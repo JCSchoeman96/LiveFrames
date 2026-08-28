@@ -2,6 +2,7 @@
 /deps/
 /.elixir_ls/
 /.fetch/
+/.worktrees/
 erl_crash.dump
 
 # Local development and generated reports
