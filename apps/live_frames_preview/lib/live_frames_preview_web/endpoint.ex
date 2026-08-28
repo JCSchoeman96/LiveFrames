@@ -25,5 +25,9 @@ defmodule LiveFramesPreviewWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
 
+  if code_reloading? do
+    plug Phoenix.LiveReloader
+  end
+
   plug LiveFramesPreviewWeb.Router
 end
