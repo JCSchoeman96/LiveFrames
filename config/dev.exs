@@ -7,6 +7,7 @@ config :live_frames_preview, LiveFramesPreviewWeb.Endpoint,
   debug_errors: true,
   code_reloader: true,
   check_origin: false,
+  secret_key_base: "liveframes-development-secret-key-base-please-change-locally-0123456789",
   http: [ip: {127, 0, 0, 1}, port: port],
   watchers: [
     tailwind: {Tailwind, :install_and_run, [:storybook, ~w(--watch)]},
