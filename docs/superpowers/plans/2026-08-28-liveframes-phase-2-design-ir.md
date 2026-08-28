@@ -39,11 +39,11 @@ Do not modify preview code, ACSS fixtures, Bricks fixtures, or generator directo
 
 **Files:** `apps/live_frames/mix.exs`, `mix.lock`
 
-- [ ] Step 1: Add `{:jason, "~> 1.4"}` to the library dependency list.
+- [x] Step 1: Add `{:jason, "~> 1.4"}` to the library dependency list.
 
 The library must be independently consumable. It cannot rely on the preview application's transitive Jason dependency for IR serialization.
 
-- [ ] Step 2: Run the dependency resolution without changing unrelated locks.
+- [x] Step 2: Run the dependency resolution without changing unrelated locks.
 
 Run:
 
@@ -54,7 +54,7 @@ mix deps.tree --only runtime
 
 Expected: `live_frames` lists Jason directly, and no Bricks, ACSS, database, Redis, or plugin dependency appears.
 
-- [ ] Step 3: Run the existing core tests.
+- [x] Step 3: Run the existing core tests.
 
 Run: `mix test apps/live_frames`
 
@@ -64,7 +64,7 @@ Expected: the existing three core tests pass before IR code is added.
 
 **File:** `apps/live_frames/test/live_frames/ir_test.exs`
 
-- [ ] Step 1: Add a valid document fixture in the test module.
+- [x] Step 1: Add a valid document fixture in the test module.
 
 The fixture must contain:
 
@@ -246,7 +246,7 @@ end
 end
 ```
 
-- [ ] Step 3: Run the focused test and confirm the expected red state.
+- [x] Step 3: Run the focused test and confirm the expected red state.
 
 Run: `mix test apps/live_frames/test/live_frames/ir_test.exs`
 
@@ -256,11 +256,11 @@ Expected: compilation fails because the IR modules do not exist yet. Fix only te
 
 **Files:** all struct files in the file map
 
-- [ ] Step 1: Define the structs with the exact fields in `docs/03_DESIGN_IR_SPEC.md`.
+- [x] Step 1: Define the structs with the exact fields in `docs/03_DESIGN_IR_SPEC.md`.
 
 Use JSON-compatible defaults: empty maps for object fields, empty lists for collections, `nil` for optional fields, and `DesignDocument` version `"1.0.0"`.
 
-- [ ] Step 2: Implement style constructors.
+- [x] Step 2: Implement style constructors.
 
 Each constructor returns `%StyleValue{kind: kind, value: value, ...}` and accepts optional `source_expression`, `source_trace`, and `metadata` keyword options. Provide:
 
@@ -274,11 +274,11 @@ StyleValue.complex_css(rules, opts \\ [])
 StyleValue.unresolved(raw_value, opts \\ [])
 ```
 
-- [ ] Step 3: Implement deterministic node IDs and document defaults.
+- [x] Step 3: Implement deterministic node IDs and document defaults.
 
 `DesignNode.deterministic_id/1` must accept a non-empty list of positive integers and return the zero-padded path form. Invalid paths raise `ArgumentError`. `DesignDocument.new/1` and `DesignNode.new/2` may provide ergonomic construction but must not bypass later validation.
 
-- [ ] Step 4: Run the focused tests.
+- [x] Step 4: Run the focused tests.
 
 Run: `mix test apps/live_frames/test/live_frames/ir_test.exs`
 
@@ -288,23 +288,23 @@ Expected: constructor, valid-document, and deterministic-ID tests pass; validati
 
 **Files:** `diagnostic.ex`, `validation_error.ex`, `validation.ex`, `ir.ex`
 
-- [ ] Step 1: Implement stable diagnostic creation.
+- [x] Step 1: Implement stable diagnostic creation.
 
 `Diagnostic.new/1` must normalize severity and category to atoms for the Elixir struct while serialization emits strings. Validation errors must use the `ir.*` code family and the categories in the specification.
 
-- [ ] Step 2: Validate the document recursively.
+- [x] Step 2: Validate the document recursively.
 
 Traverse all roots and children once to collect node IDs, then validate registry references and interaction targets against the collected sets. Do not stop at the first error. Validate JSON metadata recursively and reject non-JSON terms rather than allowing Jason to fail later.
 
-- [ ] Step 3: Validate explicit style and responsive values.
+- [x] Step 3: Validate explicit style and responsive values.
 
 Reject unknown style kinds, empty token paths, empty calculations/keywords, malformed complex CSS values, mismatched responsive map keys, and unresolved breakpoint entries without a source name. Preserve unresolved values when their shape is valid.
 
-- [ ] Step 4: Add strict helpers.
+- [x] Step 4: Add strict helpers.
 
 `IR.validate!/1` returns the original document on success and raises `%IR.ValidationError{diagnostics: diagnostics}` on failure. `ValidationError` must include the diagnostic list in its exception message.
 
-- [ ] Step 5: Run focused validation tests.
+- [x] Step 5: Run focused validation tests.
 
 Run: `mix test apps/live_frames/test/live_frames/ir_test.exs`
 
@@ -314,19 +314,19 @@ Expected: all validation tests pass, including duplicate IDs, missing references
 
 **File:** `apps/live_frames/lib/live_frames/ir/serializer.ex`
 
-- [ ] Step 1: Convert each struct to an explicit JSON-ready object.
+- [x] Step 1: Convert each struct to an explicit JSON-ready object.
 
 `Serializer.to_map/1` must emit string keys, tagged style values, string severity/category/status fields, registry maps keyed by IDs, and no Elixir struct metadata.
 
-- [ ] Step 2: Sort object keys recursively for encoding.
+- [x] Step 2: Sort object keys recursively for encoding.
 
 Convert each map to a `Jason.OrderedObject` with keys sorted lexicographically. Preserve list ordering. Do not sort semantic lists such as roots, children, diagnostics, or style rule lists.
 
-- [ ] Step 3: Expose encoding through `LiveFrames.IR`.
+- [x] Step 3: Expose encoding through `LiveFrames.IR`.
 
 `IR.to_map/1` delegates to the serializer. `IR.encode/1` validates and returns `{:ok, json}` or `{:error, diagnostics}`. `IR.encode!/1` validates and returns JSON or raises `ValidationError`.
 
-- [ ] Step 4: Run serialization tests.
+- [x] Step 4: Run serialization tests.
 
 Run: `mix test apps/live_frames/test/live_frames/ir_test.exs`
 
@@ -336,7 +336,7 @@ Expected: stable repeated JSON, explicit `ir_version`, registry objects, and tag
 
 **Files:** all Phase 2 files in the file map
 
-- [ ] Step 1: Format and run all core tests.
+- [x] Step 1: Format and run all core tests.
 
 Run:
 
@@ -347,7 +347,7 @@ mix test apps/live_frames
 
 Expected: no formatting changes remain and all core tests pass.
 
-- [ ] Step 2: Run the full umbrella checks and asset build.
+- [x] Step 2: Run the full umbrella checks and asset build.
 
 Run:
 
@@ -362,7 +362,7 @@ git diff --check
 
 Expected: all commands exit successfully. The Phase 1 preview tests still pass, and no generated assets are tracked.
 
-- [ ] Step 3: Confirm scope boundaries.
+- [x] Step 3: Confirm scope boundaries.
 
 Run:
 
@@ -372,7 +372,7 @@ rg -n "Bricks|Automatic\.css|Hero India|HEEx" apps/live_frames/lib/live_frames/i
 
 Expected: no source-specific parser or generator module is present. Generic provenance field names and documentation references are allowed; no fixture is consumed by Phase 2 code.
 
-- [ ] Step 4: Commit the Phase 2 implementation.
+- [x] Step 4: Commit the Phase 2 implementation.
 
 ```sh
 git add apps/live_frames docs/03_DESIGN_IR_SPEC.md mix.lock

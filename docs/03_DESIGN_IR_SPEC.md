@@ -166,7 +166,7 @@ strict conversion decision without matching human-readable text.
 `LiveFrames.IR.validate/1` returns `:ok` or `{:error, diagnostics}`. It checks:
 
 1. document version and JSON-compatible metadata;
-2. unique, non-empty node IDs across the entire tree;
+2. deterministic, unique, non-empty node IDs across the entire tree;
 3. supported semantic types;
 4. child node structure and style property names;
 5. explicit `StyleValue` kinds and values;
