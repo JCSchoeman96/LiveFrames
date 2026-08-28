@@ -19,4 +19,15 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
              )
            ]
   end
+
+  test "conversion lab renders the static inspection regions", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/liveframes/lab")
+
+    assert html =~ "LiveFrames Conversion Lab"
+    assert html =~ "Source metadata"
+    assert html =~ "Normalized tokens"
+    assert html =~ "Design IR"
+    assert html =~ "Diagnostics"
+    assert html =~ "Phase 1 shell"
+  end
 end

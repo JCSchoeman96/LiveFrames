@@ -83,7 +83,8 @@ defp deps do
     {:esbuild, "~> 0.10.0"},
     {:phoenix_live_reload, "~> 1.7", only: :dev},
     {:bandit, "~> 1.12"},
-    {:jason, "~> 1.4"}
+    {:jason, "~> 1.4"},
+    {:lazy_html, ">= 0.1.0", only: :test}
   ]
 end
 ~~~
@@ -582,7 +583,7 @@ Create layouts.ex:
 defmodule LiveFramesPreviewWeb.Layouts do
   use LiveFramesPreviewWeb, :html
 
-  embed_templates "layouts"
+  embed_templates "layouts/*"
 end
 ~~~
 
