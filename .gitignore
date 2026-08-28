@@ -1,0 +1,31 @@
+/_build/
+/deps/
+/.elixir_ls/
+/.fetch/
+erl_crash.dump
+
+# Local development and generated reports
+/.env
+/.env.*
+!.env.example
+/.fetch
+/cover/
+/tmp/
+
+# Mutable import state. Approved fixtures must be copied into fixtures/ with
+# provenance before they become deterministic test inputs.
+/imports/processed/*
+!/imports/processed/.gitkeep
+/imports/rejected/*
+!/imports/rejected/.gitkeep
+
+# Private vendor/plugin references must never become runtime dependencies or
+# accidental redistribution artefacts.
+/private_reference/**
+!/private_reference/**/
+!/private_reference/README.md
+!/private_reference/REFERENCE_MANIFEST.md
+/acss/**/*.zip
+/acss/**/*.tar
+/acss/**/*.tar.gz
+/acss/**/vendor/

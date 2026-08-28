@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>10 UX Animations — Interactive Boilerplate</title>
+</head>
+
+<body>
+  <header>
+    <div class="eyebrow">Interactive Boilerplate</div>
+    <h1>10 UX Animations</h1>
+    <p>
+      Vanilla HTML, CSS &amp; JS — no libraries, no image assets, no icon
+      packs.
+    </p>
+    <a class="support-btn" href="https://pixicstudio.medium.com/10-ux-animations-that-turn-a-2-app-into-one-people-pay-for-262b52b49463" target="_blank" rel="noopener">Support me — read the original article</a>
+  </header>
+
+  <div class="grid">
+    <!-- 1. RECEIPT PRINTER -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">01</span>
+        <h2>Receipt Printer</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="receipt-slot">
+          <div class="receipt-printer-head"></div>
+          <div class="receipt-paper mono" id="receiptPaper">
+            <div class="rline"><span>ORDER</span><span>#4471</span></div>
+            <div class="rdiv"></div>
+            <div class="rline"><span>Flat White</span><span>4.50</span></div>
+            <div class="rline">
+              <span>Almond Croissant</span><span>3.20</span>
+            </div>
+            <div class="rline">
+              <span>Sparkling Water</span><span>2.00</span>
+            </div>
+            <div class="rdiv"></div>
+            <div class="rline rtotal">
+              <span>TOTAL</span><span>$9.70</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Click "Print" to run the animation</div>
+      <div style="text-align: center; padding-bottom: 20px">
+        <button class="trigger" id="printBtn">Print receipt</button>
+      </div>
+    </div>
+
+    <!-- 2. CARD FLIP -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">02</span>
+        <h2>Card Flip</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="flip-scene" id="flipScene">
+          <div class="flip-card">
+            <div class="flip-face flip-front">
+              <div>
+                <div class="plan-name">Studio Plan</div>
+                <div class="plan-price mono">
+                  $24<span style="font-size: 14px; color: #b8bfe6">/mo</span>
+                </div>
+              </div>
+              <div class="plan-note mono">Click to see what's included →</div>
+            </div>
+            <div class="flip-face flip-back">
+              <div>
+                <ul>
+                  <li>Unlimited projects</li>
+                  <li>3 team seats</li>
+                  <li>Priority support</li>
+                  <li>Custom exports</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Click the card to flip</div>
+    </div>
+
+    <!-- 3. PARTICLES -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">03</span>
+        <h2>Particles</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="particle-stage">
+          <canvas id="particleCanvas"></canvas>
+          <div class="particle-btn-wrap">
+            <button class="trigger" id="particleBtn">Complete task ✓</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Click the button to trigger a burst</div>
+    </div>
+
+    <!-- 4. SPRING PHYSICS -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">04</span>
+        <h2>Spring Physics</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="spring-stage">
+          <div class="spring-track"></div>
+          <div class="spring-knob mono" id="springKnob">DRAG</div>
+        </div>
+      </div>
+      <div class="hint">Drag and release — knob springs back</div>
+    </div>
+
+    <!-- 5. PHOTO STACK -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">05</span>
+        <h2>Photo Stack</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="stack-stage" id="stackStage"></div>
+      </div>
+      <div class="hint">Drag the top card left or right</div>
+    </div>
+
+    <!-- 6. COIN FLIP -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">06</span>
+        <h2>Coin Flip</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="coin-stage">
+          <div class="coin" id="coin">
+            <div class="coin-face coin-heads mono">SHIP IT</div>
+            <div class="coin-face coin-tails mono">REFACTOR</div>
+          </div>
+          <button class="trigger" id="flipCoinBtn">Flip decision</button>
+        </div>
+      </div>
+      <div class="hint">Can't decide? Let physics decide</div>
+    </div>
+
+    <!-- 7. ORBIT -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">07</span>
+        <h2>Orbit</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="orbit-stage" id="orbitStage">
+          <div class="orbit-center mono">STACK</div>
+        </div>
+      </div>
+      <div class="hint">Ambient — runs continuously</div>
+    </div>
+
+    <!-- 8. TICKER -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">08</span>
+        <h2>Ticker</h2>
+      </div>
+      <div class="demo-stage" style="padding: 0">
+        <div class="ticker-viewport">
+          <div class="ticker-track mono" id="tickerTrack"></div>
+        </div>
+      </div>
+      <div class="hint">Hover to pause the scroll</div>
+    </div>
+
+    <!-- 9. REVEAL -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">09</span>
+        <h2>Reveal</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="reveal-stage">
+          <div class="reveal-block" id="revealBlock">
+            <div class="quote">
+              "Shipped the redesign in half the time we quoted. Didn't expect
+              that."
+            </div>
+            <div class="author">— Product lead, mid-size SaaS team</div>
+          </div>
+        </div>
+      </div>
+      <div class="hint">Click "Reveal" to wipe it in</div>
+      <div style="text-align: center; padding-bottom: 20px">
+        <button class="trigger" id="revealBtn">Reveal</button>
+      </div>
+    </div>
+
+    <!-- 10. DRAW -->
+    <div class="demo">
+      <div class="demo-label">
+        <span class="idx">10</span>
+        <h2>Draw</h2>
+      </div>
+      <div class="demo-stage">
+        <div class="draw-stage">
+          <svg class="draw-svg" id="drawSvg" width="120" height="120" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="46" />
+            <path d="M40 62 L54 76 L82 46" />
+          </svg>
+          <button class="trigger" id="drawBtn">Mark complete</button>
+        </div>
+      </div>
+      <div class="hint">SVG stroke-dashoffset animation</div>
+    </div>
+  </div>
+
+  <footer>
+    Built with vanilla HTML / CSS / JS — no images, no icon packs, no
+    dependencies.
+  </footer>
+</body>
+
+</html>

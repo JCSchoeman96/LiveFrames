@@ -1,0 +1,321 @@
+# NovaBase NB-000 Research Manifest
+#
+# Purpose:
+# Operational tracker for ACSS 4.0.1 forensic research.
+#
+# Governing documents:
+# - NOVABASE_NORTH_STAR_v0.1.0.md
+# - AGENTS.md
+# - NOVABASE_ROADMAP_v0.1.0.md
+#
+# This manifest tracks execution state only.
+# It does not define NovaBase design law.
+
+manifest_version: "0.1.0"
+
+project:
+  name: "NovaBase"
+  phase: "NB-000"
+  phase_name: "ACSS 4.0.1 Forensic Research"
+  status: "planned"
+
+source:
+  product: "Automatic.css"
+  version: "4.0.1"
+  reference_path: "reference/acss/4.0.1/plugin/"
+  immutable_reference: true
+
+status_values:
+  - "blocked"
+  - "pending"
+  - "active"
+  - "review"
+  - "accepted"
+  - "needs_followup"
+
+rules:
+  foundation_before_domains: true
+  implementation_allowed: false
+  reference_is_read_only: true
+  evidence_required: true
+  fixtures_required_when_deterministic: true
+  unresolved_must_be_explicit: true
+
+foundations:
+
+  F01:
+    name: "Settings Schema"
+    status: "accepted"
+    branch: "nb000-f01-settings"
+    path: "research/acss/4.0.1/foundations/settings/"
+    review:
+      path: "research/acss/4.0.1/reviews/NB_ACSS_F01_SETTINGS_SCHEMA_REVIEW_v0.1.0.md"
+      verdict: "ACCEPT WITH NON-BLOCKING NOTES"
+    depends_on: []
+    deliverables:
+      - "NB_ACSS_SETTINGS_SCHEMA_SPEC_v0.1.0.md"
+      - "NB_ACSS_SETTINGS_SCHEMA_SOURCE_MAP_v0.1.0.md"
+      - "acss-settings-map.json"
+    objectives:
+      - "Map setting IDs, titles, defaults, units, controls, conditions, and dependencies."
+      - "Map settings to relevant internal variables and generated CSS tokens where traceable."
+    unresolved:
+      - id: "F01-U01"
+        summary: "Full client-side displayWhen/displayWhenOr evaluator semantics in the minified dashboard bundle."
+        disposition: "Deferred unless later compatibility requires exact UI-evaluator parity."
+      - id: "F01-U02"
+        summary: "Whether site-local acss/config/* filters add options.variable overrides at runtime."
+        disposition: "Extensibility exists; no shipped reference instances. Remains unresolved."
+      - id: "F01-U03"
+        summary: "Exhaustive runtime-expanded colour setting/token inventory (cartesian of shades × channels)."
+        disposition: "Expansion pattern confirmed; full enumeration handed to F02/F04/D10 or mechanical fixtures."
+      - id: "F01-U04"
+        summary: "Complete setting ID → emitted CSS custom-property mapping through SCSS templates."
+        disposition: "Handoff to F04 token/naming architecture."
+
+  F02:
+    name: "Formula and Function Library"
+    status: "pending"
+    branch: "nb000-f02-formulas"
+    path: "research/acss/4.0.1/foundations/formulas/"
+    depends_on: []
+    deliverables:
+      - "NB_ACSS_FOUNDATION_FORMULAS_SPEC_v0.1.0.md"
+      - "NB_ACSS_FOUNDATION_FORMULAS_SOURCE_MAP_v0.1.0.md"
+      - "foundation-formula-fixtures.json"
+    objectives:
+      - "Identify shared mathematical and transformation primitives."
+      - "Document fluid interpolation, units, scales, grid maths, colour helpers, and related shared logic."
+
+  F03:
+    name: "Compilation Pipeline"
+    status: "pending"
+    branch: "nb000-f03-compilation"
+    path: "research/acss/4.0.1/foundations/compilation/"
+    depends_on: []
+    deliverables:
+      - "NB_ACSS_COMPILATION_PIPELINE_SPEC_v0.1.0.md"
+      - "NB_ACSS_COMPILATION_PIPELINE_SOURCE_MAP_v0.1.0.md"
+    objectives:
+      - "Trace settings from configuration through transformers into SCSS and generated CSS."
+      - "Identify generation stages, ordering, and important transformation boundaries."
+
+  F04:
+    name: "Token and Naming Architecture"
+    status: "pending"
+    branch: "nb000-f04-tokens"
+    path: "research/acss/4.0.1/foundations/tokens/"
+    depends_on: []
+    deliverables:
+      - "NB_ACSS_TOKEN_ARCHITECTURE_SPEC_v0.1.0.md"
+      - "NB_ACSS_TOKEN_ARCHITECTURE_SOURCE_MAP_v0.1.0.md"
+      - "acss-token-map.json"
+    objectives:
+      - "Map relationships between settings, SCSS variables, CSS custom properties, aliases, utilities, and components."
+      - "Identify naming conventions and token-generation patterns."
+
+domains:
+
+  D01:
+    name: "Spacing"
+    status: "blocked"
+    branch: "nb000-d01-spacing"
+    path: "research/acss/4.0.1/domains/spacing/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D02:
+    name: "Section Spacing and Contextual Gaps"
+    status: "blocked"
+    branch: "nb000-d02-section-spacing"
+    path: "research/acss/4.0.1/domains/section-spacing/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D03:
+    name: "Body Typography"
+    status: "blocked"
+    branch: "nb000-d03-typography"
+    path: "research/acss/4.0.1/domains/typography/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D04:
+    name: "Heading Typography"
+    status: "blocked"
+    branch: "nb000-d04-headings"
+    path: "research/acss/4.0.1/domains/headings/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D05:
+    name: "Gutters, Widths, and Containers"
+    status: "blocked"
+    branch: "nb000-d05-containers"
+    path: "research/acss/4.0.1/domains/containers/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D06:
+    name: "Breakpoints and Responsive Behaviour"
+    status: "blocked"
+    branch: "nb000-d06-breakpoints"
+    path: "research/acss/4.0.1/domains/breakpoints/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D07:
+    name: "Traditional Grids"
+    status: "blocked"
+    branch: "nb000-d07-traditional-grid"
+    path: "research/acss/4.0.1/domains/traditional-grid/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D08:
+    name: "Auto and Variable Grids"
+    status: "blocked"
+    branch: "nb000-d08-auto-grid"
+    path: "research/acss/4.0.1/domains/auto-grid/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D09:
+    name: "Content Grid"
+    status: "blocked"
+    branch: "nb000-d09-content-grid"
+    path: "research/acss/4.0.1/domains/content-grid/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D10:
+    name: "Colour Palette and OKLCH"
+    status: "blocked"
+    branch: "nb000-d10-colors"
+    path: "research/acss/4.0.1/domains/colors/"
+    depends_on: ["F01", "F02", "F03", "F04"]
+
+  D11:
+    name: "Contextual Colours, Surfaces, and Overlays"
+    status: "blocked"
+    branch: "nb000-d11-contextual-colors"
+    path: "research/acss/4.0.1/domains/contextual-colors/"
+    depends_on: ["F01", "F02", "F03", "F04", "D10"]
+
+  D12:
+    name: "Borders, Radius, and Dividers"
+    status: "blocked"
+    branch: "nb000-d12-borders-radius"
+    path: "research/acss/4.0.1/domains/borders-radius/"
+    depends_on: ["F01", "F03", "F04"]
+
+  D13:
+    name: "Shadows, Effects, and Transitions"
+    status: "blocked"
+    branch: "nb000-d13-shadows-effects"
+    path: "research/acss/4.0.1/domains/shadows-effects/"
+    depends_on: ["F01", "F03", "F04"]
+
+  D14:
+    name: "Buttons and Links"
+    status: "blocked"
+    branch: "nb000-d14-buttons-links"
+    path: "research/acss/4.0.1/domains/buttons-links/"
+    depends_on: ["F01", "F03", "F04", "D01", "D03", "D10", "D12"]
+
+  D15:
+    name: "Cards"
+    status: "blocked"
+    branch: "nb000-d15-cards"
+    path: "research/acss/4.0.1/domains/cards/"
+    depends_on: ["F01", "F03", "F04", "D01", "D03", "D10", "D12", "D13"]
+
+  D16:
+    name: "Forms"
+    status: "blocked"
+    branch: "nb000-d16-forms"
+    path: "research/acss/4.0.1/domains/forms/"
+    depends_on: ["F01", "F03", "F04", "D01", "D03", "D10", "D12"]
+
+  D17:
+    name: "Accessibility and Focus"
+    status: "blocked"
+    branch: "nb000-d17-accessibility"
+    path: "research/acss/4.0.1/domains/accessibility/"
+    depends_on: ["F01", "F03", "F04", "D10", "D12"]
+
+  D18:
+    name: "Animations and Interaction Utilities"
+    status: "blocked"
+    branch: "nb000-d18-animations"
+    path: "research/acss/4.0.1/domains/animations/"
+    depends_on: ["F01", "F03", "F04", "D13"]
+
+  D19:
+    name: "General Utilities and Layout Helpers"
+    status: "blocked"
+    branch: "nb000-d19-utilities"
+    path: "research/acss/4.0.1/domains/utilities/"
+    depends_on: ["F01", "F03", "F04", "D01", "D05", "D06", "D07", "D08", "D09"]
+
+review:
+
+  R01:
+    name: "Foundation Cross-Review"
+    status: "blocked"
+    depends_on: ["F01", "F02", "F03", "F04"]
+    deliverables:
+      - "NB_ACSS_FOUNDATION_REVIEW_v0.1.0.md"
+
+  R02:
+    name: "Core Mathematical Domain Review"
+    status: "blocked"
+    depends_on: ["D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10"]
+    deliverables:
+      - "NB_ACSS_CORE_DOMAIN_REVIEW_v0.1.0.md"
+
+  R03:
+    name: "Component and Secondary Domain Review"
+    status: "blocked"
+    depends_on: ["D11", "D12", "D13", "D14", "D15", "D16", "D17", "D18", "D19"]
+    deliverables:
+      - "NB_ACSS_COMPONENT_DOMAIN_REVIEW_v0.1.0.md"
+
+synthesis:
+
+  S01:
+    name: "ACSS 4.0.1 Cross-Domain Synthesis"
+    status: "blocked"
+    depends_on: ["R01", "R02", "R03"]
+    deliverables:
+      - "NB_ACSS_4_0_1_SYNTHESIS_v0.1.0.md"
+      - "NB_ACSS_OPEN_QUESTIONS_v0.1.0.md"
+
+completion:
+  required_for_nb000_complete:
+    - "F01"
+    - "F02"
+    - "F03"
+    - "F04"
+    - "D01"
+    - "D02"
+    - "D03"
+    - "D04"
+    - "D05"
+    - "D06"
+    - "D07"
+    - "D08"
+    - "D09"
+    - "D10"
+    - "D11"
+    - "D12"
+    - "D13"
+    - "D14"
+    - "D15"
+    - "D16"
+    - "D17"
+    - "D18"
+    - "D19"
+    - "R01"
+    - "R02"
+    - "R03"
+    - "S01"
+
+  exit_conditions:
+    - "All required items are accepted."
+    - "Core deterministic fixtures exist."
+    - "Major contradictions are resolved or explicitly recorded."
+    - "No major formula depends only on unsupported inference."
+    - "NB_ACSS_4_0_1_SYNTHESIS_v0.1.0.md is accepted."
+    - "NB_ACSS_OPEN_QUESTIONS_v0.1.0.md contains all remaining unresolved items."
