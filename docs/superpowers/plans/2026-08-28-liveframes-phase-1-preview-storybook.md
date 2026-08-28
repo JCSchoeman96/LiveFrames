@@ -265,7 +265,7 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
   use LiveFramesPreviewWeb.ConnCase, async: true
 
   test "storybook route is mounted", %{conn: conn} do
-    conn = get(conn, "/storybook")
+    conn = get(conn, "/storybook/components/proof_component")
 
     assert conn.status == 200
     assert conn.resp_body =~ "LiveFrames Storybook"
@@ -746,7 +746,7 @@ From another shell, run:
 
 ~~~sh
 curl --fail --silent http://127.0.0.1:4400/health
-curl --fail --silent http://127.0.0.1:4400/storybook
+curl --fail --silent --location http://127.0.0.1:4400/storybook
 curl --fail --silent http://127.0.0.1:4400/liveframes/lab
 ~~~
 

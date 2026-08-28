@@ -7,7 +7,12 @@ defmodule LiveFramesPreviewWeb.Endpoint do
     at: "/",
     from: :live_frames_preview,
     gzip: false,
-    only: ~w(robots.txt)
+    only: ~w(assets robots.txt)
+
+  plug Plug.Session,
+    store: :cookie,
+    key: "_live_frames_key",
+    signing_salt: "liveframes-session"
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
