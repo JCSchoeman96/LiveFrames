@@ -18,8 +18,12 @@ defmodule LiveFramesPreview.MixProject do
   defp deps do
     [
       {:live_frames, in_umbrella: true},
-      {:phoenix, "~> 1.8.9"},
-      {:phoenix_live_view, "~> 1.1"},
+      {:phoenix, "~> 1.8.13"},
+      {:phoenix_live_view, "~> 1.2.11"},
+      {:phoenix_storybook, "~> 1.3.0"},
+      {:tailwind, "~> 0.5.1"},
+      {:esbuild, "~> 0.10.0"},
+      {:phoenix_live_reload, "~> 1.7", only: :dev},
       {:bandit, "~> 1.12"},
       {:jason, "~> 1.4"}
     ]
