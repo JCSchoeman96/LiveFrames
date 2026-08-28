@@ -60,7 +60,7 @@ Generated files under apps/live_frames_preview/priv/static/assets/ stay ignored.
 - Modify: .formatter.exs
 - Create: apps/live_frames_preview/priv/static/assets/.gitkeep
 
-- [ ] Step 1: Update dependency declarations and root aliases.
+- [x] Step 1: Update dependency declarations and root aliases.
 
 Use current compatible versions and keep preview-only tooling out of the reusable package:
 
@@ -105,7 +105,7 @@ Add the generated asset ignore:
 
 Add apps/*/storybook/**/*.exs to the formatter inputs.
 
-- [ ] Step 2: Configure CSS-first Tailwind and esbuild profiles.
+- [x] Step 2: Configure CSS-first Tailwind and esbuild profiles.
 
 Append these profiles to config/config.exs:
 
@@ -131,7 +131,7 @@ config :esbuild,
   ]
 ~~~
 
-- [ ] Step 3: Fetch and inspect the resolved dependency graph.
+- [x] Step 3: Fetch and inspect the resolved dependency graph.
 
 Run:
 
@@ -142,7 +142,7 @@ mix deps.tree --only runtime
 
 Expected direct additions are phoenix_storybook, tailwind, esbuild and phoenix_live_reload. No database, Redis, Oban or ACSS runtime package may appear.
 
-- [ ] Step 4: Commit the dependency boundary.
+- [x] Step 4: Commit the dependency boundary.
 
 ~~~sh
 git add mix.exs mix.lock .formatter.exs .gitignore config/config.exs \
@@ -158,7 +158,7 @@ git commit -m "build: add Phase 1 preview dependencies"
 - Create: apps/live_frames/lib/live_frames/proof_component.ex
 - Create: apps/live_frames/test/live_frames/proof_component_test.exs
 
-- [ ] Step 1: Write the failing component test.
+- [x] Step 1: Write the failing component test.
 
 ~~~elixir
 defmodule LiveFrames.ProofComponentTest do
@@ -179,13 +179,13 @@ defmodule LiveFrames.ProofComponentTest do
 end
 ~~~
 
-- [ ] Step 2: Run the focused test and confirm the expected missing-module failure.
+- [x] Step 2: Run the focused test and confirm the expected missing-module failure.
 
 Run: mix test apps/live_frames/test/live_frames/proof_component_test.exs
 
 Expected: failure because LiveFrames.ProofComponent does not exist yet.
 
-- [ ] Step 3: Implement the smallest function component.
+- [x] Step 3: Implement the smallest function component.
 
 ~~~elixir
 defmodule LiveFrames.ProofComponent do
@@ -206,7 +206,7 @@ defmodule LiveFrames.ProofComponent do
 end
 ~~~
 
-- [ ] Step 4: Run the focused and complete core tests.
+- [x] Step 4: Run the focused and complete core tests.
 
 Run: mix test apps/live_frames/test/live_frames/proof_component_test.exs
 
@@ -216,7 +216,7 @@ Run: mix test apps/live_frames
 
 Expected: all core tests pass without warnings.
 
-- [ ] Step 5: Commit the proof component.
+- [x] Step 5: Commit the proof component.
 
 ~~~sh
 git add apps/live_frames/lib/live_frames/proof_component.ex \
@@ -237,7 +237,7 @@ git commit -m "feat: add library-owned Phase 1 proof component"
 - Modify: apps/live_frames_preview/test/test_helper.exs
 - Create: apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
-- [ ] Step 1: Write the failing Storybook route and story-contract tests.
+- [x] Step 1: Write the failing Storybook route and story-contract tests.
 
 Create test/support/conn_case.ex and load it from the test helper:
 
@@ -288,13 +288,13 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
 end
 ~~~
 
-- [ ] Step 2: Run the preview tests and verify the expected route failure.
+- [x] Step 2: Run the preview tests and verify the expected route failure.
 
 Run: mix test apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
 Expected: the Storybook test fails because the dependency, backend and route are not mounted yet. The story-count test fails until the story file exists.
 
-- [ ] Step 3: Add the backend, session support and routes.
+- [x] Step 3: Add the backend, session support and routes.
 
 Create the backend:
 
@@ -345,7 +345,7 @@ scope "/", LiveFramesPreviewWeb do
 end
 ~~~
 
-- [ ] Step 4: Add the proof story.
+- [x] Step 4: Add the proof story.
 
 ~~~elixir
 defmodule LiveFramesPreviewWeb.Storybook.Components.ProofComponent do
@@ -369,7 +369,7 @@ defmodule LiveFramesPreviewWeb.Storybook.Components.ProofComponent do
 end
 ~~~
 
-- [ ] Step 5: Run the focused Storybook tests and compile with warnings as errors.
+- [x] Step 5: Run the focused Storybook tests and compile with warnings as errors.
 
 Run: mix test apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
@@ -379,7 +379,7 @@ Run: mix compile --warnings-as-errors
 
 Expected: compilation succeeds with no warnings.
 
-- [ ] Step 6: Commit the Storybook integration.
+- [x] Step 6: Commit the Storybook integration.
 
 ~~~sh
 git add apps/live_frames_preview/lib apps/live_frames_preview/storybook \
@@ -398,7 +398,7 @@ git commit -m "feat: mount Phase 1 PhoenixStorybook"
 - Modify: apps/live_frames_preview/lib/live_frames_preview_web/endpoint.ex
 - Create: apps/live_frames_preview/priv/static/assets/.gitkeep
 
-- [ ] Step 1: Add an asset-build check that fails before inputs exist.
+- [x] Step 1: Add an asset-build check that fails before inputs exist.
 
 Run:
 
@@ -408,7 +408,7 @@ mix tailwind storybook
 
 Expected: failure because assets/css/storybook.css has not been created.
 
-- [ ] Step 2: Add the CSS-first Tailwind input.
+- [x] Step 2: Add the CSS-first Tailwind input.
 
 ~~~css
 @import "tailwindcss" source(none);
@@ -442,7 +442,7 @@ Expected: failure because assets/css/storybook.css has not been created.
 }
 ~~~
 
-- [ ] Step 3: Add the LiveView and Storybook JavaScript entry points.
+- [x] Step 3: Add the LiveView and Storybook JavaScript entry points.
 
 assets/js/app.js:
 
@@ -475,7 +475,7 @@ Update Plug.Static to serve assets as well as robots.txt:
 only: ~w(assets robots.txt)
 ~~~
 
-- [ ] Step 4: Configure development watchers and reload patterns.
+- [x] Step 4: Configure development watchers and reload patterns.
 
 Add watchers and live_reload to the endpoint config in config/dev.exs:
 
@@ -502,7 +502,7 @@ if code_reloading? do
 end
 ~~~
 
-- [ ] Step 5: Build both bundles and check their contents.
+- [x] Step 5: Build both bundles and check their contents.
 
 Run:
 
@@ -518,7 +518,7 @@ rg -q "window.storybook" apps/live_frames_preview/priv/static/assets/js/storyboo
 
 Expected: all commands succeed and generated files remain ignored.
 
-- [ ] Step 6: Commit the asset pipeline.
+- [x] Step 6: Commit the asset pipeline.
 
 ~~~sh
 git add config/dev.exs apps/live_frames_preview/assets \
@@ -540,7 +540,7 @@ git commit -m "feat: add Tailwind and preview asset builds"
 - Modify: apps/live_frames_preview/lib/live_frames_preview_web/page_controller.ex
 - Modify: apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
-- [ ] Step 1: Write the failing conversion-lab test.
+- [x] Step 1: Write the failing conversion-lab test.
 
 Add to phase_1_test.exs:
 
@@ -557,13 +557,13 @@ test "conversion lab renders the static inspection regions", %{conn: conn} do
 end
 ~~~
 
-- [ ] Step 2: Run the focused test and confirm the route is missing.
+- [x] Step 2: Run the focused test and confirm the route is missing.
 
 Run: mix test apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
 Expected: the new test fails because /liveframes/lab is not routed.
 
-- [ ] Step 3: Add the shared root layout.
+- [x] Step 3: Add the shared root layout.
 
 Update the LiveView macro:
 
@@ -606,7 +606,7 @@ Create layouts/root.html.heex:
 </html>
 ~~~
 
-- [ ] Step 4: Add the static conversion-lab LiveView and route.
+- [x] Step 4: Add the static conversion-lab LiveView and route.
 
 conversion_lab_live.ex:
 
@@ -660,7 +660,7 @@ Add this route inside the browser scope:
 live "/liveframes/lab", ConversionLabLive, :index
 ~~~
 
-- [ ] Step 5: Link the routes from the home page.
+- [x] Step 5: Link the routes from the home page.
 
 Add these links to the existing home HTML:
 
@@ -671,7 +671,7 @@ Add these links to the existing home HTML:
 </nav>
 ~~~
 
-- [ ] Step 6: Run the lab tests and commit.
+- [x] Step 6: Run the lab tests and commit.
 
 Run: mix test apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
@@ -690,7 +690,7 @@ git commit -m "feat: add the Phase 1 conversion lab shell"
 - Modify: docs/COMPATIBILITY.md
 - Modify: apps/live_frames_preview/test/live_frames_preview_web/phase_1_test.exs
 
-- [ ] Step 1: Document the Phase 1 commands and routes.
+- [x] Step 1: Document the Phase 1 commands and routes.
 
 Add to README.md:
 
@@ -711,14 +711,14 @@ Record Phoenix 1.8.13, Phoenix LiveView 1.2.11, PhoenixStorybook 1.3.0,
 Tailwind wrapper 0.5.1, Tailwind CLI 4.1.12, esbuild wrapper 0.10.0,
 esbuild 0.25.0 and Phoenix Live Reload 1.7.0 in docs/COMPATIBILITY.md.
 
-- [ ] Step 2: Add the development configuration assertion.
+- [x] Step 2: Add the development configuration assertion.
 
 Add a test that reads config/dev.exs and asserts it contains the three watcher
 profiles and the Storybook story reload pattern. This keeps the hot-reload gate
 visible in the tests without loading development configuration into the test
 environment.
 
-- [ ] Step 3: Run the complete Phase 1 verification.
+- [x] Step 3: Run the complete Phase 1 verification.
 
 Run:
 
@@ -735,7 +735,7 @@ git diff --check
 Expected: all commands exit successfully; no unused locked dependencies are
 reported; generated assets are ignored.
 
-- [ ] Step 4: Smoke-test the running preview.
+- [x] Step 4: Smoke-test the running preview.
 
 Start the server in a PTY:
 
@@ -757,7 +757,7 @@ development endpoint with the configured watchers. Touching the Storybook story
 file must trigger its configured reload path. Do not add conversion logic while
 testing this behavior.
 
-- [ ] Step 5: Commit documentation and final Phase 1 changes.
+- [x] Step 5: Commit documentation and final Phase 1 changes.
 
 ~~~sh
 git add README.md docs/COMPATIBILITY.md \
@@ -765,7 +765,7 @@ git add README.md docs/COMPATIBILITY.md \
 git commit -m "docs: record the Phase 1 preview gate"
 ~~~
 
-- [ ] Step 6: Stop at the Phase 1 gate.
+- [x] Step 6: Stop at the Phase 1 gate.
 
 Do not begin Hero India, Bricks parsing, ACSS normalization, Design IR, real
 catalogue content or generator work in this plan.

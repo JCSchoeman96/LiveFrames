@@ -30,4 +30,13 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
     assert html =~ "Diagnostics"
     assert html =~ "Phase 1 shell"
   end
+
+  test "development config watches all Phase 1 preview inputs" do
+    config = File.read!(Path.expand("../../../../config/dev.exs", __DIR__))
+
+    assert config =~ "tailwind: {Tailwind, :install_and_run, [:storybook"
+    assert config =~ "esbuild_app: {Esbuild, :install_and_run, [:app"
+    assert config =~ "esbuild_storybook: {Esbuild, :install_and_run, [:storybook"
+    assert config =~ "storybook/.*\\.exs$"
+  end
 end
