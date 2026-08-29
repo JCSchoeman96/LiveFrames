@@ -14,6 +14,10 @@ defmodule LiveFramesPreviewWeb.PageController do
         <h1>LiveFrames Preview</h1>
         <p>The Phoenix preview foundation is running.</p>
         <p>Compiler and catalogue phases are intentionally not enabled yet.</p>
+        <nav aria-label="Preview tools">
+          <a href="/storybook">Open Storybook</a>
+          <a href="/liveframes/lab">Open Conversion Lab</a>
+        </nav>
       </main>
     </body>
   </html>

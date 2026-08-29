@@ -18,6 +18,8 @@ defmodule LiveFramesUmbrella.MixProject do
   defp aliases do
     [
       setup: ["deps.get"],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.build": ["assets.setup", "tailwind storybook", "esbuild app", "esbuild storybook"],
       check: ["format --check-formatted", "compile --warnings-as-errors", "test"]
     ]
   end

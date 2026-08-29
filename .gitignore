@@ -30,3 +30,7 @@ erl_crash.dump
 /acss/**/*.tar
 /acss/**/*.tar.gz
 /acss/**/vendor/
+
+# Generated preview browser assets.
+/apps/live_frames_preview/priv/static/assets/*
+!/apps/live_frames_preview/priv/static/assets/.gitkeep
