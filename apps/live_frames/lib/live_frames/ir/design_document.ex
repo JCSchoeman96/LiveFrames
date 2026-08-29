@@ -3,7 +3,7 @@ defmodule LiveFrames.IR.DesignDocument do
   Root container for a validated, source-independent Design IR document.
   """
 
-  @default_ir_version "1.0.0"
+  @current_ir_version "1.0.0"
 
   @type t :: %__MODULE__{
           ir_version: String.t(),
@@ -16,7 +16,7 @@ defmodule LiveFrames.IR.DesignDocument do
           provenance: map()
         }
 
-  defstruct ir_version: @default_ir_version,
+  defstruct ir_version: @current_ir_version,
             source_metadata: %{},
             token_set: %{},
             root_nodes: [],
@@ -24,6 +24,9 @@ defmodule LiveFrames.IR.DesignDocument do
             interactions: %{},
             diagnostics: [],
             provenance: %{}
+
+  @spec current_ir_version() :: String.t()
+  def current_ir_version, do: @current_ir_version
 
   @spec new(keyword()) :: t()
   def new(attrs \\ []) when is_list(attrs), do: struct(__MODULE__, attrs)

@@ -25,7 +25,11 @@ defmodule LiveFrames.IRTest do
         "gap" => StyleValue.calculation("var(--space-content)"),
         "custom" => StyleValue.complex_css(%{"rules" => []}),
         "font_size" => StyleValue.literal(18),
-        "unknown" => StyleValue.unresolved("var(--unknown)")
+        "unknown" =>
+          StyleValue.unresolved("var(--unknown)",
+            source_expression: "var(--unknown)",
+            metadata: %{"preserved" => true}
+          )
       },
       responsive: %{
         "tablet_portrait" => %ResponsiveOverride{
@@ -81,14 +85,160 @@ defmodule LiveFrames.IRTest do
   test "deterministic IDs derive from traversal paths" do
     assert DesignNode.deterministic_id([1]) == "node_000001"
     assert DesignNode.deterministic_id([1, 2]) == "node_000001_000002"
+    assert DesignNode.deterministic_id([1, 2]) != DesignNode.deterministic_id([2, 1])
     assert DesignNode.deterministic_id([1, 2]) == DesignNode.deterministic_id([1, 2])
 
     assert_raise ArgumentError, fn -> DesignNode.deterministic_id([]) end
     assert_raise ArgumentError, fn -> DesignNode.deterministic_id(:root) end
   end
 
+  test "exposes the current supported IR version and uses it by default" do
+    assert DesignDocument.current_ir_version() == "1.0.0"
+    assert IR.current_ir_version() == DesignDocument.current_ir_version()
+    assert DesignDocument.new().ir_version == IR.current_ir_version()
+  end
+
+  test "validation rejects non-empty unsupported IR versions" do
+    assert {:error, diagnostics} =
+             IR.validate(%{valid_document() | ir_version: "2.0.0"})
+
+    assert Enum.any?(diagnostics, &(&1.code == "ir.document.version_unsupported"))
+    refute Enum.any?(diagnostics, &(&1.code == "ir.document.version_missing"))
+  end
+
+  test "validation keeps empty and malformed versions distinct from unsupported versions" do
+    assert {:error, empty_diagnostics} = IR.validate(%{valid_document() | ir_version: ""})
+    assert Enum.any?(empty_diagnostics, &(&1.code == "ir.document.version_missing"))
+
+    assert {:error, malformed_diagnostics} =
+             IR.validate(%{valid_document() | ir_version: :future})
+
+    assert Enum.any?(malformed_diagnostics, &(&1.code == "ir.document.version_invalid"))
+
+    assert {:error, unsupported_diagnostics} =
+             IR.validate(%{valid_document() | ir_version: "2.0.0"})
+
+    assert Enum.any?(unsupported_diagnostics, &(&1.code == "ir.document.version_unsupported"))
+  end
+
+  test "unknown is a supported semantic preservation type" do
+    node = hd(valid_document().root_nodes)
+    unknown_node = %{node | semantic_type: "unknown", children: []}
+
+    assert IR.validate(%{valid_document() | root_nodes: [unknown_node]}) == :ok
+  end
+
+  test "validates nested node trees with deterministic child positions" do
+    root = hd(valid_document().root_nodes)
+
+    first_child = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "container",
+      label: "first child"
+    }
+
+    second_child = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 2]),
+      semantic_type: "unknown",
+      label: "second child",
+      children: [
+        %DesignNode{
+          node_id: DesignNode.deterministic_id([1, 2, 1]),
+          semantic_type: "raw",
+          content: %{"preserved" => true}
+        }
+      ]
+    }
+
+    document = %{valid_document() | root_nodes: [%{root | children: [first_child, second_child]}]}
+
+    assert IR.validate(document) == :ok
+  end
+
   test "valid IR accepts registries and unresolved responsive entries" do
-    assert IR.validate(valid_document()) == :ok
+    document = valid_document()
+    override = hd(document.root_nodes).responsive["tablet_portrait"]
+
+    assert IR.validate(document) == :ok
+    assert override.resolution_status == :unresolved
+    assert override.min_width == nil
+    assert override.max_width == nil
+    assert override.source_name == "tablet_portrait"
+
+    decoded = document |> IR.encode!() |> Jason.decode!()
+
+    decoded_override =
+      get_in(decoded, ["root_nodes", Access.at(0), "responsive", "tablet_portrait"])
+
+    assert decoded_override["resolution_status"] == "unresolved"
+    assert decoded_override["min_width"] == nil
+    assert decoded_override["max_width"] == nil
+    assert decoded_override["source_name"] == "tablet_portrait"
+  end
+
+  test "preserves unresolved style values through validation and JSON" do
+    document = valid_document()
+    unresolved = hd(document.root_nodes).styles["unknown"]
+
+    assert IR.validate(document) == :ok
+    assert unresolved.kind == :unresolved
+    assert unresolved.value == "var(--unknown)"
+    assert unresolved.source_expression == "var(--unknown)"
+    assert unresolved.metadata == %{"preserved" => true}
+
+    decoded_style =
+      document
+      |> IR.encode!()
+      |> Jason.decode!()
+      |> get_in(["root_nodes", Access.at(0), "styles", "unknown"])
+
+    assert decoded_style["kind"] == "unresolved"
+    assert decoded_style["value"] == "var(--unknown)"
+    assert decoded_style["source_expression"] == "var(--unknown)"
+    assert decoded_style["metadata"] == %{"preserved" => true}
+  end
+
+  test "validates and serializes all diagnostic severities with source traces" do
+    trace = %SourceTrace{
+      source_type: "design_source",
+      source_id: "source-1",
+      source_path: "root.children[0]",
+      source_name: "hero",
+      global_classes: ["hero", "layout"],
+      source_settings: %{"display" => "flex"},
+      adapter: "fixture_adapter",
+      adapter_version: "1.0.0",
+      inference: "role inferred from label",
+      metadata: %{"line" => 12}
+    }
+
+    diagnostics =
+      Enum.map(Diagnostic.severities(), fn severity ->
+        %Diagnostic{
+          code: "fixture.#{severity}",
+          severity: severity,
+          category: :provenance,
+          message: "fixture #{severity}",
+          source_trace: trace
+        }
+      end)
+
+    document = %{valid_document() | diagnostics: diagnostics}
+
+    assert IR.validate(document) == :ok
+
+    decoded_diagnostics = document |> IR.encode!() |> Jason.decode!() |> Map.fetch!("diagnostics")
+
+    assert Enum.map(decoded_diagnostics, & &1["severity"]) ==
+             Enum.map(Diagnostic.severities(), &Atom.to_string/1)
+
+    assert Enum.all?(decoded_diagnostics, fn diagnostic ->
+             diagnostic["source_trace"]["source_id"] == "source-1" and
+               diagnostic["source_trace"]["source_name"] == "hero" and
+               diagnostic["source_trace"]["global_classes"] == ["hero", "layout"] and
+               diagnostic["source_trace"]["source_settings"] == %{"display" => "flex"} and
+               diagnostic["source_trace"]["metadata"] == %{"line" => 12}
+           end)
   end
 
   test "validation reports duplicate nodes and missing references" do
@@ -179,6 +329,31 @@ defmodule LiveFrames.IRTest do
     assert decoded["root_nodes"] |> hd() |> get_in(["styles", "unknown", "kind"]) == "unresolved"
     assert hd(decoded["diagnostics"])["severity"] == "warning"
     refute first =~ "__struct__"
+  end
+
+  test "encoding is bytewise deterministic for equivalent documents" do
+    first_document = %{
+      valid_document()
+      | source_metadata:
+          Map.new([
+            {"z", %{"b" => 2, "a" => 1}},
+            {"a", %{"d" => 4, "c" => 3}}
+          ]),
+        provenance: Map.new([{"z", "last"}, {"a", "first"}])
+    }
+
+    equivalent_document = %{
+      valid_document()
+      | source_metadata:
+          Map.new([
+            {"a", %{"c" => 3, "d" => 4}},
+            {"z", %{"a" => 1, "b" => 2}}
+          ]),
+        provenance: Map.new([{"a", "first"}, {"z", "last"}])
+    }
+
+    assert first_document == equivalent_document
+    assert IR.encode!(first_document) == IR.encode!(equivalent_document)
   end
 
   test "encoding rejects invalid documents" do

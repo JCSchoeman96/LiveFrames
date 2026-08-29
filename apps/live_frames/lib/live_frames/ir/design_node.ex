@@ -6,7 +6,7 @@ defmodule LiveFrames.IR.DesignNode do
   @semantic_types ~w(
     section container wrapper stack grid generic
     heading paragraph rich_text image icon button link
-    actions background overlay raw unsupported
+    actions background overlay raw unsupported unknown
   )
 
   @type t :: %__MODULE__{

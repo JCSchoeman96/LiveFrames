@@ -13,9 +13,13 @@ source plugin.
 
 ## Version
 
-The first contract version is `1.0.0`. Every `DesignDocument` carries its
-`ir_version`. A change to required fields, field meaning, validation rules, or
-serialized shape requires a new IR version and an explicit migration decision.
+The current supported contract version is `1.0.0`. `DesignDocument` owns this
+authoritative version and exposes it through `current_ir_version/0`; the public
+`LiveFrames.IR.current_ir_version/0` helper delegates to it. Every
+`DesignDocument` carries its `ir_version`, and serialization includes that
+explicit value. A change to required fields, field meaning, validation rules,
+or serialized shape requires a new IR version and an explicit migration
+decision.
 
 ## Root document
 
@@ -60,10 +64,12 @@ Initial `semantic_type` values are:
 - structural: `section`, `container`, `wrapper`, `stack`, `grid`, `generic`
 - content: `heading`, `paragraph`, `rich_text`, `image`, `icon`, `button`, `link`
 - intent: `actions`, `background`, `overlay`
-- preservation: `raw`, `unsupported`
+- preservation: `raw`, `unsupported`, `unknown`
 
-Adapters may preserve unsupported input as `raw` or `unsupported` nodes with a
-diagnostic. Dropping an input node without a diagnostic is invalid.
+Adapters may preserve unsupported input as `raw`, `unsupported`, or `unknown`
+nodes with a diagnostic. `unknown` is the safe semantic type for a node whose
+meaning cannot be determined yet. Dropping an input node without a diagnostic
+is invalid.
 
 ## Deterministic node identity
 
@@ -158,8 +164,10 @@ field. Adapters can retain those details in the generic trace fields.
 - optional `suggested_action`
 - JSON `metadata`
 
-Validation diagnostics use stable `ir.*` codes. A caller can therefore make a
-strict conversion decision without matching human-readable text.
+Validation diagnostics use stable `ir.*` codes, including distinct diagnostics
+for missing or malformed versions and non-empty unsupported versions. A caller
+can therefore make a strict conversion decision without matching
+human-readable text.
 
 ## Validation rules
 
@@ -203,6 +211,7 @@ LiveFrames.IR.validate!(document)
 LiveFrames.IR.to_map(document)
 LiveFrames.IR.encode(document)
 LiveFrames.IR.encode!(document)
+LiveFrames.IR.current_ir_version()
 LiveFrames.IR.DesignNode.deterministic_id(path)
 ```
 

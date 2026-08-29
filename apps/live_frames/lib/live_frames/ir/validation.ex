@@ -54,11 +54,7 @@ defmodule LiveFrames.IR.Validation do
 
   defp validate_document_fields(document, diagnostics) do
     diagnostics
-    |> require_string(
-      document.ir_version,
-      "ir.document.version_missing",
-      "ir_version must be a non-empty string"
-    )
+    |> validate_ir_version(document.ir_version)
     |> require_object(
       document.source_metadata,
       "ir.document.source_metadata_invalid",
@@ -95,6 +91,40 @@ defmodule LiveFrames.IR.Validation do
       "provenance must be a JSON object"
     )
   end
+
+  defp validate_ir_version(diagnostics, "") do
+    error(
+      diagnostics,
+      "ir.document.version_missing",
+      "ir_version must be a non-empty string",
+      :schema,
+      nil
+    )
+  end
+
+  defp validate_ir_version(diagnostics, version) when is_binary(version) do
+    if version == DesignDocument.current_ir_version() do
+      diagnostics
+    else
+      error(
+        diagnostics,
+        "ir.document.version_unsupported",
+        "ir_version is not supported by the current IR contract",
+        :schema,
+        nil
+      )
+    end
+  end
+
+  defp validate_ir_version(diagnostics, _version),
+    do:
+      error(
+        diagnostics,
+        "ir.document.version_invalid",
+        "ir_version must be a string",
+        :schema,
+        nil
+      )
 
   defp collect_nodes(nodes, ids, diagnostics, path) do
     nodes

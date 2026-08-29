@@ -9,6 +9,9 @@ defmodule LiveFrames.IR do
   alias LiveFrames.IR.Validation
   alias LiveFrames.IR.ValidationError
 
+  @spec current_ir_version() :: String.t()
+  def current_ir_version, do: DesignDocument.current_ir_version()
+
   @spec validate(DesignDocument.t()) :: :ok | {:error, [Diagnostic.t()]}
   def validate(document), do: Validation.validate(document)
 
