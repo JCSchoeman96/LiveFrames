@@ -935,9 +935,9 @@ defmodule LiveFrames.IR.Validation do
       "source_name must be a string or nil"
     )
     |> require_string_list(
-      trace.global_classes,
-      "ir.trace.global_classes_invalid",
-      "global_classes must be a list of strings"
+      trace.source_classes,
+      "ir.trace.source_classes_invalid",
+      "source_classes must be a list of strings"
     )
     |> require_object(
       trace.source_settings,

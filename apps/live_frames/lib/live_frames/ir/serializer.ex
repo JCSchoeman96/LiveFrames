@@ -121,7 +121,7 @@ defmodule LiveFrames.IR.Serializer do
       "source_id" => trace.source_id,
       "source_path" => trace.source_path,
       "source_name" => trace.source_name,
-      "global_classes" => trace.global_classes,
+      "source_classes" => trace.source_classes,
       "source_settings" => normalize_json(trace.source_settings),
       "adapter" => trace.adapter,
       "adapter_version" => trace.adapter_version,

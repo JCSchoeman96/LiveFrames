@@ -140,7 +140,7 @@ trace. The IR records intent only. It does not choose between CSS,
 `LiveFrames.IR.SourceTrace` is generic and may contain:
 
 - `source_type`, `source_id`, `source_path`, and `source_name`
-- `global_classes`
+- `source_classes`
 - `source_settings`
 - `adapter` and `adapter_version`
 - `inference`

@@ -204,7 +204,7 @@ defmodule LiveFrames.IRTest do
       source_id: "source-1",
       source_path: "root.children[0]",
       source_name: "hero",
-      global_classes: ["hero", "layout"],
+      source_classes: ["hero", "layout"],
       source_settings: %{"display" => "flex"},
       adapter: "fixture_adapter",
       adapter_version: "1.0.0",
@@ -235,7 +235,8 @@ defmodule LiveFrames.IRTest do
     assert Enum.all?(decoded_diagnostics, fn diagnostic ->
              diagnostic["source_trace"]["source_id"] == "source-1" and
                diagnostic["source_trace"]["source_name"] == "hero" and
-               diagnostic["source_trace"]["global_classes"] == ["hero", "layout"] and
+               diagnostic["source_trace"]["source_classes"] == ["hero", "layout"] and
+               not Enum.member?(Map.keys(diagnostic["source_trace"]), "global" <> "_classes") and
                diagnostic["source_trace"]["source_settings"] == %{"display" => "flex"} and
                diagnostic["source_trace"]["metadata"] == %{"line" => 12}
            end)
