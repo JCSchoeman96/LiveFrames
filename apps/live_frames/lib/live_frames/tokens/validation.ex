@@ -282,7 +282,7 @@ defmodule LiveFrames.Tokens.Validation do
     |> validate_path(token.path, canonical_key)
     |> validate_category(token.category, canonical_key)
     |> validate_status(token.resolution_status, canonical_key)
-    |> validate_token_value(token.value, canonical_key)
+    |> validate_token_value(token.value, canonical_key, token.references)
     |> validate_json_value(
       token.resolved_value,
       "tokens.resolved_value.invalid",
@@ -368,7 +368,7 @@ defmodule LiveFrames.Tokens.Validation do
     )
   end
 
-  defp validate_token_value(diagnostics, value, path) do
+  defp validate_token_value(diagnostics, value, path, references) do
     diagnostics =
       validate_json_value(
         diagnostics,
@@ -380,7 +380,7 @@ defmodule LiveFrames.Tokens.Validation do
 
     case value do
       %{"type" => "reference"} ->
-        validate_reference_value(diagnostics, value, path)
+        validate_reference_value(diagnostics, value, path, references)
 
       %{"type" => "derived"} ->
         validate_derived_value(diagnostics, value, path)
@@ -401,17 +401,18 @@ defmodule LiveFrames.Tokens.Validation do
     end
   end
 
-  defp validate_reference_value(diagnostics, value, path) do
+  defp validate_reference_value(diagnostics, value, path, references) do
     reference_path = Map.get(value, "path")
 
-    if is_binary(reference_path) and valid_path?(reference_path) do
+    if is_binary(reference_path) and valid_path?(reference_path) and is_list(references) and
+         reference_path in references do
       diagnostics
     else
       add(
         diagnostics,
         error_at(
           "tokens.reference.invalid",
-          "reference values must contain a valid semantic path",
+          "reference values must contain a valid semantic path and matching edge",
           :reference,
           path: path
         )

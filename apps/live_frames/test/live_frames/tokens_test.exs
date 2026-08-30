@@ -137,6 +137,19 @@ defmodule LiveFrames.TokensTest do
     assert "tokens.reference.invalid" in codes
   end
 
+  test "requires a reference value to declare its semantic edge" do
+    token = valid_token_set().tokens["button.primary.background"]
+    malformed = %{token | references: []}
+
+    token_set = %{
+      valid_token_set()
+      | tokens: Map.put(valid_token_set().tokens, token.path, malformed)
+    }
+
+    assert {:error, diagnostics} = Tokens.validate(token_set)
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.reference.invalid"))
+  end
+
   test "encoding is deterministic and contains no struct internals" do
     first = %{
       valid_token_set()
