@@ -28,8 +28,20 @@ defmodule LiveFrames.Tokens do
   def to_map(token_set), do: LiveFrames.Tokens.Serializer.to_map(token_set)
 
   @spec encode(TokenSet.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
-  def encode(token_set, opts \\ []), do: LiveFrames.Tokens.Serializer.encode(token_set, opts)
+  def encode(token_set, opts \\ []) do
+    case validate(token_set, opts) do
+      :ok ->
+        LiveFrames.Tokens.Serializer.encode(token_set)
+
+      {:error, diagnostics} ->
+        {:error, diagnostics}
+    end
+  end
 
   @spec encode!(TokenSet.t(), keyword()) :: String.t()
-  def encode!(token_set, opts \\ []), do: LiveFrames.Tokens.Serializer.encode!(token_set, opts)
+  def encode!(token_set, opts \\ []) do
+    token_set
+    |> validate!(opts)
+    |> LiveFrames.Tokens.Serializer.encode!()
+  end
 end

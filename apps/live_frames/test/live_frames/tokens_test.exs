@@ -125,4 +125,24 @@ defmodule LiveFrames.TokensTest do
     assert Tokens.validate(valid_token_set(), required_paths: ["color.primary"], strict: true) ==
              :ok
   end
+
+  test "encoding is deterministic and contains no struct internals" do
+    first = %{
+      valid_token_set()
+      | source_metadata: Map.new([{"z", %{"b" => 2, "a" => 1}}, {"a", "first"}])
+    }
+
+    second = %{
+      valid_token_set()
+      | source_metadata: Map.new([{"a", "first"}, {"z", %{"a" => 1, "b" => 2}}])
+    }
+
+    assert Tokens.encode!(first) == Tokens.encode!(second)
+
+    decoded = first |> Tokens.encode!() |> Jason.decode!()
+    assert decoded["token_set_version"] == "1.0.0"
+    assert decoded["tokens"]["button.primary.background"]["value"]["type"] == "reference"
+    assert decoded["tokens"]["button.primary.background"]["references"] == ["color.primary"]
+    refute Tokens.encode!(first) =~ "__struct__"
+  end
 end
