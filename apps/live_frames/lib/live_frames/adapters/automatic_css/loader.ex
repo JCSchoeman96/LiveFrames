@@ -4,18 +4,10 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   """
 
   alias LiveFrames.Tokens.Diagnostic
+  alias LiveFrames.Adapters.AutomaticCSS.Normalizer
 
   @source_version "4.0.1"
   @adapter_version "1.0.0"
-  @recognition_keys [
-    "color-primary",
-    "color-neutral",
-    "base-space",
-    "base-text-desk",
-    "base-heading-desk",
-    "btn-primary-bg",
-    "vp-min"
-  ]
 
   def from_file(path, opts \\ [])
 
@@ -106,7 +98,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   defp flat_settings_map?(_settings), do: false
 
   defp recognized_settings?(settings) do
-    Enum.any?(@recognition_keys, &Map.has_key?(settings, &1))
+    Enum.any?(Normalizer.source_keys(), &Map.has_key?(settings, &1))
   end
 
   defp source_metadata(settings, opts) do
