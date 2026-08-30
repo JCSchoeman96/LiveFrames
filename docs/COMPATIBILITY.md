@@ -22,7 +22,19 @@ Verified locally on 2026-08-28:
 | lazy_html test dependency | 0.1.12 |
 
 The lock file is the reproducible dependency record for this Phase 1
-foundation. Major framework upgrades require a compatibility review because
-later LiveFrames compiler contracts depend on Phoenix and LiveView behavior.
-Tailwind and PhoenixStorybook are mounted only for the Phase 1 preview
-surface; they do not introduce conversion or catalogue behavior.
+foundation and later conversion contracts. Major framework upgrades require a
+compatibility review because LiveFrames compiler contracts depend on Phoenix
+and LiveView behavior. Tailwind and PhoenixStorybook remain mounted only for
+the preview surface; they do not introduce catalogue behavior.
+
+## Phase 3 Automatic.css settings adapter
+
+The initial Automatic.css adapter contract is supported for the approved
+fixtures/automatic_css/acss_settings.json reference set at Automatic.css
+4.0.1. It normalizes a documented semantic subset into TokenSet 1.0.0 with
+deterministic serialization, provenance, diagnostics and the hero_foundation
+strict profile.
+
+This is not full Automatic.css compatibility. The adapter is not a runtime
+dependency, does not reconstruct generic ACSS utility classes, and does not
+parse Bricks or generate Hero, HEEx, Tailwind, or SCSS output.
