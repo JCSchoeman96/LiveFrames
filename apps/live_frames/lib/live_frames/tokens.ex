@@ -14,8 +14,15 @@ defmodule LiveFrames.Tokens do
   def validate(token_set, opts \\ []), do: LiveFrames.Tokens.Validation.validate(token_set, opts)
 
   @spec validate!(TokenSet.t(), keyword()) :: TokenSet.t()
-  def validate!(token_set, opts \\ []),
-    do: LiveFrames.Tokens.Validation.validate!(token_set, opts)
+  def validate!(token_set, opts \\ []) do
+    case validate(token_set, opts) do
+      :ok ->
+        token_set
+
+      {:error, diagnostics} ->
+        raise LiveFrames.Tokens.ValidationError, diagnostics: diagnostics
+    end
+  end
 
   @spec to_map(TokenSet.t()) :: map()
   def to_map(token_set), do: LiveFrames.Tokens.Serializer.to_map(token_set)

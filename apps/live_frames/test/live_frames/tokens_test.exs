@@ -43,4 +43,86 @@ defmodule LiveFrames.TokensTest do
     assert TokenSet.new().token_set_version == "1.0.0"
     assert Tokens.validate(valid_token_set()) == :ok
   end
+
+  test "rejects unsupported TokenSet versions" do
+    assert {:error, diagnostics} =
+             Tokens.validate(%{valid_token_set() | token_set_version: "2.0.0"})
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.version.unsupported"))
+  end
+
+  test "rejects invalid paths, categories, statuses, and provenance" do
+    token = valid_token_set().tokens["color.primary"]
+
+    invalid = %{
+      valid_token_set()
+      | tokens: %{
+          "bad path" => %{
+            token
+            | path: "bad path",
+              category: :unknown,
+              resolution_status: :pending,
+              provenance: %{"bad" => self()}
+          }
+        }
+    }
+
+    assert {:error, diagnostics} = Tokens.validate(invalid)
+    codes = Enum.map(diagnostics, & &1.code)
+    assert "tokens.path.invalid" in codes
+    assert "tokens.category.invalid" in codes
+    assert "tokens.status.invalid" in codes
+    assert "tokens.provenance.invalid" in codes
+  end
+
+  test "reports a missing reference and a reference cycle" do
+    token = valid_token_set().tokens["color.primary"]
+
+    missing = %{
+      token
+      | path: "spacing.content_gap",
+        value: %{"type" => "reference", "path" => "spacing.missing"},
+        references: ["spacing.missing"]
+    }
+
+    missing_set = %{
+      valid_token_set()
+      | tokens: Map.put(valid_token_set().tokens, missing.path, missing)
+    }
+
+    assert {:error, diagnostics} = Tokens.validate(missing_set)
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.reference.missing"))
+
+    a = %{
+      token
+      | path: "cycle.a",
+        value: %{"type" => "reference", "path" => "cycle.b"},
+        references: ["cycle.b"]
+    }
+
+    b = %{
+      token
+      | path: "cycle.b",
+        value: %{"type" => "reference", "path" => "cycle.a"},
+        references: ["cycle.a"]
+    }
+
+    cycle_set = %{valid_token_set() | tokens: %{"cycle.a" => a, "cycle.b" => b}}
+
+    assert {:error, diagnostics} = Tokens.validate(cycle_set)
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.reference.cycle"))
+  end
+
+  test "strict validation reports only missing required paths" do
+    assert {:error, diagnostics} =
+             Tokens.validate(valid_token_set(),
+               required_paths: ["color.primary", "spacing.content_gap"],
+               strict: true
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.required.missing"))
+
+    assert Tokens.validate(valid_token_set(), required_paths: ["color.primary"], strict: true) ==
+             :ok
+  end
 end
