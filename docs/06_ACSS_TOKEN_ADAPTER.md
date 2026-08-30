@@ -264,7 +264,7 @@ fail this profile. No fallback values are inserted.
 Unknown Automatic.css settings are expected. The adapter ignores them for
 canonical output and emits one informational acss.setting.unknown diagnostic
 with a total and at most ten sorted sample keys. The approved fixture currently
-has 2,476 unknown settings after the supported source keys are accounted for.
+has 2,475 unknown settings after the supported source keys are accounted for.
 
 Diagnostics are deterministic and machine-readable. The initial namespaces
 include:
