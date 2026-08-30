@@ -263,7 +263,11 @@ end
 Assert a direct color contains raw source key/value, adapter identity/version,
 and `transformation: "direct"`; add an unrelated key and assert one
 `acss.setting.unknown` summary with a count and no canonical unknown token;
-assert `color.text.dark` preserves `var(--black)` as unresolved; assert
+assert the proven BW foundation resolves `color.text.dark`/`color.text.light`
+through canonical black/white references and preserves the ACSS generated
+expression provenance; assert ultra-dark contextual text/heading preserve
+their `color.text.light` references; assert primary outline and border
+dependencies participate in strict validation; assert
 `layout.breakpoint.auto_grid` is `992px` only when `auto-staggered-grid-breakpoint`
 is numeric; and assert `strict: true, profile: :hero_foundation` succeeds for
 the full fixture, fails with `tokens.required.missing` after deleting a
@@ -366,12 +370,14 @@ Assert `source_metadata["source_version"] == "4.0.1"`,
 `source_metadata["export_version"] == nil`, and
 `source_metadata["source_version_status"] == "fixture_reference"`.
 
-- [ ] **Step 3: Assert unresolved and unknown behavior on the real fixture.**
+- [ ] **Step 3: Assert proven relationships, deferred dependencies, and unknown behavior on the real fixture.**
 
 Assert mapped `color.text.dark`/`color.text.light` preserve their raw
-`var(--black)`/`var(--white)` expressions as unresolved, the unknown-setting
-summary count is positive, and no token for the Hero overlay variable or
-generic tablet/mobile threshold is fabricated.
+`var(--black)`/`var(--white)` expressions while resolving through the proven
+BW foundation, the unknown-setting summary count is positive, and no token
+for the Hero overlay variable or generic tablet/mobile threshold is
+fabricated. The overlay variable is recorded as a deferred downstream source
+dependency, not a Phase 3 token.
 
 - [ ] **Step 4: Assert bytewise real-fixture determinism.**
 

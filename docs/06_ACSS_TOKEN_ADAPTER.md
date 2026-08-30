@@ -113,12 +113,40 @@ Derived Automatic.css relationships use structured values such as
 the source relationship and all required inputs are proven, even though Phase
 3 does not evaluate every generated CSS formula.
 
+The ACSS 4.0.1 black/white foundation is the one intentionally supported
+generated relationship in this subset. The reference palette defines white as
+`#fff` and black as `#000`, with reversed alternate-scheme values. When
+`auto-color-scheme` is `on`, the adapter preserves the generated
+`light-dark(...)` expression; when it is `off`, it preserves the corresponding
+light-scheme literal. These are distinct `color.black` and `color.white`
+concepts, not aliases for neutral palette tokens. `color.text.dark` and
+`color.text.light` retain their source expressions while referencing those
+canonical foundation paths.
+
+This distinction defines three boundaries:
+
+* A canonical semantic token is a value or relationship provable from approved
+  ACSS settings/reference evidence and useful independently of ACSS
+  implementation details.
+* A generated ACSS implementation variable is emitted or consumed by ACSS CSS
+  but is not necessarily represented or derivable from the settings export.
+* A source dependency is a variable, class, asset, or runtime dependency
+  encountered later while parsing a Bricks component. The later Stage A
+  dependency-reporting pipeline must preserve and report it even when no
+  canonical TokenSet resolution exists.
+
+`--neutral-ultra-dark-trans-60` is the first concrete example of the second
+and third categories. The approved 4.0.1 evidence proves the name is part of
+the ACSS utility vocabulary but does not prove its generated value. Phase 3
+therefore does not create a transparency token for it, include it in
+`hero_foundation`, or invent a color expression.
+
 ## Canonical token coverage
 
-The initial mapping emits 67 tokens. It is one explicit mapping table; raw
+The initial mapping emits 71 tokens. It is one explicit mapping table; raw
 Automatic.css setting names are not the canonical API.
 
-### Colors (23)
+### Colors (27)
 
 ~~~text
 color.primary
@@ -142,8 +170,12 @@ color.background.light
 color.background.dark
 color.background.ultra_light
 color.background.ultra_dark
+color.black
+color.white
 color.text.dark
 color.text.light
+color.background.ultra_dark.text
+color.background.ultra_dark.heading
 ~~~
 
 Direct hex colors remain direct. Proven HSL channel triples are rendered as a
@@ -236,7 +268,7 @@ resolve”. The initial profile is:
 profile: :hero_foundation
 ~~~
 
-It requires these 29 paths:
+It requires these 43 paths:
 
 ~~~text
 color.primary
@@ -245,6 +277,11 @@ color.primary.light
 color.primary.ultra_dark
 color.neutral
 color.neutral.ultra_dark
+color.background.ultra_dark
+color.background.ultra_dark.text
+color.background.ultra_dark.heading
+color.text.light
+color.white
 spacing.base.min
 spacing.base.max
 spacing.content_gap
@@ -258,6 +295,8 @@ button.primary.background
 button.primary.background_hover
 button.primary.text
 button.primary.border
+button.primary.border_width
+button.primary.border_style
 button.primary.focus
 button.primary.radius
 button.primary.padding_inline
@@ -266,6 +305,13 @@ button.primary.min_width
 button.primary.font_size
 button.primary.font_weight
 button.primary.line_height
+button.primary.outline.background
+button.primary.outline.background_hover
+button.primary.outline.border
+button.primary.outline.border_hover
+button.primary.outline.focus
+button.primary.outline.text
+button.primary.outline.text_hover
 layout.viewport.min
 layout.viewport.max
 ~~~
@@ -279,7 +325,7 @@ fail this profile. No fallback values are inserted.
 Unknown Automatic.css settings are expected. The adapter ignores them for
 canonical output and emits one informational acss.setting.unknown diagnostic
 with a total and at most ten sorted sample keys. The approved fixture currently
-has 2,475 unknown settings after the supported source keys are accounted for.
+has 2,471 unknown settings after the supported source keys are accounted for.
 
 Diagnostics are deterministic and machine-readable. The initial namespaces
 include:
@@ -310,10 +356,21 @@ settings. A source label without a proven threshold would remain an
 unresolved source candidate; the adapter never invents tablet or mobile
 defaults. The fixture does not produce generic tablet/mobile token paths.
 
-The fixture's var(--black) and var(--white) text values have no proven source
-token in the supported subset, so color.text.dark and color.text.light
-preserve their expressions with resolution_status: unresolved. CSS variable
-references are never evaluated or replaced with invented literals.
+The fixture's `var(--black)` and `var(--white)` text values are proven
+relationships to the ACSS 4.0.1 BW foundation. `color.text.dark` references
+`color.black`, and `color.text.light` references `color.white`; both preserve
+their original expressions and resolve to the generated foundation expression
+when the fixture's `auto-color-scheme` setting is enabled. The
+ultra-dark-background text and heading settings likewise reference
+`color.text.light`. CSS variable references are never evaluated beyond a
+proven semantic relationship.
+
+The Hero source's
+`var(--overlay-bg, var(--neutral-ultra-dark-trans-60))` remains outside this
+TokenSet. `--overlay-bg` is a later source-level override, while the ACSS
+transparency variable cannot be derived from the approved settings/reference
+inputs. The later Bricks Stage A pipeline owns preserving and reporting that
+unresolved source dependency.
 
 ## Validation and serialization
 

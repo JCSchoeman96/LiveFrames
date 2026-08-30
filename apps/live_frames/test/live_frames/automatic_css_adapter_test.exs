@@ -9,6 +9,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     Path.expand("../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   end
 
+  defp fixture_settings do
+    Jason.decode!(File.read!(fixture_path()))
+  end
+
   defp minimal_settings do
     %{
       "color-primary" => "#32a2c1",
@@ -22,7 +26,13 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       "primary-ultra-dark-s" => 59,
       "primary-ultra-dark-l" => 10,
       "color-neutral" => "#000000",
+      "option-bw-color-variables" => "on",
+      "auto-color-scheme" => "on",
       "text-dark" => "var(--black)",
+      "text-light" => "var(--white)",
+      "bg-ultra-dark" => "var(--neutral-ultra-dark)",
+      "bg-ultra-dark-text" => "var(--text-light)",
+      "bg-ultra-dark-heading" => "var(--text-light)",
       "neutral-ultra-dark-h" => 0,
       "neutral-ultra-dark-s" => 0,
       "neutral-ultra-dark-l" => 10,
@@ -123,24 +133,69 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert token_set.tokens["layout.viewport.min"].resolved_value == "360px"
   end
 
-  test "preserves source provenance and unresolved variable expressions" do
+  test "resolves the proven BW foundation and ultra-dark contextual relationships" do
     assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
     primary = token_set.tokens["color.primary"]
+    black = token_set.tokens["color.black"]
+    white = token_set.tokens["color.white"]
     text_dark = token_set.tokens["color.text.dark"]
+    text_light = token_set.tokens["color.text.light"]
+    ultra_dark_text = token_set.tokens["color.background.ultra_dark.text"]
+    ultra_dark_heading = token_set.tokens["color.background.ultra_dark.heading"]
 
     assert primary.provenance["source_keys"] == ["color-primary"]
     assert primary.provenance["raw_value"] == "#32a2c1"
     assert primary.provenance["adapter"] == "automatic_css"
     assert primary.provenance["adapter_version"] == "1.0.0"
     assert primary.provenance["transformation"] == "direct"
-    assert text_dark.source_expression == "var(--black)"
-    assert text_dark.resolution_status == :unresolved
-    assert text_dark.resolved_value == nil
 
-    assert Enum.any?(
-             _diagnostics,
-             &(&1.code == "acss.value.unresolved" and &1.path == "color.text.dark")
-           )
+    assert black.value["type"] == "derived"
+    assert black.value["recipe"] == "acss.bw_foundation"
+    assert black.value["variable"] == "--black"
+    assert black.references == []
+    refute black.value == token_set.tokens["color.neutral"].value
+    assert black.resolved_value == "light-dark(#000, #fff)"
+    assert black.source_expression["variable"] == "--black"
+    assert black.source_expression["inputs"]["option_bw_color_variables"] == "on"
+    assert black.source_expression["inputs"]["auto_color_scheme"] == "on"
+    assert black.provenance["source_type"] == "automatic_css_reference_contract"
+    assert black.provenance["source_variable"] == "--black"
+    assert black.provenance["source_contract_version"] == "4.0.1"
+    assert black.provenance["transformation"] == "acss_generated_foundation"
+
+    assert white.value["type"] == "derived"
+    assert white.value["variable"] == "--white"
+    assert white.resolved_value == "light-dark(#fff, #000)"
+    assert white.provenance["source_variable"] == "--white"
+
+    assert text_dark.source_expression == "var(--black)"
+    assert text_dark.references == ["color.black"]
+    assert text_dark.resolution_status == :resolved
+    assert text_dark.resolved_value == black.resolved_value
+    assert text_light.source_expression == "var(--white)"
+    assert text_light.references == ["color.white"]
+    assert text_light.resolution_status == :resolved
+    assert text_light.resolved_value == white.resolved_value
+
+    assert ultra_dark_text.source_expression == "var(--text-light)"
+    assert ultra_dark_text.references == ["color.text.light"]
+    assert ultra_dark_text.resolution_status == :resolved
+    assert ultra_dark_text.resolved_value == white.resolved_value
+    assert ultra_dark_heading.references == ["color.text.light"]
+    assert ultra_dark_heading.resolution_status == :resolved
+    assert ultra_dark_heading.resolved_value == white.resolved_value
+
+    refute Enum.any?(_diagnostics, &(&1.path in ["color.text.dark", "color.text.light"]))
+  end
+
+  test "preserves the proven literal BW foundation when auto color scheme is off" do
+    settings = Map.put(minimal_settings(), "auto-color-scheme", "off")
+
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(settings)
+    assert token_set.tokens["color.black"].resolved_value == "#000"
+    assert token_set.tokens["color.white"].resolved_value == "#fff"
+    assert token_set.tokens["color.black"].source_expression["expression"] == "#000"
+    assert token_set.tokens["color.white"].source_expression["expression"] == "#fff"
   end
 
   test "tolerates unrelated settings and applies strict required-token profiles" do
@@ -165,8 +220,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
     assert Enum.any?(diagnostics, &(&1.code == "tokens.required.missing"))
 
+    missing_text = Map.delete(minimal_settings(), "text-dark")
+
     assert {:error, diagnostics} =
-             AutomaticCSS.normalize(minimal_settings(),
+             AutomaticCSS.normalize(missing_text,
                strict: true,
                required_paths: ["color.text.dark"]
              )
@@ -186,6 +243,52 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                strict: true,
                profile: :hero_foundation
              )
+  end
+
+  test "hero_foundation requires every proven Hero semantic dependency" do
+    cases = [
+      {"text-light", "color.text.light"},
+      {"bg-ultra-dark", "color.background.ultra_dark"},
+      {"bg-ultra-dark-text", "color.background.ultra_dark.text"},
+      {"bg-ultra-dark-heading", "color.background.ultra_dark.heading"},
+      {"primary-outline-btn-text", "button.primary.outline.text"},
+      {"btn-border-width", "button.primary.border_width"},
+      {"btn-border-style", "button.primary.border_style"}
+    ]
+
+    for {source_key, required_path} <- cases do
+      assert {:error, diagnostics} =
+               AutomaticCSS.normalize(Map.delete(fixture_settings(), source_key),
+                 strict: true,
+                 profile: :hero_foundation
+               ),
+             source_key
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "tokens.required.missing" and
+                 diagnostic.path == required_path
+             end),
+             source_key
+    end
+  end
+
+  test "hero_foundation does not include undocumented generated transparency variables" do
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.normalize(fixture_settings(),
+               strict: true,
+               profile: :hero_foundation
+             )
+
+    required_paths = AutomaticCSS.required_paths(:hero_foundation)
+
+    refute "--neutral-ultra-dark-trans-60" in required_paths
+    refute "color.neutral.ultra_dark.alpha_60" in required_paths
+    refute Map.has_key?(token_set.tokens, "color.neutral.ultra_dark.alpha_60")
+
+    refute Enum.any?(Normalizer.mapping(), fn entry ->
+             entry.path == "color.neutral.ultra_dark.alpha_60" or
+               "--neutral-ultra-dark-trans-60" in entry.source_keys
+           end)
   end
 
   test "does not let explicit required paths bypass a named profile" do
@@ -270,11 +373,11 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping())
-    assert map_size(token_set.tokens) == 67
+    assert map_size(token_set.tokens) == 71
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
-             color: 23,
+             color: 27,
              layout: 3,
              radius: 1,
              spacing: 11,
@@ -282,7 +385,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
            }
 
     required_paths = AutomaticCSS.required_paths(:hero_foundation)
-    assert length(required_paths) == 29
+    assert length(required_paths) == 43
 
     assert Enum.all?(required_paths, fn path ->
              token_set.tokens[path].resolution_status == :resolved
@@ -293,7 +396,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert diagnostics == token_set.diagnostics
   end
 
-  test "retains fixture source-version evidence and known unresolved values" do
+  test "retains fixture source-version evidence and resolves the BW foundation" do
     assert {:ok, token_set, diagnostics} =
              AutomaticCSS.from_file(fixture_path(),
                source_version: "4.0.1",
@@ -304,10 +407,19 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert token_set.source_metadata["export_version"] == nil
     assert token_set.source_metadata["source_version_status"] == "fixture_reference"
 
+    assert token_set.tokens["color.black"].resolved_value == "light-dark(#000, #fff)"
+    assert token_set.tokens["color.white"].resolved_value == "light-dark(#fff, #000)"
     assert token_set.tokens["color.text.dark"].source_expression == "var(--black)"
-    assert token_set.tokens["color.text.dark"].resolution_status == :unresolved
+    assert token_set.tokens["color.text.dark"].references == ["color.black"]
+    assert token_set.tokens["color.text.dark"].resolution_status == :resolved
     assert token_set.tokens["color.text.light"].source_expression == "var(--white)"
-    assert token_set.tokens["color.text.light"].resolution_status == :unresolved
+    assert token_set.tokens["color.text.light"].references == ["color.white"]
+    assert token_set.tokens["color.text.light"].resolution_status == :resolved
+    assert token_set.tokens["color.background.ultra_dark.text"].references == ["color.text.light"]
+
+    assert token_set.tokens["color.background.ultra_dark.heading"].references == [
+             "color.text.light"
+           ]
 
     unknown = Enum.find(diagnostics, &(&1.code == "acss.setting.unknown"))
     assert unknown.metadata["count"] > 0

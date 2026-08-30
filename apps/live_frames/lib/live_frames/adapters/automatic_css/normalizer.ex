@@ -64,8 +64,24 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
             "color.neutral.ultra_dark",
             "--neutral-ultra-dark"
           ),
-          reference("color.text.dark", :color, "text-dark", nil, "--black"),
-          reference("color.text.light", :color, "text-light", nil, "--white")
+          foundation("color.black", :color, "--black", "#000", "#fff"),
+          foundation("color.white", :color, "--white", "#fff", "#000"),
+          reference("color.text.dark", :color, "text-dark", "color.black", "--black"),
+          reference("color.text.light", :color, "text-light", "color.white", "--white"),
+          reference(
+            "color.background.ultra_dark.text",
+            :color,
+            "bg-ultra-dark-text",
+            "color.text.light",
+            "--text-light"
+          ),
+          reference(
+            "color.background.ultra_dark.heading",
+            :color,
+            "bg-ultra-dark-heading",
+            "color.text.light",
+            "--text-light"
+          )
         ]
 
     base_spacing_inputs = [
@@ -383,6 +399,18 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp resolve_entry(
          %{
+           strategy: :foundation,
+           source_keys: source_keys,
+           variable: variable,
+           light_value: light_value,
+           dark_value: dark_value
+         },
+         settings
+       ),
+       do: Resolver.foundation(settings, variable, light_value, dark_value, source_keys)
+
+  defp resolve_entry(
+         %{
            strategy: :reference,
            source_keys: [source_key],
            reference_path: reference_path,
@@ -439,6 +467,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       "source_version" => Map.get(source_metadata, "source_version"),
       "export_version" => Map.get(source_metadata, "export_version")
     }
+
+    provenance = Map.merge(provenance, Map.get(entry, :provenance, %{}))
 
     metadata =
       entry
@@ -623,6 +653,24 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       source_keys: [source_key],
       reference_path: reference_path,
       expected_variable: expected_variable
+    }
+
+  defp foundation(path, category, variable, light_value, dark_value),
+    do: %{
+      path: path,
+      category: category,
+      strategy: :foundation,
+      source_keys: ["option-bw-color-variables", "auto-color-scheme"],
+      variable: variable,
+      light_value: light_value,
+      dark_value: dark_value,
+      provenance: %{
+        "source_type" => "automatic_css_reference_contract",
+        "source_variable" => variable,
+        "source_contract_version" => "4.0.1",
+        "source_reference" =>
+          "Automatic.css 4.0.1 palette/main/_bw.scss and color-scheme/_auto-scheme.scss"
+      }
     }
 
   defp responsive(path, category, source_keys, unit),

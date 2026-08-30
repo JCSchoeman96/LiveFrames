@@ -156,20 +156,31 @@ color.background.light
 color.background.dark
 color.background.ultra_light
 color.background.ultra_dark
+color.black
+color.white
 color.text.dark
 color.text.light
+color.background.ultra_dark.text
+color.background.ultra_dark.heading
 ```
 
 Direct palette colors use the fixture's hex value. Proven HSL channel groups
 are rendered deterministically as an HSL expression while retaining all raw
 channel settings in provenance. Background values retain semantic references
-to the corresponding palette token. `text-dark` and `text-light` currently
-refer to `--black` and `--white`, which are not supplied as settings; they are
-represented as unresolved rather than inferred from another palette.
+to the corresponding palette token. The ACSS 4.0.1 reference contract proves
+the BW foundation values (`--black` as `#000` and `--white` as `#fff`, with
+reversed alternate-scheme values). The adapter preserves the generated
+`light-dark(...)` expression when `auto-color-scheme` is enabled and keeps
+`color.black` and `color.white` distinct from neutral palette tokens.
+`text-dark` and `text-light` preserve their source expressions while
+referencing those canonical foundation paths. Ultra-dark contextual text and
+heading settings preserve their proven references to `color.text.light`.
 
 The Hero overlay expression
 `var(--overlay-bg, var(--neutral-ultra-dark-trans-60))` is not an ACSS setting
-in this fixture. Phase 3 does not invent an overlay token for it.
+whose generated value is proven by the approved settings/reference inputs.
+Phase 3 does not invent a transparency token for it; the later Bricks Stage A
+dependency pipeline must preserve and report that source dependency.
 
 ### Spacing and radius
 
@@ -267,6 +278,11 @@ color.primary.light
 color.primary.ultra_dark
 color.neutral
 color.neutral.ultra_dark
+color.background.ultra_dark
+color.background.ultra_dark.text
+color.background.ultra_dark.heading
+color.text.light
+color.white
 spacing.base.min
 spacing.base.max
 spacing.content_gap
@@ -280,6 +296,8 @@ button.primary.background
 button.primary.background_hover
 button.primary.text
 button.primary.border
+button.primary.border_width
+button.primary.border_style
 button.primary.focus
 button.primary.radius
 button.primary.padding_inline
@@ -288,6 +306,13 @@ button.primary.min_width
 button.primary.font_size
 button.primary.font_weight
 button.primary.line_height
+button.primary.outline.background
+button.primary.outline.background_hover
+button.primary.outline.border
+button.primary.outline.border_hover
+button.primary.outline.focus
+button.primary.outline.text
+button.primary.outline.text_hover
 layout.viewport.min
 layout.viewport.max
 ```
@@ -416,4 +441,3 @@ This phase does not parse Bricks, resolve Bricks global classes or ACSS utility
 classes, construct Design IR, create Hero India structures or components,
 generate HEEx, generate Tailwind configuration/classes, generate SCSS, or
 start Phase 4. The TokenSet is the only downstream-facing artifact.
-

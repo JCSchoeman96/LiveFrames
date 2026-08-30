@@ -131,6 +131,41 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
     end
   end
 
+  @spec foundation(map(), String.t(), String.t(), String.t(), [String.t()]) :: map()
+  def foundation(settings, variable, light_value, dark_value, source_keys)
+      when is_map(settings) and is_binary(variable) and is_binary(light_value) and
+             is_binary(dark_value) and is_list(source_keys) do
+    bw_variables = Map.get(settings, "option-bw-color-variables", "on")
+    auto_color_scheme = Map.get(settings, "auto-color-scheme", "off")
+
+    inputs = %{
+      "light" => light_value,
+      "dark" => dark_value,
+      "option_bw_color_variables" => bw_variables,
+      "auto_color_scheme" => auto_color_scheme
+    }
+
+    cond do
+      bw_variables != "on" ->
+        unresolved(inputs, List.first(source_keys), "ACSS black/white variables are disabled")
+
+      auto_color_scheme == "on" ->
+        expression = "light-dark(#{light_value}, #{dark_value})"
+
+        generated_foundation(variable, inputs, source_keys, expression)
+
+      auto_color_scheme == "off" ->
+        generated_foundation(variable, inputs, source_keys, light_value)
+
+      true ->
+        unresolved(
+          inputs,
+          List.first(source_keys),
+          "auto-color-scheme must be on or off for the ACSS BW contract"
+        )
+    end
+  end
+
   @spec derived(String.t(), String.t(), map(), [String.t()], [String.t()]) :: map()
   def derived(recipe, variable, inputs, references, source_keys)
       when is_binary(recipe) and is_binary(variable) and is_map(inputs) and is_list(references) and
@@ -184,6 +219,34 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
       transformation: transformation,
       metadata: metadata
     }
+  end
+
+  defp generated_foundation(variable, inputs, source_keys, expression) do
+    value = %{
+      "type" => "derived",
+      "recipe" => "acss.bw_foundation",
+      "variable" => variable,
+      "inputs" => inputs
+    }
+
+    source_expression = %{
+      "type" => "acss_generated_variable",
+      "variable" => variable,
+      "expression" => expression,
+      "inputs" => inputs
+    }
+
+    resolved(
+      value,
+      expression,
+      source_expression,
+      "acss_generated_foundation",
+      %{
+        "source_variable" => variable,
+        "source_keys" => source_keys,
+        "source_contract_version" => "4.0.1"
+      }
+    )
   end
 
   defp literal_value?(value, :color),
