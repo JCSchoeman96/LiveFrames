@@ -4,7 +4,17 @@ defmodule LiveFrames.Tokens.Diagnostic do
   """
 
   @severities [:info, :warning, :error, :fatal]
-  @categories [:source, :version, :mapping, :value, :path, :reference, :required, :provenance, :serialization]
+  @categories [
+    :source,
+    :version,
+    :mapping,
+    :value,
+    :path,
+    :reference,
+    :required,
+    :provenance,
+    :serialization
+  ]
 
   @type t :: %__MODULE__{
           code: String.t() | nil,
