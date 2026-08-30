@@ -470,7 +470,9 @@ defmodule LiveFrames.Tokens.Validation do
 
   defp validate_references(tokens_by_path, diagnostics) do
     Enum.reduce(tokens_by_path, diagnostics, fn {path, token}, diagnostics ->
-      Enum.reduce(token.references, diagnostics, fn reference, diagnostics ->
+      references = if is_list(token.references), do: token.references, else: []
+
+      Enum.reduce(references, diagnostics, fn reference, diagnostics ->
         if Map.has_key?(tokens_by_path, reference) do
           diagnostics
         else
@@ -490,7 +492,18 @@ defmodule LiveFrames.Tokens.Validation do
   end
 
   defp validate_cycles(tokens_by_path, diagnostics) do
-    graph = Map.new(tokens_by_path, fn {path, token} -> {path, token.references} end)
+    graph =
+      Map.new(tokens_by_path, fn {path, token} ->
+        references =
+          if is_list(token.references) do
+            Enum.filter(token.references, &(is_binary(&1) and valid_path?(&1)))
+          else
+            []
+          end
+
+        {path, references}
+      end)
+
     paths = tokens_by_path |> Map.keys() |> Enum.sort()
 
     {_visited, diagnostics, _cycles} =
@@ -589,7 +602,7 @@ defmodule LiveFrames.Tokens.Validation do
         "a required token is missing or unresolved",
         :required,
         path: if(is_binary(path), do: path, else: nil),
-        metadata: %{"required_path" => path, "status" => Atom.to_string(status)}
+        metadata: %{"required_path" => path, "status" => status_label(status)}
       )
     )
   end
@@ -627,6 +640,10 @@ defmodule LiveFrames.Tokens.Validation do
 
   defp valid_path?(path) when is_binary(path), do: Regex.match?(@path_pattern, path)
   defp valid_path?(_path), do: false
+
+  defp status_label(status) when is_atom(status), do: Atom.to_string(status)
+  defp status_label(status) when is_binary(status), do: status
+  defp status_label(status), do: inspect(status)
 
   defp json_object?(value) when is_map(value) and not is_struct(value) do
     case json_keys(Map.keys(value)) do

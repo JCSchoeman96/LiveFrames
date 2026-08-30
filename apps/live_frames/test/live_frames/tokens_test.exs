@@ -126,6 +126,17 @@ defmodule LiveFrames.TokensTest do
              :ok
   end
 
+  test "reports malformed reference fields without crashing" do
+    token = valid_token_set().tokens["color.primary"]
+    malformed = %{token | resolution_status: "pending", references: :not_a_list}
+    token_set = %{valid_token_set() | tokens: %{"color.primary" => malformed}}
+
+    assert {:error, diagnostics} = Tokens.validate(token_set)
+    codes = Enum.map(diagnostics, & &1.code)
+    assert "tokens.status.invalid" in codes
+    assert "tokens.reference.invalid" in codes
+  end
+
   test "encoding is deterministic and contains no struct internals" do
     first = %{
       valid_token_set()
