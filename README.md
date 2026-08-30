@@ -1,75 +1,85 @@
 # LiveFrames
 
-LiveFrames is being built as a reusable Phoenix LiveView component compiler
-with a separate preview and conversion lab. The repository is currently at
-Phase 3 of [docs/00_LIVEFRAMES_MASTER_SPEC.md](docs/00_LIVEFRAMES_MASTER_SPEC.md):
-the Design IR is frozen at 1.0.0, and the initial Automatic.css TokenSet
-adapter is implemented without making Automatic.css a runtime dependency.
+LiveFrames is a Phoenix umbrella project for converting visual-builder design
+sources into reusable LiveView components.
 
-## Local requirements
+## Current status
 
-- Elixir 1.19.3
-- OTP 28
-- Phoenix 1.8.13
-- Phoenix LiveView 1.2.11
+Phase 3 is complete and merged to `main` in [PR #3](https://github.com/JCSchoeman96/LiveFrames/pull/3).
+The merge commit is `eb67286e128526d0a746f8098cfd750cd5f167f2`.
 
-Run the baseline checks with:
+Phase 4 has not started. The next planned task is the Bricks adapter for the
+approved Hero India fixture. That work requires separate authorization.
+
+Current work is documentation and repository maintenance only.
+
+## Done
+
+- Phase 0: repository, umbrella apps, quality gates, fixtures, provenance and
+  private-reference boundaries.
+- Phase 1: Phoenix LiveView preview app, PhoenixStorybook mount, proof
+  component and conversion-lab shell.
+- Phase 2: framework-independent Design IR `1.0.0` with validation,
+  diagnostics and deterministic JSON serialization.
+- Phase 3: source-independent TokenSet `1.0.0` and the compile-time
+  Automatic.css `4.0.1` settings adapter.
+
+Phase 3 normalizes the approved ACSS settings fixture into a narrow semantic
+token set with 71 canonical tokens and a 43-token `hero_foundation` profile. It
+preserves provenance, references, unresolved values and strict required-token
+diagnostics. It does not make Automatic.css a runtime dependency. The generated
+ACSS variable `--neutral-ultra-dark-trans-60` remains a later source-dependency
+concern because its value is not proven by the approved settings evidence.
+
+## Architecture
+
+```text
+Automatic.css settings -> ACSS adapter -> LiveFrames TokenSet
+Bricks JSON             -> future adapter -> Design IR
+TokenSet + Design IR    -> future generators
+```
+
+The reusable library lives in `apps/live_frames`. The preview application in
+`apps/live_frames_preview` may depend on the library, never the reverse.
+
+## Not started
+
+- Bricks parsing, tree reconstruction and global-class resolution
+- Hero India conversion to Design IR
+- HEEx or LiveView component generation
+- Tailwind token bridging or SCSS generation
+- runtime ACSS generation, WordPress integration or asset resolution
+
+## Repository map
+
+- `apps/live_frames`: reusable library, Design IR, TokenSet and source adapters
+- `apps/live_frames_preview`: Phoenix preview and conversion-lab shell
+- `fixtures`: reviewed deterministic inputs
+- `imports`: mutable source intake and review state
+- `sources`: supplied raw experiments and exports
+- `private_reference`: local, gitignored vendor/reference material
+- `docs`: specifications, phase notes and compatibility records
+
+The approved inputs are `fixtures/automatic_css/acss_settings.json` and
+`fixtures/bricks/bricks_components.json`. The ACSS adapter consumes only its
+documented settings subset. No Bricks parser consumes the Bricks fixture yet.
+
+## Local development
+
+Requirements: Elixir 1.19.3, OTP 28, Phoenix 1.8.13 and Phoenix LiveView
+1.2.11.
 
 ```sh
 mix setup
 mix check
-```
-
-Build the preview browser assets with:
-
-```sh
 mix assets.build
-```
-
-Start the preview application with:
-
-```sh
 mix phx.server
 ```
 
-It listens on `http://localhost:4000/` in development. `/health` is the
-minimal boot check for the preview application. Use `PORT=4400 mix phx.server`
-when port 4000 is already occupied.
+The preview runs at `http://localhost:4000/`. Useful routes are `/health`,
+`/storybook` and `/liveframes/lab`.
 
-## Phase 1 preview tools
-
-- `/storybook` contains the single architecture-proof story.
-- `/liveframes/lab` is the empty conversion-lab shell.
-
-Storybook and the lab use the CSS-first Tailwind v4 bundle. The ACSS settings
-adapter normalizes only the initial semantic subset documented in
-[docs/06_ACSS_TOKEN_ADAPTER.md](docs/06_ACSS_TOKEN_ADAPTER.md). Bricks parsing,
-utility-class reconstruction, real catalogue content and code generation
-remain deferred.
-
-## Repository boundaries
-
-- `apps/live_frames` is the reusable library. It owns the frozen Design IR,
-  generic TokenSet contract and initial Automatic.css settings adapter; source
-  adapters remain conversion-time code.
-- `apps/live_frames_preview` is the Phoenix/LiveView preview application and
-  may depend on `live_frames`, never the reverse.
-- `imports/` is mutable source intake and review state.
-- `fixtures/` contains deterministic inputs that are safe to use in tests.
-- `private_reference/` is reserved for local, gitignored vendor and plugin
-  references. It is never a runtime dependency.
-- `placeholders/` contains future asset placeholders by aspect ratio.
-- `sources/` preserves the supplied raw experiments and exports.
-
-The supplied Bricks export is staged at
-`fixtures/bricks/bricks_components.json`; the supplied ACSS settings export is
-staged at `fixtures/automatic_css/acss_settings.json`. Their provenance is
-recorded beside the fixtures. The Phase 3 adapter consumes only the documented
-ACSS settings subset; the Bricks export has no parser yet.
-
-## Phase 3 boundary
-
-This phase includes the Phase 1 preview foundation, the Phase 2 Design IR
-contract, and the Phase 3 versioned TokenSet/Automatic.css adapter. It does not
-include Bricks parsing, Hero India conversion, HEEx generation, Tailwind token
-bridging, SCSS generation or Phase 4 work.
+Read [the master specification](docs/00_LIVEFRAMES_MASTER_SPEC.md) for the
+authoritative architecture and
+[the ACSS adapter notes](docs/06_ACSS_TOKEN_ADAPTER.md) for the current
+TokenSet contract.
