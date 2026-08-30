@@ -36,22 +36,36 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         [
           direct("color.base", :color, "color-base", :color),
           hsl_entry("color.base.ultra_light", "base", "ultra-light"),
-          reference("color.background.light", :color, "bg-light", "color.base.ultra_light"),
-          reference("color.background.dark", :color, "bg-dark", "color.neutral.dark"),
+          reference(
+            "color.background.light",
+            :color,
+            "bg-light",
+            "color.base.ultra_light",
+            "--base-ultra-light"
+          ),
+          reference(
+            "color.background.dark",
+            :color,
+            "bg-dark",
+            "color.neutral.dark",
+            "--neutral-dark"
+          ),
           reference(
             "color.background.ultra_light",
             :color,
             "bg-ultra-light",
-            "color.neutral.ultra_light"
+            "color.neutral.ultra_light",
+            "--neutral-ultra-light"
           ),
           reference(
             "color.background.ultra_dark",
             :color,
             "bg-ultra-dark",
-            "color.neutral.ultra_dark"
+            "color.neutral.ultra_dark",
+            "--neutral-ultra-dark"
           ),
-          reference("color.text.dark", :color, "text-dark", nil),
-          reference("color.text.light", :color, "text-light", nil)
+          reference("color.text.dark", :color, "text-dark", nil, "--black"),
+          reference("color.text.light", :color, "text-light", nil, "--white")
         ]
 
     base_spacing_inputs = [
@@ -86,14 +100,22 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         "spacing.content_gap",
         :spacing,
         "contextual-content-gap",
-        "spacing.scale.medium"
+        "spacing.scale.medium",
+        "--space-m"
       ),
-      reference("spacing.grid_gap", :spacing, "contextual-grid-gap", "spacing.scale.medium"),
+      reference(
+        "spacing.grid_gap",
+        :spacing,
+        "contextual-grid-gap",
+        "spacing.scale.medium",
+        "--space-m"
+      ),
       reference(
         "spacing.container_gap",
         :spacing,
         "contextual-container-gap",
-        "spacing.scale.xl"
+        "spacing.scale.xl",
+        "--space-xl"
       ),
       derived(
         "spacing.section",
@@ -116,7 +138,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         "spacing.section.padding_block",
         :spacing,
         "section-padding-block",
-        "spacing.section"
+        "spacing.section",
+        "--section-space-m"
       ),
       px("spacing.gutter.min", :spacing, "gutter-min"),
       px("spacing.gutter.max", :spacing, "gutter-max"),
@@ -178,27 +201,48 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     ]
 
     button_entries = [
-      reference("button.primary.background", :button, "btn-primary-bg", "color.primary"),
+      reference(
+        "button.primary.background",
+        :button,
+        "btn-primary-bg",
+        "color.primary",
+        "--primary"
+      ),
       reference(
         "button.primary.background_hover",
         :button,
         "btn-primary-hover",
-        "color.primary.hover"
+        "color.primary.hover",
+        "--primary-hover"
       ),
-      reference("button.primary.text", :button, "btn-primary-text", "color.primary.ultra_dark"),
+      reference(
+        "button.primary.text",
+        :button,
+        "btn-primary-text",
+        "color.primary.ultra_dark",
+        "--primary-ultra-dark"
+      ),
       reference(
         "button.primary.border",
         :button,
         "btn-primary-border-color",
-        "button.primary.background"
+        "button.primary.background",
+        "--btn-background"
       ),
       reference(
         "button.primary.focus",
         :button,
         "btn-primary-focus-color",
-        "color.primary.light"
+        "color.primary.light",
+        "--primary-light"
       ),
-      reference("button.primary.radius", :button, "btn-border-radius", "radius.base"),
+      reference(
+        "button.primary.radius",
+        :button,
+        "btn-border-radius",
+        "radius.base",
+        "--radius"
+      ),
       direct("button.primary.padding_inline", :button, "btn-padding-inline", :css),
       direct("button.primary.padding_block", :button, "btn-padding-block", :css),
       px("button.primary.min_width", :button, "btn-min-width"),
@@ -206,7 +250,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         "button.primary.font_size",
         :button,
         "btn-font-size",
-        "typography.body.scale.medium"
+        "typography.body.scale.medium",
+        "--text-m"
       ),
       direct("button.primary.font_weight", :button, "btn-font-weight", :string),
       direct("button.primary.line_height", :button, "btn-line-height", :any),
@@ -222,37 +267,43 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         "button.primary.outline.background_hover",
         :button,
         "btn-primary-outline-background-hover",
-        "color.primary.hover"
+        "color.primary.hover",
+        "--primary-hover"
       ),
       reference(
         "button.primary.outline.border",
         :button,
         "btn-primary-outline-border-color",
-        "color.primary"
+        "color.primary",
+        "--primary"
       ),
       reference(
         "button.primary.outline.border_hover",
         :button,
         "btn-primary-outline-border-hover",
-        "button.primary.background_hover"
+        "button.primary.background_hover",
+        "--btn-background-hover"
       ),
       reference(
         "button.primary.outline.focus",
         :button,
         "btn-primary-outline-focus-color",
-        "color.primary.semi_light"
+        "color.primary.semi_light",
+        "--primary-semi-light"
       ),
       reference(
         "button.primary.outline.text",
         :button,
         "primary-outline-btn-text",
-        "color.primary"
+        "color.primary",
+        "--primary"
       ),
       reference(
         "button.primary.outline.text_hover",
         :button,
         "primary-outline-hover-text",
-        "color.primary.ultra_light"
+        "color.primary.ultra_light",
+        "--primary-ultra-light"
       )
     ]
 
@@ -331,13 +382,18 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     do: Resolver.hsl(settings, source_keys)
 
   defp resolve_entry(
-         %{strategy: :reference, source_keys: [source_key], reference_path: reference_path},
+         %{
+           strategy: :reference,
+           source_keys: [source_key],
+           reference_path: reference_path,
+           expected_variable: expected_variable
+         },
          settings
        ) do
     raw_value = Map.get(settings, source_key)
 
     if present?(raw_value) do
-      Resolver.reference(raw_value, reference_path, source_key)
+      Resolver.reference(raw_value, reference_path, source_key, expected_variable)
     else
       Resolver.unresolved(raw_value, source_key, "source setting is missing or empty")
     end
@@ -559,13 +615,14 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     }
   end
 
-  defp reference(path, category, source_key, reference_path),
+  defp reference(path, category, source_key, reference_path, expected_variable),
     do: %{
       path: path,
       category: category,
       strategy: :reference,
       source_keys: [source_key],
-      reference_path: reference_path
+      reference_path: reference_path,
+      expected_variable: expected_variable
     }
 
   defp responsive(path, category, source_keys, unit),

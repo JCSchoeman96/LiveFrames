@@ -7,7 +7,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
   CSS.
   """
 
-  @hex_pattern ~r/^#[0-9a-fA-F]{3,8}$/
+  @hex_pattern ~r/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
   @reference_pattern ~r/^var\(\s*(--[a-zA-Z0-9_-]+)\s*\)$/
   @variable_pattern ~r/^--[a-zA-Z0-9_-]+$/
 
@@ -95,8 +95,14 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
 
   @spec reference(term(), String.t() | nil, String.t()) :: map()
   def reference(raw_value, target_path, source_key) when is_binary(source_key) do
+    reference(raw_value, target_path, source_key, nil)
+  end
+
+  @spec reference(term(), String.t() | nil, String.t(), String.t() | nil) :: map()
+  def reference(raw_value, target_path, source_key, expected_variable)
+      when is_binary(source_key) and (is_binary(expected_variable) or is_nil(expected_variable)) do
     case reference_variable(raw_value) do
-      {:ok, variable} when is_binary(target_path) ->
+      {:ok, variable} when is_binary(target_path) and variable == expected_variable ->
         resolved(
           %{"type" => "reference", "path" => target_path},
           nil,
@@ -104,6 +110,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
           "semantic_reference",
           %{"source_variable" => variable, "source_key" => source_key},
           [target_path]
+        )
+
+      {:ok, _variable} when is_binary(target_path) ->
+        unresolved(
+          raw_value,
+          source_key,
+          "source variable does not match the proven semantic target"
         )
 
       {:ok, _variable} ->

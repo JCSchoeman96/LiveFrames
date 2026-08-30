@@ -23,7 +23,8 @@ The initial adapter recognizes the committed flat settings map at
 fixtures/automatic_css/acss_settings.json. The fixture contains 2,573 source
 keys and does not contain an embedded export-version field. Its adjacent
 provenance record identifies the reference source as Automatic.css 4.0.1,
-so normalized metadata records:
+so the fixture integration supplies that sidecar evidence explicitly and
+normalized metadata records:
 
 ~~~json
 {
@@ -35,7 +36,21 @@ so normalized metadata records:
 ~~~
 
 source_version is the reference-set version; export_version remains explicitly
-absent. The adapter accepts only a flat JSON object with non-empty string keys,
+absent. The loader does not assume 4.0.1 for arbitrary input: when
+source_version is not supplied, it records source_version as null and
+source_version_status as not_embedded. A supplied source version is caller
+metadata and does not make the adapter claim full source compatibility.
+
+The committed fixture is normalized with the sidecar evidence explicitly:
+
+~~~elixir
+AutomaticCSS.from_file(path,
+  source_version: "4.0.1",
+  source_version_status: "fixture_reference"
+)
+~~~
+
+The adapter accepts only a flat JSON object with non-empty string keys,
 JSON-safe values, and at least one recognized mapping key. Nested envelopes,
 lists, scalars, malformed JSON, unreadable files, and unrecognized-only maps
 return structured diagnostics.
@@ -281,6 +296,7 @@ tokens.path.duplicate
 tokens.reference.missing
 tokens.reference.cycle
 tokens.required.missing
+tokens.required.conflict
 ~~~
 
 Expected malformed input returns diagnostics instead of crashing. Strict

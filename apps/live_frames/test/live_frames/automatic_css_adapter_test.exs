@@ -77,6 +77,14 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert token_set.source_metadata["source_shape"] == "flat_settings_map"
   end
 
+  test "does not claim a source version when the input has no embedded version" do
+    json = Jason.encode!(%{"color-primary" => "#32a2c1"})
+
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_json(json)
+    assert token_set.source_metadata["source_version"] == nil
+    assert token_set.source_metadata["source_version_status"] == "not_embedded"
+  end
+
   test "returns structured diagnostics for malformed JSON" do
     assert {:error, diagnostics} = AutomaticCSS.from_json("{not-json")
     assert Enum.any?(diagnostics, &(&1.code == "acss.source.json_invalid"))
@@ -180,6 +188,49 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
   end
 
+  test "does not let explicit required paths bypass a named profile" do
+    assert {:error, diagnostics} =
+             AutomaticCSS.normalize(minimal_settings(),
+               strict: true,
+               profile: :hero_foundation,
+               required_paths: []
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.required.conflict"))
+  end
+
+  test "does not resolve an unrelated CSS variable against a proven target" do
+    settings = Map.put(minimal_settings(), "btn-primary-bg", "var(--unrelated)")
+
+    assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(settings)
+    token = token_set.tokens["button.primary.background"]
+    assert token.resolution_status == :unresolved
+    assert token.resolved_value == nil
+    assert Enum.any?(diagnostics, &(&1.path == "button.primary.background"))
+
+    assert {:error, strict_diagnostics} =
+             AutomaticCSS.normalize(settings, strict: true, profile: :hero_foundation)
+
+    assert Enum.any?(strict_diagnostics, fn diagnostic ->
+             diagnostic.code == "tokens.required.missing" and
+               diagnostic.path == "button.primary.background"
+           end)
+  end
+
+  test "does not accept unsupported direct color hex lengths" do
+    for invalid_color <- ["#12345", "#1234567"] do
+      settings = Map.put(minimal_settings(), "color-primary", invalid_color)
+
+      assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(settings)
+      assert token_set.tokens["color.primary"].resolution_status == :unresolved
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "acss.value.unresolved" and
+                 diagnostic.path == "color.primary"
+             end)
+    end
+  end
+
   test "records proven breakpoints and never invents generic thresholds" do
     assert {:ok, token_set, _diagnostics} =
              AutomaticCSS.normalize(
@@ -211,7 +262,12 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
   test "normalizes the complete approved fixture into the versioned token vocabulary" do
     assert {:ok, token_set, diagnostics} =
-             AutomaticCSS.from_file(fixture_path(), strict: true, profile: :hero_foundation)
+             AutomaticCSS.from_file(fixture_path(),
+               strict: true,
+               profile: :hero_foundation,
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping())
     assert map_size(token_set.tokens) == 67
@@ -238,7 +294,11 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   end
 
   test "retains fixture source-version evidence and known unresolved values" do
-    assert {:ok, token_set, diagnostics} = AutomaticCSS.from_file(fixture_path())
+    assert {:ok, token_set, diagnostics} =
+             AutomaticCSS.from_file(fixture_path(),
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
 
     assert token_set.source_metadata["source_version"] == "4.0.1"
     assert token_set.source_metadata["export_version"] == nil

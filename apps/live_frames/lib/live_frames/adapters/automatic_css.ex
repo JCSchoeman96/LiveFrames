@@ -131,10 +131,46 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
 
       profile ->
         case required_paths(profile) do
-          paths when is_list(paths) -> {:ok, Keyword.get(opts, :required_paths, paths)}
+          paths when is_list(paths) -> explicit_required_paths(opts, profile, paths)
           {:error, diagnostics} -> {:error, diagnostics}
         end
     end
+  end
+
+  defp explicit_required_paths(opts, profile, profile_paths) do
+    case Keyword.fetch(opts, :required_paths) do
+      :error ->
+        {:ok, profile_paths}
+
+      {:ok, required_paths} when is_list(required_paths) ->
+        if same_required_paths?(required_paths, profile_paths) do
+          {:ok, profile_paths}
+        else
+          {:error, [required_paths_conflict(profile, required_paths, profile_paths)]}
+        end
+
+      {:ok, required_paths} ->
+        {:error, [required_paths_conflict(profile, required_paths, profile_paths)]}
+    end
+  end
+
+  defp same_required_paths?(left, right) do
+    Enum.all?(left, &is_binary/1) and Enum.all?(right, &is_binary/1) and
+      Enum.sort(Enum.uniq(left)) == Enum.sort(Enum.uniq(right))
+  end
+
+  defp required_paths_conflict(profile, requested_paths, profile_paths) do
+    Diagnostic.new(
+      code: "tokens.required.conflict",
+      severity: :error,
+      category: :required,
+      message: "explicit required_paths cannot override a named required-token profile",
+      metadata: %{
+        "profile" => inspect(profile),
+        "profile_paths" => profile_paths,
+        "requested_paths" => inspect(requested_paths)
+      }
+    )
   end
 
   defp sort_diagnostics(diagnostics) do

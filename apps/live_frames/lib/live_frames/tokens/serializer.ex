@@ -4,6 +4,7 @@ defmodule LiveFrames.Tokens.Serializer do
   """
 
   alias LiveFrames.Tokens.Diagnostic
+  alias LiveFrames.Tokens.Json
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
@@ -79,11 +80,5 @@ defmodule LiveFrames.Tokens.Serializer do
   defp ordered(list) when is_list(list), do: Enum.map(list, &ordered/1)
   defp ordered(value), do: value
 
-  defp key_string!(key) when is_binary(key), do: key
-
-  defp key_string!(key) when is_atom(key) and key not in [nil, true, false],
-    do: Atom.to_string(key)
-
-  defp key_string!(key),
-    do: raise(ArgumentError, "JSON object key must be a string or atom: #{inspect(key)}")
+  defp key_string!(key), do: Json.key_string!(key)
 end

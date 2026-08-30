@@ -25,6 +25,7 @@ Create:
 - `apps/live_frames/lib/live_frames/tokens/diagnostic.ex`: generic diagnostic struct.
 - `apps/live_frames/lib/live_frames/tokens/validation.ex`: TokenSet validation, references, cycles, and required paths.
 - `apps/live_frames/lib/live_frames/tokens/serializer.ex`: JSON-ready conversion and deterministic encoding.
+- `apps/live_frames/lib/live_frames/tokens/json.ex`: shared JSON object-key policy.
 - `apps/live_frames/lib/live_frames/adapters/automatic_css.ex`: public adapter boundary.
 - `apps/live_frames/lib/live_frames/adapters/automatic_css/loader.ex`: file/decode/flat-envelope recognition.
 - `apps/live_frames/lib/live_frames/adapters/automatic_css/normalizer.ex`: authoritative mapping table and token construction.

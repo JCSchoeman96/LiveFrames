@@ -137,6 +137,16 @@ defmodule LiveFrames.TokensTest do
     assert "tokens.reference.invalid" in codes
   end
 
+  test "rejects JSON object keys that the serializer cannot encode" do
+    invalid = %{valid_token_set() | source_metadata: %{nil => "not-json-key"}}
+
+    assert {:error, diagnostics} = Tokens.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.source_metadata.invalid"))
+
+    assert {:error, encode_diagnostics} = Tokens.encode(invalid)
+    assert Enum.any?(encode_diagnostics, &(&1.code == "tokens.source_metadata.invalid"))
+  end
+
   test "requires a reference value to declare its semantic edge" do
     token = valid_token_set().tokens["button.primary.background"]
     malformed = %{token | references: []}

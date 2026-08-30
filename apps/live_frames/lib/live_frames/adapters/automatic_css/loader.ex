@@ -6,7 +6,6 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   alias LiveFrames.Tokens.Diagnostic
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
 
-  @source_version "4.0.1"
   @adapter_version "1.0.0"
 
   def from_file(path, opts \\ [])
@@ -102,12 +101,15 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   end
 
   defp source_metadata(settings, opts) do
+    source_version = Keyword.get(opts, :source_version)
+
     %{
       "source_system" => "automatic_css",
       "source_type" => "automatic_css_settings",
       "source_shape" => "flat_settings_map",
-      "source_version" => Keyword.get(opts, :source_version, @source_version),
-      "source_version_status" => Keyword.get(opts, :source_version_status, "fixture_reference"),
+      "source_version" => source_version,
+      "source_version_status" =>
+        Keyword.get(opts, :source_version_status, source_version_status(source_version)),
       "export_version" => Keyword.get(opts, :export_version),
       "adapter" => "automatic_css",
       "adapter_version" => @adapter_version,
@@ -115,6 +117,9 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
       "compatibility" => "recognized_with_unknown_fields"
     }
   end
+
+  defp source_version_status(nil), do: "not_embedded"
+  defp source_version_status(_source_version), do: "caller_supplied"
 
   defp diagnostic(code, message, opts \\ []) do
     Diagnostic.new(

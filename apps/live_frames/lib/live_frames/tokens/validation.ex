@@ -7,6 +7,7 @@ defmodule LiveFrames.Tokens.Validation do
   """
 
   alias LiveFrames.Tokens.Diagnostic
+  alias LiveFrames.Tokens.Json
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.ValidationError
@@ -636,9 +637,12 @@ defmodule LiveFrames.Tokens.Validation do
 
   defp token_registry?(value), do: is_map(value) and not is_struct(value)
 
-  defp normalize_key(key) when is_binary(key), do: key
-  defp normalize_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp normalize_key(_key), do: nil
+  defp normalize_key(key) do
+    case Json.key_string(key) do
+      {:ok, key} -> key
+      :error -> nil
+    end
+  end
 
   defp sort_key(key) when is_binary(key), do: key
   defp sort_key(key) when is_atom(key), do: Atom.to_string(key)
@@ -679,9 +683,7 @@ defmodule LiveFrames.Tokens.Validation do
     end
   end
 
-  defp json_key(key) when is_binary(key), do: {:ok, key}
-  defp json_key(key) when is_atom(key), do: {:ok, Atom.to_string(key)}
-  defp json_key(_key), do: :error
+  defp json_key(key), do: Json.key_string(key)
 
   defp json_value?(nil), do: true
   defp json_value?(value) when is_binary(value), do: true
