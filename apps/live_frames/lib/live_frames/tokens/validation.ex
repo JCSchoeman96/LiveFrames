@@ -474,19 +474,24 @@ defmodule LiveFrames.Tokens.Validation do
       references = if is_list(token.references), do: token.references, else: []
 
       Enum.reduce(references, diagnostics, fn reference, diagnostics ->
-        if Map.has_key?(tokens_by_path, reference) do
+        if is_binary(reference) and valid_path?(reference) and
+             Map.has_key?(tokens_by_path, reference) do
           diagnostics
         else
-          add(
-            diagnostics,
-            error_at(
-              "tokens.reference.missing",
-              "token reference does not resolve to a canonical token",
-              :reference,
-              path: path,
-              metadata: %{"reference" => reference}
+          if is_binary(reference) and valid_path?(reference) do
+            add(
+              diagnostics,
+              error_at(
+                "tokens.reference.missing",
+                "token reference does not resolve to a canonical token",
+                :reference,
+                path: path,
+                metadata: %{"reference" => reference}
+              )
             )
-          )
+          else
+            diagnostics
+          end
         end
       end)
     end)
@@ -603,7 +608,7 @@ defmodule LiveFrames.Tokens.Validation do
         "a required token is missing or unresolved",
         :required,
         path: if(is_binary(path), do: path, else: nil),
-        metadata: %{"required_path" => path, "status" => status_label(status)}
+        metadata: %{"required_path" => path_label(path), "status" => status_label(status)}
       )
     )
   end
@@ -645,6 +650,9 @@ defmodule LiveFrames.Tokens.Validation do
   defp status_label(status) when is_atom(status), do: Atom.to_string(status)
   defp status_label(status) when is_binary(status), do: status
   defp status_label(status), do: inspect(status)
+
+  defp path_label(path) when is_binary(path), do: path
+  defp path_label(path), do: inspect(path)
 
   defp json_object?(value) when is_map(value) and not is_struct(value) do
     case json_keys(Map.keys(value)) do

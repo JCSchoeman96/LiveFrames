@@ -110,7 +110,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
 
       case Tokens.validate(token_set, validation_opts) do
         :ok ->
-          {:ok, token_set, diagnostics}
+          if Enum.any?(diagnostics, &(&1.severity in [:error, :fatal])) do
+            {:error, diagnostics}
+          else
+            {:ok, token_set, diagnostics}
+          end
 
         {:error, validation_diagnostics} ->
           {:error, sort_diagnostics(diagnostics ++ validation_diagnostics)}
