@@ -2,6 +2,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   use ExUnit.Case, async: true
 
   alias LiveFrames.Adapters.AutomaticCSS
+  alias LiveFrames.Adapters.AutomaticCSS.Normalizer
   alias LiveFrames.Tokens
 
   defp fixture_path do
@@ -156,11 +157,27 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
     assert Enum.any?(diagnostics, &(&1.code == "tokens.required.missing"))
 
+    assert {:error, diagnostics} =
+             AutomaticCSS.normalize(minimal_settings(),
+               strict: true,
+               required_paths: ["color.text.dark"]
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.required.missing"))
+
     fixture_settings = Jason.decode!(fixture)
     unrelated_removed = Map.delete(fixture_settings, "option-width")
 
     assert {:ok, _token_set, _diagnostics} =
              AutomaticCSS.normalize(unrelated_removed, strict: true, profile: :hero_foundation)
+
+    unrelated_mapped_removed = Map.delete(fixture_settings, "text-dark")
+
+    assert {:ok, _token_set, _diagnostics} =
+             AutomaticCSS.normalize(unrelated_mapped_removed,
+               strict: true,
+               profile: :hero_foundation
+             )
   end
 
   test "records proven breakpoints and never invents generic thresholds" do
@@ -190,5 +207,70 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert first_diagnostics == second_diagnostics
     assert Tokens.encode!(first) == Tokens.encode!(second)
     assert atom_count_after == atom_count_before
+  end
+
+  test "normalizes the complete approved fixture into the versioned token vocabulary" do
+    assert {:ok, token_set, diagnostics} =
+             AutomaticCSS.from_file(fixture_path(), strict: true, profile: :hero_foundation)
+
+    assert map_size(token_set.tokens) == length(Normalizer.mapping())
+    assert map_size(token_set.tokens) == 67
+
+    assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
+             button: 21,
+             color: 23,
+             layout: 3,
+             radius: 1,
+             spacing: 11,
+             typography: 8
+           }
+
+    required_paths = AutomaticCSS.required_paths(:hero_foundation)
+    assert length(required_paths) == 29
+
+    assert Enum.all?(required_paths, fn path ->
+             token_set.tokens[path].resolution_status == :resolved
+           end)
+
+    assert Enum.all?(Map.keys(token_set.tokens), &String.contains?(&1, "."))
+    refute Map.has_key?(token_set.tokens, "color-primary")
+    assert diagnostics == token_set.diagnostics
+  end
+
+  test "retains fixture source-version evidence and known unresolved values" do
+    assert {:ok, token_set, diagnostics} = AutomaticCSS.from_file(fixture_path())
+
+    assert token_set.source_metadata["source_version"] == "4.0.1"
+    assert token_set.source_metadata["export_version"] == nil
+    assert token_set.source_metadata["source_version_status"] == "fixture_reference"
+
+    assert token_set.tokens["color.text.dark"].source_expression == "var(--black)"
+    assert token_set.tokens["color.text.dark"].resolution_status == :unresolved
+    assert token_set.tokens["color.text.light"].source_expression == "var(--white)"
+    assert token_set.tokens["color.text.light"].resolution_status == :unresolved
+
+    unknown = Enum.find(diagnostics, &(&1.code == "acss.setting.unknown"))
+    assert unknown.metadata["count"] > 0
+
+    assert unknown.metadata["count"] ==
+             token_set.source_metadata["source_key_count"] - length(Normalizer.source_keys())
+
+    assert Enum.all?(unknown.metadata["sample_keys"], &is_binary/1)
+    refute Map.has_key?(token_set.tokens, "overlay.background")
+    refute Map.has_key?(token_set.tokens, "layout.breakpoint.tablet")
+    refute Map.has_key?(token_set.tokens, "layout.breakpoint.mobile")
+    assert token_set.tokens["layout.breakpoint.auto_grid"].resolved_value == "992px"
+  end
+
+  test "serializes the complete fixture deterministically across source map orders" do
+    settings = Jason.decode!(File.read!(fixture_path()))
+    reversed = Map.new(Enum.reverse(Map.to_list(settings)))
+
+    assert {:ok, first, first_diagnostics} = AutomaticCSS.normalize(settings)
+    assert {:ok, second, second_diagnostics} = AutomaticCSS.normalize(reversed)
+
+    assert first == second
+    assert first_diagnostics == second_diagnostics
+    assert Tokens.encode!(first) == Tokens.encode!(second)
   end
 end
