@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0.0",
+  "authority_status": "accepted",
+  "authority_level": 1,
+  "authority_type": "actual_source_environment_configuration",
+  "source_environment": {
+    "type": "LocalWP",
+    "name": "DanBricks",
+    "domain": "danbricks.local",
+    "http_port": 10049,
+    "status_at_audit": "halted",
+    "source_system": "bricks",
+    "source_url": "http://localhost:10049",
+    "hero_component_id": "sqhmmc",
+    "hero_component_label": "Hero India"
+  },
+  "source_context": {
+    "bricks_version": "2.3.1",
+    "payload_version": "2.3.1",
+    "component_version": "2.3.5",
+    "custom_breakpoints_status": "confirmed_default_via_source_fallback"
+  },
+  "breakpoints": {
+    "mobile_portrait": {
+      "source_name": "mobile_portrait",
+      "source_width": 478,
+      "unit": "px",
+      "min_width": null,
+      "max_width": 478,
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 478px)",
+      "enabled": true,
+      "cascade_order": 4,
+      "authority_level": 1,
+      "authority_type": "actual_source_environment_configuration",
+      "default_status": "confirmed_default",
+      "status": "accepted"
+    },
+    "tablet_portrait": {
+      "source_name": "tablet_portrait",
+      "source_width": 991,
+      "unit": "px",
+      "min_width": null,
+      "max_width": 991,
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 991px)",
+      "enabled": true,
+      "cascade_order": 2,
+      "authority_level": 1,
+      "authority_type": "actual_source_environment_configuration",
+      "default_status": "confirmed_default",
+      "status": "accepted"
+    }
+  },
+  "cascade": {
+    "base_breakpoint": {
+      "source_name": "desktop",
+      "source_width": 1279,
+      "unit": "px",
+      "base": true
+    },
+    "ordering": "descending_width",
+    "source_order": [
+      "desktop",
+      "tablet_portrait",
+      "mobile_landscape",
+      "mobile_portrait"
+    ],
+    "overlap": {
+      "tablet_portrait_includes_mobile_portrait": true,
+      "mobile_portrait_rule_is_later": true
+    }
+  },
+  "configuration_observations": {
+    "bricks_breakpoints_option": "absent",
+    "customBreakpoints_setting": "absent",
+    "bricks_global_settings_option": "present",
+    "default_fallback_proof": "Bricks 2.3.1 uses its default breakpoint list when the bricks_breakpoints option is absent."
+  },
+  "evidence": [
+    {
+      "reference": "LocalWP registry: DanBricks site entry",
+      "proves": "source environment identity and HTTP port 10049"
+    },
+    {
+      "reference": "LocalWP DanBricks app/sql/local.sql",
+      "sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
+      "proves": "environment snapshot contains Hero sqhmmc, Hero India, the source asset marker, both responsive names, no bricks_breakpoints option, and no customBreakpoints setting"
+    },
+    {
+      "reference": "LocalWP DanBricks app/sql/local-backup-addon-database-dump.sql",
+      "sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f",
+      "proves": "independent local backup repeats the Hero and breakpoint observations"
+    },
+    {
+      "reference": "LocalWP DanBricks app/public/wp-content/themes/bricks/style.css",
+      "sha256": "182dc2892f916ec6aac23477b36a6e35025427bfbafd8d6bdab7942a31ba903c",
+      "proves": "installed Bricks version 2.3.1"
+    },
+    {
+      "reference": "LocalWP DanBricks app/public/wp-content/themes/bricks/includes/breakpoints.php",
+      "sha256": "7e7ad8050bb40731c5efe4030daf5fce4e596cffea081e6f4b0dc2ecddac148b",
+      "proves": "default breakpoint names and source widths 991 and 478"
+    },
+    {
+      "reference": "LocalWP DanBricks app/public/wp-content/themes/bricks/includes/assets.php",
+      "sha256": "dd539627f85611a722267836beccaeec8d39a5f2db972011872f6311bea38aba",
+      "proves": "smaller-than-base breakpoints emit max-width media conditions and preserve descending cascade"
+    },
+    {
+      "reference": "sources/bricks_components.json",
+      "sha256": "bb584f35b160f5095dc67fc367884f51cff35b59693c84374426f5cecf56a1a1",
+      "proves": "Hero source export context matches component sqhmmc and source URL localhost:10049"
+    }
+  ],
+  "validation": {
+    "exact_names_match_hero_ir": true,
+    "finite_non_negative_css_pixels": true,
+    "min_max_semantics_unambiguous": true,
+    "environment_applicability_proven": true,
+    "stronger_conflict_found": false,
+    "responsive_code_changed": false,
+    "design_ir_changed": false,
+    "token_set_changed": false
+  }
+}
