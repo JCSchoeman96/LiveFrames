@@ -4,6 +4,7 @@ defmodule LiveFrames.Adapters.Bricks do
   """
 
   alias LiveFrames.Adapters.Bricks.Document
+  alias LiveFrames.Adapters.Bricks.DesignIRNormalizer
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
   alias LiveFrames.Adapters.Bricks.TreeBuilder
@@ -26,4 +27,8 @@ defmodule LiveFrames.Adapters.Bricks do
 
   @spec build_tree(term()) :: {:ok, term(), list()} | {:error, list()}
   def build_tree(component), do: TreeBuilder.build(component)
+
+  @spec to_ir(term(), keyword()) ::
+          {:ok, LiveFrames.IR.DesignDocument.t()} | {:error, list()}
+  def to_ir(source, opts \\ []), do: DesignIRNormalizer.normalize(source, opts)
 end
