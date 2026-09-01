@@ -4,6 +4,7 @@ defmodule Mix.Tasks.LiveFrames.Fidelity.Generate do
 
   alias LiveFrames.Fidelity
   alias LiveFrames.Fidelity.DocumentLoader
+  alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
 
   @default_input "sources/work/hero_india/design_ir/design_document.json"
   @default_heex "apps/live_frames_preview/lib/live_frames_preview_web/live/fidelity_generated/hero.html.heex"
@@ -23,7 +24,7 @@ defmodule Mix.Tasks.LiveFrames.Fidelity.Generate do
     manifest = path(options, :manifest, @default_manifest)
 
     with {:ok, document} <- DocumentLoader.from_file(input),
-         {:ok, bundle} <- Fidelity.generate(document),
+         {:ok, bundle} <- Fidelity.generate(document, source_resolver: FidelityResolver),
          :ok <- write(heex, bundle.heex),
          :ok <- write(css, bundle.css),
          :ok <-

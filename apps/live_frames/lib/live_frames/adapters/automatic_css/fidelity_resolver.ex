@@ -1,16 +1,26 @@
 defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
   @moduledoc "The deliberately small Automatic.css compatibility surface for fidelity output."
 
+  @behaviour LiveFrames.Fidelity.SourceResolver
+
   @hints ~w(bg--ultra-dark btn--primary btn--outline)
 
   def hints, do: @hints
 
-  def declarations(classes, token_set) do
-    tokens = token_set["tokens"] || %{}
+  @impl true
+  def resolve(classes, token_set) do
+    consumed_hints = Enum.filter(@hints, &(&1 in classes))
 
-    classes
-    |> Enum.filter(&(&1 in @hints))
-    |> Enum.flat_map(&declarations_for(&1, tokens))
+    %{
+      resolver_id: "automatic_css",
+      declarations:
+        Enum.flat_map(consumed_hints, &declarations_for(&1, token_set["tokens"] || %{})),
+      consumed_hints: consumed_hints
+    }
+  end
+
+  def declarations(classes, token_set) do
+    resolve(classes, token_set).declarations
   end
 
   defp declarations_for("bg--ultra-dark", tokens) do

@@ -1,7 +1,6 @@
 defmodule LiveFrames.Fidelity do
   @moduledoc "Deterministic, source-independent base fidelity generation."
 
-  alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
   alias LiveFrames.IR
   alias LiveFrames.IR.{AssetReference, DesignDocument, DesignNode, StyleValue}
 
@@ -13,11 +12,15 @@ defmodule LiveFrames.Fidelity do
   def generate(document, opts \\ [])
 
   def generate(%DesignDocument{} = document, opts) when is_list(opts) do
+    source_resolver = Keyword.get(opts, :source_resolver, LiveFrames.Fidelity.SourceResolver.Noop)
+
     case IR.validate(document) do
       :ok ->
-        {plan, state, diagnostics} = build_nodes(document.root_nodes, document, %{}, [], [])
+        {plan, state, diagnostics} =
+          build_nodes(document.root_nodes, document, source_resolver, %{}, [], [])
+
         heex = render_heex(plan)
-        css = render_css(plan, document)
+        css = render_css(plan)
         manifest = manifest(document, plan, state, diagnostics, heex, css)
         {:ok, %{heex: heex, css: css, manifest: manifest |> Jason.encode!() |> Jason.decode!()}}
 
@@ -29,18 +32,19 @@ defmodule LiveFrames.Fidelity do
   def generate(_document, _opts),
     do: {:error, [diagnostic("fidelity.input.invalid", "expected a DesignDocument")]}
 
-  defp build_nodes(nodes, document, state, diagnostics, acc) do
+  defp build_nodes(nodes, document, source_resolver, state, diagnostics, acc) do
     Enum.reduce(nodes, {acc, state, diagnostics}, fn node, {nodes_acc, state, diagnostics} ->
-      {render_node, state, diagnostics} = build_node(node, document, state, diagnostics)
+      {render_node, state, diagnostics} =
+        build_node(node, document, source_resolver, state, diagnostics)
 
       {children, state, diagnostics} =
-        build_nodes(node.children, document, state, diagnostics, [])
+        build_nodes(node.children, document, source_resolver, state, diagnostics, [])
 
       {nodes_acc ++ [%{render_node | children: children}], state, diagnostics}
     end)
   end
 
-  defp build_node(%DesignNode{} = node, document, state, diagnostics) do
+  defp build_node(%DesignNode{} = node, document, source_resolver, state, diagnostics) do
     {classes, class_diagnostics} = source_classes(node)
     diagnostics = diagnostics ++ class_diagnostics
     {styles, state, diagnostics} = base_styles(node, document, state, diagnostics)
@@ -60,6 +64,11 @@ defmodule LiveFrames.Fidelity do
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
 
+    resolver_result =
+      source_resolver.resolve(String.split(String.trim(classes)), document.token_set)
+
+    state = record_resolver(state, resolver_result)
+
     {%{
        id: node.node_id,
        element: element(node),
@@ -67,6 +76,7 @@ defmodule LiveFrames.Fidelity do
        attrs: attrs(node, asset),
        class: fidelity_class(node.node_id) <> classes,
        styles: styles,
+       source_declarations: resolver_result.declarations,
        responsive: responsive,
        asset: asset,
        children: []
@@ -299,10 +309,10 @@ defmodule LiveFrames.Fidelity do
 
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
 
-  defp render_css(nodes, document) do
+  defp render_css(nodes) do
     nodes
     |> flat_nodes()
-    |> Enum.map_join("\n", &node_css(&1, document))
+    |> Enum.map_join("\n", &node_css/1)
     |> then(
       &if(&1 == "",
         do: "",
@@ -314,14 +324,13 @@ defmodule LiveFrames.Fidelity do
   defp flat_nodes(nodes),
     do: Enum.flat_map(nodes, fn node -> [node | flat_nodes(node.children)] end)
 
-  defp node_css(node, document) do
+  defp node_css(node) do
     base =
       Enum.map(node.styles, fn {property, value, path} ->
         %{property: property, value: value, path: path, selector: nil}
       end)
 
-    hints = FidelityResolver.declarations(String.split(node.class), document.token_set)
-    declarations = base ++ hints
+    declarations = base ++ node.source_declarations
 
     custom =
       declarations
@@ -363,10 +372,7 @@ defmodule LiveFrames.Fidelity do
 
     token_paths =
       ((flat |> Enum.flat_map(& &1.styles) |> Enum.map(&elem(&1, 2))) ++
-         Enum.flat_map(flat, fn node ->
-           FidelityResolver.declarations(String.split(node.class), document.token_set)
-           |> Enum.map(& &1.path)
-         end))
+         Enum.flat_map(flat, fn node -> Enum.map(node.source_declarations, & &1.path) end))
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
       |> Enum.sort()
@@ -400,7 +406,8 @@ defmodule LiveFrames.Fidelity do
         |> Enum.uniq()
         |> Enum.sort(),
       "token_paths_consumed" => token_paths,
-      "acss_fidelity_hints_consumed" => FidelityResolver.hints(),
+      "source_fidelity_resolver" => Map.get(state, :resolver_id, "noop"),
+      "source_fidelity_hints_consumed" => Map.get(state, :consumed_hints, []),
       "base_declaration_count" => Map.get(state, :base_count, 0),
       "complex_css_count" => Map.get(state, :complex_count, 0),
       "unresolved_declarations" => Enum.map(diagnostics, & &1.metadata),
@@ -417,6 +424,14 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp sha(value), do: Base.encode16(:crypto.hash(:sha256, value), case: :lower)
+
+  defp record_resolver(state, result) do
+    state
+    |> Map.put_new(:resolver_id, Map.get(result, :resolver_id, "source"))
+    |> Map.update(:consumed_hints, Map.get(result, :consumed_hints, []), fn hints ->
+      Enum.uniq(hints ++ Map.get(result, :consumed_hints, []))
+    end)
+  end
 
   defp derived_css_value(expression) when is_binary(expression),
     do: if(String.starts_with?(expression, "var("), do: expression, else: "var(#{expression})")

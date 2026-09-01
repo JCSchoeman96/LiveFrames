@@ -2,8 +2,24 @@ defmodule LiveFrames.FidelityTest do
   use ExUnit.Case, async: true
 
   alias LiveFrames.Adapters.AutomaticCSS
+  alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Fidelity
+
+  defmodule FakeResolver do
+    @behaviour LiveFrames.Fidelity.SourceResolver
+
+    @impl true
+    def resolve(_classes, _token_set) do
+      %{
+        resolver_id: "fake",
+        declarations: [
+          %{property: "outline", path: "fake.outline", value: "1px solid red", selector: nil}
+        ],
+        consumed_hints: ["fake-hint"]
+      }
+    end
+  end
 
   @bricks_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
   @acss_path Path.expand("../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
@@ -25,6 +41,38 @@ defmodule LiveFrames.FidelityTest do
     assert first.css =~ "linear-gradient"
     refute first.css =~ "@media"
     assert first.manifest["asset_substitutions"] |> hd() |> Map.fetch!("status") == "unresolved"
+  end
+
+  test "generic generation uses a no-op resolver by default" do
+    assert {:ok, bundle} = Fidelity.generate(hero_document())
+
+    assert bundle.manifest["source_fidelity_resolver"] == "noop"
+    assert bundle.manifest["source_fidelity_hints_consumed"] == []
+    refute bundle.css =~ "button.primary.background"
+    refute bundle.css =~ "background-color: hsl(0 0% 10%)"
+  end
+
+  test "generic generation uses the caller-provided source resolver" do
+    assert {:ok, bundle} = Fidelity.generate(hero_document(), source_resolver: FakeResolver)
+
+    assert bundle.css =~ "outline: 1px solid red;"
+    assert bundle.manifest["source_fidelity_resolver"] == "fake"
+    assert bundle.manifest["source_fidelity_hints_consumed"] == ["fake-hint"]
+  end
+
+  test "Automatic.css reports only hints actually consumed" do
+    token_set = hero_document().token_set
+
+    assert FidelityResolver.resolve(["fr-example"], token_set).consumed_hints == []
+
+    assert FidelityResolver.resolve(["btn--primary", "other"], token_set).consumed_hints == [
+             "btn--primary"
+           ]
+
+    assert FidelityResolver.resolve(
+             ["btn--outline", "bg--ultra-dark", "btn--primary"],
+             token_set
+           ).consumed_hints == ["bg--ultra-dark", "btn--primary", "btn--outline"]
   end
 
   test "escapes source content and rejects invalid IR" do

@@ -3,6 +3,7 @@ defmodule LiveFrames.FidelityDriftTest do
 
   alias LiveFrames.Fidelity
   alias LiveFrames.Fidelity.DocumentLoader
+  alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
 
   @input Path.expand(
            "../../../../sources/work/hero_india/design_ir/design_document.json",
@@ -20,7 +21,7 @@ defmodule LiveFrames.FidelityDriftTest do
 
   test "committed fidelity artifacts regenerate byte-identically" do
     assert {:ok, document} = DocumentLoader.from_file(@input)
-    assert {:ok, bundle} = Fidelity.generate(document)
+    assert {:ok, bundle} = Fidelity.generate(document, source_resolver: FidelityResolver)
     assert File.read!(@heex) == bundle.heex
     assert File.read!(@css) == bundle.css
     expected_manifest = Map.put(bundle.manifest, "input_ir_sha256", sha(File.read!(@input)))
