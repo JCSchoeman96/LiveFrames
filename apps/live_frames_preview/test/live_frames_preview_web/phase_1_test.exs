@@ -31,6 +31,16 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
     assert html =~ "Phase 1 shell"
   end
 
+  test "base fidelity Hero route renders generated IR output", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/liveframes/fidelity/hero")
+
+    assert html =~ "data-lf-preview=\"hero-fidelity\""
+    assert html =~ "lf-fidelity-node-000001"
+    assert html =~ "data-lf-asset-status=\"unresolved\""
+    assert html =~ "/assets/fidelity/hero.css"
+    assert html =~ "btn--outline"
+  end
+
   test "development config watches all Phase 1 preview inputs" do
     config = File.read!(Path.expand("../../../../config/dev.exs", __DIR__))
 
