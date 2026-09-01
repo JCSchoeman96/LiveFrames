@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
   "authority_status": "accepted",
-  "authority_level": 1,
-  "authority_type": "actual_source_environment_configuration",
+  "authority_level": 3,
+  "authority_type": "version_matched_default_confirmed_by_source_environment",
   "source_environment": {
     "type": "LocalWP",
     "name": "DanBricks",
@@ -31,8 +31,8 @@
       "media_condition": "@media (max-width: 478px)",
       "enabled": true,
       "cascade_order": 4,
-      "authority_level": 1,
-      "authority_type": "actual_source_environment_configuration",
+      "authority_level": 3,
+      "authority_type": "version_matched_default_confirmed_by_source_environment",
       "default_status": "confirmed_default",
       "status": "accepted"
     },
@@ -46,8 +46,8 @@
       "media_condition": "@media (max-width: 991px)",
       "enabled": true,
       "cascade_order": 2,
-      "authority_level": 1,
-      "authority_type": "actual_source_environment_configuration",
+      "authority_level": 3,
+      "authority_type": "version_matched_default_confirmed_by_source_environment",
       "default_status": "confirmed_default",
       "status": "accepted"
     }
