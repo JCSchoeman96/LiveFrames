@@ -40,9 +40,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     "dependencies_bound",
     "document_assembled",
     "ir_validated",
-    "serialized",
-    "drift_verified",
-    "completed"
+    "serialized"
   ]
 
   @keyword_values [
@@ -779,8 +777,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         "unsupported_settings" => context.dependencies.unsupported_settings
       },
       "normalization_lifecycle" => @lifecycle,
-      "normalization_status" => "completed",
-      "artifact" => "sources/work/hero_india/design_ir/design_document.json",
+      "normalization_status" => "serialized",
       "stage_a_artifacts_are_evidence_only" => true
     })
   end

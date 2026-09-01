@@ -290,10 +290,14 @@ defmodule LiveFrames.BricksDesignIRTest do
              "dependencies_bound",
              "document_assembled",
              "ir_validated",
-             "serialized",
-             "drift_verified",
-             "completed"
+             "serialized"
            ]
+
+    assert document.provenance["normalization_status"] == "serialized"
+    refute Map.has_key?(document.provenance, "artifact")
+
+    refute inspect(document.provenance) =~
+             "sources/work/hero_india/design_ir/design_document.json"
   end
 
   test "embeds the validated TokenSet JSON object without changing its contract" do

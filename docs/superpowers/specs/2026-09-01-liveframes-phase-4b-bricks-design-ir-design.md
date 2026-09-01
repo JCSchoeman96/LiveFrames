@@ -30,13 +30,19 @@ recognized Bricks `Document`; it accepts `component_id` and a validated
 strict source checks and `LiveFrames.IR.validate/1` succeed, or
 `{:error, diagnostics}` without serializing an invalid document.
 
-The document provenance contains the complete pure normalization lifecycle:
+The document provenance contains the pure normalization lifecycle through the
+normalizer's successful terminal state:
 
 ```text
 source_model_ready → token_set_bound → nodes_normalized → styles_normalized
 → responsive_normalized → dependencies_bound → document_assembled
-→ ir_validated → serialized → drift_verified → completed
+→ ir_validated → serialized
 ```
+
+`LiveFrames.Adapters.Bricks.to_ir/2` does not write or compare a repository
+artifact and does not know the caller's output path. The separate repository
+artifact lifecycle is `generated → drift_verified → completed`, established by
+the generation command, drift test, repository gates, and CI.
 
 `needs_review` and `failed` are documented exceptional states. The normalizer
 does not use a process or persistent workflow; errors/fatals stop the
