@@ -1,7 +1,7 @@
 # LiveFrames Phase 5 Hardening & Acceptance Plan
 
 **Document:** `docs/18_PHASE_5_HARDENING_AND_ACCEPTANCE.md`
-**Status:** Proposed execution authority
+**Status:** Active Phase 5 execution authority
 **Scope:** Phase 5 hardening, responsive fidelity, acceptance, and Phase 6 entry criteria
 **Supersedes:** No existing architecture authority
 **Refines:** `docs/00_LIVEFRAMES_MASTER_SPEC.md` Phase 5 execution and acceptance
