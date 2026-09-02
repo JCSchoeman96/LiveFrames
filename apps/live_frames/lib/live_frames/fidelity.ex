@@ -246,10 +246,8 @@ defmodule LiveFrames.Fidelity do
   defp safe_custom_css?(css) when is_binary(css),
     do:
       not String.contains?(css, "\\") and
-        not Regex.match?(
-          ~r/@import|url\s*\(\s*(?:https?:|\/\/|javascript:)|expression\s*\(/i,
-          css
-        )
+        not CSSDeclaration.unsafe_external_url?(css) and
+        not Regex.match?(~r/@import|expression\s*\(/i, css)
 
   defp safe_custom_css?(_), do: false
 
@@ -326,7 +324,8 @@ defmodule LiveFrames.Fidelity do
 
   defp normalize_resolver_result(result) when is_map(result) and not is_struct(result) do
     with {:ok, declarations} <- resolver_field(result, :declarations),
-         true <- is_list(declarations) do
+         true <- proper_list?(declarations),
+         true <- valid_consumed_hints?(result) do
       {:ok,
        %{
          resolver_id: resolver_id(result),
@@ -339,6 +338,24 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp normalize_resolver_result(_result), do: :error
+
+  defp valid_consumed_hints?(result) do
+    case resolver_field(result, :consumed_hints) do
+      {:ok, hints} -> proper_list?(hints)
+      :error -> true
+    end
+  end
+
+  defp proper_list?(value) when is_list(value) do
+    try do
+      _ = length(value)
+      true
+    rescue
+      _exception -> false
+    end
+  end
+
+  defp proper_list?(_value), do: false
 
   defp resolver_field(result, key) do
     string_key = Atom.to_string(key)

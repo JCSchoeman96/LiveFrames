@@ -177,6 +177,18 @@ defmodule LiveFrames.FidelityTest do
             path: "attack.value.escaped_https",
             value: "url(\\68ttps://attacker.example/x)",
             selector: nil
+          },
+          %{
+            property: "background-image",
+            path: "attack.value.quoted_https",
+            value: "url(\"https://attacker.example/x\")",
+            selector: nil
+          },
+          %{
+            property: "background-image",
+            path: "attack.value.quoted_javascript",
+            value: "url(\"javascript:alert(1)\")",
+            selector: nil
           }
         ],
         consumed_hints: []
@@ -209,6 +221,19 @@ defmodule LiveFrames.FidelityTest do
     @impl true
     def resolve(_classes, _token_set),
       do: %{resolver_id: "malformed_result", declarations: :not_a_list, consumed_hints: []}
+  end
+
+  defmodule ImproperListResolver do
+    @behaviour LiveFrames.Fidelity.SourceResolver
+
+    @impl true
+    def resolve(_classes, _token_set) do
+      %{
+        resolver_id: "improper_list",
+        declarations: [%{property: "color", value: "resolver-improper"} | :tail],
+        consumed_hints: ["hint" | :tail]
+      }
+    end
   end
 
   defmodule UnresolvedResolver do
@@ -395,6 +420,18 @@ defmodule LiveFrames.FidelityTest do
            end)
   end
 
+  test "improper source resolver lists do not crash generation" do
+    assert {:ok, bundle} =
+             Fidelity.generate(hero_document(), source_resolver: ImproperListResolver)
+
+    refute bundle.css =~ "resolver-improper"
+
+    assert Enum.any?(bundle.manifest["unresolved_declarations"], fn metadata ->
+             metadata["origin"] == "source_resolver" and
+               metadata["reason"] == "invalid_resolver_result"
+           end)
+  end
+
   test "unresolved source resolver values remain non-emitted" do
     assert {:ok, bundle} = Fidelity.generate(hero_document(), source_resolver: UnresolvedResolver)
 
@@ -488,6 +525,27 @@ defmodule LiveFrames.FidelityTest do
 
     assert {:ok, bundle} = Fidelity.generate(document)
     refute bundle.css =~ "attacker.example"
+    assert bundle.manifest["diagnostic_counts"]["warning"] > 0
+  end
+
+  test "rejects quoted external and javascript URLs in custom CSS" do
+    document = hero_document()
+    root = hd(document.root_nodes)
+
+    style =
+      StyleValue.complex_css(%{
+        "type" => "custom_css",
+        "rules" => [
+          ".x { background: url(\"https://attacker.example/x\"); }",
+          ".y { background: url(\"javascript:alert(1)\"); }"
+        ]
+      })
+
+    document = %{document | root_nodes: [%{root | styles: %{"custom-css" => style}}]}
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.css =~ "attacker.example"
+    refute bundle.css =~ "javascript:"
     assert bundle.manifest["diagnostic_counts"]["warning"] > 0
   end
 

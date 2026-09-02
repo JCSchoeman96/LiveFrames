@@ -73,7 +73,9 @@ defmodule LiveFrames.Fidelity.CSSDeclarationTest do
   test "rejects escaped external and javascript URL schemes" do
     for value <- [
           "url(\\68ttps://attacker.example/x)",
-          "url(\\6aavascript:alert(1))"
+          "url(\\6aavascript:alert(1))",
+          "url(\"https://attacker.example/x\")",
+          "url(\"javascript:alert(1)\")"
         ] do
       assert {:rejected, _declaration, :unsafe_css_value} =
                CSSDeclaration.normalize(%{property: "background-image", value: value}, :ir)

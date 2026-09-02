@@ -4,7 +4,8 @@ defmodule LiveFrames.Fidelity.CSSDeclaration do
   @origins [:ir, :source_resolver]
   @safe_property ~r/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
   @safe_custom_property ~r/^--[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
-  @unsafe_value ~r/[{};\\]|url\s*\(\s*(?:https?:|\/\/|javascript:)/i
+  @unsafe_value ~r/[{};\\]/
+  @unsafe_external_url ~r/url\s*\(\s*(?:["']\s*|\/\*.*?\*\/\s*)*(?:https?:|\/\/|javascript:)/is
 
   @type origin :: :ir | :source_resolver
   @type selector :: nil | :hover | :focus_visible
@@ -83,9 +84,15 @@ defmodule LiveFrames.Fidelity.CSSDeclaration do
 
   @spec safe_value?(term()) :: boolean()
   def safe_value?(value) when is_binary(value),
-    do: not Regex.match?(@unsafe_value, value)
+    do: not Regex.match?(@unsafe_value, value) and not unsafe_external_url?(value)
 
   def safe_value?(_value), do: false
+
+  @spec unsafe_external_url?(term()) :: boolean()
+  def unsafe_external_url?(value) when is_binary(value),
+    do: Regex.match?(@unsafe_external_url, value)
+
+  def unsafe_external_url?(_value), do: false
 
   defp validate(raw, received) do
     with {:ok, fields} <- declaration_fields(raw),
