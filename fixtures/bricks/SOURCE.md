@@ -7,8 +7,13 @@
 - Source author/vendor: unknown; supplied local export
 - Origin: internal
 - License: unknown
-- Allowed internal conversion: yes
-- Allowed project use: unknown
-- Allowed redistribution in LiveFrames: unknown
+- Internal-use status: approved for internal conversion only
+- Project-use status: unknown
+- Redistribution status: unknown
+- Publication state: `internal_use_approved` scoped to internal conversion;
+  not approved for public redistribution
 - Evidence/reference: `sources/bricks_components.json`; `docs/00_LIVEFRAMES_MASTER_SPEC.md`, Section 37
-- Notes: The export contains 39 components and 468 global classes. Hero India is component `sqhmmc`. Reconfirm project and redistribution permissions before release.
+- Notes: The export contains 39 components and 468 global classes. Hero India is
+  component `sqhmmc`. Repository presence is not public-redistribution
+  clearance; see `docs/04_SOURCE_AND_PROVENANCE.md` before adding new copies or
+  releasing derived material.
