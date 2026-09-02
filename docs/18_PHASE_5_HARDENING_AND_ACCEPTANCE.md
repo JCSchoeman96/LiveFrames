@@ -730,12 +730,21 @@ Each element must be independently validated.
 received
 → validated
 → accepted
-→ serialized
+   ├→ serialized
+   └→ unresolved
 ```
 
 Exceptional terminal:
 
 ```text
+rejected
+```
+
+Terminal states:
+
+```text
+serialized
+unresolved
 rejected
 ```
 
@@ -759,7 +768,19 @@ declaration belongs to a supported current fidelity capability.
 
 Guard:
 
-deterministic serializer can emit it.
+value is non-nil and deterministic serializer can emit it.
+
+## accepted → unresolved
+
+Guard:
+
+`value == nil`
+
+Side effects:
+
+* no CSS emitted;
+* no security diagnostic;
+* unresolved source truth preserved.
 
 ## any active → rejected
 

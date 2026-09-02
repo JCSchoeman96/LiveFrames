@@ -3,6 +3,7 @@ defmodule LiveFrames.Fidelity do
 
   alias LiveFrames.IR
   alias LiveFrames.IR.{AssetReference, DesignDocument, DesignNode, StyleValue}
+  alias LiveFrames.Fidelity.CSSDeclaration
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
@@ -47,7 +48,7 @@ defmodule LiveFrames.Fidelity do
   defp build_node(%DesignNode{} = node, document, source_resolver, state, diagnostics) do
     {classes, class_diagnostics} = source_classes(node)
     diagnostics = diagnostics ++ class_diagnostics
-    {styles, state, diagnostics} = base_styles(node, document, state, diagnostics)
+    {styles, custom_css, state, diagnostics} = base_styles(node, document, state, diagnostics)
     responsive = deferred(node)
 
     diagnostics =
@@ -64,10 +65,16 @@ defmodule LiveFrames.Fidelity do
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
 
-    resolver_result =
-      source_resolver.resolve(String.split(String.trim(classes)), document.token_set)
+    {resolver_result, resolver_diagnostics} =
+      source_resolver_result(source_resolver, classes, document.token_set, node)
 
     state = record_resolver(state, resolver_result)
+    {base_declarations, base_diagnostics} = normalize_base_declarations(styles, node)
+
+    {source_declarations, source_diagnostics} =
+      normalize_declarations(resolver_result.declarations, :source_resolver, node)
+
+    diagnostics = diagnostics ++ resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
 
     {%{
        id: node.node_id,
@@ -76,7 +83,9 @@ defmodule LiveFrames.Fidelity do
        attrs: attrs(node, asset),
        class: fidelity_class(node.node_id) <> classes,
        styles: styles,
-       source_declarations: resolver_result.declarations,
+       custom_css: custom_css,
+       css_declarations: base_declarations ++ source_declarations,
+       source_declarations: source_declarations,
        responsive: responsive,
        asset: asset,
        children: []
@@ -127,16 +136,17 @@ defmodule LiveFrames.Fidelity do
   defp fidelity_class(id), do: "lf-fidelity-" <> String.replace(id, "_", "-")
 
   defp base_styles(node, document, state, diagnostics) do
-    {declarations, state, diagnostics} =
-      Enum.reduce(node.styles, {[], state, diagnostics}, fn {property, style},
-                                                            {decls, state, diagnostics} ->
+    {declarations, custom_css, state, diagnostics} =
+      Enum.reduce(node.styles, {[], nil, state, diagnostics}, fn {property, style},
+                                                                 {decls, custom_css, state,
+                                                                  diagnostics} ->
         case style_value(property, style, document) do
           {:emit, value, path} ->
-            {[{property, value, path} | decls], Map.update(state, :base_count, 1, &(&1 + 1)),
-             diagnostics}
+            {[{property, value, path} | decls], custom_css,
+             Map.update(state, :base_count, 1, &(&1 + 1)), diagnostics}
 
           {:skip, reason} ->
-            {decls, state,
+            {decls, custom_css, state,
              diagnostics ++
                [
                  diagnostic("fidelity.style.omitted", reason, node, %{
@@ -145,19 +155,22 @@ defmodule LiveFrames.Fidelity do
                  })
                ]}
 
+          {:complex, value} when property == "custom-css" ->
+            {decls, value, Map.update(state, :complex_count, 1, &(&1 + 1)), diagnostics}
+
           {:complex, value} ->
-            {[{property, value, nil} | decls], Map.update(state, :complex_count, 1, &(&1 + 1)),
-             diagnostics}
+            {[{property, value, nil} | decls], custom_css,
+             Map.update(state, :complex_count, 1, &(&1 + 1)), diagnostics}
         end
       end)
 
-    {Enum.reverse(declarations), state, diagnostics}
+    {Enum.reverse(declarations), custom_css, state, diagnostics}
   end
 
   defp style_value(_property, %StyleValue{kind: kind, value: value}, _document)
        when kind in [:literal, :keyword, :calculation] and is_binary(value),
        do:
-         if(safe_css_value?(value),
+         if(CSSDeclaration.safe_value?(value),
            do: {:emit, value, nil},
            else: {:skip, "unsafe CSS value was not emitted"}
          )
@@ -188,14 +201,14 @@ defmodule LiveFrames.Fidelity do
   defp token_value(path, %{"tokens" => tokens}) do
     case tokens[path] do
       %{"resolved_value" => value} when is_binary(value) ->
-        if safe_css_value?(value),
+        if CSSDeclaration.safe_value?(value),
           do: {:emit, value, path},
           else: {:skip, "unsafe token CSS value was not emitted"}
 
       %{"resolved_value" => %{"type" => "derived"}, "source_expression" => expression} ->
         value = derived_css_value(expression)
 
-        if safe_css_value?(value),
+        if CSSDeclaration.safe_value?(value),
           do: {:emit, value, path},
           else: {:skip, "unsafe token CSS value was not emitted"}
 
@@ -232,7 +245,9 @@ defmodule LiveFrames.Fidelity do
 
   defp safe_custom_css?(css) when is_binary(css),
     do:
-      not Regex.match?(~r/@import|url\s*\(\s*(?:https?:|\/\/|javascript:)|expression\s*\(/i, css)
+      not String.contains?(css, "\\") and
+        not CSSDeclaration.unsafe_external_url?(css) and
+        not Regex.match?(~r/@import|expression\s*\(/i, css)
 
   defp safe_custom_css?(_), do: false
 
@@ -247,16 +262,13 @@ defmodule LiveFrames.Fidelity do
        })
        when is_binary(angle) and is_list(colors) and colors != [],
        do:
-         safe_css_value?(angle) and
+         CSSDeclaration.safe_value?(angle) and
            Enum.all?(colors, fn %{"color" => %{"raw" => color}, "stop" => stop}
                                 when is_binary(color) and is_binary(stop) ->
-             safe_css_value?(color) and safe_css_value?(stop)
+             CSSDeclaration.safe_value?(color) and CSSDeclaration.safe_value?(stop)
            end)
 
   defp valid_gradient?(_), do: false
-
-  defp safe_css_value?(value),
-    do: not Regex.match?(~r/[{};]|url\s*\(\s*(?:https?:|\/\/|javascript:)/i, value)
 
   defp deferred(%{responsive: responsive}) do
     responsive |> Map.values() |> Enum.sort_by(& &1.breakpoint_id)
@@ -287,6 +299,210 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp asset_decision(_, _, diagnostics), do: {nil, diagnostics}
+
+  defp source_resolver_result(source_resolver, classes, token_set, node) do
+    result =
+      try do
+        {:ok, source_resolver.resolve(String.split(String.trim(classes)), token_set)}
+      rescue
+        _exception -> {:error, :resolver_failed}
+      catch
+        _kind, _reason -> {:error, :resolver_failed}
+      end
+
+    case result do
+      {:ok, result} ->
+        case normalize_resolver_result(result) do
+          {:ok, normalized} -> {normalized, []}
+          :error -> invalid_resolver_result(node, :invalid_resolver_result)
+        end
+
+      {:error, reason} ->
+        invalid_resolver_result(node, reason)
+    end
+  end
+
+  defp normalize_resolver_result(result) when is_map(result) and not is_struct(result) do
+    with {:ok, declarations} <- resolver_field(result, :declarations),
+         true <- proper_list?(declarations),
+         true <- valid_consumed_hints?(result) do
+      {:ok,
+       %{
+         resolver_id: resolver_id(result),
+         declarations: declarations,
+         consumed_hints: consumed_hints(result)
+       }}
+    else
+      _ -> :error
+    end
+  end
+
+  defp normalize_resolver_result(_result), do: :error
+
+  defp valid_consumed_hints?(result) do
+    case resolver_field(result, :consumed_hints) do
+      {:ok, hints} -> proper_list?(hints)
+      :error -> true
+    end
+  end
+
+  defp proper_list?(value) when is_list(value) do
+    try do
+      _ = length(value)
+      true
+    rescue
+      _exception -> false
+    end
+  end
+
+  defp proper_list?(_value), do: false
+
+  defp resolver_field(result, key) do
+    string_key = Atom.to_string(key)
+
+    case {Map.fetch(result, key), Map.fetch(result, string_key)} do
+      {{:ok, value}, :error} -> {:ok, value}
+      {:error, {:ok, value}} -> {:ok, value}
+      {{:ok, value}, {:ok, value}} -> {:ok, value}
+      {{:ok, _value}, {:ok, _other_value}} -> :error
+      {:error, :error} -> :error
+    end
+  end
+
+  defp resolver_id(result) do
+    case resolver_field(result, :resolver_id) do
+      {:ok, resolver_id} when is_binary(resolver_id) and resolver_id != "" -> resolver_id
+      _ -> "source"
+    end
+  end
+
+  defp consumed_hints(result) do
+    case resolver_field(result, :consumed_hints) do
+      {:ok, hints} when is_list(hints) -> Enum.filter(hints, &is_binary/1)
+      _ -> []
+    end
+  end
+
+  defp invalid_resolver_result(node, reason) do
+    {
+      %{resolver_id: "source", declarations: [], consumed_hints: []},
+      [
+        diagnostic(
+          "fidelity.source_resolver.invalid",
+          "source resolver output was not a supported result",
+          node,
+          %{origin: "source_resolver", reason: Atom.to_string(reason)}
+        )
+      ]
+    }
+  end
+
+  defp normalize_base_declarations(styles, node) do
+    styles
+    |> Enum.map(fn {property, value, path} ->
+      %{property: property, value: value, path: path, selector: nil}
+    end)
+    |> normalize_declarations(:ir, node)
+  end
+
+  defp normalize_declarations(declarations, origin, node) do
+    {accepted, diagnostics} =
+      declarations
+      |> Enum.with_index()
+      |> Enum.reduce({[], []}, fn {raw, index}, {accepted, diagnostics} ->
+        case CSSDeclaration.normalize(raw, origin) do
+          {:ok, declaration} ->
+            {[declaration | accepted], diagnostics}
+
+          {:unresolved, declaration} ->
+            {[declaration | accepted], diagnostics}
+
+          {:rejected, _declaration, reason} ->
+            {accepted, [declaration_diagnostic(raw, origin, node, index, reason) | diagnostics]}
+        end
+      end)
+
+    {Enum.reverse(accepted), Enum.reverse(diagnostics)}
+  end
+
+  defp declaration_diagnostic(raw, origin, node, index, reason) do
+    reason = Atom.to_string(reason)
+
+    metadata = %{
+      origin: Atom.to_string(origin),
+      reason: reason,
+      declaration_index: index,
+      node_id: node.node_id
+    }
+
+    metadata =
+      case declaration_property(raw) do
+        property when is_binary(property) and byte_size(property) <= 128 ->
+          if CSSDeclaration.safe_property?(property),
+            do: Map.put(metadata, :property, property),
+            else: metadata
+
+        _ ->
+          metadata
+      end
+
+    diagnostic(
+      declaration_diagnostic_code(reason),
+      declaration_diagnostic_message(reason),
+      node,
+      metadata
+    )
+  end
+
+  defp declaration_property(raw) when is_map(raw) do
+    case Map.get(raw, :property) do
+      property when is_binary(property) -> property
+      _ -> Map.get(raw, "property")
+    end
+  end
+
+  defp declaration_property(_raw), do: nil
+
+  defp declaration_diagnostic_code("invalid_declaration_shape"),
+    do: "fidelity.declaration.shape_invalid"
+
+  defp declaration_diagnostic_code("invalid_css_property"),
+    do: "fidelity.declaration.property_invalid"
+
+  defp declaration_diagnostic_code("invalid_css_value"),
+    do: "fidelity.declaration.value_invalid"
+
+  defp declaration_diagnostic_code("unsafe_css_value"),
+    do: "fidelity.declaration.value_unsafe"
+
+  defp declaration_diagnostic_code("unsupported_selector"),
+    do: "fidelity.declaration.selector_unsupported"
+
+  defp declaration_diagnostic_code("custom_css_forbidden"),
+    do: "fidelity.declaration.custom_css_forbidden"
+
+  defp declaration_diagnostic_code(_reason), do: "fidelity.declaration.rejected"
+
+  defp declaration_diagnostic_message("invalid_declaration_shape"),
+    do: "CSS declaration shape was not supported"
+
+  defp declaration_diagnostic_message("invalid_css_property"),
+    do: "CSS property was not supported"
+
+  defp declaration_diagnostic_message("invalid_css_value"),
+    do: "CSS declaration value was not supported"
+
+  defp declaration_diagnostic_message("unsafe_css_value"),
+    do: "unsafe CSS value was not emitted"
+
+  defp declaration_diagnostic_message("unsupported_selector"),
+    do: "CSS selector state was not supported"
+
+  defp declaration_diagnostic_message("custom_css_forbidden"),
+    do: "source resolver custom CSS declarations are not supported"
+
+  defp declaration_diagnostic_message(_reason),
+    do: "CSS declaration was rejected before serialization"
 
   defp render_heex(nodes),
     do:
@@ -325,41 +541,37 @@ defmodule LiveFrames.Fidelity do
     do: Enum.flat_map(nodes, fn node -> [node | flat_nodes(node.children)] end)
 
   defp node_css(node) do
-    base =
-      Enum.map(node.styles, fn {property, value, path} ->
-        %{property: property, value: value, path: path, selector: nil}
-      end)
+    declarations = Enum.filter(node.css_declarations, &(&1.state == :accepted))
 
-    declarations = base ++ node.source_declarations
-
-    custom =
-      declarations
-      |> Enum.filter(&(&1.property == "custom-css"))
-      |> Enum.map_join("\n", & &1.value)
-
-    declarations =
-      declarations |> Enum.filter(&(is_binary(&1.value) and &1.property != "custom-css"))
+    custom = node.custom_css || ""
 
     base_css =
       declarations
       |> Enum.filter(&is_nil(&1.selector))
-      |> Enum.map_join("\n", fn d -> "  #{d.property}: #{d.value};" end)
+      |> Enum.map_join("\n", &serialized_declaration/1)
 
     states =
       declarations
       |> Enum.reject(&is_nil(&1.selector))
       |> Enum.group_by(& &1.selector)
-      |> Enum.sort()
+      |> Enum.sort_by(fn {selector, _values} -> CSSDeclaration.selector_sort_key(selector) end)
 
     rules = if base_css == "", do: [], else: [".#{fidelity_class(node.id)} {\n#{base_css}\n}"]
 
     rules =
       rules ++
         Enum.map(states, fn {selector, values} ->
-          ".#{fidelity_class(node.id)}#{String.replace(selector, "&", "")} {\n#{Enum.map_join(values, "\n", fn d -> "  #{d.property}: #{d.value};" end)}\n}"
+          ".#{fidelity_class(node.id)}#{CSSDeclaration.selector_suffix(selector)} {\n#{Enum.map_join(values, "\n", &serialized_declaration/1)}\n}"
         end)
 
     Enum.join(Enum.reject([custom | rules], &(&1 == "")), "\n")
+  end
+
+  defp serialized_declaration(declaration) do
+    case CSSDeclaration.serialize(declaration) do
+      {:ok, _serialized, text} -> text
+      {:error, _reason} -> ""
+    end
   end
 
   defp manifest(document, plan, state, diagnostics, heex, css) do
