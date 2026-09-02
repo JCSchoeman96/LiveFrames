@@ -4,6 +4,8 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.IR
   alias LiveFrames.IR.{AssetReference, DesignDocument, DesignNode, StyleValue}
   alias LiveFrames.Fidelity.CSSDeclaration
+  alias LiveFrames.Responsive.BreakpointAuthority
+  alias LiveFrames.Responsive.Resolution
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
@@ -17,13 +19,39 @@ defmodule LiveFrames.Fidelity do
 
     case IR.validate(document) do
       :ok ->
-        {plan, state, diagnostics} =
-          build_nodes(document.root_nodes, document, source_resolver, %{}, [], [])
+        case BreakpointAuthority.coerce(Keyword.get(opts, :responsive_authority)) do
+          {:ok, responsive_authority} ->
+            {plan, state, diagnostics} =
+              build_nodes(
+                document.root_nodes,
+                document,
+                source_resolver,
+                responsive_authority,
+                %{},
+                [],
+                []
+              )
 
-        heex = render_heex(plan)
-        css = render_css(plan)
-        manifest = manifest(document, plan, state, diagnostics, heex, css)
-        {:ok, %{heex: heex, css: css, manifest: manifest |> Jason.encode!() |> Jason.decode!()}}
+            heex = render_heex(plan)
+            css = render_css(plan)
+
+            manifest =
+              manifest(document, plan, state, diagnostics, heex, css, responsive_authority)
+
+            {:ok,
+             %{heex: heex, css: css, manifest: manifest |> Jason.encode!() |> Jason.decode!()}}
+
+          {:error, reason} ->
+            {:error,
+             [
+               diagnostic(
+                 "fidelity.responsive.authority_invalid",
+                 "responsive breakpoint authority was not supported",
+                 nil,
+                 %{reason: Atom.to_string(reason)}
+               )
+             ]}
+        end
 
       {:error, diagnostics} ->
         {:error, diagnostics}
@@ -33,26 +61,52 @@ defmodule LiveFrames.Fidelity do
   def generate(_document, _opts),
     do: {:error, [diagnostic("fidelity.input.invalid", "expected a DesignDocument")]}
 
-  defp build_nodes(nodes, document, source_resolver, state, diagnostics, acc) do
+  defp build_nodes(
+         nodes,
+         document,
+         source_resolver,
+         responsive_authority,
+         state,
+         diagnostics,
+         acc
+       ) do
     Enum.reduce(nodes, {acc, state, diagnostics}, fn node, {nodes_acc, state, diagnostics} ->
       {render_node, state, diagnostics} =
-        build_node(node, document, source_resolver, state, diagnostics)
+        build_node(node, document, source_resolver, responsive_authority, state, diagnostics)
 
       {children, state, diagnostics} =
-        build_nodes(node.children, document, source_resolver, state, diagnostics, [])
+        build_nodes(
+          node.children,
+          document,
+          source_resolver,
+          responsive_authority,
+          state,
+          diagnostics,
+          []
+        )
 
       {nodes_acc ++ [%{render_node | children: children}], state, diagnostics}
     end)
   end
 
-  defp build_node(%DesignNode{} = node, document, source_resolver, state, diagnostics) do
+  defp build_node(
+         %DesignNode{} = node,
+         document,
+         source_resolver,
+         responsive_authority,
+         state,
+         diagnostics
+       ) do
     {classes, class_diagnostics} = source_classes(node)
     diagnostics = diagnostics ++ class_diagnostics
     {styles, custom_css, state, diagnostics} = base_styles(node, document, state, diagnostics)
     responsive = deferred(node)
 
-    diagnostics =
-      diagnostics ++
+    {responsive_resolutions, responsive_diagnostics} =
+      responsive_resolutions(node, document, responsive, responsive_authority)
+
+    deferred_diagnostics =
+      if is_nil(responsive_authority) do
         Enum.map(
           responsive,
           &diagnostic(
@@ -62,6 +116,11 @@ defmodule LiveFrames.Fidelity do
             %{breakpoint: &1.source_name}
           )
         )
+      else
+        []
+      end
+
+    diagnostics = diagnostics ++ deferred_diagnostics ++ responsive_diagnostics
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
 
@@ -87,6 +146,7 @@ defmodule LiveFrames.Fidelity do
        css_declarations: base_declarations ++ source_declarations,
        source_declarations: source_declarations,
        responsive: responsive,
+       responsive_resolutions: responsive_resolutions,
        asset: asset,
        children: []
      }, state, diagnostics}
@@ -272,6 +332,215 @@ defmodule LiveFrames.Fidelity do
 
   defp deferred(%{responsive: responsive}) do
     responsive |> Map.values() |> Enum.sort_by(& &1.breakpoint_id)
+  end
+
+  defp responsive_resolutions(_node, _document, _overrides, nil), do: {[], []}
+
+  defp responsive_resolutions(node, document, overrides, authority) do
+    {resolutions, diagnostics} =
+      Enum.reduce(overrides, {[], []}, fn override, {resolutions, diagnostics} ->
+        {resolution, resolution_diagnostics} =
+          resolve_responsive_override(node, document, authority, override)
+
+        {[resolution | resolutions], diagnostics ++ resolution_diagnostics}
+      end)
+
+    {Enum.sort_by(resolutions, &resolution_sort_key/1), diagnostics}
+  end
+
+  defp resolution_sort_key(%Resolution{authority: nil, source_name: source_name}),
+    do: {1_000_000, source_name || ""}
+
+  defp resolution_sort_key(%Resolution{authority: authority, source_name: source_name}),
+    do: {authority.cascade_order, source_name || ""}
+
+  defp resolve_responsive_override(node, document, authority, override) do
+    resolution = Resolution.new(node.node_id, override)
+
+    case BreakpointAuthority.lookup(authority, override.breakpoint_id, override.source_name) do
+      {:ok, entry} ->
+        {:ok, bound} = Resolution.bind(resolution, entry)
+        {declarations, custom_css, diagnostics} = responsive_values(bound, document, node)
+
+        if declarations == [] and (is_nil(custom_css) or custom_css == "") do
+          {:ok, rejected} = Resolution.reject(bound, :responsive_value_rejected)
+
+          {rejected,
+           diagnostics ++
+             [responsive_resolution_diagnostic(node, rejected, :responsive_value_rejected)]}
+        else
+          {:ok, validated} = Resolution.validate_value(bound, declarations, custom_css)
+          {:ok, resolved} = Resolution.resolve(validated)
+          {:ok, serialized} = Resolution.serialize(resolved, responsive_css(node, resolved))
+          {serialized, diagnostics}
+        end
+
+      {:error, reason} ->
+        {:ok, blocked} = Resolution.block(resolution, reason)
+        {blocked, [responsive_resolution_diagnostic(node, blocked, reason)]}
+    end
+  end
+
+  defp responsive_values(resolution, document, node) do
+    {declarations, custom_css, diagnostics} =
+      resolution.raw_styles
+      |> sorted_style_entries()
+      |> Enum.with_index()
+      |> Enum.reduce({[], nil, []}, fn {{property, style}, index},
+                                       {declarations, custom_css, diagnostics} ->
+        case style_value(property, style, document) do
+          {:emit, value, path} ->
+            responsive_declaration(
+              property,
+              value,
+              path,
+              resolution,
+              node,
+              index,
+              declarations,
+              custom_css,
+              diagnostics
+            )
+
+          {:complex, value} when property == "custom-css" ->
+            {declarations, value, diagnostics}
+
+          {:complex, value} ->
+            responsive_declaration(
+              property,
+              value,
+              nil,
+              resolution,
+              node,
+              index,
+              declarations,
+              custom_css,
+              diagnostics
+            )
+
+          {:skip, reason} ->
+            metadata = responsive_value_metadata(property, resolution)
+
+            {
+              declarations,
+              custom_css,
+              [
+                diagnostic(
+                  "fidelity.responsive.value_omitted",
+                  reason,
+                  node,
+                  metadata
+                )
+                | diagnostics
+              ]
+            }
+        end
+      end)
+
+    {Enum.reverse(declarations), custom_css, Enum.reverse(diagnostics)}
+  end
+
+  defp responsive_declaration(
+         property,
+         value,
+         path,
+         resolution,
+         node,
+         index,
+         declarations,
+         custom_css,
+         diagnostics
+       ) do
+    raw = %{property: property, value: value, path: path, selector: nil}
+
+    case CSSDeclaration.normalize(raw, :ir) do
+      {:ok, declaration} ->
+        {[declaration | declarations], custom_css, diagnostics}
+
+      {:unresolved, declaration} ->
+        {[declaration | declarations], custom_css, diagnostics}
+
+      {:rejected, _declaration, reason} ->
+        diagnostic =
+          declaration_diagnostic(raw, :ir, node, index, reason)
+          |> Map.update!(:metadata, &Map.put(&1, :breakpoint, resolution.source_name))
+
+        {declarations, custom_css, [diagnostic | diagnostics]}
+    end
+  end
+
+  defp responsive_value_metadata(property, resolution) do
+    metadata = %{
+      origin: "ir",
+      breakpoint: resolution.source_name,
+      reason: "responsive_value_omitted"
+    }
+
+    case property do
+      property when is_binary(property) and byte_size(property) <= 128 ->
+        if CSSDeclaration.safe_property?(property),
+          do: Map.put(metadata, :property, property),
+          else: metadata
+
+      _ ->
+        metadata
+    end
+  end
+
+  defp responsive_css(node, resolution) do
+    declaration_css = Enum.map_join(resolution.declarations, "\n", &serialized_declaration/1)
+
+    declaration_rule =
+      if declaration_css == "",
+        do: "",
+        else: ".#{fidelity_class(node.node_id)} {\n#{declaration_css}\n}"
+
+    [resolution.custom_css || "", declaration_rule]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
+  end
+
+  defp responsive_resolution_diagnostic(node, resolution, reason) do
+    diagnostic(
+      responsive_resolution_code(reason),
+      responsive_resolution_message(reason),
+      node,
+      %{
+        origin: "ir",
+        breakpoint: resolution.source_name,
+        reason: Atom.to_string(reason),
+        node_id: node.node_id
+      }
+    )
+  end
+
+  defp responsive_resolution_code(:authority_missing),
+    do: "fidelity.responsive.authority_missing"
+
+  defp responsive_resolution_code(:source_breakpoint_mismatch),
+    do: "fidelity.responsive.authority_mismatch"
+
+  defp responsive_resolution_code(:responsive_value_rejected),
+    do: "fidelity.responsive.value_rejected"
+
+  defp responsive_resolution_code(_reason), do: "fidelity.responsive.failed"
+
+  defp responsive_resolution_message(:authority_missing),
+    do: "responsive entry deferred because breakpoint authority is missing"
+
+  defp responsive_resolution_message(:source_breakpoint_mismatch),
+    do: "responsive entry rejected because breakpoint identity does not match authority"
+
+  defp responsive_resolution_message(:responsive_value_rejected),
+    do: "responsive entry rejected because no safe value could be emitted"
+
+  defp responsive_resolution_message(_reason),
+    do: "responsive entry failed before serialization"
+
+  defp sorted_style_entries(styles) when is_map(styles) do
+    Enum.sort_by(styles, fn {property, _style} ->
+      if is_binary(property), do: property, else: inspect(property)
+    end)
   end
 
   defp asset_decision(%{asset_refs: [id]}, %{assets: assets}, diagnostics) do
@@ -526,9 +795,13 @@ defmodule LiveFrames.Fidelity do
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
 
   defp render_css(nodes) do
-    nodes
-    |> flat_nodes()
-    |> Enum.map_join("\n", &node_css/1)
+    flat = flat_nodes(nodes)
+    base = Enum.map_join(flat, "\n", &node_css/1)
+    responsive = render_responsive_css(flat)
+
+    [base, responsive]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
     |> then(
       &if(&1 == "",
         do: "",
@@ -539,6 +812,24 @@ defmodule LiveFrames.Fidelity do
 
   defp flat_nodes(nodes),
     do: Enum.flat_map(nodes, fn node -> [node | flat_nodes(node.children)] end)
+
+  defp render_responsive_css(nodes) do
+    nodes
+    |> Enum.flat_map(fn node ->
+      Enum.map(node.responsive_resolutions, &{node, &1})
+    end)
+    |> Enum.filter(fn {_node, resolution} -> resolution.state == :serialized end)
+    |> Enum.group_by(fn {_node, resolution} ->
+      {resolution.authority.cascade_order, resolution.media_condition}
+    end)
+    |> Enum.sort_by(fn {{order, media_condition}, _entries} -> {order, media_condition} end)
+    |> Enum.map_join("\n", fn {{_order, media_condition}, entries} ->
+      inner =
+        Enum.map_join(entries, "\n", fn {_node, resolution} -> resolution.serialized_css end)
+
+      media_condition <> " {\n#{inner}\n}"
+    end)
+  end
 
   defp node_css(node) do
     declarations = Enum.filter(node.css_declarations, &(&1.state == :accepted))
@@ -574,7 +865,7 @@ defmodule LiveFrames.Fidelity do
     end
   end
 
-  defp manifest(document, plan, state, diagnostics, heex, css) do
+  defp manifest(document, plan, state, diagnostics, heex, css, responsive_authority) do
     flat = flat_nodes(plan)
 
     deferred_count =
@@ -604,7 +895,7 @@ defmodule LiveFrames.Fidelity do
         end)
       end)
 
-    %{
+    base_manifest = %{
       "schema_version" => "1.0.0",
       "generator_version" => @version,
       "input_ir_version" => document.ir_version,
@@ -633,7 +924,82 @@ defmodule LiveFrames.Fidelity do
       "generation_lifecycle" =>
         ~w(ir_received ir_validated render_plan_built heex_generated css_generated manifest_generated serialized)
     }
+
+    if responsive_authority,
+      do: Map.merge(base_manifest, responsive_manifest(flat, responsive_authority)),
+      else: base_manifest
   end
+
+  defp responsive_manifest(nodes, authority) do
+    resolutions = Enum.flat_map(nodes, & &1.responsive_resolutions)
+    total = Enum.sum(Enum.map(resolutions, &map_size(&1.raw_styles)))
+
+    resolved =
+      resolutions
+      |> Enum.filter(&(&1.state == :serialized))
+      |> Enum.map(&responsive_emitted_count/1)
+      |> Enum.sum()
+
+    deferred_for_authority =
+      resolutions
+      |> Enum.filter(
+        &(&1.state == :blocked and &1.reason in [:authority_missing, :source_breakpoint_mismatch])
+      )
+      |> Enum.map(&map_size(&1.raw_styles))
+      |> Enum.sum()
+
+    rejected = max(total - resolved - deferred_for_authority, 0)
+
+    consumed_resolutions =
+      resolutions
+      |> Enum.filter(&(&1.state == :serialized))
+      |> Enum.sort_by(&{&1.authority.cascade_order, &1.source_name})
+
+    %{
+      "responsive_breakpoint_authority" => %{
+        "schema_version" => authority.schema_version,
+        "authority_hash" => authority.authority_hash,
+        "authority_level" => authority.authority_level,
+        "authority_type" => authority.authority_type,
+        "source_names" => Enum.map(consumed_resolutions, & &1.source_name) |> Enum.uniq(),
+        "media_conditions" => Enum.map(consumed_resolutions, & &1.media_condition) |> Enum.uniq()
+      },
+      "responsive_entries_total" => total,
+      "responsive_entries_resolved" => resolved,
+      "responsive_entries_deferred_for_authority" => deferred_for_authority,
+      "responsive_entries_rejected" => rejected,
+      "deferred_responsive_count" => deferred_for_authority,
+      "deferred_responsive_entries" => Enum.flat_map(resolutions, &deferred_responsive_entries/1),
+      "invented_breakpoints" => 0
+    }
+  end
+
+  defp responsive_emitted_count(resolution) do
+    custom_count =
+      if is_binary(resolution.custom_css) and resolution.custom_css != "", do: 1, else: 0
+
+    length(resolution.declarations) + custom_count
+  end
+
+  defp deferred_responsive_entries(%Resolution{state: :blocked} = resolution) do
+    if resolution.reason in [:authority_missing, :source_breakpoint_mismatch] do
+      resolution.raw_styles
+      |> sorted_style_entries()
+      |> Enum.map(fn {property, style} ->
+        %{
+          "node_id" => resolution.node_id,
+          "source_breakpoint_name" => resolution.source_name,
+          "property" => property,
+          "raw_value" => style.value,
+          "status" => "deferred_unresolved_authority"
+        }
+      end)
+    else
+      []
+    end
+  end
+
+  defp deferred_responsive_entries(_resolution), do: []
 
   defp sha(value), do: Base.encode16(:crypto.hash(:sha256, value), case: :lower)
 

@@ -4,6 +4,7 @@ defmodule LiveFrames.FidelityDriftTest do
   alias LiveFrames.Fidelity
   alias LiveFrames.Fidelity.DocumentLoader
   alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
+  alias LiveFrames.Responsive.BreakpointAuthority
 
   @input Path.expand(
            "../../../../sources/work/hero_india/design_ir/design_document.json",
@@ -18,10 +19,21 @@ defmodule LiveFrames.FidelityDriftTest do
          __DIR__
        )
   @manifest Path.expand("../../../../sources/work/hero_india/fidelity/manifest.json", __DIR__)
+  @authority Path.expand(
+               "../../../../sources/work/hero_india/fidelity/breakpoint_authority.json",
+               __DIR__
+             )
 
   test "committed fidelity artifacts regenerate byte-identically" do
     assert {:ok, document} = DocumentLoader.from_file(@input)
-    assert {:ok, bundle} = Fidelity.generate(document, source_resolver: FidelityResolver)
+    assert {:ok, authority} = BreakpointAuthority.from_file(@authority)
+
+    assert {:ok, bundle} =
+             Fidelity.generate(document,
+               source_resolver: FidelityResolver,
+               responsive_authority: authority
+             )
+
     assert File.read!(@heex) == bundle.heex
     assert File.read!(@css) == bundle.css
     expected_manifest = Map.put(bundle.manifest, "input_ir_sha256", sha(File.read!(@input)))
