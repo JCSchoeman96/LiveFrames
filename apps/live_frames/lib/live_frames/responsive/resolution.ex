@@ -100,6 +100,14 @@ defmodule LiveFrames.Responsive.Resolution do
 
   def serialize(_resolution, _css), do: {:error, :invalid_transition}
 
+  @spec fail(t(), atom()) :: {:ok, t()} | {:error, :invalid_transition}
+  def fail(%__MODULE__{state: state} = resolution, reason)
+      when state in [:authority_missing, :authority_bound, :value_validated, :resolved] and
+             is_atom(reason),
+      do: {:ok, %{resolution | reason: reason, state: :failed}}
+
+  def fail(_resolution, _reason), do: {:error, :invalid_transition}
+
   @spec block(t(), atom()) :: {:ok, t()} | {:error, :invalid_transition}
   def block(%__MODULE__{state: state} = resolution, reason)
       when state in [:authority_missing, :authority_bound, :value_validated] and is_atom(reason),
