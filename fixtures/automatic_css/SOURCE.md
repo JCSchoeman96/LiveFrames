@@ -7,8 +7,13 @@
 - Source author/vendor: Automatic.css; supplied local export
 - Origin: internal
 - License: unknown
-- Allowed internal conversion: yes
-- Allowed project use: unknown
-- Allowed redistribution in LiveFrames: unknown
+- Internal-use status: approved for internal conversion only
+- Project-use status: unknown
+- Redistribution status: unknown
+- Publication state: `internal_use_approved` scoped to internal conversion;
+  not approved for public redistribution
 - Evidence/reference: `sources/../acss/acss.json`; `acss/4.0.1/RESEARCH_MANIFEST.yaml`
-- Notes: This is a deterministic settings input for a future ACSS adapter. The plugin archive/source is reference-only and must not become a runtime dependency.
+- Notes: This is a deterministic settings input for the existing ACSS adapter.
+  The plugin archive/source is reference-only and must not become a runtime
+  dependency. Repository presence is not public-redistribution clearance; see
+  `docs/04_SOURCE_AND_PROVENANCE.md`.

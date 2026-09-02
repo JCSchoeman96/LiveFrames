@@ -1,73 +1,70 @@
 # LiveFrames
 
-LiveFrames is a Phoenix umbrella project for converting visual-builder design
-sources into reusable LiveView components.
+LiveFrames is a Phoenix/LiveView design compiler and reusable UI-component
+platform. It adapts design sources into source-independent compiler contracts,
+preserves provenance, and produces deterministic fidelity output before later
+native componentization.
 
 ## Current status
 
-Phase 3 is complete and merged to `main` in [PR #3](https://github.com/JCSchoeman96/LiveFrames/pull/3).
-The merge commit is `eb67286e128526d0a746f8098cfd750cd5f167f2`.
+`Master Phase 5 = OPEN`
 
-Phase 4 has not started. The next planned task is the Bricks adapter for the
-approved Hero India fixture. That work requires separate authorization.
+The current tracer bullet has completed its Phase 0 through Phase 5A
+foundations. The current hardening slice is P5-H0 — repository truth and
+provenance governance.
 
-Current work is documentation and repository maintenance only.
+Completed foundations include:
 
-## Done
+- Phoenix umbrella/library foundation, preview application, and Storybook
+  foundation.
+- Design IR `1.0.0` and TokenSet `1.0.0`.
+- Automatic.css settings adapter for the current required TokenSet semantics.
+- Bricks structured adapter and Bricks → Design IR conversion.
+- Deterministic artifacts and drift verification.
+- Phase 5A fidelity HEEx/CSS generation.
+- Source-independent Fidelity with a caller-injected source fidelity resolver.
+- Accepted Level 3 Bricks breakpoint authority: `mobile_portrait` at
+  `max-width: 478px` and `tablet_portrait` at `max-width: 991px`; tablet
+  remains active at mobile widths.
 
-- Phase 0: repository, umbrella apps, quality gates, fixtures, provenance and
-  private-reference boundaries.
-- Phase 1: Phoenix LiveView preview app, PhoenixStorybook mount, proof
-  component and conversion-lab shell.
-- Phase 2: framework-independent Design IR `1.0.0` with validation,
-  diagnostics and deterministic JSON serialization.
-- Phase 3: source-independent TokenSet `1.0.0` and the compile-time
-  Automatic.css `4.0.1` settings adapter.
-
-Phase 3 normalizes the approved ACSS settings fixture into a narrow semantic
-token set with 71 canonical tokens and a 43-token `hero_foundation` profile. It
-preserves provenance, references, unresolved values and strict required-token
-diagnostics. It does not make Automatic.css a runtime dependency. The generated
-ACSS variable `--neutral-ultra-dark-trans-60` remains a later source-dependency
-concern because its value is not proven by the approved settings evidence.
-
-## Architecture
+The current pipeline is:
 
 ```text
-Automatic.css settings -> ACSS adapter -> LiveFrames TokenSet
-Bricks JSON             -> future adapter -> Design IR
-TokenSet + Design IR    -> future generators
+source
+→ source adapter
+→ Design IR + TokenSet
+→ Fidelity
+→ HEEx/CSS
+→ preview
+→ later native componentization
 ```
 
-The reusable library lives in `apps/live_frames`. The preview application in
-`apps/live_frames_preview` may depend on the library, never the reverse.
+Remaining Phase 5 work includes repository/compiler hardening, responsive
+fidelity, browser and visual verification, accessibility acceptance, and
+lifecycle hardening before Phase 6. Hero India is not yet visually,
+responsively, accessibly, or overall accepted.
 
-## Not started
+## Authority and navigation
 
-- Bricks parsing, tree reconstruction and global-class resolution
-- Hero India conversion to Design IR
-- HEEx or LiveView component generation
-- Tailwind token bridging or SCSS generation
-- runtime ACSS generation, WordPress integration or asset resolution
-
-## Repository map
-
-- `apps/live_frames`: reusable library, Design IR, TokenSet and source adapters
-- `apps/live_frames_preview`: Phoenix preview and conversion-lab shell
-- `fixtures`: reviewed deterministic inputs
-- `imports`: mutable source intake and review state
-- `sources`: supplied raw experiments and exports
-- `private_reference`: local, gitignored vendor/reference material
-- `docs`: specifications, phase notes and compatibility records
-
-The approved inputs are `fixtures/automatic_css/acss_settings.json` and
-`fixtures/bricks/bricks_components.json`. The ACSS adapter consumes only its
-documented settings subset. No Bricks parser consumes the Bricks fixture yet.
+- [Master specification](docs/00_LIVEFRAMES_MASTER_SPEC.md) — architecture and
+  product authority.
+- [Phase 5 hardening and acceptance authority](docs/18_PHASE_5_HARDENING_AND_ACCEPTANCE.md)
+  — current execution order and gates.
+- [Source and provenance policy](docs/04_SOURCE_AND_PROVENANCE.md) — canonical
+  publication and provenance governance.
+- `apps/live_frames` — reusable compiler library.
+- `apps/live_frames_preview` — Phoenix preview and conversion lab.
+- `fixtures` — synthetic, sanitized, or explicitly redistribution-cleared
+  fixture boundary; see the provenance policy for existing material.
+- `sources/work` — deterministic derived compiler artifacts with upstream
+  provenance retained.
+- `private_reference` — private/local reference boundary, never a runtime
+  dependency.
 
 ## Local development
 
-Requirements: Elixir 1.19.3, OTP 28, Phoenix 1.8.13 and Phoenix LiveView
-1.2.11.
+Requirements and local commands are defined by the umbrella project. The usual
+checks are:
 
 ```sh
 mix setup
@@ -76,10 +73,5 @@ mix assets.build
 mix phx.server
 ```
 
-The preview runs at `http://localhost:4000/`. Useful routes are `/health`,
-`/storybook` and `/liveframes/lab`.
-
-Read [the master specification](docs/00_LIVEFRAMES_MASTER_SPEC.md) for the
-authoritative architecture and
-[the ACSS adapter notes](docs/06_ACSS_TOKEN_ADAPTER.md) for the current
-TokenSet contract.
+The preview runs at `http://localhost:4000/`; useful routes are `/health`,
+`/storybook`, and `/liveframes/lab`.

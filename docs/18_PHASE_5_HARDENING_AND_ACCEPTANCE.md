@@ -423,13 +423,18 @@ Bring public repository state, status documentation, source provenance, and fixt
 
 This is a governance/truthfulness slice, not a compiler-feature slice.
 
+The durable provenance/publication policy and current-status register are
+canonical in [`docs/04_SOURCE_AND_PROVENANCE.md`](04_SOURCE_AND_PROVENANCE.md).
+This document is the active Phase 5 execution authority and adopts that policy
+for P5-H0; the two documents must remain consistent.
+
 ---
 
 # 8. P5-H0A — README and Status Truth
 
-The root README currently represents an obsolete Phase 3-era repository.
-
-The README must become a concise current-state index rather than a frozen historical status document.
+The pre-P5-H0 root README represented an obsolete Phase 3-era repository.
+P5-H0 must leave it as a concise current-state index rather than a frozen
+historical status document.
 
 ## Required changes
 
@@ -456,9 +461,10 @@ README is not architecture authority.
 
 # 9. P5-H0B — Public Repository Provenance Contradiction
 
-Current repository policy contains an internal contradiction.
+Before P5-H0, repository policy contained an internal contradiction.
 
-Repository fixtures are described as reviewed and repository-safe, while source provenance for key fixtures records:
+The fixture index described inputs as reviewed and repository-safe, while
+source provenance for key fixtures recorded:
 
 ```text
 license = unknown
@@ -470,7 +476,13 @@ At the same time, the repository is public.
 
 This document makes **no legal determination** about those files.
 
-The issue is that LiveFrames' own provenance policy and repository state disagree.
+The remaining issue is that existing public material still has unresolved
+redistribution status; its public location does not establish permission.
+
+This section makes no permission determination. Use the canonical provenance
+policy for the separate internal-use and redistribution facts, publication
+states, transition guards, terminal invariants, source-location boundaries,
+and existing-material governance register.
 
 ---
 
@@ -478,7 +490,7 @@ The issue is that LiveFrames' own provenance policy and repository state disagre
 
 Every source artifact with meaningful provenance MUST use explicit publication states.
 
-Recommended lifecycle:
+Required lifecycle:
 
 ```text
 discovered
@@ -500,8 +512,15 @@ removed_from_active_use
 
 Guard:
 
-* source identity known enough to record;
-* provenance record exists.
+* source identity is identifiable;
+* origin is recorded where known;
+* source system is recorded;
+* vendor/author is recorded where known;
+* license status is recorded;
+* internal-use status is recorded;
+* redistribution status is recorded.
+
+Unknown is acceptable when it is explicitly recorded.
 
 Side effects:
 
@@ -516,35 +535,44 @@ Side effects:
 
 Guard:
 
-internal use is explicitly permitted under project policy.
+internal use is explicitly permitted under project policy for the recorded
+scope. Possession of the file is not authority.
 
 ## 10.3 internal_use_approved → redistribution_review
 
 Guard:
 
-artifact is proposed for a public repository or release.
+artifact has an explicit intent to be evaluated for a public repository or
+release.
 
 ## 10.4 redistribution_review → public_safe
 
 Guard:
 
-redistribution is explicitly cleared.
+redistribution is explicitly cleared. Unknown is insufficient.
 
 Terminal for public distribution:
 
 `public_safe`
 
-## 10.5 Any non-public state → private_only
+## 10.5 Eligible state → private_only
 
 Guard:
 
-internal project use may continue but redistribution is not proven.
+internal/reference retention may continue while redistribution is not
+established.
 
 ## 10.6 Any state → rejected
 
 Guard:
 
-source cannot be used.
+source is determined unusable under project authority.
+
+For publication decisions, `public_safe`, `private_only`, and `rejected` are
+terminal until explicit new evidence triggers re-review. `removed_from_active_use`
+is terminal for active inputs; historical provenance may remain recorded.
+Never silently transition unknown redistribution to `public_safe`, and never
+use unqualified “reviewed” as a publication state.
 
 ---
 
