@@ -5,13 +5,21 @@ defmodule Mix.Tasks.LiveFrames.Fidelity.Generate do
   alias LiveFrames.Fidelity
   alias LiveFrames.Fidelity.DocumentLoader
   alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
+  alias LiveFrames.Responsive.BreakpointAuthority
 
   @default_input "sources/work/hero_india/design_ir/design_document.json"
   @default_heex "apps/live_frames_preview/lib/live_frames_preview_web/live/fidelity_generated/hero.html.heex"
   @default_css "apps/live_frames_preview/priv/static/assets/fidelity/hero.css"
   @default_manifest "sources/work/hero_india/fidelity/manifest.json"
+  @default_breakpoint_authority "sources/work/hero_india/fidelity/breakpoint_authority.json"
 
-  @switches [input: :string, heex: :string, css: :string, manifest: :string]
+  @switches [
+    input: :string,
+    heex: :string,
+    css: :string,
+    manifest: :string,
+    breakpoint_authority: :string
+  ]
 
   @impl Mix.Task
   def run(args) do
@@ -22,9 +30,15 @@ defmodule Mix.Tasks.LiveFrames.Fidelity.Generate do
     heex = path(options, :heex, @default_heex)
     css = path(options, :css, @default_css)
     manifest = path(options, :manifest, @default_manifest)
+    breakpoint_authority = path(options, :breakpoint_authority, @default_breakpoint_authority)
 
     with {:ok, document} <- DocumentLoader.from_file(input),
-         {:ok, bundle} <- Fidelity.generate(document, source_resolver: FidelityResolver),
+         {:ok, authority} <- BreakpointAuthority.from_file(breakpoint_authority),
+         {:ok, bundle} <-
+           Fidelity.generate(document,
+             source_resolver: FidelityResolver,
+             responsive_authority: authority
+           ),
          :ok <- write(heex, bundle.heex),
          :ok <- write(css, bundle.css),
          :ok <-
