@@ -17,7 +17,7 @@ defmodule LiveFramesPreviewWeb do
 
   def live_view do
     quote do
-      use Phoenix.LiveView, layout: {LiveFramesPreviewWeb.Layouts, :root}
+      use Phoenix.LiveView
       import Phoenix.Component
       alias Phoenix.LiveView.JS
     end
