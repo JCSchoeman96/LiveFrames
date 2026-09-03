@@ -1,0 +1,273 @@
+{
+  "schema_version": "1.0.0",
+  "verification_scope": "phase_5b_responsive_browser_boundaries",
+  "input_ir_sha256": "310d012e3b30873c899e833e6dc9f6cb85bda3a39f98eb5585dd99285f9578c6",
+  "token_set_version": "1.0.0",
+  "breakpoint_authority_sha256": "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8",
+  "breakpoint_authority": {
+    "authority_level": 3,
+    "authority_type": "version_matched_default_confirmed_by_source_environment",
+    "tablet_portrait": "@media (max-width: 991px)",
+    "mobile_portrait": "@media (max-width: 478px)"
+  },
+  "generated_heex_sha256": "15dbaa9b6250c73094ad0226f0b6a9b747c12a894cce355b31145a37c78e87c7",
+  "generated_css_sha256": "f9f1ec0507a959e3d7eb35305955a0b3bd6db3f65aa76d249c8fd0f01bd23ea3",
+  "manifest_sha256": "092993a53dde6011cc042b2d4bd5fd41f2c806e91208a4dd0bc32a8707094c89",
+  "manifest_responsive_truth": {
+    "responsive_entries_total": 4,
+    "responsive_entries_resolved": 4,
+    "responsive_entries_deferred_for_authority": 0,
+    "responsive_entries_rejected": 0,
+    "invented_breakpoints": 0
+  },
+  "preview_route": "http://127.0.0.1:4001/liveframes/fidelity/hero",
+  "preview_http_status": 200,
+  "browser_engine": {
+    "name": "Google Chrome",
+    "executable": "/usr/bin/google-chrome",
+    "version": "152.0.7977.75"
+  },
+  "viewport_mechanism": "Chrome DevTools Protocol Emulation.setDeviceMetricsOverride",
+  "stable_viewport_height": 800,
+  "bootstrap_result": {
+    "raw_html_document_roots": 1,
+    "dom_html_roots": 1,
+    "document_children": 1,
+    "raw_html_app_js_references": 1,
+    "dom_app_js_references": 1,
+    "app_js_resource_count": 1,
+    "app_js_script_parsed_count": 1,
+    "app_js_executions": 1,
+    "liveview_main_roots": 1,
+    "router_sole_document_root": true,
+    "duplicate_binding_error": "absent"
+  },
+  "stylesheet_loaded": true,
+  "stylesheet_result": {
+    "http_status": 200,
+    "href": "/assets/fidelity/hero.css",
+    "visible_in_document_style_sheets": true,
+    "link_count": 1,
+    "cssom_media_conditions": [
+      "(max-width: 991px)",
+      "(max-width: 478px)"
+    ],
+    "media_rules": [
+      {
+        "condition": "@media (max-width: 991px)",
+        "cssom_condition": "(max-width: 991px)",
+        "contains_responsive_object_position": true,
+        "contains_responsive_gradient": true
+      },
+      {
+        "condition": "@media (max-width: 478px)",
+        "cssom_condition": "(max-width: 478px)",
+        "contains_mobile_cta_width_rule": true
+      }
+    ],
+    "critical_resource_failures": []
+  },
+  "media_conditions": [
+    "@media (max-width: 991px)",
+    "@media (max-width: 478px)"
+  ],
+  "viewport_results": [
+    {
+      "requested_width": 1200,
+      "actual_inner_width": 1200,
+      "tablet_media_matches": false,
+      "mobile_media_matches": false,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "70% 50%",
+        "tablet_gradient_active": false,
+        "mobile_cta_rule_active": false,
+        "cta_child_width_css": "140px",
+        "cta_child_width_matches_parent": false,
+        "base_behavior_authoritative": true
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 992,
+      "actual_inner_width": 992,
+      "tablet_media_matches": false,
+      "mobile_media_matches": false,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "70% 50%",
+        "tablet_gradient_active": false,
+        "mobile_cta_rule_active": false,
+        "cta_child_width_css": "140px",
+        "cta_child_width_matches_parent": false,
+        "responsive_tablet_behavior_active": false
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 991,
+      "actual_inner_width": 991,
+      "tablet_media_matches": true,
+      "mobile_media_matches": false,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "50% 50%",
+        "tablet_gradient_active": true,
+        "mobile_cta_rule_active": false,
+        "cta_child_width_css": "140px",
+        "cta_child_width_matches_parent": false
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 990,
+      "actual_inner_width": 990,
+      "tablet_media_matches": true,
+      "mobile_media_matches": false,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "50% 50%",
+        "tablet_gradient_active": true,
+        "mobile_cta_rule_active": false,
+        "cta_child_width_css": "140px",
+        "cta_child_width_matches_parent": false
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 479,
+      "actual_inner_width": 479,
+      "tablet_media_matches": true,
+      "mobile_media_matches": false,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "50% 50%",
+        "tablet_gradient_active": true,
+        "mobile_cta_rule_active": false,
+        "cta_child_width_css": "140px",
+        "cta_child_width_matches_parent": false
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 478,
+      "actual_inner_width": 478,
+      "tablet_media_matches": true,
+      "mobile_media_matches": true,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "50% 50%",
+        "tablet_gradient_active": true,
+        "mobile_cta_rule_active": true,
+        "cta_child_width_css": "478px",
+        "cta_parent_width_px": 478,
+        "cta_child_width_px": 478,
+        "cta_child_width_matches_parent": true
+      },
+      "result": "pass"
+    },
+    {
+      "requested_width": 477,
+      "actual_inner_width": 477,
+      "tablet_media_matches": true,
+      "mobile_media_matches": true,
+      "computed_style_assertions": {
+        "object_fit": "cover",
+        "object_position": "50% 50%",
+        "tablet_gradient_active": true,
+        "mobile_cta_rule_active": true,
+        "cta_child_width_css": "477px",
+        "cta_parent_width_px": 477,
+        "cta_child_width_px": 477,
+        "cta_child_width_matches_parent": true
+      },
+      "result": "pass"
+    }
+  ],
+  "tablet_mobile_overlap": {
+    "at_478px": {
+      "tablet_matches": true,
+      "mobile_matches": true,
+      "tablet_object_position": "50% 50%",
+      "tablet_gradient_active": true,
+      "mobile_cta_rule_active": true,
+      "cta_width_rule_result": "100% of parent"
+    },
+    "at_477px": {
+      "tablet_matches": true,
+      "mobile_matches": true,
+      "tablet_object_position": "50% 50%",
+      "tablet_gradient_active": true,
+      "mobile_cta_rule_active": true,
+      "cta_width_rule_result": "100% of parent"
+    },
+    "result": "pass"
+  },
+  "gradient_result": {
+    "base_behavior": "linear-gradient(90deg, ...)",
+    "tablet_behavior": "linear-gradient(180deg, ...)",
+    "browser_assertion": "responsive color stops active when tablet media matches",
+    "result": "pass"
+  },
+  "liveview_result": {
+    "hero_dom_present": true,
+    "main_liveview_roots": 1,
+    "canonical_liveview_websocket_count": 1,
+    "canonical_liveview_handshake_status": 101,
+    "live_socket_present": true,
+    "live_socket_connected": true,
+    "phx_error_count": 0,
+    "development_live_reload_noise_observed": true,
+    "development_live_reload_attempts_observed": 9,
+    "result": "connected_clean"
+  },
+  "responsive_runtime_result": "clean",
+  "browser_error_classification": {
+    "uncaught_page_exceptions": [],
+    "canonical_console_errors": [],
+    "duplicate_liveview_binding_errors": [],
+    "phx_error_count": 0,
+    "console_error_classification": {
+      "canonical_hero_errors": [],
+      "development_noise": [
+        "favicon_404",
+        "dev_live_reload_websocket_handshake_404"
+      ]
+    },
+    "resource_failure_classification": {
+      "critical_failures": [],
+      "favicon_404": {
+        "observed": true,
+        "count": 1,
+        "path": "/favicon.ico"
+      },
+      "dev_live_reload_handshake": {
+        "observed": true,
+        "status": 404,
+        "path": "/phoenix/live_reload/socket/websocket"
+      }
+    },
+    "result": "clean_canonical_runtime"
+  },
+  "asset_state": {
+    "status": "unresolved",
+    "attachment_id": 880,
+    "filename": "cordallman-man-8493246_1920.webp"
+  },
+  "source_visual_reference_state": "not_started",
+  "visual_comparison_state": "not_started",
+  "accessibility_state": "not_started",
+  "known_limitations": [
+    "Hero source image remains unresolved and was not fetched or fabricated.",
+    "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result."
+  ],
+  "verification_lifecycle": [
+    "generated",
+    "compiled",
+    "rendered",
+    "browser_verified"
+  ],
+  "verification_state": "browser_verified",
+  "phase_5b_state": "closed",
+  "master_phase_5_state": "open"
+}
