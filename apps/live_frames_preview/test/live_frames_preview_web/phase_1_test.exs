@@ -41,6 +41,25 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
     assert html =~ "btn--outline"
   end
 
+  test "fidelity Hero initial response has one root document and bootstrap", %{conn: conn} do
+    conn = get(conn, "/liveframes/fidelity/hero")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "data-lf-preview=\"hero-fidelity\""
+    assert length(Regex.scan(~r/<html(?:\s|>)/i, conn.resp_body)) == 1
+    assert length(Regex.scan(~r/<head(?:\s|>)/i, conn.resp_body)) == 1
+    assert length(Regex.scan(~r/<body(?:\s|>)/i, conn.resp_body)) == 1
+
+    assert length(
+             Regex.scan(
+               ~r{<script[^>]*src="/assets/js/app\.js"[^>]*></script>}i,
+               conn.resp_body
+             )
+           ) == 1
+
+    assert length(Regex.scan(~r/data-phx-main(?:\s|>)/i, conn.resp_body)) == 1
+  end
+
   test "development config watches all Phase 1 preview inputs" do
     config = File.read!(Path.expand("../../../../config/dev.exs", __DIR__))
 
