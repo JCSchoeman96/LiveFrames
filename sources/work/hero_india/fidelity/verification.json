@@ -277,10 +277,18 @@
       "local_db_snapshot_sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
       "local_db_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f",
       "attachment_record_status": "no_wp_posts_or_wp_postmeta_record_for_attachment_id_880"
+    },
+    "runtime_evidence": {
+      "source_preview_page_id": 105,
+      "source_preview_root_class": "brxe-sqhmmc brxe-section fr-hero-india bg--ultra-dark",
+      "builder_image_node_id": "a1745a",
+      "builder_missing_asset_message_observed": true,
+      "frontend_preview_image_rendered": false,
+      "exact_upload_http_status": 404
     }
   },
   "source_visual_reference": {
-    "state": "unavailable",
+    "state": "accepted_reference",
     "identity_state": "verified",
     "source_environment": {
       "type": "LocalWP",
@@ -288,7 +296,7 @@
       "domain": "danbricks.local",
       "source_url": "http://localhost:10049",
       "source_system": "Bricks",
-      "status": "halted",
+      "status": "running",
       "bricks_version": "2.3.1",
       "component_version": "2.3.5"
     },
@@ -298,57 +306,100 @@
       "category": "Hero",
       "source_export_sha256": "bb584f35b160f5095dc67fc367884f51cff35b59693c84374426f5cecf56a1a1"
     },
+    "render_identity": {
+      "page_id": 105,
+      "post_type": "bricks_template",
+      "slug": "frames-components",
+      "title": "Frames Components",
+      "frontend_root_class": "brxe-sqhmmc brxe-section fr-hero-india bg--ultra-dark",
+      "builder_component_id": "sqhmmc",
+      "builder_image_node_id": "a1745a"
+    },
     "evidence_hashes": {
       "local_db_snapshot_sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
-      "local_db_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f"
+      "local_db_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f",
+      "template_content_meta_sha256": "721dc17facfed7db53e4fb9f183e48c1444d12948169c958bd5c3e19cc6718bc",
+      "global_component_store_sha256": "ebdfd60fe935237556ad72268285d2cdee94e8efb9b3a6c2770dc314cd856cab"
+    },
+    "startup_evidence": {
+      "attempted": true,
+      "mechanism": "LocalWP normal site-start workflow via Local GraphQL startSite",
+      "status_before": "halted",
+      "status_after": "running",
+      "upgrade_required": false,
+      "migration_required": false,
+      "save_or_write_required": false,
+      "material_source_mutation": false
+    },
+    "mutation_audit": {
+      "material_source_mutation": false,
+      "local_sql_sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
+      "local_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f",
+      "bricks_style_css_sha256": "182dc2892f916ec6aac23477b36a6e35025427bfbafd8d6bdab7942a31ba903c",
+      "bricks_breakpoints_php_sha256": "7e7ad8050bb40731c5efe4030daf5fce4e596cffea081e6f4b0dc2ecddac148b",
+      "bricks_assets_php_sha256": "dd539627f85611a722267836beccaeec8d39a5f2db972011872f6311bea38aba"
     },
     "capture_mechanism": {
       "browser": "Google Chrome",
       "executable": "/usr/bin/google-chrome",
       "protocol": "Chrome DevTools Protocol",
       "viewport_command": "Emulation.setDeviceMetricsOverride",
-      "attempted": false
+      "preview_route": "/template/frames-components/?bricks_preview=1",
+      "render_mode": "Bricks frontend preview",
+      "session_mode": "Local one-click admin session; credentials not recorded",
+      "attempted": true
     },
     "viewports": [
       {
         "width": 1200,
         "height": 800,
-        "state": "unavailable",
-        "window_inner_width": null,
-        "reference_sha256": null,
-        "dimensions": null
+        "state": "verified",
+        "window_inner_width": 1200,
+        "window_inner_height": 800,
+        "reference_sha256": "46fe40bc4bb18384e1d83b247f0ace79e522ebc99ba028cc5cc9b381159b2701",
+        "dimensions": {
+          "width": 1200,
+          "height": 800
+        }
       },
       {
         "width": 991,
         "height": 800,
-        "state": "unavailable",
-        "window_inner_width": null,
-        "reference_sha256": null,
-        "dimensions": null
+        "state": "verified",
+        "window_inner_width": 991,
+        "window_inner_height": 800,
+        "reference_sha256": "471907e8b352c37cb55316643d6973191649d6d89b091e61d3033e2aeedfe976",
+        "dimensions": {
+          "width": 991,
+          "height": 800
+        }
       },
       {
         "width": 478,
         "height": 800,
-        "state": "unavailable",
-        "window_inner_width": null,
-        "reference_sha256": null,
-        "dimensions": null
+        "state": "verified",
+        "window_inner_width": 478,
+        "window_inner_height": 800,
+        "reference_sha256": "fac177479ba4c786d4d8d234782f738e94eb6cdf9add01600f927a54783fe0f9",
+        "dimensions": {
+          "width": 478,
+          "height": 800
+        }
       }
     ],
-    "availability_reason": "source_environment_halted_and_source_url_unreachable",
-    "storage_class": "none",
+    "storage_class": "private_local_only",
     "redistribution_status": "unknown",
     "publication_state": "not_published",
     "raw_screenshots_committed": false,
     "source_mutated": false
   },
-  "source_visual_reference_state": "unavailable",
+  "source_visual_reference_state": "accepted_reference",
   "visual_comparison_state": "not_started",
   "accessibility_state": "not_started",
   "known_limitations": [
     "Hero source image remains unresolved and was not fetched or fabricated.",
     "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result.",
-    "Authoritative DanBricks source reference is unavailable because the verified source environment was halted."
+    "Raw DanBricks reference screenshots remain local/private and are not published; redistribution permission is unknown."
   ],
   "verification_lifecycle": [
     "generated",
