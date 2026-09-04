@@ -254,12 +254,101 @@
     "attachment_id": 880,
     "filename": "cordallman-man-8493246_1920.webp"
   },
-  "source_visual_reference_state": "not_started",
+  "asset_evidence": {
+    "attachment_id": 880,
+    "filename": "cordallman-man-8493246_1920.webp",
+    "fidelity_state": "unresolved",
+    "sha256": null,
+    "mime_type": null,
+    "dimensions": null,
+    "source_metadata_status": "source_marker_present_attachment_record_absent",
+    "file_presence_status": "not_found_in_local_uploads_or_local_search",
+    "metadata_file_correspondence": "not_established",
+    "redistribution_status": "unknown",
+    "publication_state": "not_published_in_repository",
+    "binary_committed": false,
+    "source_identity": {
+      "component_id": "sqhmmc",
+      "component_label": "Hero India",
+      "image_node_id": "a1745a",
+      "source_export_sha256": "bb584f35b160f5095dc67fc367884f51cff35b59693c84374426f5cecf56a1a1"
+    },
+    "metadata_evidence": {
+      "local_db_snapshot_sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
+      "local_db_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f",
+      "attachment_record_status": "no_wp_posts_or_wp_postmeta_record_for_attachment_id_880"
+    }
+  },
+  "source_visual_reference": {
+    "state": "unavailable",
+    "identity_state": "verified",
+    "source_environment": {
+      "type": "LocalWP",
+      "name": "DanBricks",
+      "domain": "danbricks.local",
+      "source_url": "http://localhost:10049",
+      "source_system": "Bricks",
+      "status": "halted",
+      "bricks_version": "2.3.1",
+      "component_version": "2.3.5"
+    },
+    "component_identity": {
+      "component_id": "sqhmmc",
+      "label": "Hero India",
+      "category": "Hero",
+      "source_export_sha256": "bb584f35b160f5095dc67fc367884f51cff35b59693c84374426f5cecf56a1a1"
+    },
+    "evidence_hashes": {
+      "local_db_snapshot_sha256": "37f93e1eee6d53a1f764221c91b30e49a8f294f57ed5631c1fc98b7b7fe7d682",
+      "local_db_backup_sha256": "e6525405f54bf71ef3332dd9954026d5458cf5c78cc819b249ab64230dd5224f"
+    },
+    "capture_mechanism": {
+      "browser": "Google Chrome",
+      "executable": "/usr/bin/google-chrome",
+      "protocol": "Chrome DevTools Protocol",
+      "viewport_command": "Emulation.setDeviceMetricsOverride",
+      "attempted": false
+    },
+    "viewports": [
+      {
+        "width": 1200,
+        "height": 800,
+        "state": "unavailable",
+        "window_inner_width": null,
+        "reference_sha256": null,
+        "dimensions": null
+      },
+      {
+        "width": 991,
+        "height": 800,
+        "state": "unavailable",
+        "window_inner_width": null,
+        "reference_sha256": null,
+        "dimensions": null
+      },
+      {
+        "width": 478,
+        "height": 800,
+        "state": "unavailable",
+        "window_inner_width": null,
+        "reference_sha256": null,
+        "dimensions": null
+      }
+    ],
+    "availability_reason": "source_environment_halted_and_source_url_unreachable",
+    "storage_class": "none",
+    "redistribution_status": "unknown",
+    "publication_state": "not_published",
+    "raw_screenshots_committed": false,
+    "source_mutated": false
+  },
+  "source_visual_reference_state": "unavailable",
   "visual_comparison_state": "not_started",
   "accessibility_state": "not_started",
   "known_limitations": [
     "Hero source image remains unresolved and was not fetched or fabricated.",
-    "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result."
+    "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result.",
+    "Authoritative DanBricks source reference is unavailable because the verified source environment was halted."
   ],
   "verification_lifecycle": [
     "generated",
