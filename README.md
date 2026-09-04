@@ -9,9 +9,13 @@ native componentization.
 
 `Master Phase 5 = OPEN`
 
-The current tracer bullet has completed its Phase 0 through Phase 5A
-foundations. The current hardening slice is P5-H0 — repository truth and
-provenance governance.
+P5-H0 and P5-H1 are complete. Phase 5B responsive generation and exact
+browser-boundary verification are complete, and Phase 5B is CLOSED. Phase 5C
+is the current and next slice for fidelity acceptance.
+
+Master Phase 5 remains OPEN. The Hero source asset remains `unresolved`.
+Visual comparison remains `not_started`, and accessibility remains
+`not_started`.
 
 Completed foundations include:
 
@@ -22,6 +26,9 @@ Completed foundations include:
 - Bricks structured adapter and Bricks → Design IR conversion.
 - Deterministic artifacts and drift verification.
 - Phase 5A fidelity HEEx/CSS generation.
+- P5-H0 repository truth and provenance governance.
+- P5-H1 Fidelity CSS serialization safety.
+- Phase 5B authority-bound responsive generation and browser verification.
 - Source-independent Fidelity with a caller-injected source fidelity resolver.
 - Accepted Level 3 Bricks breakpoint authority: `mobile_portrait` at
   `max-width: 478px` and `tablet_portrait` at `max-width: 991px`; tablet
@@ -39,10 +46,10 @@ source
 → later native componentization
 ```
 
-Remaining Phase 5 work includes repository/compiler hardening, responsive
-fidelity, browser and visual verification, accessibility acceptance, and
-lifecycle hardening before Phase 6. Hero India is not yet visually,
-responsively, accessibly, or overall accepted.
+Remaining Phase 5 work is Phase 5C fidelity acceptance and later lifecycle
+hardening before Phase 6. Hero India is not yet visually, accessibly, or
+overall accepted because its source asset remains `unresolved` and visual
+comparison and accessibility remain `not_started`.
 
 ## Authority and navigation
 

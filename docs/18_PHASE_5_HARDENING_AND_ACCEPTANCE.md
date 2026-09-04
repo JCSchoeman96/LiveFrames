@@ -7,6 +7,17 @@
 **Refines:** `docs/00_LIVEFRAMES_MASTER_SPEC.md` Phase 5 execution and acceptance
 **Does not authorize:** repository visibility changes, deletion of published history, licensing conclusions, Phase 6 implementation, or catalogue expansion
 
+**Current status:**
+
+* P5-H0 = complete
+* P5-H1 = complete
+* Phase 5B = complete and CLOSED
+* Phase 5C = current / next slice
+* Master Phase 5 = OPEN
+* Hero asset = `unresolved`
+* Visual comparison = `not_started`
+* Accessibility = `not_started`
+
 ---
 
 # 1. Purpose
@@ -170,10 +181,15 @@ The following compiler foundations are considered complete for the current trace
 * [x] unresolved source facts preserved instead of guessed
 * [x] base preview route
 * [x] base output compilation
+* [x] P5-H0 repository truth and provenance governance
+* [x] P5-H1 Fidelity CSS serialization safety
+* [x] Phase 5B authority-bound responsive generation
+* [x] Phase 5B exact responsive browser-boundary verification
 
-## 4.2 Current authority work
+## 4.2 Completed Phase 5B authority and verification
 
-Phase 5B breakpoint authority has been recovered, reviewed, and committed to `main`.
+Phase 5B breakpoint authority, responsive generation, and exact boundary browser
+verification are complete. Phase 5B is CLOSED.
 
 Accepted source authority:
 
@@ -212,14 +228,14 @@ Important cascade invariant:
 
 `tablet_portrait` MUST NOT be rewritten as an exclusive `479–991px` band.
 
-## 4.3 Not yet proven
+## 4.3 Phase 5C and later not yet proven
 
 The following remain incomplete:
 
-* [ ] generic responsive authority consumption
-* [ ] responsive fidelity CSS generation
-* [ ] 4/4 responsive overrides resolved
-* [ ] exact breakpoint boundary browser verification
+* [x] generic responsive authority consumption
+* [x] responsive fidelity CSS generation
+* [x] 4/4 responsive overrides resolved
+* [x] exact breakpoint boundary browser verification
 * [ ] Hero source asset resolved or truthfully declared unavailable
 * [ ] source visual reference established
 * [ ] desktop visual comparison
@@ -438,18 +454,18 @@ historical status document.
 
 ## Required changes
 
-* [ ] update current phase
-* [ ] state Phase 0–5A completion truthfully
-* [ ] state current Phase 5B/authority status
-* [ ] state Master Phase 5 remains OPEN
-* [ ] remove claims that Bricks parsing has not begun
-* [ ] remove claims that HEEx generation has not begun
-* [ ] accurately describe Design IR → Fidelity pipeline
-* [ ] identify Master Spec as architecture authority
-* [ ] identify this document as Phase 5 hardening/acceptance authority
-* [ ] distinguish completed work from planned work
-* [ ] keep README concise
-* [ ] do not duplicate detailed phase acceptance criteria
+* [x] update current phase
+* [x] state Phase 0–5A completion truthfully
+* [x] state current Phase 5B/authority status
+* [x] state Master Phase 5 remains OPEN
+* [x] remove claims that Bricks parsing has not begun
+* [x] remove claims that HEEx generation has not begun
+* [x] accurately describe Design IR → Fidelity pipeline
+* [x] identify Master Spec as architecture authority
+* [x] identify this document as Phase 5 hardening/acceptance authority
+* [x] distinguish completed work from planned work
+* [x] keep README concise
+* [x] do not duplicate detailed phase acceptance criteria
 
 ### README invariant
 
@@ -658,26 +674,29 @@ Return:
 
 P5-H0 is complete when:
 
-* [ ] README matches current repository reality
-* [ ] repository source policy is explicit
-* [ ] no new unknown-redistribution material may be added publicly
-* [ ] existing contradiction is documented
-* [ ] human decision points are explicit
-* [ ] agent does not make licensing decisions
-* [ ] no compiler behavior changes
-* [ ] Design IR unchanged
-* [ ] TokenSet unchanged
-* [ ] all tests remain green
+* [x] README matches current repository reality
+* [x] repository source policy is explicit
+* [x] no new unknown-redistribution material may be added publicly
+* [x] existing contradiction is documented
+* [x] human decision points are explicit
+* [x] agent does not make licensing decisions
+* [x] no compiler behavior changes
+* [x] Design IR unchanged
+* [x] TokenSet unchanged
+* [x] all tests remain green
 
 ---
 
 # 15. P5-H1 — Fidelity CSS Serialization Safety
 
+**Status:** Complete.
+
 ## 15.1 Objective
 
 Establish one strict safety boundary immediately before CSS serialization.
 
-The current architecture filters CSS values, but generic CSS property names are not yet sufficiently constrained.
+P5-H1 established the required conservative safety boundary for generic CSS
+property names and values.
 
 A validated Design IR must not be safe only because it happened to originate from the current Bricks adapter.
 
@@ -798,16 +817,16 @@ They must never silently disappear without evidence.
 
 Required:
 
-* [ ] CSS property must use conservative valid property syntax
-* [ ] custom properties may be handled only if deliberately supported
-* [ ] property cannot contain `{`
-* [ ] property cannot contain `}`
-* [ ] property cannot contain `;`
-* [ ] property cannot contain `:`
-* [ ] property cannot terminate a declaration
-* [ ] property cannot inject another selector
-* [ ] malformed properties produce deterministic diagnostics
-* [ ] adversarial regression test exists
+* [x] CSS property must use conservative valid property syntax
+* [x] custom properties may be handled only if deliberately supported
+* [x] property cannot contain `{`
+* [x] property cannot contain `}`
+* [x] property cannot contain `;`
+* [x] property cannot contain `:`
+* [x] property cannot terminate a declaration
+* [x] property cannot inject another selector
+* [x] malformed properties produce deterministic diagnostics
+* [x] adversarial regression test exists
 
 Do not build a full CSS parser for this slice.
 
@@ -821,11 +840,11 @@ A source resolver is not automatically trusted merely because it is a project mo
 
 Before serialization validate:
 
-* [ ] resolver property
-* [ ] resolver value
-* [ ] resolver pseudo selector
-* [ ] resolver declaration type
-* [ ] resolver output shape
+* [x] resolver property
+* [x] resolver value
+* [x] resolver pseudo selector
+* [x] resolver declaration type
+* [x] resolver output shape
 
 Current required pseudo-state surface is narrow.
 
@@ -902,19 +921,19 @@ It becomes mandatory before arbitrary second-party source CSS is rendered.
 
 # 23. P5-H1 Required Tests
 
-* [ ] malicious property name rejected
-* [ ] semicolon injection rejected
-* [ ] brace injection rejected
-* [ ] selector injection through property rejected
-* [ ] safe normal property accepted
-* [ ] approved custom property behavior explicitly tested if supported
-* [ ] resolver malicious property rejected
-* [ ] resolver unsupported selector rejected
-* [ ] supported `:hover` accepted
-* [ ] supported `:focus-visible` accepted
-* [ ] unsafe value regression remains rejected
-* [ ] existing Hero output remains deterministic
-* [ ] existing Phase 5A output does not regress unexpectedly
+* [x] malicious property name rejected
+* [x] semicolon injection rejected
+* [x] brace injection rejected
+* [x] selector injection through property rejected
+* [x] safe normal property accepted
+* [x] approved custom property behavior explicitly tested if supported
+* [x] resolver malicious property rejected
+* [x] resolver unsupported selector rejected
+* [x] supported `:hover` accepted
+* [x] supported `:focus-visible` accepted
+* [x] unsafe value regression remains rejected
+* [x] existing Hero output remains deterministic
+* [x] existing Phase 5A output does not regress unexpectedly
 
 ---
 
@@ -934,6 +953,8 @@ Do not broaden scope.
 ---
 
 # 25. Phase 5B — Responsive Generation
+
+**Status:** Complete. Phase 5B is CLOSED.
 
 ## 25.1 Objective
 
@@ -1180,16 +1201,16 @@ invented_breakpoints = 0
 
 Manifest must record:
 
-* [ ] breakpoint authority schema
-* [ ] authority hash
-* [ ] authority level/type
-* [ ] source names consumed
-* [ ] generated media conditions
-* [ ] resolved count
-* [ ] deferred count
-* [ ] invented count
-* [ ] asset state
-* [ ] deterministic CSS hash
+* [x] breakpoint authority schema
+* [x] authority hash
+* [x] authority level/type
+* [x] source names consumed
+* [x] generated media conditions
+* [x] resolved count
+* [x] deferred count
+* [x] invented count
+* [x] asset state
+* [x] deterministic CSS hash
 
 Generator lifecycle remains terminal at:
 
@@ -1200,6 +1221,8 @@ serialized
 ---
 
 # 33. Phase 5B Boundary Verification
+
+Phase 5B boundary verification is complete and this phase is CLOSED.
 
 Required browser boundary matrix:
 
@@ -1539,6 +1562,10 @@ Do not add a massive accessibility framework if a small existing tool can cover 
 
 # 50. Runtime Cleanliness Gate
 
+The Phase 5B browser run recorded clean canonical Hero runtime evidence. The
+broader `runtime_clean` lifecycle state remains owned by Phase 5C and is not
+advanced here.
+
 Required:
 
 * [ ] no browser console errors
@@ -1592,17 +1619,17 @@ Master Phase 5 MUST remain OPEN until all mandatory gates pass.
 
 ## Compiler
 
-* [ ] validated Design IR input
-* [ ] source-independent Fidelity core
-* [ ] safe declaration serialization
-* [ ] deterministic HEEx
-* [ ] deterministic CSS
-* [ ] deterministic manifest
-* [ ] base rendering
-* [ ] authority-bound responsive rendering
-* [ ] 4/4 Hero responsive entries resolved
-* [ ] zero invented breakpoints
-* [ ] correct max-width cascade
+* [x] validated Design IR input
+* [x] source-independent Fidelity core
+* [x] safe declaration serialization
+* [x] deterministic HEEx
+* [x] deterministic CSS
+* [x] deterministic manifest
+* [x] base rendering
+* [x] authority-bound responsive rendering
+* [x] 4/4 Hero responsive entries resolved
+* [x] zero invented breakpoints
+* [x] correct max-width cascade
 
 ## Asset
 
@@ -1618,12 +1645,12 @@ The agent cannot grant the second condition.
 
 ## Browser
 
-* [ ] desktop verified
-* [ ] 992/991/990 verified
-* [ ] 479/478/477 verified
-* [ ] tablet/mobile overlap verified
-* [ ] route HTTP success
-* [ ] CSS loaded
+* [x] desktop verified
+* [x] 992/991/990 verified
+* [x] 479/478/477 verified
+* [x] tablet/mobile overlap verified
+* [x] route HTTP success
+* [x] CSS loaded
 * [ ] runtime errors zero
 
 ## Visual
@@ -1644,11 +1671,11 @@ The agent cannot grant the second condition.
 
 ## Determinism
 
-* [ ] IR drift green
-* [ ] Stage A drift green
-* [ ] Fidelity drift green
-* [ ] responsive artifact drift green
-* [ ] verification artifact deterministic under its contract
+* [x] IR drift green
+* [x] Stage A drift green
+* [x] Fidelity drift green
+* [x] responsive artifact drift green
+* [x] verification artifact deterministic under its contract
 
 Only then:
 
@@ -2028,14 +2055,14 @@ Before public imports:
 
 | Risk                                       |                Severity | Current action                     |
 | ------------------------------------------ | ----------------------: | ---------------------------------- |
-| public fixture redistribution unknown      |     Critical governance | P5-H0                              |
-| stale README/project status                |       High truthfulness | P5-H0                              |
-| unsafe CSS property serialization          |           High security | P5-H1                              |
-| source resolver declaration injection      |           High security | P5-H1                              |
+| public fixture redistribution unknown      |     Critical governance | P5-H0 complete                    |
+| stale README/project status                |       High truthfulness | P5-H0 complete                    |
+| unsafe CSS property serialization          |           High security | P5-H1 complete                    |
+| source resolver declaration injection      |           High security | P5-H1 complete                    |
 | custom CSS preview escape                  | Medium now / High later | isolation before arbitrary sources |
-| breakpoint hard-coding in generic compiler |       High architecture | Phase 5B invariant                 |
-| responsive cascade mis-modeled             |           High fidelity | Phase 5B tests                     |
-| unresolved Hero asset                      |         High acceptance | Phase 5B/5C                        |
+| breakpoint hard-coding in generic compiler |       High architecture | Phase 5B CLOSED                   |
+| responsive cascade mis-modeled             |           High fidelity | Phase 5B CLOSED                   |
+| unresolved Hero asset                      |         High acceptance | Phase 5C                           |
 | visual gate absent                         |         High acceptance | Phase 5C                           |
 | accessibility gate absent                  |    High product quality | Phase 5C                           |
 | lifecycle terminal states weak             |     Medium architecture | P5-H2                              |
@@ -2335,47 +2362,47 @@ Do not guess.
 
 ## P5-H0
 
-* [ ] README corrected
-* [ ] current phase truthful
-* [ ] public source policy explicit
-* [ ] fixture policy explicit
-* [ ] no new unknown-rights public fixtures
-* [ ] human governance decisions identified
-* [ ] no licensing conclusion invented
+* [x] README corrected
+* [x] current phase truthful
+* [x] public source policy explicit
+* [x] fixture policy explicit
+* [x] no new unknown-rights public fixtures
+* [x] human governance decisions identified
+* [x] no licensing conclusion invented
 
 ## P5-H1
 
-* [ ] declaration serializer boundary exists
-* [ ] property validation exists
-* [ ] resolver property validation exists
-* [ ] selector validation exists
-* [ ] adversarial tests exist
-* [ ] IR `1.0.0` unchanged unless separate decision
-* [ ] Hero generation deterministic
+* [x] declaration serializer boundary exists
+* [x] property validation exists
+* [x] resolver property validation exists
+* [x] selector validation exists
+* [x] adversarial tests exist
+* [x] IR `1.0.0` unchanged unless separate decision
+* [x] Hero generation deterministic
 
 ## Phase 5B
 
-* [ ] source-neutral authority reader
-* [ ] source-neutral responsive resolution
-* [ ] no Bricks values hard-coded generically
-* [ ] 4 responsive entries total
-* [ ] 4 resolved
-* [ ] 0 authority deferred
-* [ ] 0 invented
-* [ ] tablet media condition exact
-* [ ] mobile media condition exact
-* [ ] max-width overlap preserved
-* [ ] media ordering deterministic
-* [ ] CSS drift pass
-* [ ] manifest truthful
+* [x] source-neutral authority reader
+* [x] source-neutral responsive resolution
+* [x] no Bricks values hard-coded generically
+* [x] 4 responsive entries total
+* [x] 4 resolved
+* [x] 0 authority deferred
+* [x] 0 invented
+* [x] tablet media condition exact
+* [x] mobile media condition exact
+* [x] max-width overlap preserved
+* [x] media ordering deterministic
+* [x] CSS drift pass
+* [x] manifest truthful
 
 ## Asset
 
-* [ ] attachment 880 audited
+* [x] attachment 880 audited
 * [ ] actual asset resolved OR explicit unavailable
 * [ ] hash recorded if resolved
-* [ ] provenance recorded
-* [ ] no fabricated URI
+* [x] provenance recorded
+* [x] no fabricated URI
 
 ## Phase 5C Browser
 
@@ -2411,11 +2438,11 @@ Do not guess.
 
 ## Verification
 
-* [ ] `verification.json`
-* [ ] hashes recorded
-* [ ] lifecycle truthful
-* [ ] asset limitation truthful
-* [ ] deterministic evidence
+* [x] `verification.json`
+* [x] hashes recorded
+* [x] lifecycle truthful
+* [x] asset limitation truthful
+* [x] deterministic evidence
 
 ## Lifecycle
 
