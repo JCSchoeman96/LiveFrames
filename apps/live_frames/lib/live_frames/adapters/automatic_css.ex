@@ -34,6 +34,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
     "typography.body.line_height",
     "typography.heading.base_size",
     "typography.heading.line_height",
+    "typography.heading.font_weight",
     "button.primary.background",
     "button.primary.background_hover",
     "button.primary.text",

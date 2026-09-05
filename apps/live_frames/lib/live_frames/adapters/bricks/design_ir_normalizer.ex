@@ -371,7 +371,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       label: element.label,
       content: content_for(element),
       attributes: attributes_for(element),
-      styles: styles_for(settings_result, trace, context.token_set),
+      styles: styles_for(settings_result, trace, context.token_set, element),
       responsive: responsive_for(settings_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
       asset_refs: Map.get(context.asset_ids_by_source, source_id, []),
@@ -413,7 +413,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end)
   end
 
-  defp styles_for(settings_result, trace, token_set) do
+  defp styles_for(settings_result, trace, token_set, element) do
     styles =
       Enum.reduce(settings_result.base_styles, %{}, fn {property, value}, styles ->
         source_key = source_key_for(settings_result.consumed, property, nil)
@@ -467,15 +467,47 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
       end)
 
-    Enum.reduce(settings_result.gradients, styles, fn gradient, styles ->
-      source_key = gradient.source_key
+    styles =
+      Enum.reduce(settings_result.gradients, styles, fn gradient, styles ->
+        source_key = gradient.source_key
 
-      Map.put(
-        styles,
-        gradient.property,
-        gradient_style(gradient, style_trace(trace, source_key))
+        Map.put(
+          styles,
+          gradient.property,
+          gradient_style(gradient, style_trace(trace, source_key))
+        )
+      end)
+
+    merge_intrinsic_styles(styles, element, trace)
+  end
+
+  # Bricks frontend `.brxe-container` intrinsic layout (frontend-layer.css).
+  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace) do
+    styles
+    |> put_intrinsic_style(trace, "display", "flex")
+    |> put_intrinsic_style(trace, "flex-direction", "column")
+  end
+
+  defp merge_intrinsic_styles(styles, _element, _trace), do: styles
+
+  defp put_intrinsic_style(styles, trace, property, value) do
+    Map.put_new(
+      styles,
+      property,
+      StyleValue.keyword(value,
+        source_expression: value,
+        source_trace: %{
+          trace
+          | source_type: "bricks_intrinsic",
+            source_path: "#{trace.source_path}.intrinsic.brxe-container.#{property}",
+            source_name: "brxe-container.#{property}"
+        },
+        metadata: %{
+          "authority" => "bricks_intrinsic_element_default",
+          "selector" => ".brxe-container"
+        }
       )
-    end)
+    )
   end
 
   defp source_key_for(consumed, property, breakpoint) do

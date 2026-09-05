@@ -8,6 +8,7 @@
 .bricks-element--2ef2fa {
   align-items: flex-start;
   justify-content: flex-end;
+  margin-top: 400px;
   position: relative;
   row-gap: var(--content-gap);
   z-index: 1;

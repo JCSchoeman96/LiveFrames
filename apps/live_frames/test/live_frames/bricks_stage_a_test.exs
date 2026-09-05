@@ -55,10 +55,12 @@ defmodule LiveFrames.BricksStageATest do
     assert result.custom_css.base == [".source img { height: 100%; }"]
   end
 
-  test "does not invent a unit for bare margin" do
+  test "applies Bricks spacing defaultUnit px for bare nonzero margin" do
+    # Authority: Bricks 2.3.1 includes/assets.php spacing/dimensions controls
+    # append defaultUnit px when the number is numeric and nonzero without a unit.
     result = Settings.extract(%{"_margin" => %{"top" => "400"}})
-    assert result.unresolved_values["_margin.top"] == "400"
-    refute Map.has_key?(result.base_styles, "margin-top")
+    assert result.base_styles["margin-top"] == "400px"
+    refute Map.has_key?(result.unresolved_values, "_margin.top")
   end
 
   test "preserves unsupported settings and runtime dependencies as diagnostics" do

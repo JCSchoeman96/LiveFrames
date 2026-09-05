@@ -373,7 +373,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping())
-    assert map_size(token_set.tokens) == 71
+    assert map_size(token_set.tokens) == 72
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
@@ -381,11 +381,11 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              layout: 3,
              radius: 1,
              spacing: 11,
-             typography: 8
+             typography: 9
            }
 
     required_paths = AutomaticCSS.required_paths(:hero_foundation)
-    assert length(required_paths) == 43
+    assert length(required_paths) == 44
 
     assert Enum.all?(required_paths, fn path ->
              token_set.tokens[path].resolution_status == :resolved
