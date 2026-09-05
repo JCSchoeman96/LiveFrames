@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "verification_scope": "phase_5c_b_hero_visual_fidelity_comparison",
-  "input_ir_sha256": "310d012e3b30873c899e833e6dc9f6cb85bda3a39f98eb5585dd99285f9578c6",
+  "verification_scope": "phase_5c_b_hero_visual_fidelity_comparison_rerun_after_r1",
+  "input_ir_sha256": "e502427cbb0ee6b029fdde6b9b1e50033e25680331faf3b3ee89bf2228989b0c",
   "token_set_version": "1.0.0",
   "breakpoint_authority_sha256": "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8",
   "breakpoint_authority": {
@@ -11,8 +11,8 @@
     "mobile_portrait": "@media (max-width: 478px)"
   },
   "generated_heex_sha256": "15dbaa9b6250c73094ad0226f0b6a9b747c12a894cce355b31145a37c78e87c7",
-  "generated_css_sha256": "f9f1ec0507a959e3d7eb35305955a0b3bd6db3f65aa76d249c8fd0f01bd23ea3",
-  "manifest_sha256": "092993a53dde6011cc042b2d4bd5fd41f2c806e91208a4dd0bc32a8707094c89",
+  "generated_css_sha256": "308ae5f7a4c40f107a1c202539b573e598950ea9e300064b9a0ff8eaf9d0795e",
+  "manifest_sha256": "d270af30f6558b74626d8626d0fafdfde8d6403d3fe0eb7d60f5fa05250743eb",
   "manifest_responsive_truth": {
     "responsive_entries_total": 4,
     "responsive_entries_resolved": 4,
@@ -401,8 +401,13 @@
     "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result.",
     "Raw DanBricks reference screenshots remain local/private and are not published; redistribution permission is unknown.",
     "Phase 5C-B visual comparison blocked: generated Hero omits content margin-top:400px and collapses hero geometry versus DanBricks source.",
-    "Phase 5C-B visual comparison blocked: generated heading typography (16px/400) diverges materially from source heading (~33\u201345px/700).",
-    "Attachment 880 image fidelity remains unavailable; source frontend omits image node a1745a while generated shows unresolved placeholder."
+    "Phase 5C-B visual comparison blocked: generated heading typography (16px/400) diverges materially from source heading (~33–45px/700).",
+    "Attachment 880 image fidelity remains unavailable; source frontend omits image node a1745a while generated shows unresolved placeholder.",
+    "Phase 5C-B rerun after P5C-B-R1 blocked: missing ACSS body typography (:where(body) font-size:var(--text-m) / line-height) — body remains ~16px/24px vs source fluid ~16.2–17.67px.",
+    "Phase 5C-B rerun after P5C-B-R1 blocked: CTA primary display block vs source flex (ACSS btn display); CTA wrapper missing content-gap; hero section missing Bricks align-items:center.",
+    "Phase 5C-B rerun: button colors still yellow OKLCH (live ACSS --primary) vs generated TokenSet teal #32a2c1 — recorded needs_human_review (TokenSet vs live settings authority), not silently accepted.",
+    "Phase 5C-B rerun: body font-family remains needs_human_review (Bricks/ACSS system stack vs preview ui-sans-serif); equivalence not invented.",
+    "P5C-B-R1 corrections independently re-verified exact at 1200/991/478 (root layout/padding/gap; content margin-top:400px/row-gap; heading typography). Historical blocked 5C-B evidence preserved under visual_comparison_historical_phase_5c_b_blocked."
   ],
   "verification_lifecycle": [
     "generated",
@@ -415,8 +420,4078 @@
   "master_phase_5_state": "open",
   "visual_comparison": {
     "comparison_performed": true,
+    "phase": "5C-B-rerun-after-P5C-B-R1",
+    "precondition_pr": {
+      "number": 16,
+      "title": "Phase 5C-B R1: correct source cascade fidelity",
+      "merge_sha": "e0948bbd7da97a28c84b974066c0dc24d7adb99c"
+    },
+    "result": "P5C-B RERUN BLOCKED — VISUAL FIDELITY DEFECT",
+    "structural_visual_result": "fail",
+    "image_asset_fidelity_result": "unavailable",
+    "full_visual_fidelity": "not_claimed",
+    "acceptance_decision": "blocked",
+    "source_visual_reference_guard": "accepted_reference",
+    "r1_material_defects_recheck": {
+      "status": "corrected",
+      "all_viewports_exact": true,
+      "by_viewport": [
+        {
+          "viewport": 1200,
+          "properties": {
+            "hero_root.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "hero_root.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "hero_root.paddingTop": {
+              "source": "83.0696px",
+              "generated": "83.0696px",
+              "exact_match": true
+            },
+            "hero_root.paddingRight": {
+              "source": "69.4394px",
+              "generated": "69.4394px",
+              "exact_match": true
+            },
+            "hero_root.paddingBottom": {
+              "source": "83.0696px",
+              "generated": "83.0696px",
+              "exact_match": true
+            },
+            "hero_root.paddingLeft": {
+              "source": "69.4394px",
+              "generated": "69.4394px",
+              "exact_match": true
+            },
+            "hero_root.gap": {
+              "source": "63.3987px",
+              "generated": "63.3987px",
+              "exact_match": true
+            },
+            "content_region.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "content_region.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "content_region.marginTop": {
+              "source": "400px",
+              "generated": "400px",
+              "exact_match": true
+            },
+            "content_region.rowGap": {
+              "source": "29.0099px",
+              "generated": "29.0099px",
+              "exact_match": true
+            },
+            "heading.fontSize": {
+              "source": "44.6875px",
+              "generated": "44.6875px",
+              "exact_match": true
+            },
+            "heading.fontWeight": {
+              "source": "700",
+              "generated": "700",
+              "exact_match": true
+            },
+            "heading.lineHeight": {
+              "source": "52.7906px",
+              "generated": "52.7906px",
+              "exact_match": true
+            }
+          },
+          "all_exact": true
+        },
+        {
+          "viewport": 991,
+          "properties": {
+            "hero_root.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "hero_root.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "hero_root.paddingTop": {
+              "source": "74.3439px",
+              "generated": "74.3439px",
+              "exact_match": true
+            },
+            "hero_root.paddingRight": {
+              "source": "56.1431px",
+              "generated": "56.1431px",
+              "exact_match": true
+            },
+            "hero_root.paddingBottom": {
+              "source": "74.3439px",
+              "generated": "74.3439px",
+              "exact_match": true
+            },
+            "hero_root.paddingLeft": {
+              "source": "56.1431px",
+              "generated": "56.1431px",
+              "exact_match": true
+            },
+            "hero_root.gap": {
+              "source": "58.2351px",
+              "generated": "58.2351px",
+              "exact_match": true
+            },
+            "content_region.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "content_region.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "content_region.marginTop": {
+              "source": "400px",
+              "generated": "400px",
+              "exact_match": true
+            },
+            "content_region.rowGap": {
+              "source": "27.7634px",
+              "generated": "27.7634px",
+              "exact_match": true
+            },
+            "heading.fontSize": {
+              "source": "41.3078px",
+              "generated": "41.3078px",
+              "exact_match": true
+            },
+            "heading.fontWeight": {
+              "source": "700",
+              "generated": "700",
+              "exact_match": true
+            },
+            "heading.lineHeight": {
+              "source": "49.0996px",
+              "generated": "49.0996px",
+              "exact_match": true
+            }
+          },
+          "all_exact": true
+        },
+        {
+          "viewport": 478,
+          "properties": {
+            "hero_root.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "hero_root.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "hero_root.paddingTop": {
+              "source": "52.9264px",
+              "generated": "52.9264px",
+              "exact_match": true
+            },
+            "hero_root.paddingRight": {
+              "source": "23.507px",
+              "generated": "23.507px",
+              "exact_match": true
+            },
+            "hero_root.paddingBottom": {
+              "source": "52.9264px",
+              "generated": "52.9264px",
+              "exact_match": true
+            },
+            "hero_root.paddingLeft": {
+              "source": "23.507px",
+              "generated": "23.507px",
+              "exact_match": true
+            },
+            "hero_root.gap": {
+              "source": "45.5607px",
+              "generated": "45.5607px",
+              "exact_match": true
+            },
+            "content_region.display": {
+              "source": "flex",
+              "generated": "flex",
+              "exact_match": true
+            },
+            "content_region.flexDirection": {
+              "source": "column",
+              "generated": "column",
+              "exact_match": true
+            },
+            "content_region.marginTop": {
+              "source": "400px",
+              "generated": "400px",
+              "exact_match": true
+            },
+            "content_region.rowGap": {
+              "source": "24.7038px",
+              "generated": "24.7038px",
+              "exact_match": true
+            },
+            "heading.fontSize": {
+              "source": "33.0122px",
+              "generated": "33.0122px",
+              "exact_match": true
+            },
+            "heading.fontWeight": {
+              "source": "700",
+              "generated": "700",
+              "exact_match": true
+            },
+            "heading.lineHeight": {
+              "source": "40.0469px",
+              "generated": "40.0469px",
+              "exact_match": true
+            }
+          },
+          "all_exact": true
+        }
+      ],
+      "note": "Independently re-verified: hero root layout/padding/gap, content layout/margin-top:400px/row-gap, heading font-size/weight/line-height exact-match source at 1200/991/478"
+    },
+    "source_references": {
+      "status": "regenerated",
+      "reason": "private local captures regenerated via proven read-only DanBricks LocalWP one-click admin session + CDP Emulation.setDeviceMetricsOverride for this rerun",
+      "source_mutated": false,
+      "storage_class": "private_local_only",
+      "redistribution_status": "unknown",
+      "raw_screenshots_committed": false,
+      "source_derived_diff_images_committed": false,
+      "accepted_reference_hashes_preserved_from_5c_a": {
+        "1200": "46fe40bc4bb18384e1d83b247f0ace79e522ebc99ba028cc5cc9b381159b2701",
+        "991": "471907e8b352c37cb55316643d6973191649d6d89b091e61d3033e2aeedfe976",
+        "478": "fac177479ba4c786d4d8d234782f738e94eb6cdf9add01600f927a54783fe0f9"
+      },
+      "regenerated_comparison_capture_hashes": {
+        "1200": "f8a83b916b4cb1b846a9acf48d2d2ce66092ba533b27a80dd3ba6e56b1d18c58",
+        "991": "94a5b9469711840bbb4feee7e43c6e7d5b8f3a2a307c513bab08954eea401e84",
+        "478": "27634fcae078b5e1291c84c71af5197f843084eea12c48df4de5da46c3fad68b"
+      },
+      "accepted_hash_match_regenerated": false,
+      "note": "5C-A accepted hashes remain provenance authority; regenerated captures used for live structural/style comparison in this rerun"
+    },
+    "generated_reference_hashes": {
+      "1200": "7a9eb2680bbd459781b761545f11d1592e598e0ca6609c3967e01c36104b7341",
+      "991": "7fbecb5fd791314457acfb5e58e5ef9c620657362b6947f1a9ecf604038936e8",
+      "478": "f1a7671396c2932618c0ad90a7c99bbefaf040ad191a862d50d1a77d0cb9c237"
+    },
+    "capture_mechanism": {
+      "browser": "Google Chrome",
+      "executable": "/usr/bin/google-chrome",
+      "protocol": "Chrome DevTools Protocol",
+      "viewport_command": "Emulation.setDeviceMetricsOverride",
+      "deviceScaleFactor": 1,
+      "source_preview_route": "/template/frames-components/?bricks_preview=1",
+      "generated_preview_route": "/liveframes/fidelity/hero",
+      "session_mode": "Local one-click admin session via localwp_auto_login; credentials not recorded"
+    },
+    "viewports": {
+      "1200": {
+        "requested": {
+          "width": 1200,
+          "height": 800
+        },
+        "source_viewport_confirmed": {
+          "window_inner_width": 1200,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "generated_viewport_confirmed": {
+          "window_inner_width": 1200,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "source_media_matches": {
+          "tablet_max_991": false,
+          "mobile_max_478": false
+        },
+        "generated_media_matches": {
+          "tablet_max_991": false,
+          "mobile_max_478": false
+        },
+        "responsive_flags_match_source": true
+      },
+      "991": {
+        "requested": {
+          "width": 991,
+          "height": 800
+        },
+        "source_viewport_confirmed": {
+          "window_inner_width": 991,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "generated_viewport_confirmed": {
+          "window_inner_width": 991,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "source_media_matches": {
+          "tablet_max_991": true,
+          "mobile_max_478": false
+        },
+        "generated_media_matches": {
+          "tablet_max_991": true,
+          "mobile_max_478": false
+        },
+        "responsive_flags_match_source": true
+      },
+      "478": {
+        "requested": {
+          "width": 478,
+          "height": 800
+        },
+        "source_viewport_confirmed": {
+          "window_inner_width": 478,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "generated_viewport_confirmed": {
+          "window_inner_width": 478,
+          "window_inner_height": 800,
+          "exact_match": true
+        },
+        "source_media_matches": {
+          "tablet_max_991": true,
+          "mobile_max_478": true
+        },
+        "generated_media_matches": {
+          "tablet_max_991": true,
+          "mobile_max_478": true
+        },
+        "responsive_flags_match_source": true
+      }
+    },
+    "computed_style_comparisons": {
+      "1200": {
+        "hero_root": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.984375,
+              "width": 1200,
+              "height": 789.0625,
+              "top": 31.984375,
+              "left": 0,
+              "right": 1200,
+              "bottom": 821.046875
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "1200px",
+              "height": "789.062px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "83.0696px",
+              "paddingRight": "69.4394px",
+              "paddingBottom": "83.0696px",
+              "paddingLeft": "69.4394px",
+              "rowGap": "63.3987px",
+              "columnGap": "63.3987px",
+              "gap": "63.3987px",
+              "alignItems": "center",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "oklch(0.1 0 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 1200,
+              "height": 786.25,
+              "top": 0,
+              "left": 0,
+              "right": 1200,
+              "bottom": 786.25
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "1200px",
+              "height": "786.25px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "83.0696px",
+              "paddingRight": "69.4394px",
+              "paddingBottom": "83.0696px",
+              "paddingLeft": "69.4394px",
+              "rowGap": "63.3987px",
+              "columnGap": "63.3987px",
+              "gap": "63.3987px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgb(26, 26, 26)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "content_region": {
+          "source": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 515.046875,
+              "width": 1061.125,
+              "height": 222.9375,
+              "top": 515.046875,
+              "left": 69.4375,
+              "right": 1130.5625,
+              "bottom": 737.984375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "1061.12px",
+              "height": "222.938px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "29.0099px",
+              "columnGap": "29.0099px",
+              "gap": "29.0099px",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 483.0625,
+              "width": 1061.125,
+              "height": 220.125,
+              "top": 483.0625,
+              "left": 69.4375,
+              "right": 1130.5625,
+              "bottom": 703.1875
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "1061.12px",
+              "height": "220.125px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "29.0099px",
+              "columnGap": "normal",
+              "gap": "29.0099px normal",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "heading": {
+          "source": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 515.046875,
+              "width": 301.5,
+              "height": 52.796875,
+              "top": 515.046875,
+              "left": 69.4375,
+              "right": 370.9375,
+              "bottom": 567.84375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "301.5px",
+              "height": "52.7969px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "44.6875px",
+              "fontWeight": "700",
+              "lineHeight": "52.7906px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 483.0625,
+              "width": 301.5,
+              "height": 52.796875,
+              "top": 483.0625,
+              "left": 69.4375,
+              "right": 370.9375,
+              "bottom": 535.859375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "301.5px",
+              "height": "52.7969px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "44.6875px",
+              "fontWeight": "700",
+              "lineHeight": "52.7906px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "body_text": {
+          "source": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 596.84375,
+              "width": 706.953125,
+              "height": 74.8125,
+              "top": 596.84375,
+              "left": 69.4375,
+              "right": 776.390625,
+              "bottom": 671.65625
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "706.953px",
+              "height": "74.8125px",
+              "maxWidth": "706.96px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 564.859375,
+              "width": 640.640625,
+              "height": 72,
+              "top": 564.859375,
+              "left": 69.4375,
+              "right": 710.078125,
+              "bottom": 636.859375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "640.641px",
+              "height": "72px",
+              "maxWidth": "640.642px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_wrapper": {
+          "source": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 700.65625,
+              "width": 1061.125,
+              "height": 37.328125,
+              "top": 700.65625,
+              "left": 69.4375,
+              "right": 1130.5625,
+              "bottom": 737.984375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "1061.12px",
+              "height": "37.3281px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "29.0099px",
+              "columnGap": "29.0099px",
+              "gap": "29.0099px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 665.859375,
+              "width": 1061.125,
+              "height": 37.328125,
+              "top": 665.859375,
+              "left": 69.4375,
+              "right": 1130.5625,
+              "bottom": 703.1875
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "1061.12px",
+              "height": "37.3281px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_primary": {
+          "source": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 700.65625,
+              "width": 153.484375,
+              "height": 37.328125,
+              "top": 700.65625,
+              "left": 69.4375,
+              "right": 222.921875,
+              "bottom": 737.984375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "153.484px",
+              "height": "37.3281px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.83499px",
+              "paddingRight": "22.0875px",
+              "paddingBottom": "8.83499px",
+              "paddingLeft": "22.0875px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "17.67px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.1 0.024 90.78)",
+              "backgroundColor": "oklch(0.8839 0.154 90.78)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 69.4375,
+              "y": 665.859375,
+              "width": 153.484375,
+              "height": 37.328125,
+              "top": 665.859375,
+              "left": 69.4375,
+              "right": 222.921875,
+              "bottom": 703.1875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "153.484px",
+              "height": "37.3281px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.83499px",
+              "paddingRight": "22.0875px",
+              "paddingBottom": "8.83499px",
+              "paddingLeft": "22.0875px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "17.67px",
+              "letterSpacing": "normal",
+              "color": "rgb(10, 34, 41)",
+              "backgroundColor": "rgb(50, 162, 193)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "cta_secondary": {
+          "source": {
+            "bbox": {
+              "x": 251.921875,
+              "y": 700.65625,
+              "width": 153.484375,
+              "height": 37.328125,
+              "top": 700.65625,
+              "left": 251.921875,
+              "right": 405.40625,
+              "bottom": 737.984375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "153.484px",
+              "height": "37.3281px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.83499px",
+              "paddingRight": "22.0875px",
+              "paddingBottom": "8.83499px",
+              "paddingLeft": "22.0875px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "17.67px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.8839 0.154 90.78)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 222.921875,
+              "y": 665.859375,
+              "width": 153.484375,
+              "height": 37.328125,
+              "top": 665.859375,
+              "left": 222.921875,
+              "right": 376.40625,
+              "bottom": 703.1875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "153.484px",
+              "height": "37.3281px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.83499px",
+              "paddingRight": "22.0875px",
+              "paddingBottom": "8.83499px",
+              "paddingLeft": "22.0875px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "17.67px",
+              "letterSpacing": "normal",
+              "color": "rgb(50, 162, 193)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "background_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.984375,
+              "width": 1200,
+              "height": 789.0625,
+              "top": 31.984375,
+              "left": 0,
+              "right": 1200,
+              "bottom": 821.046875
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "1200px",
+              "height": "789.062px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "29.0099px",
+              "columnGap": "29.0099px",
+              "gap": "29.0099px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 1200,
+              "height": 786.25,
+              "top": 0,
+              "left": 0,
+              "right": 1200,
+              "bottom": 786.25
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "1200px",
+              "height": "786.25px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "overlay_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.984375,
+              "width": 1200,
+              "height": 789.0625,
+              "top": 31.984375,
+              "left": 0,
+              "right": 1200,
+              "bottom": 821.046875
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "1200px",
+              "height": "789.062px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "29.0099px",
+              "columnGap": "29.0099px",
+              "gap": "29.0099px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.67px",
+              "fontWeight": "400",
+              "lineHeight": "24.9315px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 1200,
+              "height": 786.25,
+              "top": 0,
+              "left": 0,
+              "right": 1200,
+              "bottom": 786.25
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "1200px",
+              "height": "786.25px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "linear-gradient(90deg, rgba(5, 5, 5, 0.95) 30%, rgba(8, 8, 8, 0.75) 60%, rgba(15, 15, 15, 0.46) 90%)",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "media_region": {
+          "source": {
+            "bbox": null,
+            "styles": {}
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 1200,
+              "height": 786.25,
+              "top": 0,
+              "left": 0,
+              "right": 1200,
+              "bottom": 786.25
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "1200px",
+              "height": "786.25px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          },
+          "note": "Source omits .fr-background-alpha__image (attachment 880); generated shows unresolved placeholder"
+        }
+      },
+      "991": {
+        "hero_root": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.953125,
+              "width": 991,
+              "height": 763.234375,
+              "top": 31.953125,
+              "left": 0,
+              "right": 991,
+              "bottom": 795.1875
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "991px",
+              "height": "763.234px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "74.3439px",
+              "paddingRight": "56.1431px",
+              "paddingBottom": "74.3439px",
+              "paddingLeft": "56.1431px",
+              "rowGap": "58.2351px",
+              "columnGap": "58.2351px",
+              "gap": "58.2351px",
+              "alignItems": "center",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "oklch(0.1 0 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 991,
+              "height": 761.78125,
+              "top": 0,
+              "left": 0,
+              "right": 991,
+              "bottom": 761.78125
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "991px",
+              "height": "761.781px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "74.3439px",
+              "paddingRight": "56.1431px",
+              "paddingBottom": "74.3439px",
+              "paddingLeft": "56.1431px",
+              "rowGap": "58.2351px",
+              "columnGap": "58.2351px",
+              "gap": "58.2351px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgb(26, 26, 26)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "content_region": {
+          "source": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 506.296875,
+              "width": 878.71875,
+              "height": 214.546875,
+              "top": 506.296875,
+              "left": 56.140625,
+              "right": 934.859375,
+              "bottom": 720.84375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "878.719px",
+              "height": "214.547px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "27.7634px",
+              "columnGap": "27.7634px",
+              "gap": "27.7634px",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 474.34375,
+              "width": 878.71875,
+              "height": 213.09375,
+              "top": 474.34375,
+              "left": 56.140625,
+              "right": 934.859375,
+              "bottom": 687.4375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "878.719px",
+              "height": "213.094px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "27.7634px",
+              "columnGap": "normal",
+              "gap": "27.7634px normal",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "heading": {
+          "source": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 506.296875,
+              "width": 278.71875,
+              "height": 49.09375,
+              "top": 506.296875,
+              "left": 56.140625,
+              "right": 334.859375,
+              "bottom": 555.390625
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "278.719px",
+              "height": "49.0938px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "41.3078px",
+              "fontWeight": "700",
+              "lineHeight": "49.0996px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 474.34375,
+              "width": 278.71875,
+              "height": 49.09375,
+              "top": 474.34375,
+              "left": 56.140625,
+              "right": 334.859375,
+              "bottom": 523.4375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "278.719px",
+              "height": "49.0938px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "41.3078px",
+              "fontWeight": "700",
+              "lineHeight": "49.0996px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "body_text": {
+          "source": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 583.140625,
+              "width": 690.6875,
+              "height": 73.453125,
+              "top": 583.140625,
+              "left": 56.140625,
+              "right": 746.828125,
+              "bottom": 656.59375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "690.688px",
+              "height": "73.4531px",
+              "maxWidth": "690.692px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 551.1875,
+              "width": 640.640625,
+              "height": 72,
+              "top": 551.1875,
+              "left": 56.140625,
+              "right": 696.78125,
+              "bottom": 623.1875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "640.641px",
+              "height": "72px",
+              "maxWidth": "640.642px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_wrapper": {
+          "source": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 684.34375,
+              "width": 878.71875,
+              "height": 36.5,
+              "top": 684.34375,
+              "left": 56.140625,
+              "right": 934.859375,
+              "bottom": 720.84375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "878.719px",
+              "height": "36.5px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "27.7634px",
+              "columnGap": "27.7634px",
+              "gap": "27.7634px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 650.9375,
+              "width": 878.71875,
+              "height": 36.5,
+              "top": 650.9375,
+              "left": 56.140625,
+              "right": 934.859375,
+              "bottom": 687.4375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "878.719px",
+              "height": "36.5px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_primary": {
+          "source": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 684.34375,
+              "width": 149.984375,
+              "height": 36.5,
+              "top": 684.34375,
+              "left": 56.140625,
+              "right": 206.125,
+              "bottom": 720.84375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "149.984px",
+              "height": "36.5px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.62724px",
+              "paddingRight": "21.5681px",
+              "paddingBottom": "8.62724px",
+              "paddingLeft": "21.5681px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "17.2545px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.1 0.024 90.78)",
+              "backgroundColor": "oklch(0.8839 0.154 90.78)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 56.140625,
+              "y": 650.9375,
+              "width": 149.984375,
+              "height": 36.5,
+              "top": 650.9375,
+              "left": 56.140625,
+              "right": 206.125,
+              "bottom": 687.4375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "149.984px",
+              "height": "36.5px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.62724px",
+              "paddingRight": "21.5681px",
+              "paddingBottom": "8.62724px",
+              "paddingLeft": "21.5681px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "17.2545px",
+              "letterSpacing": "normal",
+              "color": "rgb(10, 34, 41)",
+              "backgroundColor": "rgb(50, 162, 193)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "cta_secondary": {
+          "source": {
+            "bbox": {
+              "x": 233.875,
+              "y": 684.34375,
+              "width": 149.984375,
+              "height": 36.5,
+              "top": 684.34375,
+              "left": 233.875,
+              "right": 383.859375,
+              "bottom": 720.84375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "149.984px",
+              "height": "36.5px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.62724px",
+              "paddingRight": "21.5681px",
+              "paddingBottom": "8.62724px",
+              "paddingLeft": "21.5681px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "17.2545px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.8839 0.154 90.78)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 206.125,
+              "y": 650.9375,
+              "width": 149.984375,
+              "height": 36.5,
+              "top": 650.9375,
+              "left": 206.125,
+              "right": 356.109375,
+              "bottom": 687.4375
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "149.984px",
+              "height": "36.5px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.62724px",
+              "paddingRight": "21.5681px",
+              "paddingBottom": "8.62724px",
+              "paddingLeft": "21.5681px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "17.2545px",
+              "letterSpacing": "normal",
+              "color": "rgb(50, 162, 193)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "background_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.953125,
+              "width": 991,
+              "height": 763.234375,
+              "top": 31.953125,
+              "left": 0,
+              "right": 991,
+              "bottom": 795.1875
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "991px",
+              "height": "763.234px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "27.7634px",
+              "columnGap": "27.7634px",
+              "gap": "27.7634px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 991,
+              "height": 761.78125,
+              "top": 0,
+              "left": 0,
+              "right": 991,
+              "bottom": 761.78125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "991px",
+              "height": "761.781px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "overlay_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 31.953125,
+              "width": 991,
+              "height": 0,
+              "top": 31.953125,
+              "left": 0,
+              "right": 991,
+              "bottom": 31.953125
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "991px",
+              "height": "0px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "27.7634px",
+              "columnGap": "27.7634px",
+              "gap": "27.7634px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "17.2545px",
+              "fontWeight": "400",
+              "lineHeight": "24.492px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 991,
+              "height": 761.78125,
+              "top": 0,
+              "left": 0,
+              "right": 991,
+              "bottom": 761.78125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "991px",
+              "height": "761.781px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "media_region": {
+          "source": {
+            "bbox": null,
+            "styles": {}
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 991,
+              "height": 761.78125,
+              "top": 0,
+              "left": 0,
+              "right": 991,
+              "bottom": 761.78125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "991px",
+              "height": "761.781px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          },
+          "note": "Source omits .fr-background-alpha__image (attachment 880); generated shows unresolved placeholder"
+        }
+      },
+      "478": {
+        "hero_root": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 45.90625,
+              "width": 478,
+              "height": 782.53125,
+              "top": 45.90625,
+              "left": 0,
+              "right": 478,
+              "bottom": 828.4375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "478px",
+              "height": "782.531px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "52.9264px",
+              "paddingRight": "23.507px",
+              "paddingBottom": "52.9264px",
+              "paddingLeft": "23.507px",
+              "rowGap": "45.5607px",
+              "columnGap": "45.5607px",
+              "gap": "45.5607px",
+              "alignItems": "center",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "wrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "oklch(0.1 0 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 478,
+              "height": 760.203125,
+              "top": 0,
+              "left": 0,
+              "right": 478,
+              "bottom": 760.203125
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "478px",
+              "height": "760.203px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "52.9264px",
+              "paddingRight": "23.507px",
+              "paddingBottom": "52.9264px",
+              "paddingLeft": "23.507px",
+              "rowGap": "45.5607px",
+              "columnGap": "45.5607px",
+              "gap": "45.5607px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgb(26, 26, 26)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "content_region": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 498.828125,
+              "width": 431,
+              "height": 276.6875,
+              "top": 498.828125,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 775.515625
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "431px",
+              "height": "276.688px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "24.7038px",
+              "columnGap": "24.7038px",
+              "gap": "24.7038px",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "wrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 452.921875,
+              "width": 431,
+              "height": 254.359375,
+              "top": 452.921875,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 707.28125
+            },
+            "styles": {
+              "display": "flex",
+              "position": "relative",
+              "width": "431px",
+              "height": "254.359px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "400px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "24.7038px",
+              "columnGap": "normal",
+              "gap": "24.7038px normal",
+              "alignItems": "flex-start",
+              "justifyContent": "flex-end",
+              "flexDirection": "column",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "heading": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 498.828125,
+              "width": 222.71875,
+              "height": 40.046875,
+              "top": 498.828125,
+              "left": 23.5,
+              "right": 246.21875,
+              "bottom": 538.875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "222.719px",
+              "height": "40.0469px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "33.0122px",
+              "fontWeight": "700",
+              "lineHeight": "40.0469px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 452.921875,
+              "width": 222.71875,
+              "height": 40.046875,
+              "top": 452.921875,
+              "left": 23.5,
+              "right": 246.21875,
+              "bottom": 492.96875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "222.719px",
+              "height": "40.0469px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "33.0122px",
+              "fontWeight": "700",
+              "lineHeight": "40.0469px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "body_text": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 563.578125,
+              "width": 431,
+              "height": 93.625,
+              "top": 563.578125,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 657.203125
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "431px",
+              "height": "93.625px",
+              "maxWidth": "649.395px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 517.671875,
+              "width": 431,
+              "height": 96,
+              "top": 517.671875,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 613.671875
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "431px",
+              "height": "96px",
+              "maxWidth": "640.642px",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_wrapper": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 681.90625,
+              "width": 431,
+              "height": 93.609375,
+              "top": 681.90625,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 775.515625
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "431px",
+              "height": "93.6094px",
+              "maxWidth": "100%",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "24.7038px",
+              "columnGap": "24.7038px",
+              "gap": "24.7038px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 638.375,
+              "width": 431,
+              "height": 68.90625,
+              "top": 638.375,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 707.28125
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "431px",
+              "height": "68.9062px",
+              "maxWidth": "none",
+              "minWidth": "auto",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "wrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "cta_primary": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 681.90625,
+              "width": 431,
+              "height": 34.453125,
+              "top": 681.90625,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 716.359375
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "431px",
+              "height": "34.4531px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.1173px",
+              "paddingRight": "20.2932px",
+              "paddingBottom": "8.1173px",
+              "paddingLeft": "20.2932px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "16.2346px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.1 0.024 90.78)",
+              "backgroundColor": "oklch(0.8839 0.154 90.78)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 638.375,
+              "width": 431,
+              "height": 34.453125,
+              "top": 638.375,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 672.828125
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "431px",
+              "height": "34.4531px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.1173px",
+              "paddingRight": "20.2932px",
+              "paddingBottom": "8.1173px",
+              "paddingLeft": "20.2932px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "16.2346px",
+              "letterSpacing": "normal",
+              "color": "rgb(10, 34, 41)",
+              "backgroundColor": "rgb(50, 162, 193)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "cta_secondary": {
+          "source": {
+            "bbox": {
+              "x": 23.5,
+              "y": 741.0625,
+              "width": 431,
+              "height": 34.453125,
+              "top": 741.0625,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 775.515625
+            },
+            "styles": {
+              "display": "flex",
+              "position": "static",
+              "width": "431px",
+              "height": "34.4531px",
+              "maxWidth": "100%",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.1173px",
+              "paddingRight": "20.2932px",
+              "paddingBottom": "8.1173px",
+              "paddingLeft": "20.2932px",
+              "rowGap": "10px",
+              "columnGap": "10px",
+              "gap": "10px",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "16.2346px",
+              "letterSpacing": "normal",
+              "color": "oklch(0.8839 0.154 90.78)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "oklch(0.8839 0.154 90.78)",
+              "borderRightColor": "oklch(0.8839 0.154 90.78)",
+              "borderBottomColor": "oklch(0.8839 0.154 90.78)",
+              "borderLeftColor": "oklch(0.8839 0.154 90.78)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 23.5,
+              "y": 672.828125,
+              "width": 431,
+              "height": 34.453125,
+              "top": 672.828125,
+              "left": 23.5,
+              "right": 454.5,
+              "bottom": 707.28125
+            },
+            "styles": {
+              "display": "block",
+              "position": "static",
+              "width": "431px",
+              "height": "34.4531px",
+              "maxWidth": "none",
+              "minWidth": "140px",
+              "marginTop": "0px",
+              "paddingTop": "8.1173px",
+              "paddingRight": "20.2932px",
+              "paddingBottom": "8.1173px",
+              "paddingLeft": "20.2932px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "16.2346px",
+              "letterSpacing": "normal",
+              "color": "rgb(50, 162, 193)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "auto",
+              "borderTopLeftRadius": "5px",
+              "borderTopRightRadius": "5px",
+              "borderBottomLeftRadius": "5px",
+              "borderBottomRightRadius": "5px",
+              "borderTopColor": "rgb(50, 162, 193)",
+              "borderRightColor": "rgb(50, 162, 193)",
+              "borderBottomColor": "rgb(50, 162, 193)",
+              "borderLeftColor": "rgb(50, 162, 193)"
+            }
+          }
+        },
+        "background_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 45.90625,
+              "width": 478,
+              "height": 782.53125,
+              "top": 45.90625,
+              "left": 0,
+              "right": 478,
+              "bottom": 828.4375
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "478px",
+              "height": "782.531px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "24.7038px",
+              "columnGap": "24.7038px",
+              "gap": "24.7038px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 478,
+              "height": 760.203125,
+              "top": 0,
+              "left": 0,
+              "right": 478,
+              "bottom": 760.203125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "478px",
+              "height": "760.203px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "overlay_region": {
+          "source": {
+            "bbox": {
+              "x": 0,
+              "y": 45.90625,
+              "width": 478,
+              "height": 0,
+              "top": 45.90625,
+              "left": 0,
+              "right": 478,
+              "bottom": 45.90625
+            },
+            "styles": {
+              "display": "block",
+              "position": "relative",
+              "width": "478px",
+              "height": "0px",
+              "maxWidth": "100%",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "24.7038px",
+              "columnGap": "24.7038px",
+              "gap": "24.7038px",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+              "fontSize": "16.2346px",
+              "fontWeight": "400",
+              "lineHeight": "23.3986px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(221, 222, 223)",
+              "borderRightColor": "rgb(221, 222, 223)",
+              "borderBottomColor": "rgb(221, 222, 223)",
+              "borderLeftColor": "rgb(221, 222, 223)"
+            }
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 478,
+              "height": 760.203125,
+              "top": 0,
+              "left": 0,
+              "right": 478,
+              "bottom": 760.203125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "478px",
+              "height": "760.203px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          }
+        },
+        "media_region": {
+          "source": {
+            "bbox": null,
+            "styles": {}
+          },
+          "generated": {
+            "bbox": {
+              "x": 0,
+              "y": 0,
+              "width": 478,
+              "height": 760.203125,
+              "top": 0,
+              "left": 0,
+              "right": 478,
+              "bottom": 760.203125
+            },
+            "styles": {
+              "display": "block",
+              "position": "absolute",
+              "width": "478px",
+              "height": "760.203px",
+              "maxWidth": "none",
+              "minWidth": "0px",
+              "marginTop": "0px",
+              "paddingTop": "0px",
+              "paddingRight": "0px",
+              "paddingBottom": "0px",
+              "paddingLeft": "0px",
+              "rowGap": "normal",
+              "columnGap": "normal",
+              "gap": "normal",
+              "alignItems": "normal",
+              "justifyContent": "normal",
+              "flexDirection": "row",
+              "flexWrap": "nowrap",
+              "fontFamily": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+              "fontSize": "16px",
+              "fontWeight": "400",
+              "lineHeight": "24px",
+              "letterSpacing": "normal",
+              "color": "rgb(255, 255, 255)",
+              "backgroundColor": "rgba(0, 0, 0, 0)",
+              "backgroundImage": "none",
+              "zIndex": "-1",
+              "borderTopLeftRadius": "0px",
+              "borderTopRightRadius": "0px",
+              "borderBottomLeftRadius": "0px",
+              "borderBottomRightRadius": "0px",
+              "borderTopColor": "rgb(255, 255, 255)",
+              "borderRightColor": "rgb(255, 255, 255)",
+              "borderBottomColor": "rgb(255, 255, 255)",
+              "borderLeftColor": "rgb(255, 255, 255)"
+            }
+          },
+          "note": "Source omits .fr-background-alpha__image (attachment 880); generated shows unresolved placeholder"
+        }
+      }
+    },
+    "image_diff_metrics": {
+      "descriptive_only": true,
+      "no_numeric_acceptance_threshold_applied": true,
+      "full_viewport_by_viewport": {
+        "1200": {
+          "mean_channel_abs_diff": 21.1045,
+          "approx_percent_pixels_differing_sampled": 33.7675,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              1200,
+              800
+            ],
+            "generated": [
+              1200,
+              800
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": {
+            "media_bbox_used_for_attribution": {
+              "x": 0,
+              "y": 0,
+              "width": 1200,
+              "height": 786.25
+            },
+            "note": "Pixel differences intersecting unresolved attachment 880 media region are classified unresolved_asset_880; not used as numeric pass/fail."
+          }
+        },
+        "991": {
+          "mean_channel_abs_diff": 29.0873,
+          "approx_percent_pixels_differing_sampled": 71.5806,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              991,
+              800
+            ],
+            "generated": [
+              991,
+              800
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": {
+            "media_bbox_used_for_attribution": {
+              "x": 0,
+              "y": 0,
+              "width": 991,
+              "height": 761.78125
+            },
+            "note": "Pixel differences intersecting unresolved attachment 880 media region are classified unresolved_asset_880; not used as numeric pass/fail."
+          }
+        },
+        "478": {
+          "mean_channel_abs_diff": 42.499,
+          "approx_percent_pixels_differing_sampled": 78.9874,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              478,
+              800
+            ],
+            "generated": [
+              478,
+              800
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": {
+            "media_bbox_used_for_attribution": {
+              "x": 0,
+              "y": 0,
+              "width": 478,
+              "height": 760.203125
+            },
+            "note": "Pixel differences intersecting unresolved attachment 880 media region are classified unresolved_asset_880; not used as numeric pass/fail."
+          }
+        }
+      },
+      "hero_clip_by_viewport": {
+        "1200": {
+          "mean_channel_abs_diff": 46.2208,
+          "approx_percent_pixels_differing_sampled": 44.6332,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              1200,
+              768
+            ],
+            "generated": [
+              1200,
+              768
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": null
+        },
+        "991": {
+          "mean_channel_abs_diff": 46.8007,
+          "approx_percent_pixels_differing_sampled": 78.4802,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              991,
+              763
+            ],
+            "generated": [
+              991,
+              763
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": null
+        },
+        "478": {
+          "mean_channel_abs_diff": 60.4407,
+          "approx_percent_pixels_differing_sampled": 84.1603,
+          "sample_step": 2,
+          "image_sizes": {
+            "source": [
+              478,
+              754
+            ],
+            "generated": [
+              478,
+              754
+            ]
+          },
+          "descriptive_only": true,
+          "no_numeric_acceptance_threshold_applied": true,
+          "media_attribution": null
+        }
+      }
+    },
+    "difference_classification_summary": {
+      "material_generated_deviation": true,
+      "unresolved_asset_880": true,
+      "needs_human_review": true,
+      "unmapped": false,
+      "browser_rasterization_variance": "present_as_secondary_noise_only_not_primary_defect",
+      "exact_match_examples": [
+        "R1-corrected root layout/padding/gap",
+        "R1-corrected content margin-top:400px and row-gap",
+        "R1-corrected heading typography",
+        "overlay gradient color-stops (source ::before vs generated background-image)",
+        "responsive media flags 1200/991/478"
+      ]
+    },
+    "known_differences": [
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "17.67px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "24.9315px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 1200,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 1200,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "29.0099px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      },
+      {
+        "viewport": 1200,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 1200,
+        "region": "overlay_region",
+        "aspect": "gradient",
+        "source_pseudo_before_backgroundImage": "linear-gradient(90deg, rgba(5, 5, 5, 0.95) 30%, rgba(8, 8, 8, 0.75) 60%, rgba(15, 15, 15, 0.46) 90%)",
+        "generated_backgroundImage": "linear-gradient(90deg, rgba(5, 5, 5, 0.95) 30%, rgba(8, 8, 8, 0.75) 60%, rgba(15, 15, 15, 0.46) 90%)",
+        "classification": "exact_match",
+        "note": "Source applies gradient via ::before; generated applies equivalent gradient on overlay element background-image (same color-stops). Element computed backgroundImage none on source is not a material defect."
+      },
+      {
+        "viewport": 1200,
+        "region": "media_region",
+        "aspect": "image_asset_and_presence",
+        "source": "element .fr-background-alpha__image absent in frontend DOM (attachment 880 unresolved; node a1745a not rendered)",
+        "generated": "placeholder figure.fr-background-alpha__image present with data-lf-asset-status=unresolved",
+        "classification": "unresolved_asset_880",
+        "image_fidelity": "unavailable"
+      },
+      {
+        "viewport": 1200,
+        "region": "content_region",
+        "property": "columnGap",
+        "source": "29.0099px",
+        "generated": "normal",
+        "classification": "acceptable_under_existing_authority",
+        "note": "Content is flex-direction:column; rowGap exact-matches ACSS/Frames content gap. columnGap expansion of gap shorthand is not layout-material for single-column content stack."
+      },
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 31.984375,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      },
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "property": "height",
+        "source": "789.062px",
+        "generated": "786.25px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "17.2545px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "24.492px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "27.7634px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 991,
+        "region": "overlay_region",
+        "aspect": "gradient",
+        "source_pseudo_before_backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+        "generated_backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+        "classification": "exact_match",
+        "note": "Source applies gradient via ::before; generated applies equivalent gradient on overlay element background-image (same color-stops). Element computed backgroundImage none on source is not a material defect."
+      },
+      {
+        "viewport": 991,
+        "region": "media_region",
+        "aspect": "image_asset_and_presence",
+        "source": "element .fr-background-alpha__image absent in frontend DOM (attachment 880 unresolved; node a1745a not rendered)",
+        "generated": "placeholder figure.fr-background-alpha__image present with data-lf-asset-status=unresolved",
+        "classification": "unresolved_asset_880",
+        "image_fidelity": "unavailable"
+      },
+      {
+        "viewport": 991,
+        "region": "content_region",
+        "property": "columnGap",
+        "source": "27.7634px",
+        "generated": "normal",
+        "classification": "acceptable_under_existing_authority",
+        "note": "Content is flex-direction:column; rowGap exact-matches ACSS/Frames content gap. columnGap expansion of gap shorthand is not layout-material for single-column content stack."
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 31.953125,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "property": "height",
+        "source": "763.234px",
+        "generated": "761.781px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "16.2346px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "23.3986px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "24.7038px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 478,
+        "region": "overlay_region",
+        "aspect": "gradient",
+        "source_pseudo_before_backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+        "generated_backgroundImage": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+        "classification": "exact_match",
+        "note": "Source applies gradient via ::before; generated applies equivalent gradient on overlay element background-image (same color-stops). Element computed backgroundImage none on source is not a material defect."
+      },
+      {
+        "viewport": 478,
+        "region": "media_region",
+        "aspect": "image_asset_and_presence",
+        "source": "element .fr-background-alpha__image absent in frontend DOM (attachment 880 unresolved; node a1745a not rendered)",
+        "generated": "placeholder figure.fr-background-alpha__image present with data-lf-asset-status=unresolved",
+        "classification": "unresolved_asset_880",
+        "image_fidelity": "unavailable"
+      },
+      {
+        "viewport": 478,
+        "region": "content_region",
+        "property": "columnGap",
+        "source": "24.7038px",
+        "generated": "normal",
+        "classification": "acceptable_under_existing_authority",
+        "note": "Content is flex-direction:column; rowGap exact-matches ACSS/Frames content gap. columnGap expansion of gap shorthand is not layout-material for single-column content stack."
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 45.90625,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "property": "height",
+        "source": "782.531px",
+        "generated": "760.203px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      }
+    ],
+    "material_generated_deviations": [
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "17.67px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "24.9315px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 1200,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 1200,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "29.0099px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "17.2545px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "24.492px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "27.7634px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "fontSize",
+        "source": "16.2346px",
+        "generated": "16px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base text sizing (var(--text-m) / related body tokens) into Fidelity CSS or document context without inventing Hero-specific px"
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "lineHeight",
+        "source": "23.3986px",
+        "generated": "24px",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS :where(body) { line-height: var(--text-line-height) } / :where(p) line-height cascade",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/paragraph line-height tokens into Fidelity output"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex",
+        "generated": "block",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display (inline-flex/flex) for btn--* classes from TokenSet/ACSS button tokens"
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Bricks intrinsic .brxe-section { align-items: center; display: flex; flex-direction: column }",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items:center for section semantic nodes"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "24.7038px",
+        "generated": "normal",
+        "classification": "material_generated_deviation",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha row/column-gap: var(--content-gap) and/or ACSS :where(.brxe-div) { gap: var(--content-gap) }",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper / Bricks div intrinsics from Frames+ACSS ownership"
+      }
+    ],
+    "human_review_differences": [
+      {
+        "viewport": 1200,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 1200,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 31.984375,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      },
+      {
+        "viewport": 991,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 991,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 31.953125,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      },
+      {
+        "viewport": 478,
+        "region": "cta_primary",
+        "property": "backgroundColor",
+        "source": "oklch(0.8839 0.154 90.78)",
+        "generated": "rgb(50, 162, 193)",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "ACSS [class*=\"btn--\"] background: var(--btn-background) resolving from live --primary OKLCH yellow vs frozen TokenSet button.primary.background #32a2c1 teal",
+        "note": "Corrected pipeline emits fixture TokenSet primary teal; live DanBricks ACSS settings resolve yellow OKLCH. Do not invent color equivalence. Owner must decide whether to re-export Automatic CSS settings from live DanBricks into the TokenSet fixture or accept fixture palette as LiveFrames token authority for Hero."
+      },
+      {
+        "viewport": 478,
+        "region": "body_text",
+        "property": "fontFamily",
+        "source": "-apple-system, \"system-ui\", \"Segoe UI\", roboto, helvetica, arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+        "generated": "ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\"",
+        "classification": "needs_human_review",
+        "likely_owning_layer": "Source Bricks/ACSS body font-family stack vs LiveFrames preview ambient ui-sans-serif/Tailwind stack",
+        "note": "Technical evidence cannot decide semantic equivalence of system-ui stacks; do not invent equivalence."
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "aspect": "absolute_y_offset",
+        "source_y": 45.90625,
+        "generated_y": 0,
+        "classification": "needs_human_review",
+        "note": "Source Bricks preview retains ~32px top chrome offset under admin/preview session; not treated as primary layout defect"
+      }
+    ],
+    "browser_rasterization_differences": [
+      {
+        "viewport": 1200,
+        "region": "hero_root",
+        "property": "height",
+        "source": "789.062px",
+        "generated": "786.25px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      },
+      {
+        "viewport": 991,
+        "region": "hero_root",
+        "property": "height",
+        "source": "763.234px",
+        "generated": "761.781px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      },
+      {
+        "viewport": 478,
+        "region": "hero_root",
+        "property": "height",
+        "source": "782.531px",
+        "generated": "760.203px",
+        "classification": "browser_rasterization_variance",
+        "note": "Small height delta secondary to body typography / chrome offset; not independent primary defect"
+      }
+    ],
+    "blocking_defects": [
+      {
+        "viewport": "1200/991/478",
+        "region": "body_text",
+        "property": "fontSize / lineHeight",
+        "source": "ACSS body fluid text (~16.2–17.67px / matching line-height)",
+        "generated": "browser default 16px / 24px",
+        "likely_owning_layer": "Automatic CSS :where(body) font-size:var(--text-m) and line-height tokens — not emitted into Fidelity document/CSS",
+        "proposed_narrow_correction_boundary": "Emit ACSS body/base typography cascade; do not invent Hero-sampled px"
+      },
+      {
+        "viewport": "1200/991/478",
+        "region": "cta_primary",
+        "property": "display",
+        "source": "flex (ACSS btn display inline-flex/flex)",
+        "generated": "block",
+        "likely_owning_layer": "Automatic CSS [class*=\"btn--\"] display: var(--btn-display, inline-flex)",
+        "proposed_narrow_correction_boundary": "Emit ACSS button display token"
+      },
+      {
+        "viewport": "1200/991/478",
+        "region": "hero_root",
+        "property": "alignItems",
+        "source": "center",
+        "generated": "normal",
+        "likely_owning_layer": "Bricks .brxe-section align-items:center",
+        "proposed_narrow_correction_boundary": "Emit Bricks section intrinsic align-items"
+      },
+      {
+        "viewport": "1200/991/478",
+        "region": "cta_wrapper",
+        "property": "gap",
+        "source": "~24–29px (var(--content-gap))",
+        "generated": "normal",
+        "likely_owning_layer": "Frames .fr-cta-links-alpha / ACSS .brxe-div content-gap",
+        "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper"
+      }
+    ],
+    "attachment_880": {
+      "fidelity_state": "unresolved",
+      "image_fidelity": "unavailable",
+      "redistribution_status": "unknown",
+      "reason": "unresolved source attachment 880",
+      "source_image_element_present": false,
+      "generated_placeholder_present": true,
+      "waiver_granted": false
+    },
+    "human_decision_required": {
+      "required": true,
+      "outcome": "BLOCKED",
+      "question": "P5C-B rerun remains BLOCKED on material non-asset generated deviations after R1 (missing ACSS body typography cascade; missing ACSS button display; missing Bricks section align-items:center; missing CTA content-gap). Separately decide: (1) whether frozen TokenSet primary teal #32a2c1 may diverge from live DanBricks OKLCH yellow button colors or settings must be re-exported; (2) whether body font-family stack differences are acceptable system-ui variance; (3) attachment 880 waiver policy. Do not authorize 5C-C until a non-asset structural pass."
+    },
+    "phase_5c_c_authorized": false,
+    "compiler_changed": false,
+    "design_ir_changed": false,
+    "token_set_changed": false,
+    "heex_css_manifest_changed": false,
+    "historical_blocked_5c_b_preserved": true,
+    "historical_blocked_5c_b_key": "visual_comparison_historical_phase_5c_b_blocked"
+  },
+  "phase_5c_b_state": "blocked",
+  "visual_comparison_historical_phase_5c_b_blocked": {
+    "comparison_performed": true,
     "phase": "5C-B",
-    "result": "P5C-B BLOCKED \u2014 VISUAL FIDELITY DEFECT",
+    "result": "P5C-B BLOCKED — VISUAL FIDELITY DEFECT",
     "structural_visual_result": "fail",
     "image_asset_fidelity_result": "unavailable",
     "full_visual_fidelity": "not_claimed",
@@ -1631,7 +5706,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -1683,7 +5758,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "content_region": {
@@ -1737,7 +5812,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -1789,7 +5864,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "heading": {
@@ -1949,7 +6024,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           },
           "generated": {
             "found": true,
@@ -2001,7 +6076,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           }
         },
         "cta_wrapper": {
@@ -2647,7 +6722,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -2699,7 +6774,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "content_region": {
@@ -2753,7 +6828,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -2805,7 +6880,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "heading": {
@@ -2965,7 +7040,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           },
           "generated": {
             "found": true,
@@ -3017,7 +7092,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           }
         },
         "cta_wrapper": {
@@ -3663,7 +7738,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -3715,7 +7790,7 @@
               "isolation": "isolate",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "content_region": {
@@ -3769,7 +7844,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "generated": {
             "found": true,
@@ -3821,7 +7896,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "heading": {
@@ -3981,7 +8056,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           },
           "generated": {
             "found": true,
@@ -4033,7 +8108,7 @@
               "isolation": "auto",
               "pseudoBefore_backgroundImage": "none"
             },
-            "text_sample": "This is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this placeholder text "
+            "text_sample": "This is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this placeholder text "
           }
         },
         "cta_wrapper": {
@@ -4838,7 +8913,7 @@
         "source_y": 31.984375,
         "generated_y": 0,
         "classification": "needs_human_review",
-        "note": "Source Bricks preview retains ~32\u201346px top chrome offset under admin/preview session; not treated as the primary layout defect"
+        "note": "Source Bricks preview retains ~32–46px top chrome offset under admin/preview session; not treated as the primary layout defect"
       },
       {
         "viewport": 991,
@@ -4899,7 +8974,7 @@
         "source_y": 31.953125,
         "generated_y": 0,
         "classification": "needs_human_review",
-        "note": "Source Bricks preview retains ~32\u201346px top chrome offset under admin/preview session; not treated as the primary layout defect"
+        "note": "Source Bricks preview retains ~32–46px top chrome offset under admin/preview session; not treated as the primary layout defect"
       },
       {
         "viewport": 478,
@@ -4960,7 +9035,7 @@
         "source_y": 45.90625,
         "generated_y": 0,
         "classification": "needs_human_review",
-        "note": "Source Bricks preview retains ~32\u201346px top chrome offset under admin/preview session; not treated as the primary layout defect"
+        "note": "Source Bricks preview retains ~32–46px top chrome offset under admin/preview session; not treated as the primary layout defect"
       },
       {
         "viewport": 478,
@@ -5077,7 +9152,7 @@
         "expected_height_px": 789.0625,
         "actual_height_px": 130,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       },
       {
@@ -5107,7 +9182,7 @@
         "expected_height_px": 763.234375,
         "actual_height_px": 130,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       },
       {
@@ -5137,7 +9212,7 @@
         "expected_height_px": 782.53125,
         "actual_height_px": 188,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       }
     ],
@@ -5153,7 +9228,7 @@
         "viewport": "all (1200, 991, 478)",
         "source_region": "content_region / hero_root",
         "generated_region": "content_region / hero_root",
-        "expected": "content wrapper margin-top: 400px; hero tall enough to place content near bottom (~760\u2013790px hero height at 800px viewport)",
+        "expected": "content wrapper margin-top: 400px; hero tall enough to place content near bottom (~760–790px hero height at 800px viewport)",
         "actual": "content wrapper margin-top: 0px; hero height collapses to ~130px (desktop/tablet) / ~188px (mobile)",
         "screenshot_hashes": {
           "source": {
@@ -5197,8 +9272,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 20,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "991": {
             "source_bbox": {
@@ -5229,8 +9304,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 20,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "478": {
             "source_bbox": {
@@ -5261,8 +9336,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 21,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "computed_style_evidence": {
@@ -5278,7 +9353,7 @@
         "viewport": "all (1200, 991, 478)",
         "source_region": "heading",
         "generated_region": "heading",
-        "expected": "Heading typography approximately font-size ~33\u201345px, font-weight 700, line-height ~40\u201353px",
+        "expected": "Heading typography approximately font-size ~33–45px, font-weight 700, line-height ~40–53px",
         "actual": "Generated heading computed font-size 16px, font-weight 400, line-height 24px",
         "likely_owning_layer": "Fidelity generation / Token resolution / missing heading CSS declarations",
         "proposed_narrow_correction_boundary": "Emit heading typography declarations for .fr-hero-india__heading from IR/tokens"
@@ -5305,5 +9380,11 @@
     "token_set_changed": false,
     "heex_css_manifest_changed": false
   },
-  "phase_5c_b_state": "blocked"
+  "p5c_b_r1_correction_provenance": {
+    "pr_number": 16,
+    "pr_title": "Phase 5C-B R1: correct source cascade fidelity",
+    "merge_sha": "e0948bbd7da97a28c84b974066c0dc24d7adb99c",
+    "branch": "fix/p5c-b-r1-source-cascade-fidelity",
+    "note": "Source-cascade corrections merged before this verification-only rerun; this PR does not change compiler/IR/TokenSet/HEEx/CSS."
+  }
 }
