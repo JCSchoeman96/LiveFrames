@@ -149,8 +149,14 @@ defmodule LiveFrames.BricksDesignIRTest do
              metadata: %{"fallback" => "30px", "token_path" => "spacing.content_gap"}
            } = node_by_source_id(document, "8ae908").styles["column-gap"]
 
-    assert %StyleValue{kind: :unresolved, value: "400", source_expression: "400"} =
+    assert %StyleValue{kind: :literal, value: "400px", source_expression: "400px"} =
              node_by_source_id(document, "2ef2fa").styles["margin-top"]
+
+    assert %StyleValue{kind: :keyword, value: "flex"} =
+             node_by_source_id(document, "2ef2fa").styles["display"]
+
+    assert %StyleValue{kind: :keyword, value: "column"} =
+             node_by_source_id(document, "2ef2fa").styles["flex-direction"]
 
     assert %StyleValue{
              kind: :unresolved,
@@ -259,17 +265,11 @@ defmodule LiveFrames.BricksDesignIRTest do
     document = document()
     codes = Enum.map(document.diagnostics, & &1.code)
 
-    assert length(document.diagnostics) == 8
+    assert length(document.diagnostics) == 7
     assert Enum.count(codes, &(&1 == "bricks.breakpoint.unresolved")) == 4
     assert Enum.count(codes, &(&1 == "bricks.variable.unresolved")) == 2
-    assert "bricks.setting.value_unresolved" in codes
+    refute "bricks.setting.value_unresolved" in codes
     assert "bricks.asset.unresolved" in codes
-
-    assert Enum.any?(document.diagnostics, fn diagnostic ->
-             diagnostic.code == "bricks.setting.value_unresolved" and
-               diagnostic.source_trace.source_id == "2ef2fa" and
-               diagnostic.metadata["raw_value"] == "400"
-           end)
 
     assert Enum.any?(document.diagnostics, fn diagnostic ->
              diagnostic.code == "bricks.variable.unresolved" and

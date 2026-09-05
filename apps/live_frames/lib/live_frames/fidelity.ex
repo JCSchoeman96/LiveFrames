@@ -260,6 +260,11 @@ defmodule LiveFrames.Fidelity do
 
   defp token_value(path, %{"tokens" => tokens}) do
     case tokens[path] do
+      %{"metadata" => %{"css_expression" => value}} when is_binary(value) ->
+        if CSSDeclaration.safe_value?(value),
+          do: {:emit, value, path},
+          else: {:skip, "unsafe token CSS value was not emitted"}
+
       %{"resolved_value" => value} when is_binary(value) ->
         if CSSDeclaration.safe_value?(value),
           do: {:emit, value, path},
@@ -268,7 +273,7 @@ defmodule LiveFrames.Fidelity do
       %{"resolved_value" => %{"type" => "derived"}, "source_expression" => expression} ->
         value = derived_css_value(expression)
 
-        if CSSDeclaration.safe_value?(value),
+        if is_binary(value) and CSSDeclaration.safe_value?(value),
           do: {:emit, value, path},
           else: {:skip, "unsafe token CSS value was not emitted"}
 
@@ -570,9 +575,12 @@ defmodule LiveFrames.Fidelity do
   defp asset_decision(_, _, diagnostics), do: {nil, diagnostics}
 
   defp source_resolver_result(source_resolver, classes, token_set, node) do
+    context = resolver_context(node)
+    class_list = String.split(String.trim(classes))
+
     result =
       try do
-        {:ok, source_resolver.resolve(String.split(String.trim(classes)), token_set)}
+        {:ok, invoke_source_resolver(source_resolver, class_list, token_set, context)}
       rescue
         _exception -> {:error, :resolver_failed}
       catch
@@ -590,6 +598,42 @@ defmodule LiveFrames.Fidelity do
         invalid_resolver_result(node, reason)
     end
   end
+
+  defp invoke_source_resolver(source_resolver, classes, token_set, context)
+       when is_atom(source_resolver) do
+    case Code.ensure_loaded(source_resolver) do
+      {:module, ^source_resolver} ->
+        :ok
+
+      _ ->
+        raise ArgumentError, "source resolver module could not be loaded"
+    end
+
+    if function_exported?(source_resolver, :resolve, 3) do
+      apply(source_resolver, :resolve, [classes, token_set, context])
+    else
+      apply(source_resolver, :resolve, [classes, token_set])
+    end
+  end
+
+  defp invoke_source_resolver(source_resolver, classes, token_set, _context) do
+    apply(source_resolver, :resolve, [classes, token_set])
+  end
+
+  defp resolver_context(%{semantic_type: semantic_type, attributes: attributes, node_id: node_id}) do
+    tag =
+      case {semantic_type, attributes} do
+        {"heading", %{"tag" => tag}} when tag in ~w(h1 h2 h3 h4 h5 h6) -> tag
+        {"section", _} -> "section"
+        {"paragraph", _} -> "p"
+        {"button", _} -> "button"
+        _ -> nil
+      end
+
+    %{semantic_type: semantic_type, tag: tag, node_id: node_id}
+  end
+
+  defp resolver_context(_node), do: %{}
 
   defp normalize_resolver_result(result) when is_map(result) and not is_struct(result) do
     with {:ok, declarations} <- resolver_field(result, :declarations),
@@ -1013,6 +1057,8 @@ defmodule LiveFrames.Fidelity do
 
   defp derived_css_value(expression) when is_binary(expression),
     do: if(String.starts_with?(expression, "var("), do: expression, else: "var(#{expression})")
+
+  defp derived_css_value(_expression), do: nil
 
   defp diagnostic(code, message, node \\ nil, metadata \\ %{}),
     do: %LiveFrames.IR.Diagnostic{

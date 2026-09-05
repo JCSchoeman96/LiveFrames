@@ -5,15 +5,27 @@
   background-color: hsl(0 0% 10%);
   color: light-dark(#fff, #000);
   --lf-context-heading-color: light-dark(#fff, #000);
+  display: flex;
+  flex-direction: column;
+  padding-block: clamp(3rem, calc(4.1749502982vw + 2.0606361829rem), 5.625rem);
+  padding-inline: clamp(1rem, calc(6.3618290258vw + -0.4314115308rem), 5rem);
+  gap: clamp(2.6653335rem, calc(2.4706425447vw + 2.1094389274rem), 4.21875rem);
 }
 .lf-fidelity-node-000001-000001 {
   align-items: flex-start;
+  display: flex;
+  flex-direction: column;
   justify-content: flex-end;
+  margin-top: 400px;
   position: relative;
-  row-gap: var(--space-m);
+  row-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   z-index: 1;
 }
-
+.lf-fidelity-node-000001-000001-000001 {
+  font-size: clamp(1.944rem, calc(1.6170835726vw + 1.5801561962rem), 2.9607412962rem);
+  font-weight: 700;
+  line-height: calc(4px + 2ex);
+}
 .lf-fidelity-node-000001-000001-000002 {
   max-width: 70ch;
 }
@@ -34,7 +46,7 @@
   padding-inline: 1.25em;
   padding-block: .5em;
   min-width: 140px;
-  font-size: var(--text-m);
+  font-size: clamp(1rem, calc(0.1988071571vw + 0.9552683897rem), 1.125rem);
   font-weight: 400;
   line-height: 1;
 }
@@ -54,7 +66,7 @@
   padding-inline: 1.25em;
   padding-block: .5em;
   min-width: 140px;
-  font-size: var(--text-m);
+  font-size: clamp(1rem, calc(0.1988071571vw + 0.9552683897rem), 1.125rem);
   font-weight: 400;
   line-height: 1;
   background-color: transparent;

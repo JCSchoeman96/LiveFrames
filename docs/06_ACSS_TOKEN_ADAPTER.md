@@ -143,7 +143,7 @@ therefore does not create a transparency token for it, include it in
 
 ## Canonical token coverage
 
-The initial mapping emits 71 tokens. It is one explicit mapping table; raw
+The initial mapping emits 72 tokens. It is one explicit mapping table; raw
 Automatic.css setting names are not the canonical API.
 
 ### Colors (27)
@@ -202,7 +202,7 @@ The spacing scale and section values preserve the ACSS clamp relationship and
 its base, scale, adjustment, and viewport inputs. Contextual gaps retain
 semantic references to those derived tokens.
 
-### Typography (8)
+### Typography (9)
 
 ~~~text
 typography.body.base_size
@@ -213,10 +213,13 @@ typography.heading.base_size
 typography.heading.scale
 typography.heading.scale.h1
 typography.heading.line_height
+typography.heading.font_weight
 ~~~
 
 Base sizes are responsive pairs from the demonstrated mobile and desktop
-settings. Line-height expressions remain source CSS expressions.
+settings. Line-height expressions remain source CSS expressions. Heading font
+weight uses the exported `heading-weight` setting when present, otherwise the
+Automatic.css SCSS default `700`.
 
 ### Primary button (21)
 
@@ -291,6 +294,7 @@ typography.body.base_size
 typography.body.line_height
 typography.heading.base_size
 typography.heading.line_height
+typography.heading.font_weight
 button.primary.background
 button.primary.background_hover
 button.primary.text

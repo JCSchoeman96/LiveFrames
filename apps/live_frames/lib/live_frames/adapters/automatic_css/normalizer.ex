@@ -5,6 +5,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   """
 
   alias LiveFrames.Adapters.AutomaticCSS.Resolver
+  alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
   alias LiveFrames.Tokens.Diagnostic
   alias LiveFrames.Tokens.Token
 
@@ -213,7 +214,14 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         ["typography.heading.base_size", "layout.viewport.min", "layout.viewport.max"],
         "headings"
       ),
-      direct("typography.heading.line_height", :typography, "base-heading-lh", :css)
+      direct("typography.heading.line_height", :typography, "base-heading-lh", :css),
+      literal_default(
+        "typography.heading.font_weight",
+        :typography,
+        "heading-weight",
+        :string,
+        "700"
+      )
     ]
 
     button_entries = [
@@ -384,6 +392,25 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     end
   end
 
+  defp resolve_entry(
+         %{
+           strategy: :literal_default,
+           source_keys: [source_key],
+           kind: kind,
+           default: default
+         },
+         settings
+       ) do
+    raw_value = Map.get(settings, source_key)
+
+    if present?(raw_value) do
+      Resolver.literal(raw_value, kind)
+    else
+      # Automatic.css SCSS default, e.g. $heading-weight: 700 !default
+      Resolver.literal(default, kind)
+    end
+  end
+
   defp resolve_entry(%{strategy: :px, source_keys: [source_key]}, settings) do
     raw_value = Map.get(settings, source_key)
 
@@ -474,6 +501,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       entry
       |> Map.get(:metadata, %{})
       |> Map.merge(result.metadata)
+      |> put_css_expression(result.resolved_value)
 
     %Token{
       path: entry.path,
@@ -486,6 +514,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       provenance: provenance,
       metadata: metadata
     }
+  end
+
+  defp put_css_expression(metadata, resolved_value) do
+    case FluidClamp.css_expression(resolved_value) do
+      css when is_binary(css) -> Map.put(metadata, "css_expression", css)
+      _ -> metadata
+    end
   end
 
   defp diagnostics_for(entry, result, raw_value) do
@@ -527,10 +562,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
         case effective_value(target_path, tokens, [path]) do
           {:resolved, resolved_value, _reason} ->
+            metadata = put_css_expression(token.metadata, resolved_value)
+
             {Map.put(tokens, path, %{
                token
                | resolved_value: resolved_value,
-                 resolution_status: :resolved
+                 resolution_status: :resolved,
+                 metadata: metadata
              }), diagnostics}
 
           {:unresolved, _resolved_value, reason} ->
@@ -629,6 +667,21 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       strategy: :literal,
       source_keys: [source_key],
       kind: kind
+    }
+
+  defp literal_default(path, category, source_key, kind, default),
+    do: %{
+      path: path,
+      category: category,
+      strategy: :literal_default,
+      source_keys: [source_key],
+      kind: kind,
+      default: default,
+      provenance: %{
+        "source_default" => default,
+        "source_default_authority" =>
+          "Automatic.css SCSS default when the exported setting is empty"
+      }
     }
 
   defp px(path, category, source_key),

@@ -435,8 +435,17 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
 
   defp safe_style_value(_value, _property), do: :unresolved
 
+  # Bricks 2.3.1 includes/assets.php spacing/dimensions controls append the
+  # defaultUnit `px` when a direction value is numeric and nonzero without a
+  # unit. This is spacing-control authority only — other bare numbers stay
+  # unresolved via safe_style_value/2.
   defp safe_box_value(value) when is_integer(value) and value == 0, do: {:ok, "0"}
   defp safe_box_value(value) when is_float(value) and value == 0.0, do: {:ok, "0"}
+
+  defp safe_box_value(value) when is_integer(value), do: {:ok, Integer.to_string(value) <> "px"}
+
+  defp safe_box_value(value) when is_float(value),
+    do: {:ok, :erlang.float_to_binary(value, decimals: 4) <> "px"}
 
   defp safe_box_value(value) when is_binary(value) do
     cond do
@@ -458,6 +467,9 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
       String.starts_with?(value, "var(") or String.starts_with?(value, "calc(") or
           String.starts_with?(value, "clamp(") ->
         {:ok, value}
+
+      bare_number?(value) ->
+        {:ok, value <> "px"}
 
       true ->
         :unresolved
