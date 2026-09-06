@@ -143,10 +143,10 @@ defmodule LiveFrames.BricksDesignIRTest do
              node_by_source_id(document, "3f6ee6").styles["max-width"]
 
     assert %StyleValue{
-             kind: :unresolved,
-             value: "var(--content-gap, 30px)",
+             kind: :token_ref,
+             value: "spacing.content_gap",
              source_expression: "var(--content-gap, 30px)",
-             metadata: %{"fallback" => "30px", "token_path" => "spacing.content_gap"}
+             metadata: %{"fallback" => "30px", "source_variable" => "--content-gap"}
            } = node_by_source_id(document, "8ae908").styles["column-gap"]
 
     assert %StyleValue{kind: :literal, value: "400px", source_expression: "400px"} =

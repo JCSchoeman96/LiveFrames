@@ -481,16 +481,22 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     merge_intrinsic_styles(styles, element, trace)
   end
 
-  # Bricks frontend `.brxe-container` intrinsic layout (frontend-layer.css).
+  # Bricks frontend `.brxe-container` / `.brxe-section` intrinsic layout.
   defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace) do
     styles
-    |> put_intrinsic_style(trace, "display", "flex")
-    |> put_intrinsic_style(trace, "flex-direction", "column")
+    |> put_intrinsic_style(trace, "container", "display", "flex")
+    |> put_intrinsic_style(trace, "container", "flex-direction", "column")
+  end
+
+  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace) do
+    put_intrinsic_style(styles, trace, "section", "align-items", "center")
   end
 
   defp merge_intrinsic_styles(styles, _element, _trace), do: styles
 
-  defp put_intrinsic_style(styles, trace, property, value) do
+  defp put_intrinsic_style(styles, trace, element_name, property, value) do
+    selector = ".brxe-#{element_name}"
+
     Map.put_new(
       styles,
       property,
@@ -499,12 +505,12 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         source_trace: %{
           trace
           | source_type: "bricks_intrinsic",
-            source_path: "#{trace.source_path}.intrinsic.brxe-container.#{property}",
-            source_name: "brxe-container.#{property}"
+            source_path: "#{trace.source_path}.intrinsic.brxe-#{element_name}.#{property}",
+            source_name: "brxe-#{element_name}.#{property}"
         },
         metadata: %{
           "authority" => "bricks_intrinsic_element_default",
-          "selector" => ".brxe-container"
+          "selector" => selector
         }
       )
     )
@@ -542,6 +548,20 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           source_expression: value,
           source_trace: trace,
           metadata: Map.merge(metadata, %{"source_variable" => "--content-gap"})
+        )
+
+      match?([_, _fallback], Regex.run(~r/^var\(--content-gap,\s*(.+)\)$/, value)) and
+          token_present?(token_set, "spacing.content_gap") ->
+        [_, fallback] = Regex.run(~r/^var\(--content-gap,\s*(.+)\)$/, value)
+
+        StyleValue.token_ref("spacing.content_gap",
+          source_expression: value,
+          source_trace: trace,
+          metadata:
+            Map.merge(metadata, %{
+              "source_variable" => "--content-gap",
+              "fallback" => fallback
+            })
         )
 
       String.starts_with?(value, "var(") ->
