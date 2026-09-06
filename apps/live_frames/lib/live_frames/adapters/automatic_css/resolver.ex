@@ -67,6 +67,49 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
     end
   end
 
+  @doc """
+  Resolve Automatic.css OKLCH channel triples into an `oklch(L C H)` CSS color.
+
+  Channel order is lightness, chroma, hue. Values must be numeric; hue is
+  unconstrained beyond being finite because Automatic.css exports fractional hues.
+  """
+  @spec oklch(map(), [String.t()]) :: map()
+  def oklch(settings, source_keys) when is_map(settings) and is_list(source_keys) do
+    raw_value = Map.new(source_keys, &{&1, Map.get(settings, &1)})
+
+    case Enum.map(source_keys, &Map.get(settings, &1)) do
+      [lightness, chroma, hue]
+      when (is_integer(lightness) or is_float(lightness)) and
+             (is_integer(chroma) or is_float(chroma)) and
+             (is_integer(hue) or is_float(hue)) ->
+        if lightness >= 0 and lightness <= 1 and chroma >= 0 do
+          result =
+            "oklch(#{format_number(lightness)} #{format_number(chroma)} #{format_number(hue)})"
+
+          resolved(
+            result,
+            result,
+            raw_value,
+            "oklch_channels",
+            %{"channels" => raw_value}
+          )
+        else
+          unresolved(
+            raw_value,
+            List.first(source_keys),
+            "OKLCH channels are outside supported ranges"
+          )
+        end
+
+      _ ->
+        unresolved(
+          raw_value,
+          List.first(source_keys),
+          "OKLCH channel values are incomplete or invalid"
+        )
+    end
+  end
+
   @spec responsive(map(), [String.t()], String.t() | nil) :: map()
   def responsive(settings, source_keys, unit)
       when is_map(settings) and is_list(source_keys) and (is_binary(unit) or is_nil(unit)) do

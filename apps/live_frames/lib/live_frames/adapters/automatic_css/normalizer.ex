@@ -15,11 +15,20 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   def mapping do
     primary_colors =
       [
-        direct("color.primary", :color, "color-primary", :color)
+        # ACSS 4.0 palette SCSS emits `--primary` as oklch($primary-*-oklch …).
+        # There is no active color-model settings toggle; hex `color-primary` is
+        # UI/storage input that coexists with OKLCH channels. Prefer valid OKLCH;
+        # fall back to hex only when the OKLCH triple is incomplete/invalid.
+        oklch_prefer(
+          "color.primary",
+          :color,
+          ["primary-l-oklch", "primary-c-oklch", "primary-h-oklch"],
+          "color-primary"
+        )
       ] ++
         Enum.map(
           ["hover", "light", "semi-light", "dark", "semi-dark", "ultra-light", "ultra-dark"],
-          &hsl_entry("color.primary.#{underscore(&1)}", "primary", &1)
+          &oklch_or_hsl("color.primary.#{underscore(&1)}", "primary", &1)
         )
 
     neutral_colors =
@@ -371,6 +380,10 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         else
           raw_value = source_value(settings, entry.source_keys)
           result = resolve_entry(entry, settings)
+
+          raw_value =
+            Map.get(result.metadata, "effective_raw_value", raw_value)
+
           token = build_token(entry, result, raw_value, source_metadata)
           diagnostics = diagnostics ++ diagnostics_for(entry, result, raw_value)
           {Map.put(tokens, entry.path, token), diagnostics, consumed}
@@ -423,6 +436,82 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp resolve_entry(%{strategy: :hsl, source_keys: source_keys}, settings),
     do: Resolver.hsl(settings, source_keys)
+
+  defp resolve_entry(
+         %{
+           strategy: :oklch_or_hsl,
+           oklch_keys: oklch_keys,
+           hsl_keys: hsl_keys
+         },
+         settings
+       ) do
+    case Resolver.oklch(settings, oklch_keys) do
+      %{resolution_status: :resolved} = result ->
+        raw_value = Map.new(oklch_keys, &{&1, Map.get(settings, &1)})
+
+        %{
+          result
+          | metadata:
+              result.metadata
+              |> Map.put("source_keys", oklch_keys)
+              |> Map.put("effective_raw_value", raw_value)
+              |> Map.put("representation", "oklch")
+        }
+
+      _unresolved ->
+        result = Resolver.hsl(settings, hsl_keys)
+
+        %{
+          result
+          | metadata:
+              result.metadata
+              |> Map.put("source_keys", hsl_keys)
+              |> Map.put("effective_raw_value", Map.new(hsl_keys, &{&1, Map.get(settings, &1)}))
+              |> Map.put("representation", "hsl")
+        }
+    end
+  end
+
+  defp resolve_entry(
+         %{
+           strategy: :oklch_prefer,
+           oklch_keys: oklch_keys,
+           hex_key: hex_key
+         },
+         settings
+       ) do
+    case Resolver.oklch(settings, oklch_keys) do
+      %{resolution_status: :resolved} = result ->
+        raw_value = Map.new(oklch_keys, &{&1, Map.get(settings, &1)})
+
+        %{
+          result
+          | metadata:
+              result.metadata
+              |> Map.put("source_keys", oklch_keys)
+              |> Map.put("effective_raw_value", raw_value)
+              |> Map.put("representation", "oklch")
+        }
+
+      _unresolved ->
+        raw_value = Map.get(settings, hex_key)
+
+        if present?(raw_value) do
+          result = Resolver.literal(raw_value, :color)
+
+          %{
+            result
+            | metadata:
+                result.metadata
+                |> Map.put("source_keys", [hex_key])
+                |> Map.put("effective_raw_value", raw_value)
+                |> Map.put("representation", "hex")
+          }
+        else
+          Resolver.unresolved(raw_value, hex_key, "source setting is missing or empty")
+        end
+    end
+  end
 
   defp resolve_entry(
          %{
@@ -484,9 +573,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   end
 
   defp build_token(entry, result, raw_value, source_metadata) do
+    source_keys = Map.get(result.metadata, "source_keys", entry.source_keys)
+
     provenance = %{
       "source_type" => "automatic_css_settings",
-      "source_keys" => entry.source_keys,
+      "source_keys" => source_keys,
       "raw_value" => raw_value,
       "adapter" => "automatic_css",
       "adapter_version" => @adapter_version,
@@ -495,12 +586,17 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       "export_version" => Map.get(source_metadata, "export_version")
     }
 
-    provenance = Map.merge(provenance, Map.get(entry, :provenance, %{}))
+    provenance =
+      provenance
+      |> Map.merge(Map.get(entry, :provenance, %{}))
+      |> maybe_put_representation(result.metadata)
 
     metadata =
       entry
       |> Map.get(:metadata, %{})
-      |> Map.merge(result.metadata)
+      |> Map.merge(
+        Map.drop(result.metadata, ["effective_raw_value", "source_keys", "representation"])
+      )
       |> put_css_expression(result.resolved_value)
 
     %Token{
@@ -520,6 +616,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     case FluidClamp.css_expression(resolved_value) do
       css when is_binary(css) -> Map.put(metadata, "css_expression", css)
       _ -> metadata
+    end
+  end
+
+  defp maybe_put_representation(provenance, metadata) do
+    case Map.get(metadata, "representation") do
+      rep when is_binary(rep) -> Map.put(provenance, "representation", rep)
+      _ -> provenance
     end
   end
 
@@ -668,6 +771,42 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       source_keys: [source_key],
       kind: kind
     }
+
+  defp oklch_prefer(path, category, oklch_keys, hex_key)
+       when is_list(oklch_keys) and is_binary(hex_key) do
+    %{
+      path: path,
+      category: category,
+      strategy: :oklch_prefer,
+      source_keys: oklch_keys ++ [hex_key],
+      oklch_keys: oklch_keys,
+      hex_key: hex_key,
+      kind: :color
+    }
+  end
+
+  defp oklch_or_hsl(path, source_prefix, variant) do
+    oklch_keys = [
+      "#{source_prefix}-#{variant}-l-oklch",
+      "#{source_prefix}-#{variant}-c-oklch",
+      "#{source_prefix}-#{variant}-h-oklch"
+    ]
+
+    hsl_keys = [
+      "#{source_prefix}-#{variant}-h",
+      "#{source_prefix}-#{variant}-s",
+      "#{source_prefix}-#{variant}-l"
+    ]
+
+    %{
+      path: path,
+      category: :color,
+      strategy: :oklch_or_hsl,
+      source_keys: oklch_keys ++ hsl_keys,
+      oklch_keys: oklch_keys,
+      hsl_keys: hsl_keys
+    }
+  end
 
   defp literal_default(path, category, source_key, kind, default),
     do: %{

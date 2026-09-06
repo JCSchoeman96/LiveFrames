@@ -38,7 +38,10 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
       keyword("flex-direction", "column"),
       token("padding-block", "spacing.section.padding_block", tokens),
       gutter("padding-inline", tokens),
-      token("gap", "spacing.container_gap", tokens)
+      token("gap", "spacing.container_gap", tokens),
+      # ACSS `:where(body)` base typography inherited by section content.
+      token("font-size", "typography.body.scale.medium", tokens),
+      token("line-height", "typography.body.line_height", tokens)
     ]
   end
 
@@ -61,8 +64,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
     ]
   end
 
+  # ACSS buttons-links: `display: var(--btn-display, inline-flex)`.
+  # DanBricks leaves `--btn-display` unset; matched declaration is inline-flex.
   defp declarations_for("btn--primary", tokens) do
     [
+      keyword("display", "inline-flex"),
       token("background-color", "button.primary.background", tokens),
       token("color", "button.primary.text", tokens),
       token("border-color", "button.primary.border", tokens),
@@ -80,8 +86,10 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
     ]
   end
 
+  # Same ACSS default as btn--primary: var(--btn-display, inline-flex).
   defp declarations_for("btn--outline", tokens) do
     [
+      keyword("display", "inline-flex"),
       token("background-color", "button.primary.outline.background", tokens),
       token("color", "button.primary.outline.text", tokens),
       token("border-color", "button.primary.outline.border", tokens),
