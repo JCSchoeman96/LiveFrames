@@ -64,6 +64,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
     ]
   end
 
+  # ACSS buttons-links: `display: var(--btn-display, inline-flex)`.
+  # DanBricks leaves `--btn-display` unset; matched declaration is inline-flex.
   defp declarations_for("btn--primary", tokens) do
     [
       keyword("display", "inline-flex"),
@@ -84,6 +86,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
     ]
   end
 
+  # Same ACSS default as btn--primary: var(--btn-display, inline-flex).
   defp declarations_for("btn--outline", tokens) do
     [
       keyword("display", "inline-flex"),

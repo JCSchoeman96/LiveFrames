@@ -15,7 +15,10 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   def mapping do
     primary_colors =
       [
-        # Prefer Automatic.css OKLCH channels when present; legacy hex remains fallback.
+        # ACSS 4.0 palette SCSS emits `--primary` as oklch($primary-*-oklch …).
+        # There is no active color-model settings toggle; hex `color-primary` is
+        # UI/storage input that coexists with OKLCH channels. Prefer valid OKLCH;
+        # fall back to hex only when the OKLCH triple is incomplete/invalid.
         oklch_prefer(
           "color.primary",
           :color,
@@ -452,6 +455,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
               result.metadata
               |> Map.put("source_keys", oklch_keys)
               |> Map.put("effective_raw_value", raw_value)
+              |> Map.put("representation", "oklch")
         }
 
       _unresolved ->
@@ -463,6 +467,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
               result.metadata
               |> Map.put("source_keys", hsl_keys)
               |> Map.put("effective_raw_value", Map.new(hsl_keys, &{&1, Map.get(settings, &1)}))
+              |> Map.put("representation", "hsl")
         }
     end
   end
@@ -485,6 +490,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
               result.metadata
               |> Map.put("source_keys", oklch_keys)
               |> Map.put("effective_raw_value", raw_value)
+              |> Map.put("representation", "oklch")
         }
 
       _unresolved ->
@@ -499,6 +505,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
                 result.metadata
                 |> Map.put("source_keys", [hex_key])
                 |> Map.put("effective_raw_value", raw_value)
+                |> Map.put("representation", "hex")
           }
         else
           Resolver.unresolved(raw_value, hex_key, "source setting is missing or empty")
@@ -579,12 +586,17 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       "export_version" => Map.get(source_metadata, "export_version")
     }
 
-    provenance = Map.merge(provenance, Map.get(entry, :provenance, %{}))
+    provenance =
+      provenance
+      |> Map.merge(Map.get(entry, :provenance, %{}))
+      |> maybe_put_representation(result.metadata)
 
     metadata =
       entry
       |> Map.get(:metadata, %{})
-      |> Map.merge(Map.drop(result.metadata, ["effective_raw_value", "source_keys"]))
+      |> Map.merge(
+        Map.drop(result.metadata, ["effective_raw_value", "source_keys", "representation"])
+      )
       |> put_css_expression(result.resolved_value)
 
     %Token{
@@ -604,6 +616,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     case FluidClamp.css_expression(resolved_value) do
       css when is_binary(css) -> Map.put(metadata, "css_expression", css)
       _ -> metadata
+    end
+  end
+
+  defp maybe_put_representation(provenance, metadata) do
+    case Map.get(metadata, "representation") do
+      rep when is_binary(rep) -> Map.put(provenance, "representation", rep)
+      _ -> provenance
     end
   end
 

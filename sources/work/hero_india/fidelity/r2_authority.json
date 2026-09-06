@@ -1,0 +1,63 @@
+{
+  "artifact": "p5c_b_r2_authority",
+  "pr": 18,
+  "scope": "authority_closure_only",
+  "acss_plugin_version_observed": "4.0.0-rc-1",
+  "fixture_source_version_reference": "4.0.1",
+  "color_model": {
+    "conclusion": "oklch_canonical_for_css_when_channels_valid",
+    "active_model_toggle": null,
+    "rule": "ACSS 4.0 palette SCSS emits --primary as oklch($primary-l/c/h-oklch). color-primary hex is UI/storage input that coexists with OKLCH channels; it is not the active CSS representation when OKLCH channels are valid.",
+    "primary_authority": {
+      "live_declaration": "light-dark(oklch(0.8839 0.154 90.78), oklch(0.8839 0.154 90.78))",
+      "stylesheet": "uploads/automatic-css/automatic.css",
+      "selector": ":root",
+      "fixture_hex_coexists": "#32a2c1",
+      "fixture_oklch_channels": {
+        "primary-l-oklch": 0.8839,
+        "primary-c-oklch": 0.154,
+        "primary-h-oklch": 90.78
+      }
+    },
+    "fallback": "Incomplete or out-of-range OKLCH does not invent a color; settings-level hex fallback is recorded as representation=hex."
+  },
+  "button_display": {
+    "authoritative_declaration": "inline-flex",
+    "selector": "[class*=\"btn--\"]:where(:not(.btn--none, .wp-block-button)), [class*=\"btn--\"].wp-block-button > .wp-block-button__link",
+    "declaration": "display: var(--btn-display, inline-flex)",
+    "stylesheet": "uploads/automatic-css/automatic.css",
+    "acss_source": "assets/scss/modules/buttons-links/_button-properties.scss",
+    "btn_display_custom_property": null,
+    "computed_display_note": "getComputedStyle may report flex; authored matched value remains inline-flex"
+  },
+  "body_font_family": {
+    "classification": "environmental_system_fallback",
+    "acss_text_font_family": "",
+    "acss_scss_default": "null",
+    "winning_rule": {
+      "selector": "body",
+      "declaration": "font-family: -apple-system, \"system-ui\", Segoe UI, roboto, helvetica, arial, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol",
+      "stylesheet": "themes/bricks/assets/css/frontend.min.css"
+    },
+    "note": "ACSS intentionally leaves text-font-family blank; remaining difference is the Bricks theme default system UI stack. Do not emit a Hero font-family rule to force string equality."
+  },
+  "source_chrome_y_offset": {
+    "classification": "environmental_source_chrome",
+    "component_owned": false,
+    "viewport_width": 1200,
+    "hero_root_y": 186.984375,
+    "contributors": [
+      {
+        "id": "wpadminbar",
+        "kind": "wordpress_admin_bar",
+        "height": 32
+      },
+      {
+        "id": "brx-header",
+        "kind": "bricks_site_header",
+        "height": 154.984375
+      }
+    ],
+    "note": "Hero-relative content geometry is component-owned; absolute page Y offset is external chrome. Do not reproduce WP/Bricks chrome in generated CSS."
+  }
+}
