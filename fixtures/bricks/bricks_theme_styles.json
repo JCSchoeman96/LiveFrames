@@ -1,0 +1,14 @@
+{
+  "source": "bricks_theme_styles",
+  "active_style_id": "standard",
+  "styles": {
+    "standard": {
+      "label": "ACSS",
+      "settings": {
+        "container": {
+          "width": "var(--content-width)"
+        }
+      }
+    }
+  }
+}

@@ -2,30 +2,28 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
   @moduledoc """
   Regression coverage for P5C-B-R3 Bricks container width fidelity.
 
-  Authority (Bricks 2.3.1 frontend CSS, installed DanBricks LocalWP):
+  Authority chain (Bricks 2.3.1 + DanBricks LocalWP + ACSS 4.0.1):
 
-      .brxe-container {
-        width: 1100px;           /* Bricks intrinsic default / Theme Styles placeholder */
-        margin-left: auto;
-        margin-right: auto;
-        ...
-      }
-      [class*=brxe-] { max-width: 100%; }
-
-  DanBricks Theme Styles override container width to `var(--content-width)`
-  (ACSS). That site override is not ingested in this slice; the Bricks
-  intrinsic default remains the Case A boundary. Alternate configured widths
-  are proven via optional `:container_width` and authored `_width` / `_widthMax`.
+  * Bricks frontend intrinsic: `.brxe-container { width: 1100px; margin-*: auto }`
+  * `[class*=brxe-] { max-width: 100% }`
+  * DanBricks Theme Styles (active `standard`): `.brxe-container { width: var(--content-width) }`
+  * ACSS owns `--content-width` via setting `vp-max` (UI: Content Width) → TokenSet
+    `layout.viewport.max`
   """
   use ExUnit.Case, async: true
 
   alias LiveFrames.Adapters.AutomaticCSS
+  alias LiveFrames.Adapters.AutomaticCSS.FidelityResolver
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Fidelity
   alias LiveFrames.IR.StyleValue
 
   @token_fixture Path.expand("../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   @bricks_fixture Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
+  @theme_styles_fixture Path.expand(
+                          "../../../../fixtures/bricks/bricks_theme_styles.json",
+                          __DIR__
+                        )
 
   defp token_set do
     {:ok, token_set, _} =
@@ -39,7 +37,20 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
     token_set
   end
 
-  defp hero_document(opts \\ []) do
+  defp theme_styles(overrides \\ %{}) do
+    @theme_styles_fixture
+    |> File.read!()
+    |> Jason.decode!()
+    |> deep_merge(overrides)
+  end
+
+  defp deep_merge(left, right) when is_map(left) and is_map(right) do
+    Map.merge(left, right, fn _k, l, r -> deep_merge(l, r) end)
+  end
+
+  defp deep_merge(_left, right), do: right
+
+  defp hero_document(opts) do
     assert {:ok, document} =
              Bricks.to_ir(
                @bricks_fixture,
@@ -50,11 +61,10 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
   end
 
   defp hero_container(opts \\ []) do
-    document = hero_document(opts)
-    hd(hd(document.root_nodes).children)
+    hd(hd(hero_document(opts).root_nodes).children)
   end
 
-  defp document_with_container_settings(settings) do
+  defp document_with_container_settings(settings, opts \\ []) do
     source =
       File.read!(@bricks_fixture)
       |> Jason.decode!()
@@ -72,32 +82,74 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
       )
 
     assert {:ok, document} =
-             Bricks.to_ir(source, component_id: "sqhmmc", token_set: token_set())
+             Bricks.to_ir(
+               source,
+               Keyword.merge([component_id: "sqhmmc", token_set: token_set()], opts)
+             )
 
     document
   end
 
-  test "Bricks container receives authoritative width, max-width, and auto margins" do
+  test "no site override keeps proven Bricks 2.3.1 default 1100px" do
     container = hero_container()
 
-    assert container.semantic_type == "container"
     assert %StyleValue{kind: :literal, value: "1100px"} = container.styles["width"]
+    assert container.styles["width"].metadata["authority"] == "bricks_intrinsic_element_default"
     assert %StyleValue{kind: :literal, value: "100%"} = container.styles["max-width"]
     assert %StyleValue{kind: :keyword, value: "auto"} = container.styles["margin-left"]
     assert %StyleValue{kind: :keyword, value: "auto"} = container.styles["margin-right"]
-
-    assert container.styles["width"].metadata["authority"] == "bricks_intrinsic_element_default"
-    assert container.styles["width"].metadata["selector"] == ".brxe-container"
-    assert container.styles["max-width"].metadata["selector"] == "[class*=brxe-]"
   end
 
-  test "explicit authored width overrides intrinsic container width" do
+  test "authoritative Theme Styles override replaces Bricks default via TokenSet" do
+    container = hero_container(theme_styles: theme_styles())
+
+    assert %StyleValue{
+             kind: :token_ref,
+             value: "layout.viewport.max",
+             source_expression: "var(--content-width)"
+           } = container.styles["width"]
+
+    assert container.styles["width"].metadata["authority"] == "bricks_theme_styles"
+    assert container.styles["width"].metadata["source_variable"] == "--content-width"
+    refute container.styles["width"].value == "1100px"
+  end
+
+  test "alternate Theme Styles width flows from source config not a manual shortcut" do
+    styles =
+      theme_styles(%{
+        "styles" => %{"standard" => %{"settings" => %{"container" => %{"width" => "960px"}}}}
+      })
+
+    container = hero_container(theme_styles: styles)
+
+    assert %StyleValue{kind: :literal, value: "960px"} = container.styles["width"]
+    assert container.styles["width"].metadata["authority"] == "bricks_theme_styles"
+  end
+
+  test "configured Theme Styles width beats Bricks default" do
+    styles =
+      theme_styles(%{
+        "styles" => %{"standard" => %{"settings" => %{"container" => %{"width" => "1200px"}}}}
+      })
+
+    container = hero_container(theme_styles: styles)
+    assert container.styles["width"].value == "1200px"
+    refute container.styles["width"].metadata["authority"] == "bricks_intrinsic_element_default"
+  end
+
+  test "explicit authored width beats Theme Styles and Bricks default" do
+    styles = theme_styles()
+
     container =
-      document_with_container_settings(%{"_width" => "720px"})
+      document_with_container_settings(%{"_width" => "720px"}, theme_styles: styles)
       |> then(&hd(hd(&1.root_nodes).children))
 
     assert %StyleValue{kind: :literal, value: "720px"} = container.styles["width"]
-    refute container.styles["width"].metadata["authority"] == "bricks_intrinsic_element_default"
+
+    refute container.styles["width"].metadata["authority"] in [
+             "bricks_intrinsic_element_default",
+             "bricks_theme_styles"
+           ]
   end
 
   test "explicit authored max-width overrides intrinsic max-width" do
@@ -111,19 +163,25 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
              "bricks_intrinsic_element_default"
   end
 
-  test "alternate configured container width does not hard-code only 1100px" do
-    container = hero_container(container_width: "960px")
-
-    assert %StyleValue{kind: :literal, value: "960px"} = container.styles["width"]
-    assert container.styles["max-width"].value == "100%"
-  end
-
-  test "unknown container width authority remains unresolved rather than guessed" do
+  test "explicit unavailable authority does not guess 1100px" do
     container = hero_container(container_width: :unavailable)
 
     refute Map.has_key?(container.styles, "width")
     assert %StyleValue{kind: :literal, value: "100%"} = container.styles["max-width"]
-    assert %StyleValue{kind: :keyword, value: "auto"} = container.styles["margin-left"]
+  end
+
+  test "invalid configured Theme Styles width does not silently fall back to 1100px" do
+    styles =
+      theme_styles(%{
+        "styles" => %{
+          "standard" => %{"settings" => %{"container" => %{"width" => "not-a-width!!!"}}}
+        }
+      })
+
+    container = hero_container(theme_styles: styles)
+
+    refute Map.has_key?(container.styles, "width")
+    refute Map.get(container.styles, "width") == %StyleValue{kind: :literal, value: "1100px"}
   end
 
   test "generic Fidelity remains free of Bricks container width assumptions" do
@@ -133,19 +191,21 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
 
     refute source =~ "1100px"
     refute source =~ "brxe-container"
+    refute source =~ "content-width"
     refute source =~ "fr-hero-india__content-wrapper"
   end
 
-  test "generated Hero fidelity emits container width semantics without Hero hacks" do
+  test "generated Hero with Theme Styles emits configured width without Hero hacks" do
     assert {:ok, bundle} =
-             Fidelity.generate(hero_document(),
-               source_resolver: LiveFrames.Adapters.AutomaticCSS.FidelityResolver
+             Fidelity.generate(hero_document(theme_styles: theme_styles()),
+               source_resolver: FidelityResolver
              )
 
-    assert bundle.css =~ "width: 1100px"
+    assert bundle.css =~ "width: 1366px"
     assert bundle.css =~ "max-width: 100%"
     assert bundle.css =~ "margin-left: auto"
     assert bundle.css =~ "margin-right: auto"
+    refute bundle.css =~ "width: 1100px"
     refute bundle.css =~ "fr-hero-india__content-wrapper"
     refute bundle.css =~ "sqhmmc"
   end

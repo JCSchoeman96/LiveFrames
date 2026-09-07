@@ -10,6 +10,10 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                         "../../../../fixtures/automatic_css/acss_settings.json",
                         __DIR__
                       )
+  @theme_styles_path Path.expand(
+                       "../../../../fixtures/bricks/bricks_theme_styles.json",
+                       __DIR__
+                     )
   @artifact_path Path.expand(
                    "../../../../sources/work/hero_india/design_ir/design_document.json",
                    __DIR__
@@ -27,7 +31,11 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
     on_exit(fn -> File.rm_rf!(temporary_dir) end)
 
     assert {:ok, document} =
-             Bricks.to_ir(@fixture_path, component_id: "sqhmmc", token_set: token_set)
+             Bricks.to_ir(@fixture_path,
+               component_id: "sqhmmc",
+               token_set: token_set,
+               theme_styles: @theme_styles_path
+             )
 
     File.write!(temporary_output, IR.encode!(document) <> "\n")
 
