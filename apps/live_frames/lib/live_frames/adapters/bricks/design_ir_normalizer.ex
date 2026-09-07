@@ -125,7 +125,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           dependencies: dependencies,
           token_set: token_set,
           component_index: component_index(document, component),
-          source_diagnostics: diagnostics
+          source_diagnostics: diagnostics,
+          container_width: Keyword.get(opts, :container_width, "1100px")
         }
 
         assemble(context)
@@ -371,7 +372,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       label: element.label,
       content: content_for(element),
       attributes: attributes_for(element),
-      styles: styles_for(settings_result, trace, context.token_set, element),
+      styles: styles_for(settings_result, trace, context.token_set, element, context),
       responsive: responsive_for(settings_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
       asset_refs: Map.get(context.asset_ids_by_source, source_id, []),
@@ -413,7 +414,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end)
   end
 
-  defp styles_for(settings_result, trace, token_set, element) do
+  defp styles_for(settings_result, trace, token_set, element, context) do
     styles =
       Enum.reduce(settings_result.base_styles, %{}, fn {property, value}, styles ->
         source_key = source_key_for(settings_result.consumed, property, nil)
@@ -478,42 +479,89 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
       end)
 
-    merge_intrinsic_styles(styles, element, trace)
+    merge_intrinsic_styles(styles, element, trace, context)
   end
 
   # Bricks frontend `.brxe-container` / `.brxe-section` intrinsic layout.
-  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace) do
+  # Width/max-width/margins: Bricks 2.3.1 frontend.css
+  #   .brxe-container { width:1100px; margin-left:auto; margin-right:auto; ... }
+  #   [class*=brxe-] { max-width:100% }
+  # Authored element settings win via Map.put_new. Optional :container_width
+  # opts replace the Case A default without hard-coding a site-only value in
+  # generic Fidelity; :unavailable leaves width unresolved.
+  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace, context) do
     styles
     |> put_intrinsic_style(trace, "container", "display", "flex")
     |> put_intrinsic_style(trace, "container", "flex-direction", "column")
+    |> put_container_width_intrinsic(trace, context)
+    |> put_intrinsic_literal(trace, "container", "max-width", "100%", selector: "[class*=brxe-]")
+    |> put_intrinsic_style(trace, "container", "margin-left", "auto")
+    |> put_intrinsic_style(trace, "container", "margin-right", "auto")
   end
 
-  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace) do
+  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace, _context) do
     put_intrinsic_style(styles, trace, "section", "align-items", "center")
   end
 
-  defp merge_intrinsic_styles(styles, _element, _trace), do: styles
+  defp merge_intrinsic_styles(styles, _element, _trace, _context), do: styles
+
+  defp put_container_width_intrinsic(styles, _trace, %{container_width: :unavailable}), do: styles
+
+  defp put_container_width_intrinsic(styles, trace, context) do
+    width =
+      case Map.get(context, :container_width, "1100px") do
+        value when is_binary(value) and value != "" -> value
+        _other -> "1100px"
+      end
+
+    put_intrinsic_literal(styles, trace, "container", "width", width)
+  end
 
   defp put_intrinsic_style(styles, trace, element_name, property, value) do
-    selector = ".brxe-#{element_name}"
+    put_intrinsic_value(styles, trace, element_name, property, value, :keyword, [])
+  end
 
-    Map.put_new(
-      styles,
-      property,
-      StyleValue.keyword(value,
-        source_expression: value,
-        source_trace: %{
-          trace
-          | source_type: "bricks_intrinsic",
-            source_path: "#{trace.source_path}.intrinsic.brxe-#{element_name}.#{property}",
-            source_name: "brxe-#{element_name}.#{property}"
-        },
-        metadata: %{
-          "authority" => "bricks_intrinsic_element_default",
-          "selector" => selector
-        }
-      )
-    )
+  defp put_intrinsic_literal(styles, trace, element_name, property, value, opts \\ []) do
+    put_intrinsic_value(styles, trace, element_name, property, value, :literal, opts)
+  end
+
+  defp put_intrinsic_value(styles, trace, element_name, property, value, kind, opts) do
+    selector = Keyword.get(opts, :selector, ".brxe-#{element_name}")
+
+    style_value =
+      case kind do
+        :keyword ->
+          StyleValue.keyword(value,
+            source_expression: value,
+            source_trace: intrinsic_trace(trace, element_name, property),
+            metadata: intrinsic_metadata(selector)
+          )
+
+        :literal ->
+          StyleValue.literal(value,
+            source_expression: value,
+            source_trace: intrinsic_trace(trace, element_name, property),
+            metadata: intrinsic_metadata(selector)
+          )
+      end
+
+    Map.put_new(styles, property, style_value)
+  end
+
+  defp intrinsic_trace(trace, element_name, property) do
+    %{
+      trace
+      | source_type: "bricks_intrinsic",
+        source_path: "#{trace.source_path}.intrinsic.brxe-#{element_name}.#{property}",
+        source_name: "brxe-#{element_name}.#{property}"
+    }
+  end
+
+  defp intrinsic_metadata(selector) do
+    %{
+      "authority" => "bricks_intrinsic_element_default",
+      "selector" => selector
+    }
   end
 
   defp source_key_for(consumed, property, breakpoint) do
