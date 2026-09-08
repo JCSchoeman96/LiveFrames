@@ -11,12 +11,14 @@ defmodule Mix.Tasks.LiveFrames.Bricks.DesignIr do
     source: :string,
     component_id: :string,
     acss_source: :string,
+    theme_styles: :string,
     output: :string
   ]
 
   @default_source "fixtures/bricks/bricks_components.json"
   @default_component_id "sqhmmc"
   @default_acss_source "fixtures/automatic_css/acss_settings.json"
+  @default_theme_styles "fixtures/bricks/bricks_theme_styles.json"
   @default_output "sources/work/hero_india/design_ir/design_document.json"
 
   @impl Mix.Task
@@ -30,10 +32,15 @@ defmodule Mix.Tasks.LiveFrames.Bricks.DesignIr do
     source_path = path_option(options, :source, @default_source)
     component_id = Keyword.get(options, :component_id, @default_component_id)
     acss_path = path_option(options, :acss_source, @default_acss_source)
+    theme_styles_path = path_option(options, :theme_styles, @default_theme_styles)
     output_path = path_option(options, :output, @default_output)
     token_set = load_token_set!(acss_path)
 
-    case Bricks.to_ir(source_path, component_id: component_id, token_set: token_set) do
+    case Bricks.to_ir(source_path,
+           component_id: component_id,
+           token_set: token_set,
+           theme_styles: theme_styles_path
+         ) do
       {:ok, document} ->
         File.mkdir_p!(Path.dirname(output_path))
         File.write!(output_path, IR.encode!(document) <> "\n")

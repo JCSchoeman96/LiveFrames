@@ -15,6 +15,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
   alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.Adapters.Bricks.ThemeStyles
   alias LiveFrames.Adapters.Bricks.TreeBuilder
   alias LiveFrames.IR
   alias LiveFrames.IR.AssetReference
@@ -27,6 +28,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
+
+  @bricks_container_width_default "1100px"
+  @valid_width_length ~r/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ch|vw|vh|vmin|vmax|ex|cm|mm|in|pt|pc)$/i
+  @valid_width_keywords ~w(0 auto inherit initial unset fit-content max-content min-content)
 
   @default_component_id "sqhmmc"
   @ir_severities [:info, :warning, :error, :fatal]
@@ -116,6 +121,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       if blocking?(diagnostics) do
         {:error, to_ir_diagnostics(diagnostics)}
       else
+        {theme_styles, theme_diagnostics} = load_theme_styles(Keyword.get(opts, :theme_styles))
+
         context = %{
           document: document,
           proxy: proxy,
@@ -125,7 +132,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           dependencies: dependencies,
           token_set: token_set,
           component_index: component_index(document, component),
-          source_diagnostics: diagnostics
+          source_diagnostics: diagnostics ++ theme_diagnostics,
+          container_width: Keyword.get(opts, :container_width),
+          theme_styles: theme_styles
         }
 
         assemble(context)
@@ -371,7 +380,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       label: element.label,
       content: content_for(element),
       attributes: attributes_for(element),
-      styles: styles_for(settings_result, trace, context.token_set, element),
+      styles: styles_for(settings_result, trace, context.token_set, element, context),
       responsive: responsive_for(settings_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
       asset_refs: Map.get(context.asset_ids_by_source, source_id, []),
@@ -413,7 +422,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end)
   end
 
-  defp styles_for(settings_result, trace, token_set, element) do
+  defp styles_for(settings_result, trace, token_set, element, context) do
     styles =
       Enum.reduce(settings_result.base_styles, %{}, fn {property, value}, styles ->
         source_key = source_key_for(settings_result.consumed, property, nil)
@@ -478,42 +487,218 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
       end)
 
-    merge_intrinsic_styles(styles, element, trace)
+    merge_intrinsic_styles(styles, element, trace, context)
   end
 
   # Bricks frontend `.brxe-container` / `.brxe-section` intrinsic layout.
-  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace) do
+  # Precedence for width (Map.put_new keeps authored `_width`):
+  #   explicit element _width
+  #     > active Theme Styles container.width
+  #     > Bricks 2.3.1 intrinsic default 1100px
+  # Explicit :unavailable / invalid configured values omit width (no silent
+  # fallback). max-width/margins remain Bricks frontend intrinsics.
+  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace, context) do
     styles
     |> put_intrinsic_style(trace, "container", "display", "flex")
     |> put_intrinsic_style(trace, "container", "flex-direction", "column")
+    |> put_container_width(trace, context)
+    |> put_intrinsic_literal(trace, "container", "max-width", "100%", selector: "[class*=brxe-]")
+    |> put_intrinsic_style(trace, "container", "margin-left", "auto")
+    |> put_intrinsic_style(trace, "container", "margin-right", "auto")
   end
 
-  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace) do
+  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace, _context) do
     put_intrinsic_style(styles, trace, "section", "align-items", "center")
   end
 
-  defp merge_intrinsic_styles(styles, _element, _trace), do: styles
+  defp merge_intrinsic_styles(styles, _element, _trace, _context), do: styles
 
-  defp put_intrinsic_style(styles, trace, element_name, property, value) do
-    selector = ".brxe-#{element_name}"
+  defp put_container_width(styles, _trace, %{container_width: :unavailable}), do: styles
 
-    Map.put_new(
-      styles,
-      property,
-      StyleValue.keyword(value,
-        source_expression: value,
-        source_trace: %{
-          trace
-          | source_type: "bricks_intrinsic",
-            source_path: "#{trace.source_path}.intrinsic.brxe-#{element_name}.#{property}",
-            source_name: "brxe-#{element_name}.#{property}"
-        },
+  defp put_container_width(styles, trace, context) do
+    case resolve_container_width_authority(context) do
+      :omit ->
+        styles
+
+      {:intrinsic, value} ->
+        put_intrinsic_literal(styles, trace, "container", "width", value)
+
+      {:theme_styles, value} ->
+        put_theme_styles_width(styles, trace, context.token_set, value)
+    end
+  end
+
+  defp resolve_container_width_authority(%{container_width: value}) when is_binary(value) do
+    if valid_width_authority?(value), do: {:intrinsic, value}, else: :omit
+  end
+
+  defp resolve_container_width_authority(%{container_width: value})
+       when value in [:invalid, :unavailable],
+       do: :omit
+
+  defp resolve_container_width_authority(%{theme_styles: :unavailable}), do: :omit
+
+  defp resolve_container_width_authority(%{theme_styles: :absent}) do
+    {:intrinsic, @bricks_container_width_default}
+  end
+
+  defp resolve_container_width_authority(%{theme_styles: theme_styles})
+       when is_map(theme_styles) do
+    case ThemeStyles.container_width(theme_styles) do
+      {:ok, value} ->
+        if valid_width_authority?(value), do: {:theme_styles, value}, else: :omit
+
+      {:invalid, _value} ->
+        :omit
+
+      :absent ->
+        {:intrinsic, @bricks_container_width_default}
+    end
+  end
+
+  defp resolve_container_width_authority(_context) do
+    {:intrinsic, @bricks_container_width_default}
+  end
+
+  defp put_theme_styles_width(styles, trace, token_set, value) do
+    theme_trace = %{
+      trace
+      | source_type: "bricks_theme_styles",
+        source_path: "#{trace.source_path}.theme_styles.container.width",
+        source_name: "theme_styles.container.width",
+        inference: "Bricks Theme Styles container width preserved from site configuration"
+    }
+
+    style =
+      normalize_style(value, "width", theme_trace, token_set,
         metadata: %{
-          "authority" => "bricks_intrinsic_element_default",
-          "selector" => selector
+          "authority" => "bricks_theme_styles",
+          "selector" => ".brxe-container"
         }
       )
+
+    case style do
+      %StyleValue{kind: :unresolved} -> styles
+      %StyleValue{} = style_value -> Map.put_new(styles, "width", style_value)
+    end
+  end
+
+  # Theme Styles load states:
+  #   :absent — option omitted; Bricks 1100px default allowed
+  #   map — supplied and valid
+  #   :unavailable — supplied but unreadable/invalid; width omitted
+  defp load_theme_styles(nil), do: {:absent, []}
+
+  defp load_theme_styles(path) when is_binary(path) do
+    case ThemeStyles.from_file(path) do
+      {:ok, theme_styles} ->
+        {theme_styles, []}
+
+      {:error, reason} ->
+        {:unavailable, [theme_styles_unavailable_diagnostic(reason)]}
+    end
+  end
+
+  defp load_theme_styles(map) when is_map(map) do
+    case ThemeStyles.from_map(map) do
+      {:ok, theme_styles} ->
+        {theme_styles, []}
+
+      {:error, reason} ->
+        {:unavailable, [theme_styles_unavailable_diagnostic(reason)]}
+    end
+  end
+
+  defp load_theme_styles(_other) do
+    {:unavailable, [theme_styles_unavailable_diagnostic(:invalid_theme_styles)]}
+  end
+
+  defp theme_styles_unavailable_diagnostic(reason) do
+    BricksDiagnostic.new(
+      code: "bricks.theme_styles.unavailable",
+      severity: :warning,
+      message: "Bricks Theme Styles could not be loaded; container width left unresolved",
+      metadata: %{"reason" => theme_styles_reason(reason)}
     )
+  end
+
+  defp theme_styles_reason(:enoent), do: "missing_file"
+  defp theme_styles_reason(:invalid_theme_styles), do: "invalid_payload"
+  defp theme_styles_reason(%Jason.DecodeError{}), do: "malformed_json"
+  defp theme_styles_reason({:error, %Jason.DecodeError{}}), do: "malformed_json"
+  defp theme_styles_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp theme_styles_reason(_reason), do: "unavailable"
+
+  defp valid_width_authority?(value) when is_binary(value) do
+    safe_css_fragment?(value) and
+      (String.starts_with?(value, "var(") or String.starts_with?(value, "calc(") or
+         Regex.match?(@valid_width_length, value) or value in @valid_width_keywords)
+  end
+
+  defp valid_width_authority?(_value), do: false
+
+  defp safe_css_fragment?(value) do
+    lowered = String.downcase(value)
+
+    value != "" and
+      not String.contains?(lowered, [
+        "{",
+        "}",
+        ";",
+        "\\",
+        "\0",
+        "</",
+        "url(",
+        "expression(",
+        "javascript:"
+      ])
+  end
+
+  defp put_intrinsic_style(styles, trace, element_name, property, value) do
+    put_intrinsic_value(styles, trace, element_name, property, value, :keyword, [])
+  end
+
+  defp put_intrinsic_literal(styles, trace, element_name, property, value, opts \\ []) do
+    put_intrinsic_value(styles, trace, element_name, property, value, :literal, opts)
+  end
+
+  defp put_intrinsic_value(styles, trace, element_name, property, value, kind, opts) do
+    selector = Keyword.get(opts, :selector, ".brxe-#{element_name}")
+
+    style_value =
+      case kind do
+        :keyword ->
+          StyleValue.keyword(value,
+            source_expression: value,
+            source_trace: intrinsic_trace(trace, element_name, property),
+            metadata: intrinsic_metadata(selector)
+          )
+
+        :literal ->
+          StyleValue.literal(value,
+            source_expression: value,
+            source_trace: intrinsic_trace(trace, element_name, property),
+            metadata: intrinsic_metadata(selector)
+          )
+      end
+
+    Map.put_new(styles, property, style_value)
+  end
+
+  defp intrinsic_trace(trace, element_name, property) do
+    %{
+      trace
+      | source_type: "bricks_intrinsic",
+        source_path: "#{trace.source_path}.intrinsic.brxe-#{element_name}.#{property}",
+        source_name: "brxe-#{element_name}.#{property}"
+    }
+  end
+
+  defp intrinsic_metadata(selector) do
+    %{
+      "authority" => "bricks_intrinsic_element_default",
+      "selector" => selector
+    }
   end
 
   defp source_key_for(consumed, property, breakpoint) do
@@ -562,6 +747,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
               "source_variable" => "--content-gap",
               "fallback" => fallback
             })
+        )
+
+      value == "var(--content-width)" and token_present?(token_set, "layout.viewport.max") ->
+        StyleValue.token_ref("layout.viewport.max",
+          source_expression: value,
+          source_trace: trace,
+          metadata: Map.merge(metadata, %{"source_variable" => "--content-width"})
         )
 
       String.starts_with?(value, "var(") ->
