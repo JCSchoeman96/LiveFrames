@@ -121,6 +121,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       if blocking?(diagnostics) do
         {:error, to_ir_diagnostics(diagnostics)}
       else
+        {theme_styles, theme_diagnostics} = load_theme_styles(Keyword.get(opts, :theme_styles))
+
         context = %{
           document: document,
           proxy: proxy,
@@ -130,9 +132,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           dependencies: dependencies,
           token_set: token_set,
           component_index: component_index(document, component),
-          source_diagnostics: diagnostics,
+          source_diagnostics: diagnostics ++ theme_diagnostics,
           container_width: Keyword.get(opts, :container_width),
-          theme_styles: load_theme_styles(Keyword.get(opts, :theme_styles))
+          theme_styles: theme_styles
         }
 
         assemble(context)
@@ -534,8 +536,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
        when value in [:invalid, :unavailable],
        do: :omit
 
-  defp resolve_container_width_authority(context) do
-    case ThemeStyles.container_width(Map.get(context, :theme_styles)) do
+  defp resolve_container_width_authority(%{theme_styles: :unavailable}), do: :omit
+
+  defp resolve_container_width_authority(%{theme_styles: :absent}) do
+    {:intrinsic, @bricks_container_width_default}
+  end
+
+  defp resolve_container_width_authority(%{theme_styles: theme_styles})
+       when is_map(theme_styles) do
+    case ThemeStyles.container_width(theme_styles) do
       {:ok, value} ->
         if valid_width_authority?(value), do: {:theme_styles, value}, else: :omit
 
@@ -545,6 +554,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       :absent ->
         {:intrinsic, @bricks_container_width_default}
     end
+  end
+
+  defp resolve_container_width_authority(_context) do
+    {:intrinsic, @bricks_container_width_default}
   end
 
   defp put_theme_styles_width(styles, trace, token_set, value) do
@@ -570,23 +583,51 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
-  defp load_theme_styles(nil), do: nil
+  # Theme Styles load states:
+  #   :absent — option omitted; Bricks 1100px default allowed
+  #   map — supplied and valid
+  #   :unavailable — supplied but unreadable/invalid; width omitted
+  defp load_theme_styles(nil), do: {:absent, []}
 
   defp load_theme_styles(path) when is_binary(path) do
     case ThemeStyles.from_file(path) do
-      {:ok, theme_styles} -> theme_styles
-      {:error, _reason} -> nil
+      {:ok, theme_styles} ->
+        {theme_styles, []}
+
+      {:error, reason} ->
+        {:unavailable, [theme_styles_unavailable_diagnostic(reason)]}
     end
   end
 
   defp load_theme_styles(map) when is_map(map) do
     case ThemeStyles.from_map(map) do
-      {:ok, theme_styles} -> theme_styles
-      {:error, _reason} -> nil
+      {:ok, theme_styles} ->
+        {theme_styles, []}
+
+      {:error, reason} ->
+        {:unavailable, [theme_styles_unavailable_diagnostic(reason)]}
     end
   end
 
-  defp load_theme_styles(_other), do: nil
+  defp load_theme_styles(_other) do
+    {:unavailable, [theme_styles_unavailable_diagnostic(:invalid_theme_styles)]}
+  end
+
+  defp theme_styles_unavailable_diagnostic(reason) do
+    BricksDiagnostic.new(
+      code: "bricks.theme_styles.unavailable",
+      severity: :warning,
+      message: "Bricks Theme Styles could not be loaded; container width left unresolved",
+      metadata: %{"reason" => theme_styles_reason(reason)}
+    )
+  end
+
+  defp theme_styles_reason(:enoent), do: "missing_file"
+  defp theme_styles_reason(:invalid_theme_styles), do: "invalid_payload"
+  defp theme_styles_reason(%Jason.DecodeError{}), do: "malformed_json"
+  defp theme_styles_reason({:error, %Jason.DecodeError{}}), do: "malformed_json"
+  defp theme_styles_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp theme_styles_reason(_reason), do: "unavailable"
 
   defp valid_width_authority?(value) when is_binary(value) do
     safe_css_fragment?(value) and

@@ -184,6 +184,41 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
     refute Map.get(container.styles, "width") == %StyleValue{kind: :literal, value: "1100px"}
   end
 
+  test "missing Theme Styles file does not guess 1100px" do
+    missing =
+      Path.join(
+        System.tmp_dir!(),
+        "live_frames_missing_theme_styles_#{System.unique_integer([:positive])}.json"
+      )
+
+    refute File.exists?(missing)
+
+    container = hero_container(theme_styles: missing)
+
+    refute Map.has_key?(container.styles, "width")
+  end
+
+  test "malformed JSON Theme Styles file does not guess 1100px" do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "live_frames_bad_theme_styles_#{System.unique_integer([:positive])}.json"
+      )
+
+    File.write!(path, "{not-json")
+    on_exit(fn -> File.rm(path) end)
+
+    container = hero_container(theme_styles: path)
+
+    refute Map.has_key?(container.styles, "width")
+  end
+
+  test "invalid Theme Styles source payload does not guess 1100px" do
+    container = hero_container(theme_styles: %{"source" => "not_bricks_theme_styles"})
+
+    refute Map.has_key?(container.styles, "width")
+  end
+
   test "generic Fidelity remains free of Bricks container width assumptions" do
     source =
       Path.expand("../../lib/live_frames/fidelity.ex", __DIR__)
