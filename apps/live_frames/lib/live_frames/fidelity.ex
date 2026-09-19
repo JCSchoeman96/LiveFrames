@@ -834,10 +834,12 @@ defmodule LiveFrames.Fidelity do
         Enum.map_join(nodes, "\n", &render_node/1) <> "\n"
 
   defp render_node(node) do
-    attrs = Enum.map_join(node.attrs, " ", fn {key, value} -> "#{key}=#{inspect(value)}" end)
+    attrs = Enum.map_join(node.attrs, " ", &serialize_html_attr/1)
+
+    class_attr = serialize_html_attr({"class", String.trim(node.class)})
 
     attrs =
-      "class=#{inspect(String.trim(node.class))}" <> if(attrs == "", do: "", else: " " <> attrs)
+      class_attr <> if(attrs == "", do: "", else: " " <> attrs)
 
     content = if is_binary(node.content), do: "<%= #{inspect(node.content)} %>", else: ""
     open = "<#{node.element} #{attrs}>"
@@ -848,6 +850,20 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
+
+  defp serialize_html_attr({key, value}) when is_binary(value) do
+    "#{key}=\"#{html_attr_escape(value)}\""
+  end
+
+  defp serialize_html_attr({key, value}), do: "#{key}=#{inspect(value)}"
+
+  defp html_attr_escape(value) do
+    value
+    |> String.replace("&", "&amp;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+  end
 
   defp render_css(nodes) do
     flat = flat_nodes(nodes)

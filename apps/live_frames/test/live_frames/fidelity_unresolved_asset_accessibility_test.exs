@@ -9,6 +9,7 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
   @bricks_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
   @acss_path Path.expand("../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   @fabricated_label "Unresolved fidelity image placeholder"
+  @adversarial_alt ~s(Team "Alpha" <launch> & friends" autofocus data-injected="true)
 
   test "hero unresolved asset placeholder never receives fabricated accessible label" do
     assert {:ok, bundle} = Fidelity.generate(hero_document())
@@ -74,6 +75,43 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
     assert bundle.heex =~ "Call to action"
   end
 
+  test "authoritative adversarial alt is serialized safely without attribute or structure injection" do
+    document = unresolved_image_document(alt: @adversarial_alt)
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    figure_open = figure_attrs_fragment(bundle.heex)
+
+    assert {:ok, _quoted} = compile_heex(bundle.heex)
+    rendered = render_heex(bundle.heex)
+
+    assert figure_attribute_names(figure_open) == [
+             "class",
+             "data-lf-asset-status",
+             "data-lf-asset-id",
+             "aria-label"
+           ]
+
+    refute String.contains?(figure_open, "<launch>")
+    refute injected_attribute_outside_aria_label?(figure_open, "autofocus")
+    refute injected_attribute_outside_aria_label?(figure_open, "data-injected")
+
+    assert decode_html_attr_value(extract_aria_label(figure_open)) == @adversarial_alt
+    assert decode_html_attr_value(extract_aria_label(rendered)) == @adversarial_alt
+    assert count_elements(rendered, "figure") == 1
+  end
+
+  test "simple authoritative alt regression remains preserved after safe serialization" do
+    document = unresolved_image_document(alt: "Team celebrating launch")
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    figure_open = figure_attrs_fragment(bundle.heex)
+    rendered = render_heex(bundle.heex)
+
+    assert decode_html_attr_value(extract_aria_label(figure_open)) == "Team celebrating launch"
+    assert decode_html_attr_value(extract_aria_label(rendered)) == "Team celebrating launch"
+    refute bundle.heex =~ @fabricated_label
+  end
+
   defp hero_document do
     {:ok, token_set, _} =
       AutomaticCSS.from_file(@acss_path,
@@ -127,5 +165,52 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
   defp figure_attrs_fragment(heex) do
     [fragment | _] = Regex.run(~r/<figure[^>]*>/, heex)
     fragment
+  end
+
+  defp compile_heex(heex) do
+    try do
+      {:ok, EEx.compile_string(heex, engine: Phoenix.LiveView.Engine)}
+    rescue
+      error -> {:error, error}
+    end
+  end
+
+  defp render_heex(heex) do
+    heex
+    |> EEx.eval_string(engine: Phoenix.LiveView.Engine)
+    |> IO.iodata_to_binary()
+  end
+
+  defp extract_aria_label(fragment) do
+    case Regex.run(~r/\baria-label="([^"]*)"/, fragment) do
+      [_, value] -> value
+      _ -> flunk("expected exactly one aria-label attribute, got: #{inspect(fragment)}")
+    end
+  end
+
+  defp figure_attribute_names(fragment) do
+    outside_aria = String.replace(fragment, ~r/\saria-label="[^"]*"/, "")
+
+    outside_aria
+    |> then(&Regex.scan(~r/\s([a-zA-Z0-9:-]+)=/, &1))
+    |> Enum.map(fn [_, name] -> name end)
+    |> Kernel.++(if(Regex.match?(~r/\saria-label="/, fragment), do: ["aria-label"], else: []))
+  end
+
+  defp injected_attribute_outside_aria_label?(fragment, name) do
+    outside_aria = String.replace(fragment, ~r/\saria-label="[^"]*"/, "")
+    Regex.match?(~r/\s#{name}(=|\s|>)/, outside_aria)
+  end
+
+  defp count_elements(html, tag) do
+    Regex.scan(~r/<#{tag}\b/, html) |> length()
+  end
+
+  defp decode_html_attr_value(value) do
+    value
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&amp;", "&")
   end
 end
