@@ -250,14 +250,22 @@
     "result": "clean_canonical_runtime"
   },
   "asset_state": {
-    "status": "unresolved",
+    "status": "unavailable",
     "attachment_id": 880,
-    "filename": "cordallman-man-8493246_1920.webp"
+    "filename": "cordallman-man-8493246_1920.webp",
+    "owner_decision": "accepted as unavailable source asset for Hero India tracer bullet"
   },
   "asset_evidence": {
     "attachment_id": 880,
     "filename": "cordallman-man-8493246_1920.webp",
-    "fidelity_state": "unresolved",
+    "fidelity_state": "unavailable",
+    "asset_lifecycle_transition": {
+      "from": "unresolved",
+      "to": "unavailable",
+      "type": "exceptional_terminal",
+      "authority": "owner_decision_for_tracer_bullet",
+      "never_resolved": true
+    },
     "sha256": null,
     "mime_type": null,
     "dimensions": null,
@@ -407,7 +415,7 @@
     "HISTORICAL (Phase 5C-B pre-R1, superseded by PR #16): blocked on missing content margin-top:400px and heading typography under-serialization.",
     "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18): blocked on body typography / CTA / align-items / primary OKLCH / font-family review items addressed in R2.",
     "HISTORICAL (Phase 5C-B final rerun after R1+R2, superseded by PR #20 / this post-R3 rerun): blocked on missing Bricks container width shrink-wrap under align-items:center.",
-    "CURRENT (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 is the sole remaining fidelity limitation; owner decision required; accessibility not started; Master Phase 5 remains open."
+    "CURRENT (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 accepted as unavailable source asset under owner decision (image_asset_fidelity unavailable, redistribution unknown, no fabricated replacement); accessibility not started; Master Phase 5 remains open."
   ],
   "verification_lifecycle": [
     "generated",
@@ -440,14 +448,14 @@
         "reviewed_head": "4946a3366aeb4e59297e21a875e7a324239b7dc7"
       }
     ],
-    "result": "P5C-B POST-R3 FINAL RERUN — non-asset component fidelity pass; attachment 880 sole remaining limitation",
+    "result": "P5C-B POST-R3 FINAL RERUN — non-asset component fidelity pass; attachment 880 accepted as unavailable under owner decision; sole remaining limitation",
     "structural_visual_result": "pass",
     "typography_result": "pass",
     "responsive_result": "pass",
     "component_style_result": "pass",
     "image_asset_fidelity_result": "unavailable",
     "full_visual_fidelity": "not_claimed",
-    "acceptance_decision": "needs_owner_decision",
+    "acceptance_decision": "explicit_authorized_acceptance_of_unresolved_image_limitation",
     "visual_comparison_state": "visual_compared",
     "remaining_material_non_asset_deviations": 0,
     "unmapped_regions": [],
@@ -783,13 +791,15 @@
     "attachment_880": {
       "attachment_id": 880,
       "filename": "cordallman-man-8493246_1920.webp",
-      "fidelity_state": "unresolved",
+      "fidelity_state": "unavailable",
       "image_asset_fidelity": "unavailable",
       "redistribution_status": "unknown",
-      "waiver_granted": false,
-      "classification": "unresolved_asset_880",
+      "waiver_granted": true,
+      "owner_decision": "accepted as unavailable source asset for Hero India tracer bullet",
+      "no_fabricated_replacement": true,
+      "classification": "unavailable_asset_880",
       "sole_remaining_fidelity_limitation": true,
-      "sole_remaining_note": "Only unavailable fidelity domain. Prior non-blocking needs_human_review residuals (button alignItems/gap; overlay element vs ::before carrier) remain classified and non-blocking; material_generated_deviation count is 0."
+      "sole_remaining_note": "Only unavailable fidelity domain, accepted under owner decision. Prior non-blocking needs_human_review residuals (button alignItems/gap; overlay element vs ::before carrier) remain classified and non-blocking; material_generated_deviation count is 0."
     },
     "image_diff_metrics_descriptive_only": {
       "full_viewport": {
@@ -832,8 +842,9 @@
       "this_run": "visual_comparison (current object)"
     },
     "human_decision_required": {
-      "required": true,
-      "outcome": "NEEDS_OWNER_DECISION",
+      "required": false,
+      "outcome": "OWNER_DECISION_RECORDED",
+      "decision": "Treat attachment 880 as an unavailable source asset for the Hero India tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, redistribution status = unknown, and no fabricated replacement.",
       "question": "Authorize treating attachment 880 as an unavailable source asset for this tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, unresolved redistribution status, and no fabricated replacement?"
     },
     "phase_5c_c_authorized": false,
@@ -843,7 +854,7 @@
     "heex_css_manifest_changed": false,
     "production_code_changed": false
   },
-  "phase_5c_b_state": "needs_owner_decision",
+  "phase_5c_b_state": "visual_compared",
   "visual_comparison_historical_phase_5c_b_blocked": {
     "preserved": true,
     "phase": "5C-B",
