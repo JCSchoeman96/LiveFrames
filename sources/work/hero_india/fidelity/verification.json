@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "verification_scope": "phase_5c_b_hero_visual_fidelity_final_rerun_after_r1_r2",
+  "verification_scope": "phase_5c_b_hero_visual_fidelity_final_rerun_after_r1_r2_r3",
   "input_ir_sha256": "e502427cbb0ee6b029fdde6b9b1e50033e25680331faf3b3ee89bf2228989b0c",
   "token_set_version": "1.0.0",
   "breakpoint_authority_sha256": "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8",
@@ -11,8 +11,8 @@
     "mobile_portrait": "@media (max-width: 478px)"
   },
   "generated_heex_sha256": "15dbaa9b6250c73094ad0226f0b6a9b747c12a894cce355b31145a37c78e87c7",
-  "generated_css_sha256": "308ae5f7a4c40f107a1c202539b573e598950ea9e300064b9a0ff8eaf9d0795e",
-  "manifest_sha256": "d270af30f6558b74626d8626d0fafdfde8d6403d3fe0eb7d60f5fa05250743eb",
+  "generated_css_sha256": "8f75e577edb2cead6dc5a595963a3f06f47eda6d0002b10a34215cb18baba1dc",
+  "manifest_sha256": "ae0a9966ecb44d1fc54e16ed4f3d0c50ec30eab8c914b0e082b0b5c1a37df91a",
   "manifest_responsive_truth": {
     "responsive_entries_total": 4,
     "responsive_entries_resolved": 4,
@@ -250,14 +250,22 @@
     "result": "clean_canonical_runtime"
   },
   "asset_state": {
-    "status": "unresolved",
+    "status": "unavailable",
     "attachment_id": 880,
-    "filename": "cordallman-man-8493246_1920.webp"
+    "filename": "cordallman-man-8493246_1920.webp",
+    "owner_decision": "accepted as unavailable source asset for Hero India tracer bullet"
   },
   "asset_evidence": {
     "attachment_id": 880,
     "filename": "cordallman-man-8493246_1920.webp",
-    "fidelity_state": "unresolved",
+    "fidelity_state": "unavailable",
+    "asset_lifecycle_transition": {
+      "from": "unresolved",
+      "to": "unavailable",
+      "type": "exceptional_terminal",
+      "authority": "owner_decision_for_tracer_bullet",
+      "never_resolved": true
+    },
     "sha256": null,
     "mime_type": null,
     "dimensions": null,
@@ -323,8 +331,8 @@
     },
     "startup_evidence": {
       "attempted": true,
-      "mechanism": "LocalWP normal site-start workflow via Local GraphQL startSite",
-      "status_before": "halted",
+      "mechanism": "Local app start + Local GraphQL startSite(id) normal site-start; site already running after Local launch",
+      "status_before": "halted_or_restored_running",
       "status_after": "running",
       "upgrade_required": false,
       "migration_required": false,
@@ -360,7 +368,8 @@
         "dimensions": {
           "width": 1200,
           "height": 800
-        }
+        },
+        "current_rerun_sha256": "a8eaba5b0887280198ea904e5a4a110f7fa4b7ab7ce8849893d2b480a8f38842"
       },
       {
         "width": 991,
@@ -372,7 +381,8 @@
         "dimensions": {
           "width": 991,
           "height": 800
-        }
+        },
+        "current_rerun_sha256": "ecda9f12f8b58c0641e83598e0c4dbbb991cf6ab674c007b3ac39949ee280f25"
       },
       {
         "width": 478,
@@ -384,7 +394,8 @@
         "dimensions": {
           "width": 478,
           "height": 800
-        }
+        },
+        "current_rerun_sha256": "1d70dc8c1e817c19103cda01915bdb93ca7d7977e0d4444463a1f78e445eb699"
       }
     ],
     "storage_class": "private_local_only",
@@ -394,34 +405,31 @@
     "source_mutated": false
   },
   "source_visual_reference_state": "accepted_reference",
-  "visual_comparison_state": "blocked",
+  "visual_comparison_state": "visual_compared",
   "accessibility_state": "not_started",
   "known_limitations": [
     "Hero source image remains unresolved and was not fetched or fabricated.",
     "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result.",
     "Raw DanBricks reference screenshots remain local/private and are not published; redistribution permission is unknown.",
     "Attachment 880 image fidelity remains unavailable; source frontend omits image node a1745a while generated shows unresolved placeholder.",
-    "HISTORICAL (Phase 5C-B pre-R1, superseded by PR #16): blocked on missing content margin-top:400px and heading typography under-serialization. Full evidence: PR #15 / merge f566f96; compact summary in visual_comparison_historical_phase_5c_b_blocked.",
-    "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18 / this final rerun): blocked on missing ACSS body typography (:where(body) font-size:var(--text-m) / line-height) \u2014 body ~16px/24px vs source fluid ~16.2\u201317.67px.",
-    "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18 / this final rerun): blocked on CTA primary display block vs source flex (ACSS btn display); CTA wrapper missing content-gap; hero section missing Bricks align-items:center.",
-    "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18 / this final rerun): button colors yellow OKLCH (live ACSS --primary) vs TokenSet teal #32a2c1 \u2014 needs_human_review (TokenSet vs live settings authority), not silently accepted.",
-    "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18 / this final rerun): body font-family needs_human_review (Bricks/ACSS system stack vs preview ui-sans-serif); equivalence not invented.",
-    "P5C-B-R1 corrections independently re-verified exact at 1200/991/478 (root layout/padding/gap; content margin-top:400px/row-gap; heading typography).",
-    "CURRENT (Phase 5C-B final rerun after R1+R2): blocked on missing Bricks container width for content wrapper \u2014 shrink-wrap under align-items:center shifts content ~177px (1200) / ~94px (991).",
-    "P5C-B-R1 and P5C-B-R2 scoped corrections independently re-verified exact at 1200/991/478; final rerun blocked on newly expressed container-width geometry defect."
+    "HISTORICAL (Phase 5C-B pre-R1, superseded by PR #16): blocked on missing content margin-top:400px and heading typography under-serialization.",
+    "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18): blocked on body typography / CTA / align-items / primary OKLCH / font-family review items addressed in R2.",
+    "HISTORICAL (Phase 5C-B final rerun after R1+R2, superseded by PR #20 / this post-R3 rerun): blocked on missing Bricks container width shrink-wrap under align-items:center.",
+    "CURRENT (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 accepted as unavailable source asset under owner decision (image_asset_fidelity unavailable, redistribution unknown, no fabricated replacement); accessibility not started; Master Phase 5 remains open."
   ],
   "verification_lifecycle": [
     "generated",
     "compiled",
     "rendered",
-    "browser_verified"
+    "browser_verified",
+    "visual_compared"
   ],
-  "verification_state": "blocked",
+  "verification_state": "visual_compared",
   "phase_5b_state": "closed",
   "master_phase_5_state": "open",
   "visual_comparison": {
     "comparison_performed": true,
-    "phase": "5C-B-final-rerun-after-P5C-B-R1-R2",
+    "phase": "5C-B-post-R3-final-rerun",
     "precondition_prs": [
       {
         "number": 16,
@@ -432,21 +440,30 @@
         "number": 18,
         "title": "Phase 5C-B R2",
         "merge_sha": "98c6b277d6d5f5910f7b139e80dba1ce70e65b17"
+      },
+      {
+        "number": 20,
+        "title": "Phase 5C-B R3",
+        "merge_sha": "77d8d11cb82b1ad8865cf8edde554e50572805aa",
+        "reviewed_head": "4946a3366aeb4e59297e21a875e7a324239b7dc7"
       }
     ],
-    "result": "P5C-B FINAL RERUN BLOCKED \u2014 VISUAL FIDELITY DEFECT",
-    "structural_visual_result": "fail",
+    "result": "P5C-B POST-R3 FINAL RERUN — non-asset component fidelity pass; attachment 880 accepted as unavailable under owner decision; sole remaining limitation",
+    "structural_visual_result": "pass",
     "typography_result": "pass",
     "responsive_result": "pass",
-    "component_style_result": "fail",
+    "component_style_result": "pass",
     "image_asset_fidelity_result": "unavailable",
     "full_visual_fidelity": "not_claimed",
-    "acceptance_decision": "blocked",
-    "visual_comparison_state": "blocked",
+    "acceptance_decision": "explicit_authorized_acceptance_of_unresolved_image_limitation",
+    "visual_comparison_state": "visual_compared",
+    "remaining_material_non_asset_deviations": 0,
+    "unmapped_regions": [],
     "exact_viewport_confirmation": {
       "mechanism": "Chrome DevTools Protocol Emulation.setDeviceMetricsOverride",
       "stable_height": 800,
       "asserted": true,
+      "hide_scrollbars": true,
       "viewports": [
         {
           "requested": 1200,
@@ -485,16 +502,80 @@
     },
     "source_identity": {
       "verified": true,
+      "component": "Hero India",
       "component_id": "sqhmmc",
-      "label": "Hero India",
       "page_id": 105,
       "image_node_id": "a1745a",
+      "bricks_version": "2.3.1",
       "source_mutated": false,
-      "mutation_hashes_match_accepted_reference": true
+      "mutation_hashes_match_accepted_reference": true,
+      "frontend_root_class": "brxe-sqhmmc brxe-section fr-hero-india bg--ultra-dark"
+    },
+    "source_capture_hashes": {
+      "1200": "a8eaba5b0887280198ea904e5a4a110f7fa4b7ab7ce8849893d2b480a8f38842",
+      "991": "ecda9f12f8b58c0641e83598e0c4dbbb991cf6ab674c007b3ac39949ee280f25",
+      "478": "1d70dc8c1e817c19103cda01915bdb93ca7d7977e0d4444463a1f78e445eb699"
+    },
+    "generated_capture_hashes": {
+      "1200": "a7aeee6e7fd29ad32066c067adfa1b0c64c9e6aef77e02ad9df2b37058f02445",
+      "991": "20863cb76dfa9b95dea64bb215e9daaf467d6eea0c20a7e68344ca4d78030332",
+      "478": "a59085929aea3f3b72f2d2c63abe504ed1b9b1182a2a995bec4259c3e0f809f3"
+    },
+    "raw_screenshots_committed": false,
+    "storage_class": "private_local_only",
+    "r3_authority_baseline": {
+      "status": "pass",
+      "generated_rule": {
+        "selector": ".lf-fidelity-node-000001-000001",
+        "width": "1366px",
+        "max-width": "100%",
+        "margin-left": "auto",
+        "margin-right": "auto"
+      },
+      "trace": "Theme Styles container.width=var(--content-width) → ACSS --content-width → TokenSet layout.viewport.max → 1366px",
+      "computed_at_1200_content_width": "1061.12px",
+      "note": "computed width is max-width:100% of padded section; authored width remains 1366px"
+    },
+    "r3_geometry_regression": {
+      "status": "pass",
+      "hero_relative_horizontal_delta": {
+        "1200": {
+          "content": 0.0,
+          "heading": 0.0,
+          "body": 0.0,
+          "cta": 0.0
+        },
+        "991": {
+          "content": 0.0,
+          "heading": 0.0,
+          "body": 0.0,
+          "cta": 0.0
+        },
+        "478": {
+          "content": 0.0,
+          "heading": 0.0,
+          "body": 0.0,
+          "cta": 0.0
+        }
+      },
+      "content_width": {
+        "1200": {
+          "source": "1061.125px",
+          "generated": "1061.125px"
+        },
+        "991": {
+          "source": "878.71875px",
+          "generated": "878.71875px"
+        },
+        "478": {
+          "source": "431px",
+          "generated": "431px"
+        }
+      },
+      "shrink_wrap_defect_reappeared": false
     },
     "r1_regression_check": {
       "status": "pass",
-      "note": "Hero root flex/padding/gap; content margin-top:400px/row-gap; heading font-size/weight/line-height exact at 1200/991/478",
       "representative_1200": {
         "hero_root.display": {
           "source": "flex",
@@ -544,20 +625,19 @@
       }
     },
     "r2_regression_check": {
-      "status": "pass_for_r2_scoped_properties",
-      "note": "ACSS body font-size/line-height, section align-items:center, CTA content-gap, button display authored inline-flex (computed flex), primary OKLCH, button text color all match. Font-family remains environmental_system_fallback. Absolute Y remains environmental_source_chrome.",
+      "status": "pass",
       "representative_1200": {
         "hero_root.alignItems": {
           "source": "center",
           "generated": "center",
           "exact_match": true
         },
-        "hero_root.fontSize": {
+        "body.fontSize": {
           "source": "17.67px",
           "generated": "17.67px",
           "exact_match": true
         },
-        "hero_root.lineHeight": {
+        "body.lineHeight": {
           "source": "24.9315px",
           "generated": "24.9315px",
           "exact_match": true
@@ -596,31 +676,25 @@
         },
         "absolute_page_y": {
           "classification": "environmental_source_chrome",
-          "component_owned": false
+          "component_owned": false,
+          "absY_delta_1200": -186.984
         }
       }
     },
-    "source_references": {
-      "status": "regenerated",
-      "reason": "fresh private captures via read-only DanBricks LocalWP one-click admin + CDP Emulation.setDeviceMetricsOverride",
-      "source_mutated": false,
-      "storage_class": "private_local_only",
-      "raw_screenshots_committed": false,
-      "accepted_reference_hashes_preserved_from_5c_a": {
-        "1200": "46fe40bc4bb18384e1d83b247f0ace79e522ebc99ba028cc5cc9b381159b2701",
-        "991": "471907e8b352c37cb55316643d6973191649d6d89b091e61d3033e2aeedfe976",
-        "478": "fac177479ba4c786d4d8d234782f738e94eb6cdf9add01600f927a54783fe0f9"
-      },
-      "regenerated_comparison_capture_hashes": {
-        "1200": "f8a83b916b4cb1b846a9acf48d2d2ce66092ba533b27a80dd3ba6e56b1d18c58",
-        "991": "94a5b9469711840bbb4feee7e43c6e7d5b8f3a2a307c513bab08954eea401e84",
-        "478": "c6077052a5eea19b8d55f886acefa607a26ce99476b7653eb03e5ba811d7a93c"
-      }
-    },
-    "generated_reference_hashes": {
-      "1200": "fb665be039eeb2d8bb9301d640d863aee7f00508f758a0a499299246c48c1b38",
-      "991": "e2cabe0ed39e08044c4253c5404fccb7a2433f26077e5d55bcb6c48d0833c4c3",
-      "478": "a59085929aea3f3b72f2d2c63abe504ed1b9b1182a2a995bec4259c3e0f809f3"
+    "region_results": {
+      "hero_root": "pass",
+      "content_wrapper_width": "pass",
+      "content_wrapper_max_width": "pass",
+      "content_wrapper_margins": "pass",
+      "heading": "pass",
+      "body": "pass",
+      "cta_wrapper": "pass",
+      "primary_button": "pass",
+      "outline_button": "pass",
+      "background_geometry": "pass",
+      "gradient": "pass",
+      "responsive": "pass",
+      "media_geometry": "unavailable_due_to_attachment_880"
     },
     "viewport_verdicts": {
       "1200": {
@@ -628,125 +702,30 @@
         "tablet_active": false,
         "mobile_active": false,
         "r1": "pass",
-        "r2_scoped": "pass",
-        "content_width_geometry": "fail",
-        "hero_relative_content_delta": {
-          "dx": 177.08,
-          "dy": 0.0,
-          "dwidth": -354.17,
-          "dheight": 0.0
-        },
-        "content_width": {
-          "source": "1061.12px",
-          "generated": "706.953px",
-          "source_authority": "Bricks .brxe-container { width:1100px; max-width:100%; margin-inline:auto } on container content wrapper"
-        }
+        "r2": "pass",
+        "r3": "pass",
+        "structural": "pass"
       },
       "991": {
         "responsive": "pass",
         "tablet_active": true,
         "mobile_active": false,
         "r1": "pass",
-        "r2_scoped": "pass",
-        "content_width_geometry": "fail",
-        "hero_relative_content_delta": {
-          "dx": 94.02,
-          "dy": 0.0,
-          "dwidth": -188.03,
-          "dheight": 0.0
-        },
-        "content_width": {
-          "source": "878.719px",
-          "generated": "690.688px"
-        }
+        "r2": "pass",
+        "r3": "pass",
+        "structural": "pass"
       },
       "478": {
         "responsive": "pass",
         "tablet_active": true,
         "mobile_active": true,
         "r1": "pass",
-        "r2_scoped": "pass",
-        "content_width_geometry": "pass",
-        "hero_relative_content_delta": {
-          "dx": 0.0,
-          "dy": 0.0,
-          "dwidth": 0,
-          "dheight": 0.0
-        },
-        "note": "At 478, shrink-to-fit equals full padded width; horizontal defect not expressed"
+        "r2": "pass",
+        "r3": "pass",
+        "structural": "pass",
+        "mobile_cta_full_width": "pass"
       }
     },
-    "blocking_defects": [
-      {
-        "id": "P5C-B-FINAL-DEFECT-001",
-        "viewport": "1200 and 991 (not expressed at 478)",
-        "source_node_region": "content_region / fr-hero-india__content-wrapper (Bricks container)",
-        "generated_node_region": "content_region / fr-hero-india__content-wrapper",
-        "property": "width / hero-relative horizontal geometry",
-        "expected": "Bricks container width semantics: width 1100px capped by max-width:100% of section content box after padding; children left-aligned at padded edge (x\u224869.44 at 1200)",
-        "actual": "No container width emitted; with section align-items:center (R2), wrapper shrink-wraps to ~70ch body (~706.95px) and centers, shifting heading/body/CTA right by \u2248177px at 1200 / \u224894px at 991",
-        "evidence": {
-          "source_matched_rule": ".brxe-container{width:1100px;max-width:100%;margin-left:auto;margin-right:auto;...}",
-          "ir_source_name": "container",
-          "hero_relative_delta_1200": {
-            "dx": 177.08,
-            "dy": 0.0,
-            "dwidth": -354.17,
-            "dheight": 0.0
-          },
-          "hero_relative_delta_991": {
-            "dx": 94.02,
-            "dy": 0.0,
-            "dwidth": -188.03,
-            "dheight": 0.0
-          },
-          "source_capture_sha_1200": "f8a83b916b4cb1b846a9acf48d2d2ce66092ba533b27a80dd3ba6e56b1d18c58",
-          "generated_capture_sha_1200": "fb665be039eeb2d8bb9301d640d863aee7f00508f758a0a499299246c48c1b38"
-        },
-        "likely_owning_layer": "Bricks adapter / Fidelity CSS \u2014 missing brxe-container intrinsic width on Hero content wrapper after align-items:center",
-        "proposed_narrow_correction_boundary": "Emit Bricks container width/max-width (or equivalent stretch) for content wrapper so align-items:center does not shrink-wrap; do not invent unrelated layout",
-        "classification": "material_generated_deviation"
-      }
-    ],
-    "material_generated_deviations": [
-      {
-        "viewport": 1200,
-        "region": "content_region",
-        "property": "width",
-        "source": "1061.12px",
-        "generated": "706.953px",
-        "classification": "material_generated_deviation",
-        "likely_owning_layer": "Bricks container intrinsic width not serialized"
-      },
-      {
-        "viewport": 1200,
-        "region": "heading/body/cta (cascade)",
-        "property": "hero_relative_x",
-        "source_heading_x": 69.44,
-        "generated_heading_x": 246.52,
-        "classification": "material_generated_deviation",
-        "likely_owning_layer": "follows content_region width shrink-wrap under align-items:center"
-      },
-      {
-        "viewport": 991,
-        "region": "content_region",
-        "property": "width",
-        "source": "878.719px",
-        "generated": "690.688px",
-        "classification": "material_generated_deviation",
-        "likely_owning_layer": "Bricks container intrinsic width not serialized"
-      },
-      {
-        "viewport": 991,
-        "region": "heading/body/cta (cascade)",
-        "property": "hero_relative_x",
-        "source_heading_x": 56.14,
-        "generated_heading_x": 150.16,
-        "classification": "material_generated_deviation",
-        "likely_owning_layer": "follows content_region width shrink-wrap under align-items:center"
-      }
-    ],
-    "remaining_material_non_asset_deviations": 4,
     "environmental_differences": [
       {
         "classification": "environmental_system_fallback",
@@ -756,7 +735,12 @@
       {
         "classification": "environmental_source_chrome",
         "property": "absolute_y",
-        "note": "WP admin bar / #brx-header offset; hero-relative Y exact"
+        "note": "WP admin bar / #brx-header offset; hero-relative Y exact",
+        "absY_delta": {
+          "1200": -186.984,
+          "991": -175.953,
+          "478": -224.906
+        }
       },
       {
         "classification": "acceptable_under_existing_authority",
@@ -765,191 +749,116 @@
       },
       {
         "classification": "browser_rasterization_variance",
-        "note": "pixel metrics descriptive only; no numeric pass threshold"
+        "property": "root.backgroundColor",
+        "note": "source oklch(0.1 0 0) vs generated rgb(26,26,26); equivalent near-black"
+      },
+      {
+        "classification": "browser_rasterization_variance",
+        "property": "content.columnGap serialization",
+        "note": "source mirrors rowGap into columnGap/gap; generated rowGap set with columnGap normal; layout unchanged"
+      },
+      {
+        "classification": "needs_human_review",
+        "property": "button alignItems/gap",
+        "source": "center / 10px",
+        "generated": "normal",
+        "blocking": false,
+        "geometry_impact": "none_single_child_buttons"
+      },
+      {
+        "classification": "needs_human_review",
+        "property": "overlay_element_height_at_tablet_mobile",
+        "note": "Source overlay element height:0 + gradient on ::before; generated overlay element fills + gradient on element. Gradient color stops match. Non-blocking under existing authority.",
+        "blocking": false
+      },
+      {
+        "classification": "browser_rasterization_variance",
+        "property": "heading.maxWidth",
+        "source": "100%",
+        "generated": "none",
+        "note": "Bounding box and wrapping identical at 1200/991/478; no layout displacement",
+        "blocking": false
+      },
+      {
+        "classification": "browser_rasterization_variance",
+        "property": "root/content.flexWrap_at_478",
+        "source": "wrap",
+        "generated": "nowrap",
+        "note": "CTA flexWrap wrap on both; button stacked geometry exact at 478; root/content flexWrap computed differs without hero-relative displacement",
+        "blocking": false
       }
     ],
-    "unmapped_regions": [],
     "attachment_880": {
-      "fidelity_state": "unresolved",
+      "attachment_id": 880,
+      "filename": "cordallman-man-8493246_1920.webp",
+      "fidelity_state": "unavailable",
       "image_asset_fidelity": "unavailable",
       "redistribution_status": "unknown",
-      "publication": "not_published",
-      "filename": "cordallman-man-8493246_1920.webp",
-      "source_image_element_present": false,
-      "generated_placeholder_present": true,
-      "waiver_granted": false,
-      "classification": "unresolved_asset_880"
+      "waiver_granted": true,
+      "owner_decision": "accepted as unavailable source asset for Hero India tracer bullet",
+      "no_fabricated_replacement": true,
+      "classification": "unavailable_asset_880",
+      "sole_remaining_fidelity_limitation": true,
+      "sole_remaining_note": "Only unavailable fidelity domain, accepted under owner decision. Prior non-blocking needs_human_review residuals (button alignItems/gap; overlay element vs ::before carrier) remain classified and non-blocking; material_generated_deviation count is 0."
     },
     "image_diff_metrics_descriptive_only": {
       "full_viewport": {
         "1200": {
-          "mean_channel_abs_diff": 21.5524,
-          "approx_percent_pixels_differing_sampled": 33.3713,
+          "mean_channel_abs_diff": 53.9969,
+          "approx_percent_pixels_differing_sampled": 74.0563,
           "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              1200,
-              800
-            ],
-            "generated": [
-              1200,
-              800
-            ]
-          },
           "descriptive_only": true,
           "no_numeric_acceptance_threshold_applied": true
         },
         "991": {
-          "mean_channel_abs_diff": 29.687,
-          "approx_percent_pixels_differing_sampled": 71.5171,
+          "mean_channel_abs_diff": 53.1079,
+          "approx_percent_pixels_differing_sampled": 99.9808,
           "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              991,
-              800
-            ],
-            "generated": [
-              991,
-              800
-            ]
-          },
           "descriptive_only": true,
           "no_numeric_acceptance_threshold_applied": true
         },
         "478": {
-          "mean_channel_abs_diff": 43.56,
-          "approx_percent_pixels_differing_sampled": 77.7238,
+          "mean_channel_abs_diff": 70.2815,
+          "approx_percent_pixels_differing_sampled": 99.9874,
           "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              478,
-              800
-            ],
-            "generated": [
-              478,
-              800
-            ]
-          },
           "descriptive_only": true,
           "no_numeric_acceptance_threshold_applied": true
         }
       },
-      "hero_clip": {
-        "1200": {
-          "mean_channel_abs_diff": 46.7166,
-          "approx_percent_pixels_differing_sampled": 44.651,
-          "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              1200,
-              768
-            ],
-            "generated": [
-              1200,
-              768
-            ]
-          },
-          "descriptive_only": true,
-          "no_numeric_acceptance_threshold_applied": true
-        },
-        "991": {
-          "mean_channel_abs_diff": 47.4907,
-          "approx_percent_pixels_differing_sampled": 69.2166,
-          "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              991,
-              763
-            ],
-            "generated": [
-              991,
-              763
-            ]
-          },
-          "descriptive_only": true,
-          "no_numeric_acceptance_threshold_applied": true
-        },
-        "478": {
-          "mean_channel_abs_diff": 62.7431,
-          "approx_percent_pixels_differing_sampled": 87.0415,
-          "sample_step": 2,
-          "image_sizes": {
-            "source": [
-              478,
-              754
-            ],
-            "generated": [
-              478,
-              754
-            ]
-          },
-          "descriptive_only": true,
-          "no_numeric_acceptance_threshold_applied": true
-        }
-      },
-      "no_numeric_acceptance_threshold_applied": true,
       "primary_pixel_drivers": [
-        "unresolved_asset_880 media absence",
-        "content horizontal shift at 1200/991",
-        "source chrome in full-viewport source captures"
-      ]
-    },
-    "phase_5b_boundary_authority": {
-      "note": "Phase 5B viewport boundary evidence at 992/990/479/477 remains authoritative; generated responsive artifacts unchanged on main",
-      "unchanged": true
+        "unresolved_asset_880 media absence on both sides with generated placeholder semantics differing from source omission",
+        "environmental_source_chrome in full-viewport source captures",
+        "overlay pseudo vs element gradient carrier difference (non-blocking)"
+      ],
+      "no_numeric_acceptance_threshold_applied": true
     },
     "historical_blocked_attempts_preserved": {
       "initial_5c_b": "visual_comparison_historical_phase_5c_b_blocked",
       "rerun_after_r1": "visual_comparison_historical_phase_5c_b_rerun_after_r1_blocked",
+      "post_r2_final_rerun": "visual_comparison_historical_phase_5c_b_post_r2_final_rerun_blocked",
       "r1_passed": true,
       "r2_passed": true,
-      "final_rerun": "visual_comparison (this object)"
+      "r3_passed": true,
+      "this_run": "visual_comparison (current object)"
     },
     "human_decision_required": {
-      "required": true,
-      "outcome": "BLOCKED",
-      "question": "P5C-B FINAL RERUN BLOCKED on material non-asset deviation: missing Bricks container width on Hero content wrapper causes shrink-wrap + horizontal shift at 1200/991 after R2 align-items:center. Authorize a narrow P5C-B-R3 correction for container width/max-width before any 5C-C or attachment-880 owner decision?"
+      "required": false,
+      "outcome": "OWNER_DECISION_RECORDED",
+      "decision": "Treat attachment 880 as an unavailable source asset for the Hero India tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, redistribution status = unknown, and no fabricated replacement.",
+      "question": "Authorize treating attachment 880 as an unavailable source asset for this tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, unresolved redistribution status, and no fabricated replacement?"
     },
     "phase_5c_c_authorized": false,
     "compiler_changed": false,
     "design_ir_changed": false,
     "token_set_changed": false,
     "heex_css_manifest_changed": false,
-    "overlay_height_note": {
-      "viewports": [
-        991,
-        478
-      ],
-      "observation": "Source .fr-background-alpha__overlay reports height:0 while generated overlay fills hero; background_region hero-relative geometry remains exact on all viewports",
-      "classification": "needs_human_review",
-      "blocking": false,
-      "note": "Not elevated as separate material blocker; gradient/stacking assessed via background_region + overlay styles. Primary blocker remains container width."
-    },
-    "non_blocking_style_notes": [
-      {
-        "region": "cta_primary/secondary",
-        "property": "alignItems/gap",
-        "source": "center / 10px",
-        "generated": "normal",
-        "classification": "needs_human_review",
-        "geometry_impact": "none_single_child_buttons",
-        "blocking": false
-      },
-      {
-        "region": "content_region",
-        "property": "columnGap serialization",
-        "source": "rowGap value mirrored",
-        "generated": "normal columnGap with rowGap set",
-        "classification": "browser_rasterization_variance",
-        "blocking": false
-      }
-    ]
+    "production_code_changed": false
   },
-  "phase_5c_b_state": "blocked",
+  "phase_5c_b_state": "visual_compared",
   "visual_comparison_historical_phase_5c_b_blocked": {
     "preserved": true,
     "phase": "5C-B",
-    "result": "P5C-B BLOCKED \u2014 VISUAL FIDELITY DEFECT",
+    "result": "P5C-B BLOCKED — VISUAL FIDELITY DEFECT",
     "structural_visual_result": "fail",
     "image_asset_fidelity_result": "unavailable",
     "acceptance_decision": "blocked",
@@ -980,7 +889,7 @@
         "viewport": "all (1200, 991, 478)",
         "source_region": "content_region / hero_root",
         "generated_region": "content_region / hero_root",
-        "expected": "content wrapper margin-top: 400px; hero tall enough to place content near bottom (~760\u2013790px hero height at 800px viewport)",
+        "expected": "content wrapper margin-top: 400px; hero tall enough to place content near bottom (~760–790px hero height at 800px viewport)",
         "actual": "content wrapper margin-top: 0px; hero height collapses to ~130px (desktop/tablet) / ~188px (mobile)",
         "screenshot_hashes": {
           "source": {
@@ -1024,8 +933,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 20,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "991": {
             "source_bbox": {
@@ -1056,8 +965,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 20,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           },
           "478": {
             "source_bbox": {
@@ -1088,8 +997,8 @@
             },
             "geometry_classification": "needs_human_review",
             "style_diff_count": 21,
-            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla",
-            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don\u2019t be alarmed, this is just here to fill up space since your finalized copy isn\u2019t ready yet. Once we have your content finalized, we\u2019ll replace this pla"
+            "source_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla",
+            "generated_text_sample": "Hero heading\n\nThis is just placeholder text. Don’t be alarmed, this is just here to fill up space since your finalized copy isn’t ready yet. Once we have your content finalized, we’ll replace this pla"
           }
         },
         "computed_style_evidence": {
@@ -1105,7 +1014,7 @@
         "viewport": "all (1200, 991, 478)",
         "source_region": "heading",
         "generated_region": "heading",
-        "expected": "Heading typography approximately font-size ~33\u201345px, font-weight 700, line-height ~40\u201353px",
+        "expected": "Heading typography approximately font-size ~33–45px, font-weight 700, line-height ~40–53px",
         "actual": "Generated heading computed font-size 16px, font-weight 400, line-height 24px",
         "likely_owning_layer": "Fidelity generation / Token resolution / missing heading CSS declarations",
         "proposed_narrow_correction_boundary": "Emit heading typography declarations for .fr-hero-india__heading from IR/tokens"
@@ -1205,7 +1114,7 @@
         "expected_height_px": 789.0625,
         "actual_height_px": 130,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       },
       {
@@ -1235,7 +1144,7 @@
         "expected_height_px": 763.234375,
         "actual_height_px": 130,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       },
       {
@@ -1265,7 +1174,7 @@
         "expected_height_px": 782.53125,
         "actual_height_px": 188,
         "classification": "material_generated_deviation",
-        "likely_owning_layer": "Fidelity CSS serialization \u2014 unresolved margin-top:400 on content wrapper collapses hero geometry",
+        "likely_owning_layer": "Fidelity CSS serialization — unresolved margin-top:400 on content wrapper collapses hero geometry",
         "proposed_narrow_correction_boundary": "Serialize content-wrapper margin-top:400px from IR (currently listed unresolved in manifest) and verify hero min-height/geometry"
       }
     ],
@@ -1315,7 +1224,7 @@
   "visual_comparison_historical_phase_5c_b_rerun_after_r1_blocked": {
     "preserved": true,
     "phase": "5C-B-rerun-after-P5C-B-R1",
-    "result": "P5C-B RERUN BLOCKED \u2014 VISUAL FIDELITY DEFECT",
+    "result": "P5C-B RERUN BLOCKED — VISUAL FIDELITY DEFECT",
     "structural_visual_result": "fail",
     "acceptance_decision": "blocked",
     "image_asset_fidelity_result": "unavailable",
@@ -1357,7 +1266,7 @@
         "property": "fontSize",
         "source": "17.67px",
         "generated": "16px",
-        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } \u2014 missing ACSS body/base typography cascade on Fidelity preview document"
+        "likely_owning_layer": "Automatic CSS :where(body) { font-size: var(--text-m) } — missing ACSS body/base typography cascade on Fidelity preview document"
       },
       {
         "viewport": "1200/991/478",
@@ -1397,9 +1306,9 @@
         "viewport": "1200/991/478",
         "region": "body_text",
         "property": "fontSize / lineHeight",
-        "source": "ACSS body fluid text (~16.2\u201317.67px / matching line-height)",
+        "source": "ACSS body fluid text (~16.2–17.67px / matching line-height)",
         "generated": "browser default 16px / 24px",
-        "likely_owning_layer": "Automatic CSS :where(body) font-size:var(--text-m) and line-height tokens \u2014 not emitted into Fidelity document/CSS",
+        "likely_owning_layer": "Automatic CSS :where(body) font-size:var(--text-m) and line-height tokens — not emitted into Fidelity document/CSS",
         "proposed_narrow_correction_boundary": "Emit ACSS body/base typography cascade; do not invent Hero-sampled px"
       },
       {
@@ -1424,7 +1333,7 @@
         "viewport": "1200/991/478",
         "region": "cta_wrapper",
         "property": "gap",
-        "source": "~24\u201329px (var(--content-gap))",
+        "source": "~24–29px (var(--content-gap))",
         "generated": "normal",
         "likely_owning_layer": "Frames .fr-cta-links-alpha / ACSS .brxe-div content-gap",
         "proposed_narrow_correction_boundary": "Emit content-gap on CTA wrapper"
@@ -1456,5 +1365,51 @@
       "acss_plugin_version_observed": "4.0.0-rc-1",
       "fixture_source_version_reference": "4.0.1"
     }
+  },
+  "visual_comparison_historical_phase_5c_b_post_r2_final_rerun_blocked": {
+    "preserved": true,
+    "phase": "5C-B-final-rerun-after-P5C-B-R1-R2",
+    "result": "P5C-B FINAL RERUN BLOCKED — VISUAL FIDELITY DEFECT",
+    "structural_visual_result": "fail",
+    "typography_result": "pass",
+    "responsive_result": "pass",
+    "component_style_result": "fail",
+    "image_asset_fidelity_result": "unavailable",
+    "acceptance_decision": "blocked",
+    "visual_comparison_state": "blocked",
+    "remaining_material_non_asset_deviations": 4,
+    "blocking_defect_summary": {
+      "id": "P5C-B-FINAL-DEFECT-001",
+      "property": "content wrapper width / hero-relative horizontal geometry",
+      "viewport": "1200 and 991",
+      "hero_relative_delta_1200_dx": 177.08,
+      "hero_relative_delta_991_dx": 94.02,
+      "classification": "material_generated_deviation",
+      "resolved_by": "PR #20 / P5C-B-R3 Bricks Theme Styles container width → layout.viewport.max → width:1366px; max-width:100%; margin-inline:auto"
+    },
+    "source_capture_hashes": {
+      "1200": "f8a83b916b4cb1b846a9acf48d2d2ce66092ba533b27a80dd3ba6e56b1d18c58",
+      "991": "94a5b9469711840bbb4feee7e43c6e7d5b8f3a2a307c513bab08954eea401e84",
+      "478": "c6077052a5eea19b8d55f886acefa607a26ce99476b7653eb03e5ba811d7a93c"
+    },
+    "generated_capture_hashes": {
+      "1200": "fb665be039eeb2d8bb9301d640d863aee7f00508f758a0a499299246c48c1b38",
+      "991": "e2cabe0ed39e08044c4253c5404fccb7a2433f26077e5d55bcb6c48d0833c4c3",
+      "478": "a59085929aea3f3b72f2d2c63abe504ed1b9b1182a2a995bec4259c3e0f809f3"
+    },
+    "note": "Compacted post-R2 final-rerun blocked evidence; full prior object was visual_comparison before post-R3 rerun. R1/R2 passed; blocked solely on container-width shrink-wrap."
+  },
+  "p5c_b_r3_correction_provenance": {
+    "pr": 20,
+    "branch": "fix/p5c-b-r3-bricks-container-width",
+    "reviewed_head": "4946a3366aeb4e59297e21a875e7a324239b7dc7",
+    "merge_sha": "77d8d11cb82b1ad8865cf8edde554e50572805aa",
+    "authority_chain": [
+      "DanBricks Theme Styles container.width = var(--content-width)",
+      "ACSS --content-width from layout.viewport.max / vp-max",
+      "TokenSet layout.viewport.max",
+      "generated width: 1366px; max-width: 100%; margin-left/right: auto"
+    ],
+    "not_generic_hardcoded_bricks_1100": true
   }
 }
