@@ -184,14 +184,24 @@ defmodule LiveFrames.Fidelity do
 
   defp attrs(%{semantic_type: "button"}, _), do: [{"type", "button"}]
 
-  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset),
-    do: [
+  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset) do
+    [
       {"data-lf-asset-status", "unresolved"},
-      {"data-lf-asset-id", asset["asset_id"]},
-      {"aria-label", "Unresolved fidelity image placeholder"}
+      {"data-lf-asset-id", asset["asset_id"]}
     ]
+    |> maybe_add_unresolved_asset_label(asset["alt"])
+  end
 
   defp attrs(_, _), do: []
+
+  defp maybe_add_unresolved_asset_label(attrs, alt) when is_binary(alt) do
+    case String.trim(alt) do
+      "" -> attrs
+      trimmed -> attrs ++ [{"aria-label", trimmed}]
+    end
+  end
+
+  defp maybe_add_unresolved_asset_label(attrs, _), do: attrs
 
   defp fidelity_class(id), do: "lf-fidelity-" <> String.replace(id, "_", "-")
 
@@ -554,6 +564,7 @@ defmodule LiveFrames.Fidelity do
         {%{
            "status" => "unresolved",
            "asset_id" => asset.asset_id,
+           "alt" => asset.alt,
            "attachment_id" => asset.metadata["attachment_id"],
            "filename" => asset.metadata["filename"]
          },
