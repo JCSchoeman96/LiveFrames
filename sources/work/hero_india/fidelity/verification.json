@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "verification_scope": "phase_5c_c_hero_accessibility_runtime_rerun_after_a11y01",
+  "verification_scope": "phase_5c_d_final_acceptance",
   "input_ir_sha256": "7dd619e95ecccd7f3631f1bc494c56462a1739ad772901211011e6e693f613ab",
   "token_set_version": "1.0.0",
   "breakpoint_authority_sha256": "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8",
@@ -416,9 +416,10 @@
     "HISTORICAL (Phase 5C-B pre-R1, superseded by PR #16): blocked on missing content margin-top:400px and heading typography under-serialization.",
     "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18): blocked on body typography / CTA / align-items / primary OKLCH / font-family review items addressed in R2.",
     "HISTORICAL (Phase 5C-B final rerun after R1+R2, superseded by PR #20 / this post-R3 rerun): blocked on missing Bricks container width shrink-wrap under align-items:center.",
-    "CURRENT (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 accepted as unavailable source asset under owner decision (image_asset_fidelity unavailable, redistribution unknown, no fabricated replacement); accessibility not started; Master Phase 5 remains open.",
+    "HISTORICAL (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 accepted as unavailable source asset under owner decision (image_asset_fidelity unavailable, redistribution unknown, no fabricated replacement); accessibility was not started at that point; Master Phase 5 remained open.",
     "HISTORICAL (Phase 5C-C pre-A11Y-01, PR #22): accessibility gate blocked on decorative unresolved-asset figure exposing implementation-noise accessible name; runtime observations were supporting evidence only; lifecycle remained visual_compared; Master Phase 5 remained open.",
-    "CURRENT (Phase 5C-C post-A11Y-01 rerun): accessibility and runtime gates pass; attachment 880 remains unavailable under the existing waiver; lifecycle ends at runtime_clean; Phase 5C-D remains pending this PR merge; Master Phase 5 remains open."
+    "HISTORICAL (Phase 5C-C post-A11Y-01 rerun): accessibility and runtime gates pass; attachment 880 remains unavailable under the existing waiver; lifecycle ended at runtime_clean before Phase 5C-D acceptance; Master Phase 5 remained open.",
+    "CURRENT (Phase 5C-D final acceptance): runtime_clean transitioned to accepted; Master Phase 5 is closed; attachment 880 remains unavailable under explicit owner acceptance; image_asset_fidelity is unavailable, redistribution is unknown, and full_visual_fidelity is not_claimed."
   ],
   "verification_lifecycle": [
     "generated",
@@ -427,12 +428,13 @@
     "browser_verified",
     "visual_compared",
     "accessibility_verified",
-    "runtime_clean"
+    "runtime_clean",
+    "accepted"
   ],
-  "verification_state": "runtime_clean",
-  "acceptance_decision": "pending_phase_5c_d",
+  "verification_state": "accepted",
+  "acceptance_decision": "accepted",
   "phase_5b_state": "closed",
-  "master_phase_5_state": "open",
+  "master_phase_5_state": "closed",
   "visual_comparison": {
     "comparison_performed": true,
     "phase": "5C-B-post-R3-final-rerun",
@@ -1717,5 +1719,87 @@
     "css_changed_during_rerun": false,
     "manifest_changed_during_rerun": false,
     "verification_artifact_only": true
+  },
+  "phase_5c_d": {
+    "phase": "5C-D",
+    "result": "accepted",
+    "starting_main_sha": "644abe650f2a48b70e9bb4ed4891630ba14f856b",
+    "pr_24_reviewed_head": "8c61367cb9e03ec017c4503cc05272d1ba759a19",
+    "pr_24_merge_sha": "644abe650f2a48b70e9bb4ed4891630ba14f856b",
+    "pr_24_merge_verified": true,
+    "previous_terminal_state": "runtime_clean",
+    "transition": "runtime_clean -> accepted",
+    "guard_results": {
+      "browser_console_errors": {
+        "value": 0,
+        "result": "pass",
+        "evidence": "phase_5c_c_post_a11y01_rerun.runtime.canonical_console_errors"
+      },
+      "liveview_runtime_errors": {
+        "phx_errors": 0,
+        "canonical_page_exceptions": 0,
+        "duplicate_liveview_bindings": 0,
+        "reconnect_loop": "absent",
+        "result": "pass",
+        "evidence": "phase_5c_c_post_a11y01_rerun.runtime"
+      },
+      "required_acceptance_evidence": {
+        "result": "pass",
+        "evidence": [
+          "source_visual_reference",
+          "visual_comparison",
+          "phase_5c_c_post_a11y01_rerun.accessibility",
+          "phase_5c_c_post_a11y01_rerun.runtime",
+          "phase_5c_c_post_a11y01_rerun.artifact_baseline"
+        ]
+      },
+      "unresolved_limitations": {
+        "result": "pass",
+        "status": "explicitly_accepted_under_project_authority",
+        "evidence": "owner_asset_limitation_authority"
+      }
+    },
+    "owner_asset_limitation_authority": {
+      "source_commit": "fac894a37b6fe805a9e58d8c69d4e58d0ae96aae",
+      "source_field": "visual_comparison.human_decision_required.decision",
+      "outcome": "OWNER_DECISION_RECORDED",
+      "decision": "Treat attachment 880 as an unavailable source asset for the Hero India tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, redistribution status = unknown, and no fabricated replacement.",
+      "attachment_880": {
+        "fidelity_state": "unavailable",
+        "never_resolved": true,
+        "waiver_granted": true,
+        "image_asset_fidelity": "unavailable",
+        "redistribution_status": "unknown",
+        "full_visual_fidelity": "not_claimed"
+      }
+    },
+    "master_phase_5_definition_of_done": {
+      "compiler": "pass",
+      "asset": "pass",
+      "browser": "pass",
+      "visual": "pass",
+      "accessibility": "pass",
+      "determinism": "pass",
+      "all_mandatory_gates": "pass",
+      "visual_tolerance_basis": "0 material non-asset deviations; attachment 880 limitation accepted under owner authority"
+    },
+    "verification_artifact_determinism": {
+      "result": "pass",
+      "method": "JSON parse plus repeated canonical jq serialization produced byte-identical output",
+      "scope": "current verification artifact"
+    },
+    "master_phase_5_transition": {
+      "from": "open",
+      "to": "closed"
+    },
+    "production_code_changed": false,
+    "generated_artifacts_changed": false,
+    "compiler_changed": false,
+    "design_ir_changed": false,
+    "token_set_changed": false,
+    "heex_changed": false,
+    "css_changed": false,
+    "manifest_changed": false,
+    "verification_artifact_only": false
   }
 }

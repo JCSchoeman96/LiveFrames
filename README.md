@@ -7,15 +7,16 @@ native componentization.
 
 ## Current status
 
-`Master Phase 5 = OPEN`
+`Master Phase 5 = CLOSED`
 
-P5-H0 and P5-H1 are complete. Phase 5B responsive generation and exact
-browser-boundary verification are complete, and Phase 5B is CLOSED. Phase 5C
-is the current and next slice for fidelity acceptance.
+P5-H0, P5-H1, and Phase 5B responsive generation and exact browser-boundary
+verification are complete. Phase 5C-D is accepted, and the verification
+lifecycle is `accepted`.
 
-Master Phase 5 remains OPEN. The Hero source asset remains `unresolved`.
-Visual comparison remains `not_started`, and accessibility remains
-`not_started`.
+The Hero source asset is `unavailable` under explicit owner acceptance.
+Visual comparison is complete, accessibility is verified, and runtime is
+clean. Image asset fidelity remains `unavailable`, redistribution remains
+`unknown`, and full visual fidelity is `not_claimed`.
 
 Completed foundations include:
 
@@ -46,10 +47,8 @@ source
 → later native componentization
 ```
 
-Remaining Phase 5 work is Phase 5C fidelity acceptance and later lifecycle
-hardening before Phase 6. Hero India is not yet visually, accessibly, or
-overall accepted because its source asset remains `unresolved` and visual
-comparison and accessibility remain `not_started`.
+Remaining Phase 5 work is P5-H2 lifecycle hardening. Hero India is accepted
+with the authorized unavailable-image limitation. Phase 6 is not authorized.
 
 ## Authority and navigation
 

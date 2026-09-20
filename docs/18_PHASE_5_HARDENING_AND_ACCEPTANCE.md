@@ -1,7 +1,8 @@
 # LiveFrames Phase 5 Hardening & Acceptance Plan
 
 **Document:** `docs/18_PHASE_5_HARDENING_AND_ACCEPTANCE.md`
-**Status:** Active Phase 5 execution authority
+**Status:** Phase 5 acceptance complete; this document remains the execution
+authority for the recorded gates and Phase 6 entry criteria
 **Scope:** Phase 5 hardening, responsive fidelity, acceptance, and Phase 6 entry criteria
 **Supersedes:** No existing architecture authority
 **Refines:** `docs/00_LIVEFRAMES_MASTER_SPEC.md` Phase 5 execution and acceptance
@@ -12,11 +13,15 @@
 * P5-H0 = complete
 * P5-H1 = complete
 * Phase 5B = complete and CLOSED
-* Phase 5C = current / next slice
-* Master Phase 5 = OPEN
-* Hero asset = `unresolved`
-* Visual comparison = `not_started`
-* Accessibility = `not_started`
+* Phase 5C = complete (5C-D accepted)
+* Master Phase 5 = CLOSED
+* Hero source asset = `unavailable` under explicit owner acceptance
+* Visual comparison = complete
+* Accessibility = verified
+* Runtime = clean
+* Verification lifecycle = `accepted`
+* P5-H2 = not started; authorized after this acceptance merges
+* Phase 6 = not authorized
 
 ---
 
@@ -228,7 +233,7 @@ Important cascade invariant:
 
 `tablet_portrait` MUST NOT be rewritten as an exclusive `479–991px` band.
 
-## 4.3 Phase 5C and later not yet proven
+## 4.3 Phase 5C complete; later work not yet proven
 
 The following remain incomplete:
 
@@ -236,14 +241,14 @@ The following remain incomplete:
 * [x] responsive fidelity CSS generation
 * [x] 4/4 responsive overrides resolved
 * [x] exact breakpoint boundary browser verification
-* [ ] Hero source asset resolved or truthfully declared unavailable
-* [ ] source visual reference established
-* [ ] desktop visual comparison
-* [ ] tablet visual comparison
-* [ ] mobile visual comparison
-* [ ] automated accessibility gate
-* [ ] runtime console-error gate
-* [ ] full Master Phase 5 acceptance
+* [x] Hero source asset truthfully declared unavailable under owner acceptance
+* [x] source visual reference established
+* [x] desktop visual comparison
+* [x] tablet visual comparison
+* [x] mobile visual comparison
+* [x] automated accessibility gate
+* [x] runtime console-error gate
+* [x] full Master Phase 5 acceptance
 * [ ] lifecycle hardening
 * [ ] native Hero componentization
 * [ ] semantic Tailwind bridge
@@ -1547,14 +1552,14 @@ Phase 5C must include accessibility as acceptance, not optional polish.
 
 Required minimum:
 
-* [ ] automated accessibility scan if existing tooling supports it
-* [ ] semantic heading structure check
-* [ ] interactive element semantics
-* [ ] keyboard accessibility where applicable
-* [ ] focus-visible behavior where applicable
-* [ ] accessible unresolved-asset placeholder if asset unresolved
-* [ ] no critical accessibility findings
-* [ ] findings captured in verification evidence
+* [x] automated accessibility scan if existing tooling supports it
+* [x] semantic heading structure check
+* [x] interactive element semantics
+* [x] keyboard accessibility where applicable
+* [x] focus-visible behavior where applicable
+* [x] accessible unresolved-asset placeholder if asset unresolved
+* [x] no critical accessibility findings
+* [x] findings captured in verification evidence
 
 Do not add a massive accessibility framework if a small existing tool can cover the gate.
 
@@ -1562,20 +1567,20 @@ Do not add a massive accessibility framework if a small existing tool can cover 
 
 # 50. Runtime Cleanliness Gate
 
-The Phase 5B browser run recorded clean canonical Hero runtime evidence. The
-broader `runtime_clean` lifecycle state remains owned by Phase 5C and is not
-advanced here.
+The Phase 5C browser rerun recorded clean canonical Hero runtime evidence. The
+final acceptance transition advances the lifecycle from `runtime_clean` to
+`accepted`.
 
 Required:
 
-* [ ] no browser console errors
-* [ ] no uncaught JS errors
-* [ ] no LiveView runtime errors
-* [ ] no missing required CSS assets
-* [ ] preview HTTP success
-* [ ] generated CSS loads
-* [ ] no polling
-* [ ] no unexpected network dependency
+* [x] no browser console errors
+* [x] no uncaught JS errors
+* [x] no LiveView runtime errors
+* [x] no missing required CSS assets
+* [x] preview HTTP success
+* [x] generated CSS loads
+* [x] no polling
+* [x] no unexpected network dependency
 
 ---
 
@@ -1639,7 +1644,7 @@ One of:
 
 or:
 
-* [ ] explicit authorized acceptance of unresolved image limitation
+* [x] explicit authorized acceptance of unresolved image limitation
 
 The agent cannot grant the second condition.
 
@@ -1651,23 +1656,23 @@ The agent cannot grant the second condition.
 * [x] tablet/mobile overlap verified
 * [x] route HTTP success
 * [x] CSS loaded
-* [ ] runtime errors zero
+* [x] runtime errors zero
 
 ## Visual
 
-* [ ] authoritative visual reference exists
-* [ ] desktop compared
-* [ ] tablet compared
-* [ ] mobile compared
-* [ ] tolerance accepted
-* [ ] differences documented
+* [x] authoritative visual reference exists
+* [x] desktop compared
+* [x] tablet compared
+* [x] mobile compared
+* [x] tolerance accepted under explicit owner limitation authority
+* [x] differences documented
 
 ## Accessibility
 
-* [ ] automated accessibility pass
-* [ ] semantic structure reviewed
-* [ ] interactions/focus reviewed as applicable
-* [ ] no critical violations
+* [x] automated accessibility pass
+* [x] semantic structure reviewed
+* [x] interactions/focus reviewed as applicable
+* [x] no critical violations
 
 ## Determinism
 
@@ -1803,14 +1808,14 @@ This is a bounded lifecycle correctness slice.
 
 Master Phase 6 MUST NOT start until:
 
-* [ ] Master Phase 5 accepted
-* [ ] P5-H0 completed or human governance decision explicitly recorded
-* [ ] P5-H1 completed
+* [x] Master Phase 5 accepted
+* [x] P5-H0 completed or human governance decision explicitly recorded
+* [x] P5-H1 completed
 * [ ] P5-H2 completed
-* [ ] source asset state understood
-* [ ] visual acceptance complete
-* [ ] accessibility gate complete
-* [ ] generated source behavior understood well enough to separate fidelity from native design
+* [x] source asset state understood
+* [x] visual acceptance complete
+* [x] accessibility gate complete
+* [x] generated source behavior understood well enough to separate fidelity from native design
 
 ---
 
@@ -2399,42 +2404,42 @@ Do not guess.
 ## Asset
 
 * [x] attachment 880 audited
-* [ ] actual asset resolved OR explicit unavailable
+* [x] explicit unavailable under owner acceptance
 * [ ] hash recorded if resolved
 * [x] provenance recorded
 * [x] no fabricated URI
 
 ## Phase 5C Browser
 
-* [ ] desktop verified
-* [ ] 992 verified
-* [ ] 991 verified
-* [ ] 990 verified
-* [ ] 479 verified
-* [ ] 478 verified
-* [ ] 477 verified
-* [ ] tablet active at mobile widths
-* [ ] CSS loaded
-* [ ] HTTP success
-* [ ] no console errors
+* [x] desktop verified
+* [x] 992 verified
+* [x] 991 verified
+* [x] 990 verified
+* [x] 479 verified
+* [x] 478 verified
+* [x] 477 verified
+* [x] tablet active at mobile widths
+* [x] CSS loaded
+* [x] HTTP success
+* [x] no console errors
 
 ## Phase 5C Visual
 
-* [ ] authoritative source reference
-* [ ] desktop source screenshot/reference
-* [ ] tablet source screenshot/reference
-* [ ] mobile source screenshot/reference
-* [ ] visual comparison complete
-* [ ] differences documented
-* [ ] tolerance accepted
+* [x] authoritative source reference
+* [x] desktop source screenshot/reference
+* [x] tablet source screenshot/reference
+* [x] mobile source screenshot/reference
+* [x] visual comparison complete
+* [x] differences documented
+* [x] tolerance accepted under explicit owner limitation authority
 
 ## Accessibility
 
-* [ ] automated accessibility
-* [ ] semantic headings
-* [ ] button semantics
-* [ ] keyboard/focus
-* [ ] no critical violations
+* [x] automated accessibility
+* [x] semantic headings
+* [x] button semantics
+* [x] keyboard/focus
+* [x] no critical violations
 
 ## Verification
 
@@ -2455,11 +2460,11 @@ Do not guess.
 
 ## Phase 6 entry
 
-* [ ] Master Phase 5 CLOSED
-* [ ] H0 resolved
-* [ ] H1 resolved
+* [x] Master Phase 5 CLOSED
+* [x] H0 resolved
+* [x] H1 resolved
 * [ ] H2 resolved
-* [ ] no unresolved acceptance blocker
+* [x] no unresolved acceptance blocker
 * [ ] native componentization explicitly authorized
 
 ---
@@ -2549,13 +2554,8 @@ Only then should component catalogue breadth accelerate.
 
 ---
 
-# 84. Next Execution Action
+# 84. Current post-acceptance state
 
-After this document is reviewed and accepted:
-
-1. synchronize `main` and confirm the reviewed breakpoint-authority artifact remains present;
-2. execute the plan one narrow slice at a time;
-3. begin with P5-H0;
-4. do not begin Phase 5B implementation until P5-H0 and P5-H1 have passed.
-
-STOP.
+Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
+closes Master Phase 5. P5-H2 is authorized after this acceptance merges, but
+has not started. Phase 6 remains unauthorized.
