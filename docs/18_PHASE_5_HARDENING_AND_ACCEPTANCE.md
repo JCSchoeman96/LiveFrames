@@ -20,8 +20,8 @@ authority for the recorded gates and Phase 6 entry criteria
 * Accessibility = verified
 * Runtime = clean
 * Verification lifecycle = `accepted`
-* P5-H2 = not started; authorized after this acceptance merges
-* Phase 6 = not authorized
+* P5-H2 = complete (candidate PR; pending owner review/merge)
+* Phase 6 = not authorized; requires owner review/merge authorization after P5-H2
 
 ---
 
@@ -1776,17 +1776,17 @@ Do not scatter lifecycle truth across unrelated functions.
 
 # 57. P5-H2 Tests
 
-* [ ] happy path valid
-* [ ] invalid forward transition rejected
-* [ ] skipped transition rejected
-* [ ] completed terminal
-* [ ] rejected terminal
-* [ ] failed terminal
-* [ ] completed → rejected rejected
-* [ ] completed → failed rejected
-* [ ] rejected → failed rejected
-* [ ] failed → rejected rejected
-* [ ] diagnostics preserved appropriately
+* [x] happy path valid
+* [x] invalid forward transition rejected
+* [x] skipped transition rejected
+* [x] completed terminal
+* [x] rejected terminal
+* [x] failed terminal
+* [x] completed → rejected rejected
+* [x] completed → failed rejected
+* [x] rejected → failed rejected
+* [x] failed → rejected rejected
+* [x] diagnostics preserved appropriately
 
 ---
 
@@ -1811,7 +1811,7 @@ Master Phase 6 MUST NOT start until:
 * [x] Master Phase 5 accepted
 * [x] P5-H0 completed or human governance decision explicitly recorded
 * [x] P5-H1 completed
-* [ ] P5-H2 completed
+* [x] P5-H2 completed
 * [x] source asset state understood
 * [x] visual acceptance complete
 * [x] accessibility gate complete
@@ -2451,19 +2451,19 @@ Do not guess.
 
 ## Lifecycle
 
-* [ ] active states explicit
-* [ ] terminal states explicit
-* [ ] completed terminal
-* [ ] rejected terminal
-* [ ] failed terminal
-* [ ] invalid transitions tested
+* [x] active states explicit
+* [x] terminal states explicit
+* [x] completed terminal
+* [x] rejected terminal
+* [x] failed terminal
+* [x] invalid transitions tested
 
 ## Phase 6 entry
 
 * [x] Master Phase 5 CLOSED
 * [x] H0 resolved
 * [x] H1 resolved
-* [ ] H2 resolved
+* [x] H2 resolved
 * [x] no unresolved acceptance blocker
 * [ ] native componentization explicitly authorized
 
@@ -2557,5 +2557,6 @@ Only then should component catalogue breadth accelerate.
 # 84. Current post-acceptance state
 
 Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
-closes Master Phase 5. P5-H2 is authorized after this acceptance merges, but
-has not started. Phase 6 remains unauthorized.
+closes Master Phase 5. P5-H2 lifecycle hardening is complete in the candidate
+PR pending owner review/merge. Phase 6 implementation remains unauthorized until
+owner review/merge authorization.

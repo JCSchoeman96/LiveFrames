@@ -47,8 +47,9 @@ source
 → later native componentization
 ```
 
-Remaining Phase 5 work is P5-H2 lifecycle hardening. Hero India is accepted
-with the authorized unavailable-image limitation. Phase 6 is not authorized.
+Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete
+in the candidate PR pending owner review/merge. Hero India is accepted with the
+authorized unavailable-image limitation. Phase 6 is not authorized.
 
 ## Authority and navigation
 
