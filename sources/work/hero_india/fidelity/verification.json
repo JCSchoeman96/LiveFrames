@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "verification_scope": "phase_5c_b_hero_visual_fidelity_final_rerun_after_r1_r2_r3",
-  "input_ir_sha256": "e502427cbb0ee6b029fdde6b9b1e50033e25680331faf3b3ee89bf2228989b0c",
+  "verification_scope": "phase_5c_c_hero_accessibility_runtime_rerun_after_a11y01",
+  "input_ir_sha256": "7dd619e95ecccd7f3631f1bc494c56462a1739ad772901211011e6e693f613ab",
   "token_set_version": "1.0.0",
   "breakpoint_authority_sha256": "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8",
   "breakpoint_authority": {
@@ -10,9 +10,9 @@
     "tablet_portrait": "@media (max-width: 991px)",
     "mobile_portrait": "@media (max-width: 478px)"
   },
-  "generated_heex_sha256": "15dbaa9b6250c73094ad0226f0b6a9b747c12a894cce355b31145a37c78e87c7",
+  "generated_heex_sha256": "b86cc93f0cb10544f74adfdecada887896ecd0f102c0a86cc59ccaa13f420825",
   "generated_css_sha256": "8f75e577edb2cead6dc5a595963a3f06f47eda6d0002b10a34215cb18baba1dc",
-  "manifest_sha256": "ae0a9966ecb44d1fc54e16ed4f3d0c50ec30eab8c914b0e082b0b5c1a37df91a",
+  "manifest_sha256": "057cc511be78dde993d26c13dbac94e6b5156ecf319da4b46938bbf43d1bf5ac",
   "manifest_responsive_truth": {
     "responsive_entries_total": 4,
     "responsive_entries_resolved": 4,
@@ -25,7 +25,7 @@
   "browser_engine": {
     "name": "Google Chrome",
     "executable": "/usr/bin/google-chrome",
-    "version": "152.0.7977.82"
+    "version": "153.0.8010.36"
   },
   "viewport_mechanism": "Chrome DevTools Protocol Emulation.setDeviceMetricsOverride",
   "stable_viewport_height": 800,
@@ -406,8 +406,8 @@
   },
   "source_visual_reference_state": "accepted_reference",
   "visual_comparison_state": "visual_compared",
-  "accessibility_state": "blocked",
-  "runtime_state": "not_started",
+  "accessibility_state": "accessibility_verified",
+  "runtime_state": "runtime_clean",
   "known_limitations": [
     "Hero source image remains unresolved and was not fetched or fabricated.",
     "Favicon 404 and development live-reload handshake noise are outside the canonical Hero runtime result.",
@@ -417,17 +417,20 @@
     "HISTORICAL (Phase 5C-B rerun after R1, superseded by PR #18): blocked on body typography / CTA / align-items / primary OKLCH / font-family review items addressed in R2.",
     "HISTORICAL (Phase 5C-B final rerun after R1+R2, superseded by PR #20 / this post-R3 rerun): blocked on missing Bricks container width shrink-wrap under align-items:center.",
     "CURRENT (Phase 5C-B post-R3 final rerun): all verifiable non-asset component fidelity domains pass; attachment 880 accepted as unavailable source asset under owner decision (image_asset_fidelity unavailable, redistribution unknown, no fabricated replacement); accessibility not started; Master Phase 5 remains open.",
-    "CURRENT (Phase 5C-C): accessibility gate blocked on decorative unresolved-asset figure exposing implementation-noise accessible name; runtime observations collected as supporting evidence only; lifecycle remains visual_compared; Master Phase 5 remains open."
+    "HISTORICAL (Phase 5C-C pre-A11Y-01, PR #22): accessibility gate blocked on decorative unresolved-asset figure exposing implementation-noise accessible name; runtime observations were supporting evidence only; lifecycle remained visual_compared; Master Phase 5 remained open.",
+    "CURRENT (Phase 5C-C post-A11Y-01 rerun): accessibility and runtime gates pass; attachment 880 remains unavailable under the existing waiver; lifecycle ends at runtime_clean; Phase 5C-D remains pending this PR merge; Master Phase 5 remains open."
   ],
   "verification_lifecycle": [
     "generated",
     "compiled",
     "rendered",
     "browser_verified",
-    "visual_compared"
+    "visual_compared",
+    "accessibility_verified",
+    "runtime_clean"
   ],
-  "verification_state": "visual_compared",
-  "acceptance_decision": "blocked",
+  "verification_state": "runtime_clean",
+  "acceptance_decision": "pending_phase_5c_d",
   "phase_5b_state": "closed",
   "master_phase_5_state": "open",
   "visual_comparison": {
@@ -1559,5 +1562,160 @@
     "heex_changed": false,
     "css_changed": false,
     "manifest_changed": false
+  },
+  "phase_5c_c_post_a11y01_rerun": {
+    "phase": "5C-C",
+    "attempt": "post_a11y01_rerun",
+    "historical_blocked_attempt": "phase_5c_c",
+    "historical_blocked_attempt_preserved": true,
+    "starting_main_sha": "8a31d5ec8469518cd476efef8eddc789b53b6eb2",
+    "pr_23_merge_sha": "8a31d5ec8469518cd476efef8eddc789b53b6eb2",
+    "pr_23_merge_verified": true,
+    "branch": "verification/phase-5c-c-accessibility-runtime-rerun",
+    "browser": {
+      "executable": "/usr/bin/google-chrome",
+      "version": "153.0.8010.36",
+      "protocol": "Chrome DevTools Protocol",
+      "viewport_mechanism": "Emulation.setDeviceMetricsOverride",
+      "viewports": [1200, 991, 478],
+      "height": 800,
+      "isolated_target_per_viewport": true
+    },
+    "artifact_baseline": {
+      "hero_heex_sha256": "b86cc93f0cb10544f74adfdecada887896ecd0f102c0a86cc59ccaa13f420825",
+      "hero_css_sha256": "8f75e577edb2cead6dc5a595963a3f06f47eda6d0002b10a34215cb18baba1dc",
+      "manifest_sha256": "057cc511be78dde993d26c13dbac94e6b5156ecf319da4b46938bbf43d1bf5ac",
+      "manifest_generated_heex_sha256_matches": true,
+      "manifest_generated_css_sha256_matches": true,
+      "deterministic_match": true,
+      "artifact_drift": "none"
+    },
+    "accessibility": {
+      "gate_lifecycle": [
+        "automated_checked",
+        "semantics_verified",
+        "keyboard_verified",
+        "focus_verified",
+        "asset_accessibility_verified",
+        "accessibility_verified"
+      ],
+      "ax_collection": {
+        "1200": {"collected": true, "node_count": 25, "hero_present": true},
+        "991": {"collected": true, "node_count": 25, "hero_present": true},
+        "478": {"collected": true, "node_count": 26, "hero_present": true}
+      },
+      "hero": {"present": true, "role": "generic", "name": "", "hidden": false},
+      "heading": {
+        "element": "h1.fr-hero-india__heading",
+        "role": "heading",
+        "name": "Hero heading",
+        "level": 1,
+        "result": "pass"
+      },
+      "buttons": {
+        "primary": {"native": true, "role": "button", "name": "Call to action", "focusable": true, "positive_tabindex": false, "disabled": false},
+        "outline": {"native": true, "role": "button", "name": "Call to action", "focusable": true, "positive_tabindex": false, "disabled": false}
+      },
+      "dom_safety": {
+        "positive_tabindex": {"1200": 0, "991": 0, "478": 0},
+        "hidden_focusable": {"1200": 0, "991": 0, "478": 0},
+        "duplicate_hero_ids": {"1200": 0, "991": 0, "478": 0},
+        "unexpected_event_handler_attrs": {"1200": 0, "991": 0, "478": 0},
+        "attribute_injection_regression": "absent"
+      },
+      "unresolved_asset_880": {
+        "dom": {
+          "data-lf-asset-status": "unresolved",
+          "data-lf-asset-id": "asset_000001",
+          "aria-label": null,
+          "aria-hidden": null
+        },
+        "ax_role": "figure",
+        "ax_name": "",
+        "ax_name_empty": true,
+        "fabricated_placeholder_name_present": false,
+        "attachment_id_or_filename_exposed": false,
+        "unnamed_figure_accepted_under_alt_nil_rule": true,
+        "p5c_c_a11y_defect_001": "resolved"
+      },
+      "keyboard": {
+        "isolated_tab_order": {
+          "1200": ["primary", "outline"],
+          "991": ["primary", "outline"],
+          "478": ["primary", "outline"]
+        },
+        "shift_tab": "outline_to_primary_pass",
+        "focus_trap": "absent",
+        "hidden_or_unexpected_focus_target": "absent"
+      },
+      "focus_visible": {
+        "primary": {"outline_width": "1px", "outline_style": "auto", "outline_color": "oklch(0.85 0.154 90.78)", "clipped": false, "perceivable": true},
+        "outline": {"outline_width": "1px", "outline_style": "auto", "outline_color": "oklch(0.65 0.153 90.7741)", "clipped": false, "perceivable": true}
+      },
+      "contrast_bounded": "pass_bounded_no_full_wcag_audit",
+      "material_defects": 0,
+      "state": "accessibility_verified"
+    },
+    "runtime": {
+      "gate_lifecycle": [
+        "route_verified",
+        "resources_verified",
+        "console_verified",
+        "liveview_verified",
+        "network_verified",
+        "runtime_clean"
+      ],
+      "route": {"path": "/liveframes/fidelity/hero", "http_status": 200, "hero_dom_present": true},
+      "resources": {
+        "hero_css": {"path": "/assets/fidelity/hero.css", "http_status": 200, "in_document_style_sheets": true},
+        "app_js": {"path": "/assets/js/app.js", "http_status": 200, "bootstrap_count": 1, "performance_entries": 1},
+        "responsive_media_rules": ["(max-width: 991px)", "(max-width: 478px)"],
+        "required_failures": 0
+      },
+      "exceptions": 0,
+      "canonical_console_errors": 0,
+      "phx_errors": 0,
+      "duplicate_liveview_bindings": 0,
+      "development_only_noise": [
+        {"kind": "favicon_404", "observed": true, "classification": "known_dev_only_noise"},
+        {"kind": "dev_live_reload_websocket_404", "observed": true, "endpoint": "/phoenix/live_reload/socket/websocket", "classification": "known_dev_only_noise_equivalent_to_prior_observation"}
+      ],
+      "liveview": {
+        "main_roots": 1,
+        "websocket_count": 1,
+        "handshake_status": 101,
+        "connected": true,
+        "reconnect_loop": "absent"
+      },
+      "network": {
+        "polling": "absent",
+        "observation_seconds": 5,
+        "request_origins": ["http://127.0.0.1:4001", "ws://127.0.0.1:4001"],
+        "external_origins": [],
+        "unexpected_external_dependencies": 0
+      },
+      "state": "runtime_clean"
+    },
+    "attachment_880": {
+      "fidelity_state": "unavailable",
+      "never_resolved": true,
+      "waiver_granted": true,
+      "image_asset_fidelity": "unavailable",
+      "redistribution_status": "unknown",
+      "full_visual_fidelity": "not_claimed"
+    },
+    "lifecycle_terminal": "runtime_clean",
+    "acceptance_decision": "pending_phase_5c_d",
+    "acceptance_decision_note": "No prior pending_phase_5c_d value existed; this narrow marker means runtime_clean is recorded and Phase 5C-D remains gated on this PR merge.",
+    "phase_5c_d_authorized": false,
+    "phase_5c_d_authorized_after": "this PR merges",
+    "master_phase_5_state": "open",
+    "compiler_changed": false,
+    "design_ir_changed": false,
+    "token_set_changed": false,
+    "heex_changed_during_rerun": false,
+    "css_changed_during_rerun": false,
+    "manifest_changed_during_rerun": false,
+    "verification_artifact_only": true
   }
 }
