@@ -184,14 +184,24 @@ defmodule LiveFrames.Fidelity do
 
   defp attrs(%{semantic_type: "button"}, _), do: [{"type", "button"}]
 
-  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset),
-    do: [
+  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset) do
+    [
       {"data-lf-asset-status", "unresolved"},
-      {"data-lf-asset-id", asset["asset_id"]},
-      {"aria-label", "Unresolved fidelity image placeholder"}
+      {"data-lf-asset-id", asset["asset_id"]}
     ]
+    |> maybe_add_unresolved_asset_label(asset["alt"])
+  end
 
   defp attrs(_, _), do: []
+
+  defp maybe_add_unresolved_asset_label(attrs, alt) when is_binary(alt) do
+    case String.trim(alt) do
+      "" -> attrs
+      trimmed -> attrs ++ [{"aria-label", trimmed}]
+    end
+  end
+
+  defp maybe_add_unresolved_asset_label(attrs, _), do: attrs
 
   defp fidelity_class(id), do: "lf-fidelity-" <> String.replace(id, "_", "-")
 
@@ -554,6 +564,7 @@ defmodule LiveFrames.Fidelity do
         {%{
            "status" => "unresolved",
            "asset_id" => asset.asset_id,
+           "alt" => asset.alt,
            "attachment_id" => asset.metadata["attachment_id"],
            "filename" => asset.metadata["filename"]
          },
@@ -823,10 +834,12 @@ defmodule LiveFrames.Fidelity do
         Enum.map_join(nodes, "\n", &render_node/1) <> "\n"
 
   defp render_node(node) do
-    attrs = Enum.map_join(node.attrs, " ", fn {key, value} -> "#{key}=#{inspect(value)}" end)
+    attrs = Enum.map_join(node.attrs, " ", &serialize_html_attr/1)
+
+    class_attr = serialize_html_attr({"class", String.trim(node.class)})
 
     attrs =
-      "class=#{inspect(String.trim(node.class))}" <> if(attrs == "", do: "", else: " " <> attrs)
+      class_attr <> if(attrs == "", do: "", else: " " <> attrs)
 
     content = if is_binary(node.content), do: "<%= #{inspect(node.content)} %>", else: ""
     open = "<#{node.element} #{attrs}>"
@@ -837,6 +850,20 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
+
+  defp serialize_html_attr({key, value}) when is_binary(value) do
+    "#{key}=\"#{html_attr_escape(value)}\""
+  end
+
+  defp serialize_html_attr({key, value}), do: "#{key}=#{inspect(value)}"
+
+  defp html_attr_escape(value) do
+    value
+    |> String.replace("&", "&amp;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+  end
 
   defp render_css(nodes) do
     flat = flat_nodes(nodes)
