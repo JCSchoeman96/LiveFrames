@@ -1761,7 +1761,7 @@
     },
     "owner_asset_limitation_authority": {
       "source_commit": "fac894a37b6fe805a9e58d8c69d4e58d0ae96aae",
-      "source_field": "asset_evidence.human_decision_required",
+      "source_field": "visual_comparison.human_decision_required.decision",
       "outcome": "OWNER_DECISION_RECORDED",
       "decision": "Treat attachment 880 as an unavailable source asset for the Hero India tracer bullet, allowing Phase 5 to proceed without claiming source-image reproduction, while preserving image_asset_fidelity = unavailable, redistribution status = unknown, and no fabricated replacement.",
       "attachment_880": {
@@ -1800,6 +1800,6 @@
     "heex_changed": false,
     "css_changed": false,
     "manifest_changed": false,
-    "verification_artifact_only": true
+    "verification_artifact_only": false
   }
 }
