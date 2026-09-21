@@ -20,8 +20,9 @@ authority for the recorded gates and Phase 6 entry criteria
 * Accessibility = verified
 * Runtime = clean
 * Verification lifecycle = `accepted`
-* P5-H2 = complete (candidate PR; pending owner review/merge)
-* Phase 6 = not authorized; requires owner review/merge authorization after P5-H2
+* P5-H2 = complete
+* Phase 6 = not started
+* native componentization = not explicitly authorized
 
 ---
 
@@ -2557,6 +2558,5 @@ Only then should component catalogue breadth accelerate.
 # 84. Current post-acceptance state
 
 Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
-closes Master Phase 5. P5-H2 lifecycle hardening is complete in the candidate
-PR pending owner review/merge. Phase 6 implementation remains unauthorized until
-owner review/merge authorization.
+closes Master Phase 5. P5-H2 Bricks Result lifecycle hardening is complete.
+Phase 6 has not started and requires explicit owner authorization.
