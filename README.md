@@ -50,8 +50,9 @@ source
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.
 Hero India is accepted with the authorized unavailable-image limitation.
 Phase 6 is authorized. The P6.1 native Hero API is approved. The P6.2 native
-Hero implementation is present. P6.3 and later work are not authorized. Styling
-and Storybook work have not started.
+Hero implementation is present. P6.3 semantic verification is complete. P6.4
+styling and later work are not authorized. Styling and Storybook work have not
+started.
 
 ## Authority and navigation
 
