@@ -23,9 +23,11 @@ authority for the recorded gates and Phase 6 entry criteria
 * P5-H2 = complete
 * Phase 6 = authorized
 * P6.1 = `api_approved`
-* P6.2 = authorized but not started
+* P6.2 = implemented
 * P6.3+ = not authorized
-* native Hero implementation = not started
+* native Hero implementation = present
+* semantic verification = not complete
+* styling bridge = not complete
 
 ---
 
@@ -2562,6 +2564,6 @@ Only then should component catalogue breadth accelerate.
 
 Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
 closes Master Phase 5. P5-H2 Bricks Result lifecycle hardening is complete.
-Phase 6 is authorized. P6.1 is `api_approved`. P6.2 is authorized but not
-started and may begin only from a clean `main` containing the approved P6.1
-authority. P6.3 and later Phase 6 work are not authorized.
+Phase 6 is authorized. P6.1 is `api_approved`. P6.2 native Hero
+implementation is present. Semantic verification and the styling bridge are
+not complete. P6.3 and later Phase 6 work are not authorized.
