@@ -82,7 +82,8 @@ defmodule LiveFrames.Components.Sections.Hero do
     raise ArgumentError, "image_alt is required when image_src is provided"
   end
 
-  defp validate_slot_cardinality!(entries, _name) when length(entries) <= 1, do: :ok
+  defp validate_slot_cardinality!([], _name), do: :ok
+  defp validate_slot_cardinality!([_single], _name), do: :ok
 
   defp validate_slot_cardinality!(_entries, name) do
     raise ArgumentError, "#{name} accepts at most one slot entry"
