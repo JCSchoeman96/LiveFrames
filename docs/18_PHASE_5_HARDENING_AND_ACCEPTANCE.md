@@ -6,7 +6,7 @@ authority for the recorded gates and Phase 6 entry criteria
 **Scope:** Phase 5 hardening, responsive fidelity, acceptance, and Phase 6 entry criteria
 **Supersedes:** No existing architecture authority
 **Refines:** `docs/00_LIVEFRAMES_MASTER_SPEC.md` Phase 5 execution and acceptance
-**Does not authorize:** repository visibility changes, deletion of published history, licensing conclusions, Phase 6 implementation, or catalogue expansion
+**Does not authorize:** repository visibility changes, deletion of published history, licensing conclusions, P6.2+ implementation, or catalogue expansion. P6.1 is authorized only for the API proposal recorded in `docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md`.
 
 **Current status:**
 
@@ -21,8 +21,10 @@ authority for the recorded gates and Phase 6 entry criteria
 * Runtime = clean
 * Verification lifecycle = `accepted`
 * P5-H2 = complete
-* Phase 6 = not started
-* native componentization = not explicitly authorized
+* Phase 6 = authorized for P6.1 API proposal
+* P6.1 = API proposal complete; owner review pending
+* P6.2+ = not started and not authorized
+* native Hero implementation = not started
 
 ---
 
@@ -234,7 +236,7 @@ Important cascade invariant:
 
 `tablet_portrait` MUST NOT be rewritten as an exclusive `479–991px` band.
 
-## 4.3 Phase 5C complete; later work not yet proven
+## 4.3 Phase 5C complete; Phase 6.1 proposal authorized
 
 The following remain incomplete:
 
@@ -250,7 +252,7 @@ The following remain incomplete:
 * [x] automated accessibility gate
 * [x] runtime console-error gate
 * [x] full Master Phase 5 acceptance
-* [ ] lifecycle hardening
+* [x] lifecycle hardening
 * [ ] native Hero componentization
 * [ ] semantic Tailwind bridge
 * [ ] native Storybook Hero
@@ -2466,7 +2468,7 @@ Do not guess.
 * [x] H1 resolved
 * [x] H2 resolved
 * [x] no unresolved acceptance blocker
-* [ ] native componentization explicitly authorized
+* [x] native componentization explicitly authorized for P6.1 API proposal
 
 ---
 
@@ -2559,4 +2561,7 @@ Only then should component catalogue breadth accelerate.
 
 Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
 closes Master Phase 5. P5-H2 Bricks Result lifecycle hardening is complete.
-Phase 6 has not started and requires explicit owner authorization.
+Phase 6 is authorized for the P6.1 native Hero component API proposal.
+P6.1 is complete as a proposal and awaits owner API review. P6.2
+implementation and all later Phase 6 work have not started and are not
+authorized.
