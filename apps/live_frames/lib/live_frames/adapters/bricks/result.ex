@@ -5,7 +5,7 @@ defmodule LiveFrames.Adapters.Bricks.Result do
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
 
-  @states [
+  @active_states [
     :received,
     :recognized,
     :validated,
@@ -13,11 +13,14 @@ defmodule LiveFrames.Adapters.Bricks.Result do
     :tree_built,
     :dependencies_extracted,
     :rendered,
-    :verified,
-    :completed
+    :verified
   ]
 
-  @next_states %{
+  @terminal_states [:completed, :rejected, :failed]
+
+  @states @active_states ++ @terminal_states
+
+  @happy_next %{
     received: :recognized,
     recognized: :validated,
     validated: :resolved,
@@ -27,6 +30,14 @@ defmodule LiveFrames.Adapters.Bricks.Result do
     rendered: :verified,
     verified: :completed
   }
+
+  @exceptional_targets [:rejected, :failed]
+
+  @allowed_transitions Enum.reduce(@active_states, %{}, fn state, acc ->
+                         happy = Map.fetch!(@happy_next, state)
+                         Map.put(acc, state, [happy | @exceptional_targets])
+                       end)
+                       |> Map.merge(%{completed: [], rejected: [], failed: []})
 
   @type t :: %__MODULE__{
           status: atom(),
@@ -57,29 +68,87 @@ defmodule LiveFrames.Adapters.Bricks.Result do
   @spec states() :: [atom()]
   def states, do: @states
 
+  @spec active_states() :: [atom()]
+  def active_states, do: @active_states
+
+  @spec terminal_states() :: [atom()]
+  def terminal_states, do: @terminal_states
+
+  @spec allowed_transitions() :: %{atom() => [atom()]}
+  def allowed_transitions, do: @allowed_transitions
+
+  @spec terminal?(t() | atom()) :: boolean()
+  def terminal?(%__MODULE__{status: status}), do: terminal?(status)
+
+  def terminal?(state) when state in @terminal_states, do: true
+  def terminal?(state) when state in @active_states, do: false
+  def terminal?(_), do: false
+
   @spec new(keyword()) :: t()
-  def new(attrs \\ []) when is_list(attrs), do: struct(__MODULE__, attrs)
+  def new(attrs \\ []) when is_list(attrs) do
+    if Keyword.has_key?(attrs, :status) do
+      raise ArgumentError, "Result.new/1 does not accept lifecycle-owned field :status"
+    end
+
+    if Keyword.has_key?(attrs, :lifecycle) do
+      raise ArgumentError, "Result.new/1 does not accept lifecycle-owned field :lifecycle"
+    end
+
+    struct(__MODULE__, attrs)
+  end
 
   @spec advance(t(), atom()) :: t()
   def advance(%__MODULE__{status: status} = result, next) when next in @states do
-    case Map.get(@next_states, status) do
+    if terminal?(status) do
+      raise transition_error(status, next)
+    end
+
+    case Map.get(@happy_next, status) do
       ^next -> %{result | status: next, lifecycle: result.lifecycle ++ [next]}
-      _ -> raise ArgumentError, "invalid Bricks lifecycle transition from #{status} to #{next}"
+      _ -> raise transition_error(status, next)
     end
   end
 
-  def advance(_result, next),
-    do: raise(ArgumentError, "invalid Bricks lifecycle state: #{inspect(next)}")
+  def advance(%__MODULE__{status: status}, next),
+    do: raise(transition_error(status, next))
 
   @spec reject(t(), [Diagnostic.t()]) :: t()
-  def reject(%__MODULE__{} = result, diagnostics),
-    do: %{result | status: :rejected, diagnostics: result.diagnostics ++ diagnostics}
+  def reject(%__MODULE__{} = result, diagnostics) do
+    ensure_active_transition_source!(result.status, :rejected)
+
+    %{
+      result
+      | status: :rejected,
+        lifecycle: result.lifecycle ++ [:rejected],
+        diagnostics: result.diagnostics ++ diagnostics
+    }
+  end
 
   @spec fail(t(), [Diagnostic.t()]) :: t()
-  def fail(%__MODULE__{} = result, diagnostics),
-    do: %{result | status: :failed, diagnostics: result.diagnostics ++ diagnostics}
+  def fail(%__MODULE__{} = result, diagnostics) do
+    ensure_active_transition_source!(result.status, :failed)
+
+    %{
+      result
+      | status: :failed,
+        lifecycle: result.lifecycle ++ [:failed],
+        diagnostics: result.diagnostics ++ diagnostics
+    }
+  end
 
   @spec add_diagnostics(t(), [Diagnostic.t()]) :: t()
   def add_diagnostics(%__MODULE__{} = result, diagnostics),
     do: %{result | diagnostics: result.diagnostics ++ diagnostics}
+
+  defp ensure_active_transition_source!(status, target) do
+    if status in @active_states do
+      :ok
+    else
+      raise transition_error(status, target)
+    end
+  end
+
+  defp transition_error(from, to) do
+    ArgumentError.exception("invalid Bricks lifecycle transition from #{from} to #{to}")
+  end
 end
