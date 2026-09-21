@@ -49,20 +49,41 @@ or requirement, and an accessibility consequence where applicable. Named slots
 are appropriate when a small number of stable semantic roles is evidenced;
 repeatable or variant-heavy slot DSLs are not a default.
 
+For a singular named slot, the component validates slot-entry cardinality
+before rendering. A slot with cardinality zero or one accepts no more than one
+entry. The component validates entries, not arbitrary nested descendants in
+consumer HEEx. Each consumer-supplied action role must provide one appropriate
+interactive root and a meaningful accessible name.
+
+Declarative attr values can provide compile-time warnings for literal inputs,
+but dynamic invariants still require deterministic runtime guards. Invalid
+values raise `ArgumentError`; components do not coerce, silently fall back, or
+infer missing accessibility information.
+
 `id`, `class`, and standard global attributes follow Phoenix conventions. The
 component may merge consumer classes with its internal semantic classes, while
-internal classes remain implementation details. Raw inline `style` is not the
-primary extension mechanism. Attributes are escaped by HEEx and are never
-treated as raw source markup.
+internal classes remain implementation details. `attr :rest, :global` is the
+preferred global-attribute contract. Explicit `id` and `class` are not also
+controlled through `rest`, and callers do not provide a second `rest={...}` map
+API. Raw inline `style` is not the primary extension mechanism.
+
+Consumer global attrs can alter root semantics, focus behavior, visibility,
+ARIA, data attributes, LiveView bindings, and appearance. Those effects are
+consumer-owned and outside the component-owned accessibility and isolated
+visual guarantees. HEEx escaping remains authoritative, and ordinary content
+never uses `raw/1`.
 
 ## Accessibility
 
 Components provide deterministic native semantics, valid heading structure,
-visible keyboard focus where an interactive surface is styled, and no
-positive `tabindex` or hidden focus target. Consumers choose the document
-heading hierarchy, provide meaningful action names and markup, and make an
-explicit informative-versus-decorative image decision. A component does not
-claim complete WCAG conformance from isolated markup.
+visible keyboard focus where an interactive surface is styled, and
+LiveFrames-owned markup that does not itself introduce positive `tabindex`,
+hidden focus targets, inappropriate ARIA replacing native semantics, or
+component-owned root event behavior. Consumers choose the document heading
+hierarchy, provide meaningful action names and markup, and make an explicit
+informative-versus-decorative image decision. Consumer global attrs remain
+consumer-owned. A component does not claim complete WCAG conformance from
+isolated markup.
 
 ## Tokens and styling
 

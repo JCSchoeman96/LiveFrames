@@ -1,11 +1,12 @@
 # Phase 6 Native Componentization
 
-**Status:** Phase 6 authorized; P6.1 API proposal complete; P6.2 not started
+**Status:** Phase 6 authorized; P6.1 API approved; P6.2 authorized but not started
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
-section. It does not authorize implementation, styling work, Storybook work,
-catalogue work, or any other P6 slice.
+section. It records the P6.1 approval and the durable prerequisite for P6.2;
+it does not begin implementation, styling work, Storybook work, catalogue
+work, or any other P6 slice.
 
 ## 1. Goal
 
@@ -27,8 +28,9 @@ P6.1 starts from clean `main` at:
 ```
 
 PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
-and P5-H2 are complete. Phase 6 is explicitly owner-authorized for this API
-proposal only. P6.2 and later remain unauthorized pending owner review.
+and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
+approved. P6.2 is authorized but not started, and P6.3 and later remain
+unauthorized.
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -67,7 +69,8 @@ source design
 ```
 
 This slice defines the native semantic component boundary that later slices
-may implement and verify. It does not authorize the later steps.
+may implement and verify. It authorizes P6.2 only under the clean-`main`
+prerequisite recorded below. It does not authorize P6.3 or later steps.
 
 ## 4. Native candidate lifecycle
 
@@ -89,20 +92,21 @@ authorized
 It is not a retry or recovery mechanism. `accepted` is terminal for this
 tracer lifecycle. It is distinct from a future CatalogueItem lifecycle.
 
-The current transition is exactly:
+The reviewed lifecycle transition is:
 
 ```text
-authorized → api_proposed
+authorized → api_proposed → api_approved
 ```
 
-`api_approved` requires owner review after this proposal. No implementation
-state is implied.
+The approved API proposal records reviewed input head
+`6eda7ba9a66e16c2902868a82a3621d2d3267c92`. `api_approved` does not imply
+implementation.
 
 ## 5. Component category and boundary
 
-The candidate category is **section**. The proposed boundary for owner review
-is one section-level function component. The background, overlay, content, and
-action markup are internal structure, not separate public components yet.
+The candidate category is **section**. The approved boundary is one
+section-level function component. The background, overlay, content, and action
+markup are internal structure, not separate public components yet.
 
 Do not extract `HeroContent`, `HeroOverlay`, `HeroActions`, or `HeroBackground`
 solely because those nodes exist in the rendered tree. A child becomes a
@@ -166,13 +170,24 @@ tags, a button variant DSL, or source-runtime values.
 
 | Slot | Required/optional | Cardinality | Slot attrs | Consumer responsibility | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| `primary_action` | Optional | At most one | None in the first API | Provide normal Phoenix markup such as a `<.link>`, `<button>`, or another appropriate action element, including its label, destination, events, and application semantics. | Omit the action entirely when absent; no placeholder is rendered. |
-| `secondary_action` | Optional | At most one | None in the first API | Provide the secondary action markup and all application-owned behavior. | Omit the action entirely when absent; no placeholder is rendered. |
+| `primary_action` | Optional | 0 or 1 slot entries | None in the first API | Provide one normal Phoenix action root such as a `<.link>`, `<button>`, or another appropriate action element, including its label, destination, events, and application semantics. | Omit the action entirely when absent; no placeholder is rendered. |
+| `secondary_action` | Optional | 0 or 1 slot entries | None in the first API | Provide one normal Phoenix action root and all application-owned behavior. | Omit the action entirely when absent; no placeholder is rendered. |
 
 Named action slots are deliberately chosen over one repeatable `actions`
 slot. Accepted evidence proves two stable semantic roles with distinct visual
 treatment. A repeatable slot would require an ordering and variant contract
 that is not yet evidenced. This is not a generalized button system.
+
+P6.2 must validate slot-entry cardinality before rendering. Each supplied slot
+entry must conceptually render one interactive action root, such as an `<a>`,
+`<button>`, a Phoenix `<.link>` that resolves to one anchor, or an equivalent
+consumer component that resolves to one appropriate interactive root. The
+component validates slot entries, not nested descendants inside arbitrary
+HEEx. It must not reinterpret a group of links or buttons as one action.
+
+The consumer supplies one action role per slot, a meaningful accessible name,
+an appropriate native action element, and all navigation, event, and business
+behavior. Representative semantic markup tests belong to P6.3.
 
 There is no media slot in the first API. One optional backdrop is adequately
 represented by `image_src` and `image_alt`; arbitrary media markup would add a
@@ -201,6 +216,35 @@ or interpolate a tag from source data. The default is `2` because a reusable
 section is commonly placed below a page heading, while consumers can select
 `1` when this section is the document's main heading. The consumer remains
 responsible for the surrounding document hierarchy.
+
+## 10.1 Runtime validation contract
+
+P6.2 must perform deterministic validation before rendering. Phoenix
+declarative attrs and slots alone do not enforce every invariant, especially
+when values are dynamic. Literal `heading_level` values may also use
+`attr ... values:` for compile-time warnings, but that warning is not the
+runtime guard.
+
+The required runtime behavior is:
+
+| Invalid condition | Required result and message |
+| --- | --- |
+| `heading_level` is not an integer in `1..6` | Raise `ArgumentError` with `heading_level must be an integer between 1 and 6`. |
+| `image_src != nil` and `image_alt == nil` | Raise `ArgumentError` with `image_alt is required when image_src is provided`. |
+| More than one `primary_action` slot entry | Raise `ArgumentError` with `primary_action accepts at most one slot entry`. |
+| More than one `secondary_action` slot entry | Raise `ArgumentError` with `secondary_action accepts at most one slot entry`. |
+
+Validation must not silently fall back, coerce values, correct a heading
+level, infer that a missing image alt is decorative, or render before the
+guard completes.
+
+These ordinary absences remain valid:
+
+```text
+image_src = nil and image_alt = nil
+lede = nil
+no action slot entries
+```
 
 ## 11. Action and behavior contract
 
@@ -242,11 +286,26 @@ network lifecycle.
 
 ## 13. Class and global-attribute ergonomics
 
-`id`, `class`, and `rest` follow Phoenix conventions. Consumer classes are
-merged with internal semantic classes; source-export classes never become part
-of the public contract. Standard `aria-*`, `data-*`, `title`, and other valid
-global attrs may pass through to the root. The component does not turn raw
-consumer strings into arbitrary tags, HTML, CSS selectors, or executable code.
+The eventual P6.2 implementation must use Phoenix's declarative global-attr
+contract, conceptually `attr :rest, :global`. It must not replace that
+contract with a large ad-hoc whitelist or accept a caller-supplied `rest={...}`
+map as an alternative API.
+
+The explicit `id` and `class` attrs are component-owned API fields. They are not
+also controlled through `rest`. Internal semantic classes must always remain
+present, and the consumer's `class` value is additive and merged with them.
+`rest` is applied only as the global passthrough map produced by Phoenix's
+declarative attr handling.
+
+Consumer global attrs may alter root semantics, focus behavior, visibility,
+ARIA, data attributes, LiveView bindings, and appearance. Those effects belong
+to the consumer and are outside the component-owned accessibility and isolated
+visual guarantees. Consumers must not claim LiveFrames' isolated verification
+after overriding required styling or semantics.
+
+Source-export classes never become part of the public contract. HEEx escaping
+remains authoritative. The component does not turn consumer strings into
+arbitrary tags, HTML, CSS selectors, executable code, or raw markup.
 
 ## 14. Responsive contract
 
@@ -274,8 +333,9 @@ none.
 - Preserve native link and button semantics supplied through slots.
 - Keep visible keyboard focus styling for interactive action presentation,
   including `:focus-visible` support.
-- Do not add positive `tabindex`, hidden focus targets, or ARIA in place of
-  valid native semantics.
+- LiveFrames-owned markup does not itself introduce positive `tabindex`, hidden
+  focus targets, inappropriate ARIA replacing native semantics, or
+  component-owned root event behavior.
 - Omit absent optional content rather than emitting empty semantic nodes.
 - Keep output deterministic for the same attrs and slots.
 
@@ -286,7 +346,10 @@ none.
 - Own link destinations, events, navigation, and all application behavior.
 - Decide whether each supplied image is informative or decorative and provide
   `image_alt` accordingly.
-- Keep ids unique and use global ARIA/data attributes validly.
+- Keep ids unique and use global ARIA/data attributes validly. Consumer-supplied
+  global attrs may alter semantics, focus, visibility, ARIA, data attributes,
+  LiveView bindings, and appearance; those effects are consumer-owned and
+  outside the component-owned guarantee.
 
 This contract does not claim complete WCAG compliance for an application.
 
@@ -299,7 +362,7 @@ does not add tokens.
 | --- | --- | --- | --- |
 | Section background | `color.background.ultra_dark` | Root section background | Existing token is adequate. |
 | Section text | `color.background.ultra_dark.heading` and `.text` | Heading and body text contrast | Existing authority is adequate. |
-| Heading typography | `typography.heading.scale.h1`, weight, line height | Apply semantic heading scale while preserving the selected level | Scale authority is accepted; level selection is semantic. |
+| Native Hero/display heading visual scale | `typography.heading.scale.h1`, weight, and line height are valid Phase 5 fidelity authority | Keep the Hero's visual scale independent of the selected HTML heading level | **GAP / P6.4 decision required.** Do not add a token in P6.1. |
 | Body typography | `typography.body.scale.medium`, line height | Lede paragraph type | Existing authority is adequate. |
 | Section padding | `spacing.section.padding_block` | Section block padding | Existing authority is adequate. |
 | Gutter | `spacing.gutter.max` and `.min` | Responsive container gutters | Existing authority is adequate. |
@@ -316,6 +379,12 @@ does not add tokens.
 | Action padding/minimum size | Primary button padding and minimum-width tokens | Usable action hit area | Existing authority is adequate. |
 | Overlay | No adequate native semantic overlay token is proven; accepted evidence contains an unresolved overlay expression | Preserve readable content and keep implementation scoped | Gap recorded. Do not add a token in P6.1. |
 | Image positioning | No native semantic focal-position token is proven | Preserve responsive composition internally | Gap recorded. Do not expose a public attr or add a token in P6.1. |
+
+The native Hero/display heading visual-scale gap is separate from heading
+semantics. P6.4 must either introduce or derive a semantic Hero/display
+heading token, or formally document an existing token as a visual-scale token
+independent of the HTML heading level. The overlay semantic token and image
+focal-position semantic token remain unresolved. P6.1 adds none of them.
 
 ## 17. Tailwind and CSS boundary
 
@@ -403,11 +472,16 @@ not fixed, widened, or used as a P6.1 acceptance gate.
 
 ## 22. P6.2 implementation boundary
 
-P6.2 may implement only this owner-reviewed contract as a Phoenix function
-component under the `LiveFrames.Components.Sections` family. It may not begin
-before `api_approved`. P6.2 must not broaden the API into a universal Hero
-framework, add source-specific names, replace attachment 880, create a media
-catalogue item, or claim full visual fidelity.
+P6.2 is authorized but not started. It may implement only this approved
+contract as a Phoenix function component under the
+`LiveFrames.Components.Sections` family. P6.2 implementation may start only
+from a clean `main` containing the approved P6.1 authority. The reviewed API
+input head was `6eda7ba9a66e16c2902868a82a3621d2d3267c92`; a branch containing
+unmerged authority is not an implementation base.
+
+P6.2 must not broaden the API into a universal Hero framework, add
+source-specific names, replace attachment 880, create a media catalogue item,
+or claim full visual fidelity.
 
 The intended later library location is
 `apps/live_frames/lib/live_frames/components/sections/hero.ex`. Its tests
@@ -432,7 +506,8 @@ Stop the Phase 6 work and record the exact blocker if:
 - implementation would require changing compiler or generated artifacts;
 - attachment 880 would be resolved, redistributed, or reclassified;
 - a generic Hero taxonomy or variant DSL is being invented from one tracer;
-- P6.2 or a later phase begins without its authorization;
+- P6.2 begins before approved P6.1 authority is present on a clean `main`;
+- P6.3 or a later phase begins without its authorization;
 - a required semantic, accessibility, or responsive behavior cannot be
   represented by this contract;
 - tests or CI fail.
@@ -444,9 +519,9 @@ P6.1 is authorized by this document.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
-| P6.1 API proposal | Owner-reviewable proposal records category, module/function, complete attrs and slots, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed` complete; owner review required for `api_approved`. |
-| P6.2 implementation | Owner-approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage. | Not started; not authorized. |
-| P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, keyboard focus, escaping, and edge cases verified. | Not started; not authorized. |
+| P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
+| P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | Authorized but not started. |
+| P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, keyboard focus, escaping, runtime guards, and edge cases verified. | Not authorized. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | Not started; not authorized. |
 | P6.5 Storybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
 | P6.6 acceptance and catalogue readiness | Owner accepts semantic/styling/Storybook evidence before any catalogue or generation/ejection exposure. | Not started; not authorized. |
@@ -467,9 +542,12 @@ ACSS runtime dependency = 0
 business-logic leakage = 0
 production code changed = 0
 generated artifacts changed = 0
-P6 lifecycle = authorized → api_proposed
-P6.2 = not started
+reviewed API proposal head = 6eda7ba9a66e16c2902868a82a3621d2d3267c92
+P6 lifecycle = authorized → api_proposed → api_approved
+P6.1 = api_approved
+P6.2 = authorized, not started
+P6.3+ = not authorized
 ```
 
-The next required action is owner review of this API proposal. No native Hero
-implementation is authorized until that review advances the lifecycle.
+P6.2 may begin only after the approved P6.1 authority is present on a clean
+`main`. Native Hero implementation remains unstarted.
