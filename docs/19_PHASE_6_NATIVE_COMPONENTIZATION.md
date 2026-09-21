@@ -1,6 +1,6 @@
 # Phase 6 Native Componentization
 
-**Status:** Phase 6 authorized; P6.1 API approved; P6.2 authorized but not started
+**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -29,7 +29,7 @@ P6.1 starts from clean `main` at:
 
 PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
-approved. P6.2 is authorized but not started, and P6.3 and later remain
+approved. P6.2 is implemented, and P6.3 and later remain
 unauthorized.
 
 The accepted fidelity evidence establishes a dark section with a large
@@ -472,27 +472,23 @@ not fixed, widened, or used as a P6.1 acceptance gate.
 
 ## 22. P6.2 implementation boundary
 
-P6.2 is authorized but not started. It may implement only this approved
-contract as a Phoenix function component under the
-`LiveFrames.Components.Sections` family. P6.2 implementation may start only
-from a clean `main` containing the approved P6.1 authority. The reviewed API
-input head was `6eda7ba9a66e16c2902868a82a3621d2d3267c92`; a branch containing
-unmerged authority is not an implementation base.
+P6.2 is implemented. It implemented only this approved contract as a Phoenix
+function component under the `LiveFrames.Components.Sections` family, starting
+from clean `main` containing the approved P6.1 authority.
 
-P6.2 must not broaden the API into a universal Hero framework, add
+P6.2 did not broaden the API into a universal Hero framework, add
 source-specific names, replace attachment 880, create a media catalogue item,
 or claim full visual fidelity.
 
-The intended later library location is
+The library location is
 `apps/live_frames/lib/live_frames/components/sections/hero.ex`. Its tests
-belong under `apps/live_frames/test/live_frames/components/sections/`, and a
-future Storybook story belongs under
-`apps/live_frames_preview/storybook/components/`. P6.1 creates none of these
-files; the existing `.gitkeep` structure is sufficient.
+live under `apps/live_frames/test/live_frames/components/sections/`. A future
+Storybook story belongs under
+`apps/live_frames_preview/storybook/components/`.
 
-P6.2 also does not authorize the semantic Tailwind bridge, native Storybook
-Hero, catalogue integration, ejection, or a second tracer. Those require their
-own gates.
+P6.2 does not authorize the semantic Tailwind bridge, native Storybook Hero,
+catalogue integration, ejection, or a second tracer. Those require their own
+gates.
 
 ## 23. Phase 6 STOP conditions
 
@@ -514,14 +510,13 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is
-approved. P6.2 is authorized but not started. P6.3 and later slices remain
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 and later slices remain
 unauthorized.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
-| P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | Authorized but not started. |
+| P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, keyboard focus, escaping, runtime guards, and edge cases verified. | Not authorized. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | Not started; not authorized. |
 | P6.5 Storybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
@@ -544,11 +539,12 @@ business-logic leakage = 0
 production code changed = 0
 generated artifacts changed = 0
 reviewed API proposal head = 6eda7ba9a66e16c2902868a82a3621d2d3267c92
-P6 lifecycle = authorized → api_proposed → api_approved
+P6 lifecycle = authorized → api_proposed → api_approved → implemented
 P6.1 = api_approved
-P6.2 = authorized, not started
+P6.2 = implemented
 P6.3+ = not authorized
 ```
 
-P6.2 may begin only after the approved P6.1 authority is present on a clean
-`main`. Native Hero implementation remains unstarted.
+P6.2 implementation is present in
+`apps/live_frames/lib/live_frames/components/sections/hero.ex`. Semantic
+verification, styling bridge, Storybook, and acceptance remain unstarted.
