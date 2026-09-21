@@ -247,6 +247,69 @@ defmodule LiveFrames.BricksResultLifecycleTest do
     end
   end
 
+  describe "invalid exceptional transition source" do
+    test "rejects unknown status to rejected" do
+      result = %{Result.new() | status: :corrupted}
+
+      assert_raise ArgumentError, ~r/from corrupted to rejected/, fn ->
+        Result.reject(result, [])
+      end
+    end
+
+    test "rejects unknown status to failed" do
+      result = %{Result.new() | status: :corrupted}
+
+      assert_raise ArgumentError, ~r/from corrupted to failed/, fn ->
+        Result.fail(result, [])
+      end
+    end
+  end
+
+  describe "active state exceptional transition matrix" do
+    test "every active state permits rejected with lifecycle preserved" do
+      for state <- Result.active_states() do
+        lifecycle = lifecycle_up_to(state)
+        result = %{Result.new() | status: state, lifecycle: lifecycle}
+        rejected = Result.reject(result, [])
+
+        assert rejected.status == :rejected
+        assert rejected.lifecycle == lifecycle ++ [:rejected]
+        assert :rejected in Result.allowed_transitions()[state]
+      end
+    end
+
+    test "every active state permits failed with lifecycle preserved" do
+      for state <- Result.active_states() do
+        lifecycle = lifecycle_up_to(state)
+        result = %{Result.new() | status: state, lifecycle: lifecycle}
+        failed = Result.fail(result, [])
+
+        assert failed.status == :failed
+        assert failed.lifecycle == lifecycle ++ [:failed]
+        assert :failed in Result.allowed_transitions()[state]
+      end
+    end
+  end
+
+  describe "terminal exceptional transition matrix" do
+    test "terminal states reject all exceptional transitions" do
+      for {state, transition, fun} <- [
+            {:completed, :rejected, &Result.reject/2},
+            {:completed, :failed, &Result.fail/2},
+            {:rejected, :failed, &Result.fail/2},
+            {:failed, :rejected, &Result.reject/2}
+          ] do
+        result = %{Result.new() | status: state, lifecycle: [state]}
+
+        assert_raise ArgumentError, ~r/from #{state} to #{transition}/, fn ->
+          fun.(result, [])
+        end
+
+        assert Result.allowed_transitions()[state] == []
+      end
+    end
+  end
+
   describe "reject/2 and fail/2 side effects" do
     test "reject appends diagnostics and rejected lifecycle entry" do
       existing = diagnostic("existing")
@@ -303,6 +366,11 @@ defmodule LiveFrames.BricksResultLifecycleTest do
 
   defp advance_to(:completed, result) do
     Enum.reduce(Enum.drop(@happy_path, 1), result, &Result.advance(&2, &1))
+  end
+
+  defp lifecycle_up_to(state) do
+    index = Enum.find_index(@happy_path, &(&1 == state))
+    Enum.take(@happy_path, index + 1)
   end
 
   defp put_status(result, status), do: %{result | status: status}

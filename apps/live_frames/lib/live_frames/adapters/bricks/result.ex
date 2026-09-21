@@ -113,10 +113,8 @@ defmodule LiveFrames.Adapters.Bricks.Result do
     do: raise(transition_error(status, next))
 
   @spec reject(t(), [Diagnostic.t()]) :: t()
-  def reject(%__MODULE__{status: status} = result, diagnostics) do
-    if terminal?(status) do
-      raise transition_error(status, :rejected)
-    end
+  def reject(%__MODULE__{} = result, diagnostics) do
+    ensure_active_transition_source!(result.status, :rejected)
 
     %{
       result
@@ -127,10 +125,8 @@ defmodule LiveFrames.Adapters.Bricks.Result do
   end
 
   @spec fail(t(), [Diagnostic.t()]) :: t()
-  def fail(%__MODULE__{status: status} = result, diagnostics) do
-    if terminal?(status) do
-      raise transition_error(status, :failed)
-    end
+  def fail(%__MODULE__{} = result, diagnostics) do
+    ensure_active_transition_source!(result.status, :failed)
 
     %{
       result
@@ -143,6 +139,14 @@ defmodule LiveFrames.Adapters.Bricks.Result do
   @spec add_diagnostics(t(), [Diagnostic.t()]) :: t()
   def add_diagnostics(%__MODULE__{} = result, diagnostics),
     do: %{result | diagnostics: result.diagnostics ++ diagnostics}
+
+  defp ensure_active_transition_source!(status, target) do
+    if status in @active_states do
+      :ok
+    else
+      raise transition_error(status, target)
+    end
+  end
 
   defp transition_error(from, to) do
     ArgumentError.exception("invalid Bricks lifecycle transition from #{from} to #{to}")
