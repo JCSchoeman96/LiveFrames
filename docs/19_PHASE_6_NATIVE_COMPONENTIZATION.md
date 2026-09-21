@@ -33,7 +33,10 @@ proposal only. P6.2 and later remain unauthorized pending owner review.
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
 responsive focal and overlay composition, narrow-screen full-width actions,
-and ordinary hover and focus-visible states. It establishes no required
+and ordinary hover and focus-visible states. The semantic shape is a section
+with content (heading, lede, and actions) plus background (optional media and
+overlay); those internal child names are not public API. The primary action is
+filled and the secondary action is outlined. It establishes no required
 JavaScript interaction, hook, server event, or component-owned state.
 
 Attachment 880 remains unavailable. The native API must not depend on it or
