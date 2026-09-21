@@ -514,8 +514,9 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the proposed gates for the remaining native-component slices. Only
-P6.1 is authorized by this document.
+These are the gates for the remaining native-component slices. P6.1 is
+approved. P6.2 is authorized but not started. P6.3 and later slices remain
+unauthorized.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
