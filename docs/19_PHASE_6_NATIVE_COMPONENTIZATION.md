@@ -406,6 +406,13 @@ before `api_approved`. P6.2 must not broaden the API into a universal Hero
 framework, add source-specific names, replace attachment 880, create a media
 catalogue item, or claim full visual fidelity.
 
+The intended later library location is
+`apps/live_frames/lib/live_frames/components/sections/hero.ex`. Its tests
+belong under `apps/live_frames/test/live_frames/components/sections/`, and a
+future Storybook story belongs under
+`apps/live_frames_preview/storybook/components/`. P6.1 creates none of these
+files; the existing `.gitkeep` structure is sufficient.
+
 P6.2 also does not authorize the semantic Tailwind bridge, native Storybook
 Hero, catalogue integration, ejection, or a second tracer. Those require their
 own gates.
@@ -434,7 +441,7 @@ P6.1 is authorized by this document.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
-| P6.1 API proposal | Owner-independent proposal records category, module/function, complete attrs and slots, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed` complete; owner review required for `api_approved`. |
+| P6.1 API proposal | Owner-reviewable proposal records category, module/function, complete attrs and slots, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed` complete; owner review required for `api_approved`. |
 | P6.2 implementation | Owner-approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage. | Not started; not authorized. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, keyboard focus, escaping, and edge cases verified. | Not started; not authorized. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | Not started; not authorized. |
@@ -450,8 +457,11 @@ implementation type = Phoenix function component
 module = LiveFrames.Components.Sections.Hero
 function = hero/1
 source-specific public names = 0
+source class/ID leakage in public API = 0
 source breakpoint API = 0
+Bricks/ACSS public API leakage = 0
 ACSS runtime dependency = 0
+business-logic leakage = 0
 production code changed = 0
 generated artifacts changed = 0
 P6 lifecycle = authorized → api_proposed
