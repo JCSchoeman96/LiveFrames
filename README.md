@@ -49,7 +49,8 @@ source
 
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.
 Hero India is accepted with the authorized unavailable-image limitation.
-Phase 6 has not started and requires explicit owner authorization.
+Phase 6 is authorized. The P6.1 native Hero API is approved. P6.2
+implementation has not started, and P6.3 and later work are not authorized.
 
 ## Authority and navigation
 
@@ -57,6 +58,8 @@ Phase 6 has not started and requires explicit owner authorization.
   product authority.
 - [Phase 5 hardening and acceptance authority](docs/18_PHASE_5_HARDENING_AND_ACCEPTANCE.md)
   — current execution order and gates.
+- [Phase 6 native componentization authority](docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md)
+  — P6.1 native Hero API proposal and later-slice gates.
 - [Source and provenance policy](docs/04_SOURCE_AND_PROVENANCE.md) — canonical
   publication and provenance governance.
 - `apps/live_frames` — reusable compiler library.
