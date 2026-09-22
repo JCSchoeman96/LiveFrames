@@ -366,7 +366,7 @@ does not add tokens.
 | --- | --- | --- | --- |
 | Section background | `color.background.ultra_dark` | Root section background | Existing token is adequate. |
 | Section text | `color.background.ultra_dark.heading` and `.text` | Heading and body text contrast | Existing authority is adequate. |
-| Native Hero/display heading visual scale | `typography.heading.scale.h1`, weight, and line height are valid Phase 5 fidelity authority | Keep the Hero's visual scale independent of the selected HTML heading level | **Resolved in P6.4A** — Hero display typography via `--lf-typography-display-*` on `.lf-hero__heading`; see `docs/20` §14. |
+| Native Hero/display heading visual scale | `typography.heading.scale.h1`, weight, and line height are valid Phase 5 fidelity authority | Keep the Hero's visual scale independent of the selected HTML heading level | **Resolved in P6.4A** — Hero display typography via `--lf-typography-display-*` on `.lf-hero__heading`; see `docs/20` §15. |
 | Body typography | `typography.body.scale.medium`, line height | Lede paragraph type | Existing authority is adequate. |
 | Section padding | `spacing.section.padding_block` | Section block padding | Existing authority is adequate. |
 | Gutter | `spacing.gutter.max` and `.min` | Responsive container gutters | Existing authority is adequate. |
@@ -381,14 +381,17 @@ does not add tokens.
 | Outline action hover | Outline background-hover, text-hover, and border-hover tokens | Ordinary hover state | Existing authority is adequate. |
 | Outline action focus-visible | Outline focus token | Visible keyboard focus state | Existing authority is adequate. |
 | Action padding/minimum size | Primary button padding and minimum-width tokens | Usable action hit area | Existing authority is adequate. |
-| Overlay | No adequate native semantic overlay token is proven; accepted evidence contains an unresolved overlay expression | Preserve readable content and keep implementation scoped | **Resolved in P6.4A** — component-private `--lf-hero-overlay-*` in `hero.css`; no global overlay token. See `docs/20` §15. |
-| Image positioning | No native semantic focal-position token is proven | Preserve responsive composition internally | **Resolved in P6.4A** — component-private focal variables; no public attr. See `docs/20` §16. |
+| Overlay | No adequate native semantic overlay token is proven; accepted evidence contains an unresolved overlay expression | Preserve readable content and keep implementation scoped | **Resolved in P6.4A** — component-private `--lf-hero-overlay-*` in `hero.css`; no global overlay token. See `docs/20` §16. |
+| Image positioning | No native semantic focal-position token is proven | Preserve responsive composition internally | **Resolved in P6.4A** — component-private focal variables; no public attr. See `docs/20` §17. |
 
 The native Hero/display heading visual-scale gap is separate from heading
-semantics. P6.4 must either introduce or derive a semantic Hero/display
-heading token, or formally document an existing token as a visual-scale token
-independent of the HTML heading level. The overlay semantic token and image
-focal-position semantic token remain unresolved. P6.1 adds none of them.
+semantics. P6.1 recorded display heading scale, overlay, and focal positioning
+as gaps without adding tokens. P6.4A now resolves their **architectural**
+treatment in `docs/20`: Hero display typography uses source-independent native
+visual aliases independent of HTML heading level; overlay remains
+component-private; focal positioning remains component-private with no public
+breakpoint attrs. P6.4B still must **implement and visually verify** those
+decisions. No `styling_verified` claim exists yet.
 
 ## 17. Tailwind and CSS boundary
 

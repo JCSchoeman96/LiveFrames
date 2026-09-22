@@ -1,22 +1,31 @@
 # P6.4A — Native styling bridge architecture
 
-**Plan ID:** `p6-4a-styling-bridge-architecture`  
-**Plan version:** `v1`  
-**Status:** `architecture_proposed` (design authority; implementation not authorized)  
+**Plan ID:** `p6-4a-styling-bridge-architecture`
+
+**Plan version:** `v2`
+
+**Status:** `architecture_proposed` (design authority; implementation not authorized)
+
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
-compilation posture.  
+compilation posture.
+
 **Authority:** This document is the active contract for P6.4 styling architecture.
 `docs/00_LIVEFRAMES_MASTER_SPEC.md` wins on Master phase numbering.
 `docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md` remains P6 API and lifecycle
 authority. On conflict for styling delivery, this document wins until amended.
 
-**Last updated:** 2026-09-22  
+**Last updated:** 2026-09-22
+
 **Base repository head:** `d13609e3f7b68479b65481897039cc9b3121dd89`
 
 ### Revision log
 
 - `v1` — Initial P6.4A architecture proposal (docs only).
+- `v2` — Owner architecture gate: P6.4 workstream lifecycle, evidence-backed
+  breakpoints only, `@theme` alias model, repository vs package paths, Hex
+  inclusion contract, library build-tool ownership, committed-artifact drift
+  gates, token-map single authority, action direct-root selectors.
 
 ## 1. Goal
 
@@ -54,19 +63,44 @@ authorized
 → api_approved
 → implemented
 → semantic_verified
+→ styling_verified
+→ documented
+→ storybook_verified
+→ accepted
 ```
 
-`styling_verified` is **not** claimed by P6.4A.
+On `main` today the Hero stops at `semantic_verified`. `styling_verified` is
+**not** claimed by P6.4A.
 
-### P6.4 workstream lifecycle
+P6.4 workstream `verified` is the evidence required for the main transition:
+
+```text
+semantic_verified → styling_verified
+```
+
+### P6.4 workstream lifecycle (subordinate)
 
 ```text
 unplanned
-→ architecture_proposed   ← P6.4A (this document)
-→ styling_verified        ← P6.4B+ (not authorized yet)
+→ architecture_proposed        ← P6.4A (this document)
+→ architecture_approved        ← owner architecture review (not claimed here)
+→ implemented                  ← P6.4B styling implementation
+→ verified                     ← P6.4B browser/visual verification
 ```
 
-### Master-aligned phase gates (after P6.4A)
+Rules:
+
+- **P6.4A candidate state** = `architecture_proposed` only.
+- `architecture_proposed → architecture_approved` requires **owner** architecture
+  review (including merge of this PR when accepted).
+- **P6.4B implementation** begins only from `architecture_approved`.
+- P6.4B implementation: `architecture_approved → implemented`.
+- P6.4B verification: `implemented → verified`.
+
+Do **not** conflate workstream `verified` with main `styling_verified`; the
+latter is recorded on the main Hero lifecycle after P6.4B evidence is accepted.
+
+### Master-aligned phase gates
 
 ```text
 P6.3 → semantic_verified
@@ -96,22 +130,25 @@ Fidelity CSS under `apps/live_frames_preview/priv/static/assets/fidelity/` remai
 Phase 5 reference material only. Native Hero styling does **not** extend fidelity
 static assets as the canonical native contract.
 
-## 5. Canonical source paths (library-owned)
+## 5. Canonical paths (repository vs package-relative)
 
-All paths are under the `:live_frames` application.
+All paths belong to the `:live_frames` application. **Hex and Git consumers must
+use package-relative paths**, not `apps/live_frames/...` repository paths.
 
-| Role | Path |
-| --- | --- |
-| Package CSS entry (Tailwind v4 input) | `apps/live_frames/assets/css/live_frames.css` |
-| Token / theme bridge (`@theme`, `--lf-*`) | `apps/live_frames/assets/css/theme/lf_theme.css` |
-| Hero semantic stylesheet | `apps/live_frames/assets/css/components/sections/hero.css` |
-| Token map authority (deterministic bridge input) | `apps/live_frames/priv/token_maps/native_hero_v1.json` |
+### Source CSS
 
-`native_hero_v1.json` records **source-independent** LiveFrames token names and
-their mapping to CSS custom properties. It is derived from approved TokenSet
-semantics, not copied ACSS variable names. P6.4B may add a Mix task to
-regenerate bridge fragments from TokenSet JSON; P6.4A does not require that
-task to exist yet.
+| Role | Repository path | Package-relative path |
+| --- | --- | --- |
+| Package CSS entry (Tailwind v4 input) | `apps/live_frames/assets/css/live_frames.css` | `assets/css/live_frames.css` |
+| Token bridge output | `apps/live_frames/assets/css/theme/lf_theme.css` | `assets/css/theme/lf_theme.css` |
+| Hero semantic stylesheet | `apps/live_frames/assets/css/components/sections/hero.css` | `assets/css/components/sections/hero.css` |
+
+### Compiled CSS and token map
+
+| Role | Repository path | Package-relative path |
+| --- | --- | --- |
+| Compiled package CSS | `apps/live_frames/priv/static/live_frames/css/live_frames.css` | `priv/static/live_frames/css/live_frames.css` |
+| Token map (mapping metadata only) | `apps/live_frames/priv/token_maps/native_hero_v1.json` | `priv/token_maps/native_hero_v1.json` |
 
 HEEx in `hero.ex` keeps **semantic classes** (`lf-hero`, `lf-hero__heading`,
 etc.). It does **not** carry large utility strings to prove Tailwind usage.
@@ -120,16 +157,59 @@ etc.). It does **not** carry large utility strings to prove Tailwind usage.
 
 | Question | Decision |
 | --- | --- |
-| Canonical **source** | `apps/live_frames/assets/css/**` (above) |
-| Canonical **compiled** artifact | `apps/live_frames/priv/static/live_frames/css/live_frames.css` |
-| Committed compiled CSS? | **Yes** — committed after library build in CI/release so consumers can use LiveFrames without running Tailwind locally. Source remains the change authority. |
-| Who compiles? | **`:live_frames` build** via official Tailwind v4 (`mix live_frames.assets.build` — **defined in P6.4B**, not P6.4A). |
-| What preview consumes? | The **same compiled artifact** (or the same compile inputs through the library alias) on verification routes only. Preview Tailwind config (`storybook.css`) remains for Storybook chrome / proof components, **not** for native Hero ownership. |
+| Canonical **source** | `assets/css/**` (see §5) |
+| Canonical **compiled** artifact | `priv/static/live_frames/css/live_frames.css` |
+| Committed compiled CSS? | **Yes** — developers commit source and generated artifact together after a deterministic local/CI-equivalent build. |
+| Who compiles? | **`:live_frames` build** via official Tailwind v4 (`mix live_frames.assets.build` — **P6.4B**). |
+| What preview consumes? | The **same compiled artifact** (or the same library build alias) on verification routes only. Preview Tailwind (`storybook.css`) is Storybook chrome only. |
+
+### Committed-artifact workflow (no CI commits)
+
+```text
+developer / build task
+→ deterministically generates compiled artifact
+→ source + generated artifact committed together
+
+CI
+→ reruns deterministic build
+→ verifies committed artifact has zero drift
+
+release / Hex package
+→ ships the already-verified committed artifact
+```
+
+CI must **not** be described as committing repository changes. P6.4B must add a
+drift gate conceptually equivalent to:
+
+```text
+mix live_frames.assets.build
+git diff --exit-code -- <compiled styling outputs>
+```
+
+(exact paths and Mix task name may match P6.4B implementation).
 
 Two sources of truth are forbidden: Hero native CSS is **not** authored primarily
 in `apps/live_frames_preview/assets/css/`.
 
-## 7. Consumer CSS acquisition (distribution model)
+## 7. Hex package inclusion contract (P6.4B)
+
+The architecture documents public styling artifacts that **must** appear in the
+published `:live_frames` Hex package. Today `apps/live_frames/mix.exs` has no
+`package/0` file list; **P6.4B must** update package file declarations so
+consumers receive every documented artifact.
+
+Required package content:
+
+```text
+assets/css/**
+priv/static/live_frames/css/live_frames.css
+priv/token_maps/native_hero_v1.json
+```
+
+P6.4A does **not** modify `mix.exs`. The architecture must not promise source
+CSS that the package omits.
+
+## 8. Consumer CSS acquisition (distribution model)
 
 P6.4A fixes the **stable public artifact** and import contract. Preview is not
 the distribution channel.
@@ -137,182 +217,260 @@ the distribution channel.
 ### Primary consumer path (runtime / no local Tailwind)
 
 1. Add `{:live_frames, ...}` to the host application.
-2. Import precompiled package CSS using the documented public path:
+2. Import precompiled package CSS:
 
 ```text
 priv/static/live_frames/css/live_frames.css
 ```
 
+(package-relative within the `:live_frames` dependency)
+
 3. Expose via host `Endpoint` / `Plug.Static` from the `:live_frames`
-   application (exact Plug configuration is host documentation in P6.5).
+   application (host integration documented in P6.5).
 
 ### Optional integrator path (host already runs Tailwind v4)
 
 1. Depend on `:live_frames`.
-2. `@import` the package **source entry** from
-   `apps/live_frames/assets/css/live_frames.css` (path as published in hex
-   package or git dep) into the host stylesheet.
-3. Host Tailwind compile must include LiveFrames `@source` paths documented in
-   P6.5. Host owns merge conflicts and build time.
+2. `@import` the package **source entry**:
+
+```text
+assets/css/live_frames.css
+```
+
+3. Host Tailwind compile must register LiveFrames library sources per Tailwind
+   v4 `@source` rules (P6.5). Host owns merge conflicts and build time.
 
 ### Future generator / ejection (relationship only)
 
-The generator **must** emit:
+The generator **must** emit the same entry or prebuilt
+`priv/static/live_frames/css/live_frames.css`, documented `@import` or vendor
+copy, and no required `.live-frames` wrapper.
 
-- the same `live_frames.css` entry or prebuilt `priv/static/live_frames/css/live_frames.css`;
-- documented `@import` or static copy into `assets/css/vendor/live_frames.css`;
-- no requirement that consumers wrap every component in `.live-frames`.
-
-Generator implementation is **future**; the **source contract above is stable**
-for ejection.
-
-## 8. Tailwind v4 compiler ownership
+## 9. Tailwind v4 compiler and build-tool ownership
 
 | Context | Owner | Compiler |
 | --- | --- | --- |
-| Native package CSS | `:live_frames` | Official Tailwind v4 (pinned with umbrella; today preview pins `4.1.12` in `config/config.exs`) |
+| Native package CSS | `:live_frames` | Official Tailwind v4 (version pinned with umbrella; preview currently pins `4.1.12` in `config/config.exs`) |
 | Preview Storybook chrome | `:live_frames_preview` | Official Tailwind v4 (`tailwind storybook`) |
 | Future generator preview | Generator tool / host app | Official Tailwind v4 for **release** artifacts |
-| Future candidate fast paths | Editor / generator (optional) | Alternate compiler only behind parity gate (§19) |
+| Future candidate fast paths | Editor / generator (optional) | Alternate compiler only behind parity gate (§22) |
 
 **Compatibility authority for P6.4 Hero:** official Tailwind v4 only.
 
-## 9. TokenSet → CSS variable bridge
+### Library build tooling (P6.4B)
+
+Preserve:
 
 ```text
-TokenSet (approved semantics)
-    ↓ deterministic map (native_hero_v1.json)
---lf-* CSS custom properties + @theme entries
-    ↓ referenced by
-component CSS + selective utilities
+live_frames
+does NOT depend on
+live_frames_preview
 ```
+
+The canonical library CSS build **must not** work only because the preview app
+installed Tailwind.
+
+P6.4B rule:
+
+```text
+:live_frames owns its build-time Tailwind tooling
+official Tailwind Mix package as non-runtime build/dev dependency
+runtime dependency on Tailwind = 0
+```
+
+Recommended: `{:tailwind, ..., runtime: false}` (or equivalent) on `:live_frames`
+only. Exact Mix `only:` / environment options are P6.4B implementation detail.
+The build must be **reproducible without** `live_frames_preview`.
+
+P6.4A does **not** add the dependency.
+
+## 10. TokenSet → public CSS variables (stable theme surface)
+
+```text
+approved TokenSet values (authority)
+        +
+native_hero_v1.json (mapping only: TokenSet path → LiveFrames name)
+        ↓
+focused deterministic bridge builder (P6.4B — required, not optional)
+        ↓
+lf_theme.css
+        ↓
+ordinary public CSS custom properties --lf-*
+        ↓
+semantic component CSS (+ selective Tailwind utilities)
+```
+
+### `native_hero_v1.json` role
+
+- Contains **deterministic mapping metadata** only, for example:
+  - approved TokenSet path → LiveFrames CSS variable name;
+  - optional Tailwind theme alias name when a utility is required.
+- **Must not** duplicate authoritative token **values**. Values come from the
+  approved TokenSet input at build time.
+- Same TokenSet + same mapping version ⇒ same `lf_theme.css` (deterministic).
+
+P6.4B must implement **one bounded** bridge build/validation path. No generic
+token framework. No universal token compiler.
+
+### CI token drift gate (P6.4B)
+
+```text
+same TokenSet + same mapping version = same lf_theme.css
+```
+
+CI fails if regenerated `lf_theme.css` differs from committed output (analogous
+to compiled CSS drift in §6).
+
+### Public `--lf-*` variables
+
+Examples (exact names are deterministic and source-independent):
+
+```text
+--lf-color-background-ultra-dark
+--lf-color-text-on-dark
+--lf-typography-display-size
+--lf-space-content-gap
+```
+
+These are the **stable LiveFrames theme surface** for hosts and semantic CSS.
+They do **not** automatically become Tailwind utilities merely by existing.
 
 Rules:
 
-- **Source-independent names** — public theme surface uses `--lf-*` and
-  `@theme` keys under LiveFrames namespace, not ACSS or Bricks identifiers.
-- **Deterministic mapping** — same TokenSet input + map version ⇒ same
-  `lf_theme.css` fragment.
-- **Global vs component** — colors, typography scales, spacing, radii, and
-  action tokens used across components live in `lf_theme.css`. Hero-only
-  overlay and focal composition live as **component-private** custom
-  properties on `.lf-hero` (§12–14).
-- **No ACSS runtime** — Automatic.css is not a dependency of `:live_frames`.
-- **No unnecessary generator framework** — a single versioned JSON map plus an
-  optional regen task in P6.4B suffices; no open-ended plugin system in P6.4.
+- **Source-independent names** — no ACSS or Bricks identifiers in public names.
+- **Global vs component** — shared tokens in `lf_theme.css`; Hero overlay and
+  focal composition as `--lf-hero-*` on `.lf-hero` (§15–17).
+- **No ACSS runtime** on `:live_frames`.
 
-## 10. `@theme` boundary
+## 11. Tailwind `@theme` aliases (utility layer only)
 
-- `@theme` lives in `lf_theme.css` and defines LiveFrames semantic design
-  tokens exposed to Tailwind v4.
-- Component files use `theme(...)` / `var(--lf-...)` and semantic classes; they
-  do **not** redefine global palette scales.
-- Preview `storybook.css` `@theme` (if any) is **preview-only** and must not
-  become the native Hero theme authority.
+Tailwind v4 utilities are driven by **recognized theme namespaces** (for
+example `--color-*`, `--spacing-*`, `--radius-*`, `--breakpoint-*`). Arbitrary
+`--lf-*` variables are ordinary CSS unless aliased.
 
-## 11. `@apply` policy
+When a token **needs** a Tailwind utility, map through a recognized namespace:
+
+```css
+:root {
+  --lf-color-brand: ...;
+}
+
+@theme inline {
+  --color-lf-brand: var(--lf-color-brand);
+}
+```
+
+Then utilities such as `bg-lf-brand` / `text-lf-brand` may be used where
+appropriate.
+
+If a token is consumed **only** by semantic component CSS:
+
+```text
+no Tailwind @theme alias is required
+```
+
+Do **not** place arbitrary `--lf-*` inside `@theme` and assume Tailwind will
+generate utilities.
+
+Preview `storybook.css` `@theme` (if any) remains **preview-only**.
+
+## 12. `@apply` policy
 
 - **Default:** avoid `@apply` for layout-heavy or variant-heavy rules.
 - **Allowed:** narrow use inside `@layer components` in `hero.css` when it
-  reduces duplication of token-backed declarations **without** raising
-  specificity above a single semantic class per element.
-- **Forbidden:** `@apply` chains that reproduce fidelity high-specificity
-  selectors or duplicate slotted consumer markup styling.
+  reduces duplication without raising specificity above a single semantic class
+  per element.
+- **Forbidden:** high-specificity chains copied from fidelity CSS.
 
-Ordinary CSS declarations remain preferred for pseudo-elements, overlays, and
-slotted action states.
+Ordinary CSS remains preferred for pseudo-elements, overlays, and slotted action
+states.
 
-## 12. Class and custom-property namespaces
+## 13. Class and custom-property namespaces
 
 | Namespace | Use |
 | --- | --- |
-| `lf-` prefix | Public semantic component classes (`lf-hero__heading`) |
-| `--lf-` | Global theme tokens bridged from TokenSet |
-| `--lf-hero-` | Component-private variables (overlay, focal, local gaps) |
-| `data-lf-theme` (optional) | Future host-level theme root; **not** required per component |
+| `lf-` prefix | Public semantic component classes |
+| `--lf-` | Public theme variables (ordinary CSS custom properties) |
+| `--lf-hero-` | Component-private variables |
+| `data-lf-theme` (optional) | Future host theme root; not required per component |
 
-Consumers may pass `class` on the Hero root; internal classes are merged per
-Phoenix conventions. Internal classes are not a supported extension API.
+## 14. Cascade, layers, and overrides
 
-## 13. Cascade, layers, and overrides
+Low-specificity semantic classes; `@layer components`; consumer `class` on root;
+hosts may override `--lf-*` on a documented theme root. **No required
+`.live-frames` wrapper** for consumers.
 
-- Component rules target **single semantic classes** with **low specificity**
-  (no long chained selectors copied from fidelity CSS).
-- Use `@layer components` in package CSS; avoid `!important` except where
-  accessibility requires documented exceptions (none for Hero P6.4B).
-- **Consumer `class`** on root may override presentation via utilities or
-  custom rules; component-owned guarantees apply only to documented surfaces.
-- **Theme overrides:** hosts may set `--lf-*` on a documented theme root;
-  component-private `--lf-hero-*` may be overridden only for documented
-  extension points (initially: none public).
+## 15. Hero display heading (semantic vs visual scale)
 
-### Preview wrapper `.live-frames`
+- **Semantics:** `heading_level` → `<h1>`–`<h6>`.
+- **Visual scale:** `.lf-hero__heading` uses Hero display tokens
+  (`--lf-typography-display-*`) independent of heading level.
 
-The preview root layout uses `.live-frames` for Storybook sandbox and lab
-chrome. **Consumers are not required** to wrap Hero in `.live-frames`. Native
-package CSS must stand alone on a host page.
+## 16. Overlay strategy (component-private)
 
-## 14. Hero display heading (semantic vs visual scale)
+Component-private `--lf-hero-overlay-*`; no global overlay token in P6.4;
+pseudo-elements preferred over extra HEEx overlay nodes when sufficient.
 
-- **Semantics:** `heading_level` selects `<h1>`–`<h6>` only.
-- **Visual scale:** `.lf-hero__heading` always uses the **Hero display**
-  typography tokens (`--lf-typography-display-*`), independent of heading level.
-- P6.4B introduces or formalizes `typography.display.hero` (or equivalent) in
-  the native map — derived from Phase 5 fidelity authority for large heading
-  scale, **not** tied to `typography.heading.scale.h1` as an HTML coupling.
+## 17. Image focal position (component-private)
 
-## 15. Overlay strategy (component-private)
+No public focal attr; private `--lf-hero-media-focal-*` in `hero.css` only.
 
-- No new **global** overlay token in P6.4 unless reuse is proven by a second
-  tracer.
-- Hero overlay is implemented with **component-private** `--lf-hero-overlay-*`
-  variables and `::before` / `::after` / background layers in `hero.css` as
-  needed.
-- Prefer pseudo-elements over extra HEEx overlay nodes when layering suffices.
-
-## 16. Image focal position (component-private)
-
-- **No public API attr** for focal position (P6.1 boundary preserved).
-- Responsive focal treatment uses **private** `--lf-hero-media-focal-*` and
-  media queries in `hero.css`, mapped from Phase 5 visual evidence — not
-  Bricks breakpoint attr names.
-
-## 17. Responsive threshold policy
+## 18. Responsive threshold policy
 
 ```text
 public source breakpoint attrs = 0
 ```
 
-Internal native thresholds are **evidence-backed**, not mechanical Bricks name
-copy and not blind Tailwind defaults without mapping notes.
+Distinguish:
 
-| Native internal name | Min-width (px) | Evidence basis |
+```text
+internal behavior breakpoint
+≠ verification viewport
+≠ public API breakpoint
+```
+
+### Evidence-backed behavior bands
+
+Phase 5 max-width authorities map to native **min-width** transitions:
+
+| Behavior band | Width | Basis |
 | --- | --- | --- |
-| `lf-sm` | 479 | Phase 5 `mobile_portrait` authority (`478`) — content stacks / full-width actions |
-| `lf-md` | 992 | Phase 5 `tablet_portrait` authority (`991`) — layout / media composition shift |
-| `lf-lg` | 1280 | Verification viewport used in Phase 5C browser matrix |
+| Base / narrow | `<= 478px` | Below `mobile_portrait` authority (`478`) |
+| Intermediate | `479px–991px` | From `479` until below `tablet_portrait` authority (`991`) |
+| Desktop | `>= 992px` | From `992` upward |
 
-CSS uses `@media (min-width: …)` with these values. Names are **internal** to
-package CSS; they are not attrs and are not Bricks identifiers.
+Internal CSS uses `@media (min-width: 479px)` and `@media (min-width: 992px)`
+only. **Do not** invent additional behavior breakpoints (for example **no**
+`1280px` styling threshold). `1280×800` is a **verification viewport only**
+(§21), not evidence of a third layout transition.
 
-## 18. Action hover and focus-visible
+Unless later visual evidence proves another behavior transition, these two
+min-width boundaries are the full native responsive threshold set for Hero P6.4.
 
-- Style **slotted** primary/secondary actions via descendant selectors on
-  `.lf-hero__action--primary` / `--secondary` targeting interactive roots
-  (`a`, `button`) without parsing slot content, rewriting semantics, or adding
-  LiveView behavior.
-- **Required in P6.4B:** visible `:hover` and `:focus-visible` consistent with
-  token-backed action states in `native_hero_v1.json`.
-- No new Button component required.
+## 19. Action hover and focus-visible
 
-## 19. Alternate Tailwind compilers (research)
+The slot contract requires **one interactive root** per named action slot.
+Style **direct** action roots only — do not broadly target nested links/buttons
+inside arbitrary consumer markup.
 
-Architecture research evaluated
-[BeaconCMS/tailwind_compiler](https://github.com/BeaconCMS/tailwind_compiler)
-(candidate-in → CSS-out; Elixir NIF; WASM for browsers). **No dependency is
-added.**
+Preferred pattern (or equivalent low-specificity direct-root selectors):
 
-### Parity rule (durable)
+```css
+.lf-hero__action--primary > :where(a, button) { ... }
+.lf-hero__action--secondary > :where(a, button) { ... }
+```
+
+Include `:hover` and `:focus-visible` in P6.4B. No slot parsing, no LiveView
+behavior, no new Button component. Consumer owns semantics and behavior; Hero
+owns presentation.
+
+## 20. Alternate Tailwind compilers (research)
+
+See prior evaluation of
+[BeaconCMS/tailwind_compiler](https://github.com/BeaconCMS/tailwind_compiler).
+**No dependency added.**
+
+Parity rule:
 
 ```text
 alternate Tailwind compiler feature support MUST NOT be treated as
@@ -320,12 +478,7 @@ official-Tailwind parity until the exact LiveFrames candidate subset has been
 verified against the official Tailwind compiler.
 ```
 
-Upstream may advertise broad variant/selector support; its own `DESIGN.md`
-records coverage gaps. LiveFrames does not categorically deny feature support in
-alternate compilers — it **requires subset verification** before any alternate
-compiler can author or gate release CSS.
-
-### Three responsibilities (future candidate pipelines)
+Three responsibilities for future candidate pipelines:
 
 ```text
 Design IR / editor state
@@ -337,103 +490,67 @@ candidate completeness validation
 compiler
 ```
 
-Compiler output matching official Tailwind on a candidate list does **not**
-prove all required styles were discovered. Completeness validation is a
-separate step (e.g. manifest of required utilities + semantic CSS classes from
-IR).
-
 ### Decision table
 
-| Use case | Official Tailwind v4 | Candidate compiler (`tailwind_compiler`) | Current decision |
+| Use case | Official Tailwind v4 | Candidate compiler | Current decision |
 | --- | --- | --- | --- |
-| Native package styling (Hero CSS artifact) | `@theme` + component CSS + library build | Possible for utility subsets | **Adopt now:** official v4 + ordinary CSS. **Reject** alternate as canonical for P6.4. |
-| Preview static build (Storybook chrome) | Existing `tailwind storybook` | Optional dev speedup | **Adopt now:** official v4 for authority. **Evaluate later** optional dev-only fast path. |
-| Generator / converter | Write files → host official compile | IR → candidates → compile | **Borrow architecture only.** **Evaluate later** with dual-compile parity on LiveFrames subset. |
-| Server visual editor | CLI/process compile | In-memory NIF | **Evaluate later** (editor phase). |
-| Browser visual editor | Impractical for tight loop | WASM compile | **Borrow architecture only.** **Evaluate later.** Not Phase 6. |
+| Native package styling | `@theme` aliases + component CSS + library build | Utility subsets | **Adopt now:** official v4. **Reject** alternate as canonical. |
+| Preview Storybook chrome | `tailwind storybook` | Dev speedup | **Adopt now:** official v4. |
+| Generator / converter | Files → official compile | IR → candidates | **Borrow / evaluate later** |
+| Server visual editor | CLI compile | NIF | **Evaluate later** |
+| Browser visual editor | — | WASM | **Borrow / evaluate later** |
 
-### Pipeline comparison (summary)
+Hero must never invoke a compiler at request time.
 
-| | Candidate-driven | Filesystem + official compile |
-| --- | --- | --- |
-| Determinism | Good with sorted candidates + versioned theme | Strong; standard Phoenix path |
-| Generator | Strong for synthetic trees | Strong for ejected repos |
-| Editor | Strong | Weak |
-| Compatibility risk | High without subset gate | Lowest |
-| LiveFrames P6.4 Hero | Not canonical | **Chosen** |
-
-### Runtime coupling
-
-`LiveFrames.Components.Sections.Hero` must **never** invoke a compiler at
-request time. Compilation stays in build, generator, or editor tooling.
-
-## 20. P6.4B browser verification plan (before P6.6 Storybook)
-
-P6.6 Storybook must **not** start until P6.4B styling verification passes per
-this plan.
+## 21. P6.4B browser verification plan (before P6.6 Storybook)
 
 | Item | Specification |
 | --- | --- |
-| Verification host | `live_frames_preview` dev server (`mix phx.server` from umbrella) |
-| Route (P6.4B) | `/liveframes/native/hero` — dedicated native Hero styling surface |
-| Viewports | 1280×800, 992×800, 479×800, 375×667 |
-| Hover | Primary and outline actions — hover background/border tokens visible |
-| Keyboard focus | Tab to actions — `:focus-visible` ring/outline visible |
-| Contrast | Heading, lede, actions against section background (manual + tooling note in P6.4B record) |
-| Responsive actions | Full-width/stacked at narrow; side-by-side or aligned per evidence at `lf-md+` |
-| Image / overlay / focal | With approved **synthetic** demo image only; overlay readability; focal shift at breakpoints — **no attachment 880** |
-| Authority CSS | Compiled `priv/static/live_frames/css/live_frames.css` from library build |
+| Verification host | `live_frames_preview` (`mix phx.server`) |
+| Route (P6.4B) | `/liveframes/native/hero` |
+| **Verification viewports** | `375×667`, `478×800`, `479×800`, `991×800`, `992×800`, `1280×800` |
+| Boundary intent | `478/479` = narrow transition; `991/992` = intermediate/desktop transition; `1280` = representative desktop check **only** (no CSS behavior invented at 1280) |
+| Hover / focus / contrast / actions / overlay / focal | Per prior P6.4A criteria; synthetic image only |
+| Authority CSS | Package-relative `priv/static/live_frames/css/live_frames.css` from library build |
 
-Storybook (`/storybook`) remains P6.6.
+Storybook remains P6.6.
 
-## 21. Performance and runtime constraints
+## 22. Performance and runtime constraints
 
 ```text
 runtime CSS generation = 0
 DB calls = 0
 network calls = 0
 polling = 0
+runtime Tailwind dependency = 0
 ```
 
-Static compile/build only; CDN/browser cache friendly.
+## 23. Selector capability
 
-## 22. Selector capability
+Ordinary CSS for states and pseudo-elements; Hero does not invent `:nth-child()`.
 
-Package CSS retains ordinary CSS:
-
-`:hover`, `:focus-visible`, `:disabled` (where justified), `::before`,
-`::after`, `:nth-child(...)` only when a future component proves it, media and
-container queries as approved.
-
-Hero does **not** invent `:nth-child()` behavior. When Tailwind utilities are
-insufficient, **ordinary CSS** in `hero.css` is authoritative.
-
-## 23. Asset policy
+## 24. Asset policy
 
 ```text
 attachment 880 = unavailable
 ```
 
-Demo imagery for P6.4B must be independent/synthetic. No fidelity claim for
-substitute media. Do not use `chore/placeholder-assets` / `6e73b2d…` without
-separate owner authorization.
-
-## 24. P6.4A completion record
+## 25. P6.4A completion record
 
 ```text
 P6.4 workstream = architecture_proposed
+architecture_approved = NOT CLAIMED (owner review pending)
 P6.4 implementation = NOT AUTHORIZED
-P6 lifecycle on main = ... → semantic_verified (unchanged)
+main P6 lifecycle on main = ... → semantic_verified (unchanged)
 styling_verified = NOT CLAIMED
-canonical styling authority = live_frames library assets + priv static contract
-preview role = verification host only
-tailwind_compiler dependency = 0
-official Tailwind v4 = compatibility authority for P6.4
 ```
 
-## 25. P6.4B authorization prerequisites (checklist)
+## 26. P6.4B authorization prerequisites
 
-P6.4B may begin only after owner accepts P6.4A and clean `main` contains this
-document. P6.4B scope includes: library Tailwind build alias, `hero.css`
-implementation, token bridge file, verification LiveView route, and transition to
-`styling_verified` — not Storybook.
+P6.4B may begin only after **owner** transitions the workstream to
+`architecture_approved` on clean `main` containing this document.
+
+P6.4B must deliver: `:live_frames` Tailwind build tooling (`runtime: false`),
+`mix live_frames.assets.build`, Hex `package/0` file inclusion, bounded token
+bridge builder + drift gates, `hero.css`, compiled CSS drift gate, verification
+route, and workstream `implemented → verified` before main `styling_verified`.
