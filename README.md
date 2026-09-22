@@ -50,9 +50,10 @@ source
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.
 Hero India is accepted with the authorized unavailable-image limitation.
 Phase 6 is authorized. The P6.1 native Hero API is approved. The P6.2 native
-Hero implementation is present. P6.3 semantic verification is complete. P6.4
-styling and later work are not authorized. Styling and Storybook work have not
-started.
+Hero implementation is present. P6.3 semantic verification is complete. P6.4A
+styling-bridge architecture is proposed in
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B implementation
+and later slices are not authorized.
 
 ## Authority and navigation
 
@@ -62,6 +63,8 @@ started.
   — current execution order and gates.
 - [Phase 6 native componentization authority](docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md)
   — P6.1 native Hero API proposal and later-slice gates.
+- [P6.4A native styling bridge architecture](docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md)
+  — library CSS contract and P6.4B verification plan.
 - [Source and provenance policy](docs/04_SOURCE_AND_PROVENANCE.md) — canonical
   publication and provenance governance.
 - `apps/live_frames` — reusable compiler library.
