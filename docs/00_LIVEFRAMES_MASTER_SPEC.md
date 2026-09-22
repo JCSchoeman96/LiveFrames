@@ -2,11 +2,55 @@
 
 **Document:** `docs/00_LIVEFRAMES_MASTER_SPEC.md`  
 **Project:** LiveFrames  
-**Status:** Proposed Architecture Authority / Pre-Implementation  
-**Version:** 0.1.0  
-**Date:** 2026-08-27  
+**Status:** Architecture Authority / Implementation Active
+**Version:** 0.2.0
+**Date:** 2026-09-22
 **Primary audience:** LiveFrames maintainers, `/go` coding agents, reviewers, future contributors  
 **Authority rule:** Until superseded by a later accepted version, this document defines the intended product boundaries, repository structure, conversion pipeline, lifecycle rules, agent workflow, and implementation sequence for LiveFrames.
+
+**Revision (v0.2.0):** v0.2.0 reconciles execution status after accepted Phase 6. It does not redesign the underlying product architecture or retroactively rewrite historical phase evidence. The long-term product remains under development.
+
+## Current execution checkpoint
+
+**Repository checkpoint:** `f1e2e140c656ec3a9ff0a39cbca1cb0054b757ed`
+
+- **Master Phase 5:** CLOSED
+- **Phase 6 native componentization:** CLOSED / accepted
+- **First native Hero tracer:** accepted
+- **Hero `accepted`:** terminal only for that native tracer lifecycle
+
+**Related authorities:** `docs/19` = Phase 6 lifecycle/exit; `docs/20` = styling architecture; `docs/21` = P6.4 browser evidence; `docs/22` = P6.6 Storybook evidence.
+
+### Source-fidelity limitations (preserved)
+
+Hero `accepted` does **not** mean attachment 880 was resolved. Do not upgrade provenance or redistribution status. Authoritative Phase 5 / Phase 6 record (`docs/19` §2):
+
+```text
+fidelity_state = unavailable
+never_resolved = true
+waiver_granted = true
+image_asset_fidelity = unavailable
+redistribution_status = unknown
+full_visual_fidelity = not_claimed
+```
+
+### Catalogue and downstream authorization
+
+```text
+CatalogueItem lifecycle = architectural definition only
+
+Catalogue implementation = NOT YET AUTHORIZED
+
+No CatalogueItem instance/state has been advanced by Phase 6.
+
+Generator/ejection = NOT YET AUTHORIZED
+
+Package/Hex release = NOT CLAIMED
+
+Next native tracer = NOT YET AUTHORIZED
+```
+
+Hero native tracer `accepted` is **not** CatalogueItem `APPROVED` / `RELEASED`.
 
 ---
 
@@ -511,6 +555,8 @@ Guards:
 Terminal: `DEPRECATED`.
 
 A deprecated item may contain `superseded_by`, but history must remain traceable.
+
+**Execution status:** The CatalogueItem states and transitions above are architectural definition only. Catalogue implementation is not yet authorized; no CatalogueItem instance has been advanced by Phase 6. See *Current execution checkpoint* at the top of this document.
 
 ---
 
@@ -2474,7 +2520,7 @@ Mitigation:
 
 # 30. Current Source/Reference Set
 
-The current planning effort has access to:
+The project reference set includes:
 
 1. **Hero India Bricks JSON example** containing component elements and global classes.
 2. **Automatic.css settings JSON export** containing the current design-system configuration.
@@ -2483,9 +2529,9 @@ The current planning effort has access to:
 5. **Novamira Pro plugin archive** containing Bricks-oriented abilities such as content/settings/elements/components/interactions/variables/global classes/templates.
 6. **LiveFrame.tar.gz** containing initial plain HTML/CSS/JS conversion candidates, including carousel, accordion, tooltips, gallery, GSAP and infinite-scroll examples.
 
-These inputs are enough to author the architecture and begin Phase 0-4 planning. They do not need to be supplied again within the current working conversation/session.
+These inputs were sufficient to author the architecture and support early-phase planning. They do not need to be re-supplied for routine work in an environment that already holds them.
 
-Before repository execution begins, the fixtures/reference policy in Section 10 must be followed so agents can access the approved sources consistently.
+The fixtures/reference policy in Section 10 governs how agents access approved sources consistently.
 
 ---
 
@@ -2493,7 +2539,7 @@ Before repository execution begins, the fixtures/reference policy in Section 10 
 
 ## 31.1 No re-upload required right now
 
-For the current planning work, do not upload the Bricks JSON, ACSS JSON, ACSS plugin, Novamira or Novamira Pro again.
+For routine work in an environment that already holds the reference set, do not re-upload the Bricks JSON, ACSS JSON, ACSS plugin, Novamira or Novamira Pro.
 
 ## 31.2 What should enter the repository
 
@@ -3025,9 +3071,7 @@ The agent must not silently upgrade major framework versions later. Major-versio
 
 # 39. Master Spec STOP Condition
 
-This master specification intentionally stops before implementation code.
-
-The next action after acceptance is **Phase 0 only**.
+Implementation proceeds phase-by-phase under explicit owner authorization. As of v0.2.0, Master Phase 5 and Phase 6 native componentization (first Hero tracer) are closed; catalogue implementation, generator/ejection, package/Hex release, and the next native tracer are not yet authorized. The long-term roadmap remains under development.
 
 An agent receiving this document must not interpret it as permission to execute the entire roadmap in one run.
 
