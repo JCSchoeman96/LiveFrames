@@ -96,8 +96,11 @@ That file is **generated** (`LiveFrames.Styling.TokenBridge`). Consumers must
 **not** edit it. They may override **`--lf-*`** custom properties from their own
 stylesheet or scoped container, loaded so overrides win through normal cascade.
 
-Literal token values are authoritative only in generated output and the token
-map; this document names groups and purpose, not duplicate numeric/color tables.
+Approved **TokenSet** values are the semantic value authority. **`lf_theme.css`**
+is the deterministic generated/resolved CSS representation of those values.
+**`native_hero_v1.json`** (under `priv/token_maps/`) contains mapping metadata
+only and must not be treated as a value authority. This document names variable
+groups and purpose; it does not duplicate literal token values.
 
 ### Public variable groups (Hero-relevant)
 
@@ -113,19 +116,21 @@ map; this document names groups and purpose, not duplicate numeric/color tables.
 | Focus | `--lf-action-primary-focus`, `--lf-action-secondary-focus` | Keyboard focus outlines on slotted roots |
 | Border / radius | primary border and radius variables on actions | Action shape |
 
-## 8. Private component presentation
+## 8. Semantic classes and private composition variables
 
-These are **implementation hooks**, not a stable consumer API:
+Namespace model (matches `docs/20`):
 
 ```text
---lf-hero-*
-.lf-hero*
+.lf-hero*     — public semantic component classes (package-owned structure/presentation)
+--lf-*        — public theme customization surface (preferred for theming)
+--lf-hero-*   — component-private composition variables (not public theme API)
 ```
 
 Hero overlay gradients, focal treatment, and layout-specific composition use
-**component-private** `--lf-hero-*` variables on `.lf-hero`. Semantic
-`.lf-hero*` classes style the verified structure. Consumers must **not** depend
-on private variables or internal class names for long-term theming.
+**component-private** `--lf-hero-*` on `.lf-hero`. **Prefer public `--lf-*`**
+custom properties for theme customization rather than overriding `.lf-hero*`
+selectors casually. Overriding semantic classes may invalidate verified
+presentation; the consumer owns re-verification (see §9).
 
 ## 9. Consumer overrides and cascade
 

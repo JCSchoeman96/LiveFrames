@@ -215,15 +215,17 @@ Patterns:
 
 Do not edit `lf_theme.css` or committed precompiled CSS.
 
-### Public vs private variables
+### Public styling surfaces
 
-| Surface | Stable for consumers? |
+| Surface | Role |
 | --- | --- |
-| `--lf-*` from generated theme | **Yes** — public theme API |
-| `--lf-hero-*` on `.lf-hero` | **No** — private composition |
-| `.lf-hero*` classes | **No** — semantic implementation hooks |
+| `.lf-hero*` | **Public** semantic component class namespace (package-owned selectors) |
+| `--lf-*` from generated theme | **Public** theme customization surface — **preferred** for consumer theming |
+| `--lf-hero-*` on `.lf-hero` | **Private** composition variables — not public theme API |
 
-See variable groups in `docs/11`. Canonical values: generated `lf_theme.css`.
+Semantic TokenSet values are authoritative; `lf_theme.css` is the generated
+resolved CSS output; `native_hero_v1.json` is mapping metadata only (see
+`docs/11`). Variable groups: `docs/11`. Do not duplicate literal values here.
 
 ### Override verification warning
 
