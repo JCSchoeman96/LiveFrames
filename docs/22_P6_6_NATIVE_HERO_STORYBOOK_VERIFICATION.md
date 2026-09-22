@@ -21,18 +21,27 @@
 ```text
 P6.4 = verified
 P6.5 = documented / owner accepted
-Hero lifecycle = storybook_verified
 P6.6 = storybook_verified / owner accepted
-Phase 6 exit = not yet authorized
 ```
+
+P6.6 established Hero lifecycle **`storybook_verified`** only. Terminal
+**`accepted`** and Phase 6 **CLOSED / accepted** are separate Phase 6 exit
+decisions (`docs/19` §31).
+
+**Current lifecycle handoff:**
+
+```text
+Phase 6 exit = owner-approved / CLOSED
+Current Hero lifecycle = accepted
+```
+
+Catalogue / generator / ejection = **not authorized**.
 
 **Independent browser review:** PASS
 
 **Reviewed candidate head:** `bab0d7e6024c452d20abb8e2137c7720a0bffc9b`
 
 **Owner P6.6 gate:** APPROVED
-
-Do **not** advance Hero to **`accepted`** or authorize Phase 6 exit / catalogue work until PR #34 is merged, `main` is clean and synchronized, and separate owner authorization is recorded.
 
 ## Storybook CSS consumption
 

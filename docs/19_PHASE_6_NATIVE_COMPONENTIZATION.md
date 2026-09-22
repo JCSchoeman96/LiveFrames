@@ -1,14 +1,11 @@
 # Phase 6 Native Componentization
 
-**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
-`semantic_verified`; P6.4 = **verified** (P6.4B1 merged; P6.4B2 browser
-verification owner-accepted in
-`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); P6.5 = **documented /
-owner accepted** (owner-reviewed head `31416d7f545fa194b92303afe0a2503142516227`);
-P6.6 = **storybook_verified / owner accepted**
-(`docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`); Hero lifecycle =
-**`storybook_verified`**; Phase 6 exit = **acceptance candidate** (§30); Hero
-**accepted** = **not yet claimed**
+**Status:** **Phase 6 = CLOSED / accepted** (§31); P6.1 = **complete**; P6.2 =
+**complete**; P6.3 = **semantic_verified**; P6.4 = **verified / owner
+accepted**; P6.5 = **documented / owner accepted**; P6.6 =
+**storybook_verified / owner accepted**; **Hero lifecycle = `accepted`**; exit
+candidate reviewed at `dcb135e4289a03a93869632abbd0c19b179d6a34` (§30); catalogue /
+generator / ejection = **not authorized**
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -43,9 +40,8 @@ styling-bridge architecture is approved in
 P6.4B2 browser verification is verified / owner accepted (`docs/21`); P6.4 =
 verified. P6.5 documentation is **documented / owner accepted**; Hero lifecycle
 = **storybook_verified**. P6.6 Storybook verification is **storybook_verified /
-owner accepted** (`docs/22`). Phase 6 exit = **acceptance candidate** (§30);
-Hero **accepted** = **not yet claimed** (independent exit review and owner
-approval still required).
+owner accepted** (`docs/22`). Current Phase 6 close and Hero **`accepted`** are
+recorded in §31 (candidate basis §30).
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -529,7 +525,10 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified`; Hero lifecycle is **`storybook_verified`**; P6.5 documentation is **owner accepted**; P6.6 Storybook verification is **owner accepted** (§29). Phase 6 exit is recorded as **acceptance candidate** (§30); Hero **`accepted`** and Phase 6 close are **not yet claimed**.
+These are the gates for the native Hero tracer programme. P6.1–P6.6 are complete
+(§§25–29). Phase 6 exit owner acceptance is **CLOSED / accepted** (§31). Hero
+lifecycle is **`accepted`**. Catalogue, generator, and ejection remain **not
+authorized**.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
@@ -539,7 +538,7 @@ These are the gates for the remaining native-component slices. P6.1 is approved.
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). P6.4B1 merged; P6.4B2 owner-accepted. |
 | P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | **`documented` / owner accepted** — surfaces in §28; consumer guides: `docs/11`, `docs/16`; module docs in `hero.ex`; README navigation. Hero lifecycle: **`documented`**. |
 | P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | **`storybook_verified` / owner accepted** — `docs/22`; evidence `docs/evidence/p6_6_native_hero_storybook/`; tested source `ad1c6164afbdc3ee42b47ff7b814a89d5c647935`; independent browser review PASS; owner P6.6 approval APPROVED (§29). Hero lifecycle: **`storybook_verified`**. |
-| Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | **Acceptance candidate** (§30) — PR #34 merged at `83095f209583b07260ebbd3a8024bf9521240031`; independent exit review PASS and owner approval required before Hero **`accepted`**, Phase 6 close, or catalogue/generator/ejection work. |
+| Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | **CLOSED / accepted** (§31) — exit matrix basis §30 at reviewed head `dcb135e4289a03a93869632abbd0c19b179d6a34`; Hero **`accepted`**. Catalogue, generator, ejection, package release, and Hex release remain **not authorized / not claimed**. |
 
 ## 25. P6.1 completion record
 
@@ -711,9 +710,16 @@ Story module: `LiveFramesPreviewWeb.Storybook.Components.Hero`. Route:
 
 ## 30. Phase 6 exit acceptance candidate
 
-This section records a bounded **acceptance candidate** for independent Phase 6
-exit review. It does **not** mark Hero **`accepted`**, close Phase 6, authorize
-catalogue work, or authorize generator/ejection exposure.
+This section preserves the **acceptance candidate** independently reviewed for
+Phase 6 exit at head:
+
+```text
+dcb135e4289a03a93869632abbd0c19b179d6a34
+```
+
+It is the historical candidate record and exit-matrix evidence basis. Terminal
+Hero **`accepted`** and Phase 6 **CLOSED / accepted** are recorded in §31.
+This section does not authorize catalogue work or generator/ejection exposure.
 
 ```text
 authorized base = 83095f209583b07260ebbd3a8024bf9521240031
@@ -744,13 +750,12 @@ acceptance candidate (this section)
 ↑ P6.1 API approval (§25)
 ```
 
-### Phase 6 terminal outcome
+### Phase 6 terminal outcome (at candidate review)
 
 One source-independent native Hero tracer whose API, implementation, semantics,
-styling, consumer documentation, and Storybook consumption have each passed
-their required gates. Hero remains **`storybook_verified`** until independent
-exit review **PASS** and owner approval advance the tracer lifecycle to
-**`accepted`**.
+styling, consumer documentation, and Storybook consumption had each passed
+their required gates at candidate time. Independent exit review **PASS** and
+owner approval advancing Hero to **`accepted`** are recorded in §31.
 
 ### Invariant preservation (exit review)
 
@@ -803,7 +808,7 @@ is distinct from the Master Spec CatalogueItem lifecycle:
 DRAFT → GENERATED → REVIEWED → APPROVED → RELEASED → DEPRECATED
 ```
 
-Phase 6 exit **acceptance candidate** does **not** mean CatalogueItem
+Phase 6 exit (candidate or owner-accepted close) does **not** mean CatalogueItem
 **APPROVED** or **RELEASED**, Hex release, package release, generator
 availability, or ejection availability.
 
@@ -824,14 +829,100 @@ this candidate; evidence is referenced, not duplicated here.
 | Dependency boundaries | **PASS** | §22; §25 invariant table; §30 invariant block |
 | Test / CI health | **PASS** | Umbrella ExUnit suite and CI on candidate branch (governance-only diff; no runtime change) |
 
-### Next gates (not satisfied by this candidate)
+### Exit gates satisfied (recorded in §31)
 
 ```text
-acceptance candidate
+acceptance candidate (this section, head dcb135e…)
 → independent Phase 6 exit review PASS
-→ owner approval
-→ Hero lifecycle = accepted (tracer only)
+→ owner Phase 6 exit gate APPROVED
+→ Hero lifecycle = accepted
+→ Phase 6 = CLOSED / accepted
 ```
 
-Until those gates pass, do not record Hero **`accepted`**, Phase 6 **closed**,
-catalogue exposure, generator work, ejection work, or a second native tracer.
+Catalogue exposure, generator work, ejection work, package/Hex release, and a
+second native tracer remain **not authorized**.
+
+## 31. Phase 6 exit owner acceptance record
+
+```text
+independently reviewed candidate head =
+dcb135e4289a03a93869632abbd0c19b179d6a34
+
+independent Phase 6 exit review =
+PASS
+
+owner Phase 6 exit gate =
+APPROVED
+
+Hero lifecycle =
+accepted
+
+Phase 6 =
+CLOSED / accepted
+```
+
+Terminal native Hero tracer lifecycle:
+
+```text
+authorized
+→ api_proposed
+→ api_approved
+→ implemented
+→ semantic_verified
+→ styling_verified
+→ documented
+→ storybook_verified
+→ accepted
+```
+
+```text
+accepted = terminal for this native Hero tracer lifecycle
+```
+
+### Acceptance basis (references only)
+
+| Gate | Authority |
+| --- | --- |
+| P6.1 API | `docs/19` §§6–10 and §25 |
+| P6.2 implementation | Hero production module and §22 |
+| P6.3 semantics | `hero_semantics_test.exs` and §26 |
+| P6.4 styling | `docs/20`, `docs/21`, §27 |
+| P6.5 documentation | `docs/11`, `docs/16`, §28 |
+| P6.6 Storybook | `docs/22`, `docs/evidence/p6_6_native_hero_storybook/`, §29 |
+| Phase 6 exit matrix | §30 |
+
+### Source/provenance limitation (part of acceptance)
+
+```text
+fidelity_state = unavailable
+never_resolved = true
+waiver_granted = true
+image_asset_fidelity = unavailable
+redistribution_status = unknown
+full_visual_fidelity = not_claimed
+```
+
+```text
+Hero accepted
+≠ attachment 880 resolved
+≠ source-image fidelity proven
+≠ redistribution permission established
+```
+
+### Catalogue lifecycle separation
+
+Hero native tracer lifecycle:
+
+```text
+… → storybook_verified → accepted
+```
+
+is distinct from CatalogueItem:
+
+```text
+DRAFT → GENERATED → REVIEWED → APPROVED → RELEASED → DEPRECATED
+```
+
+No CatalogueItem state is advanced by Phase 6 Hero acceptance. Catalogue,
+generator, ejection, package release, and Hex release remain **not authorized /
+not claimed**.

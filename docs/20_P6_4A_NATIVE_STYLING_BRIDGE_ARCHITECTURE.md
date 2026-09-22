@@ -4,12 +4,11 @@
 
 **Plan version:** `v3`
 
-**Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4B1
-merged**; **P6.4B2 verified / owner accepted**
-(`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); **P6.4 workstream
-`verified`**; **P6.5 documented / owner accepted**; **P6.6 storybook_verified /
-owner accepted** (`docs/22`); **Hero lifecycle `storybook_verified`**; **Phase 6
-exit acceptance candidate** (`docs/19` §30); **Hero accepted not yet claimed**
+**Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4
+workstream `verified`**; **P6.4B1 merged**; **P6.4B2 verified / owner accepted**
+(`docs/21`); **P6.5 documented / owner accepted**; **P6.6 storybook_verified /
+owner accepted** (`docs/22`); **Hero lifecycle `accepted`**; **Phase 6 CLOSED /
+accepted** (`docs/19` §31); catalogue / generator / ejection **not authorized**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -103,9 +102,9 @@ Rules:
 - **Current P6.4 workstream state** = `verified` (P6.4A architecture approved;
   P6.4B1 merged; P6.4B2 browser evidence owner-accepted — `docs/21`).
 - **Hero lifecycle at P6.4 close** = `styling_verified` (P6.4B2 owner acceptance).
-- **Current Hero lifecycle** = `storybook_verified` (P6.5–P6.6; `docs/19` §28–§29).
-- **Phase 6 exit** = acceptance candidate (`docs/19` §30); Hero **accepted** = not
-  yet claimed.
+- **Current Hero lifecycle** = `accepted` (Phase 6 exit owner-approved; `docs/19` §31).
+- **Phase 6** = **CLOSED / accepted**; catalogue / generator / ejection **not
+  authorized**.
 - Historical: `architecture_proposed → architecture_approved` completed with
   independent architecture review PASS and owner approval (PR #30).
 - Historical: P6.4B implementation required separate owner authorization after
@@ -600,11 +599,10 @@ P6.4 workstream = verified
 
 Hero lifecycle at P6.4 close = styling_verified
 
-Current Hero lifecycle = storybook_verified
+Current Hero lifecycle = accepted
 P6.5 = documented / owner accepted
 P6.6 = storybook_verified / owner accepted
-Phase 6 exit = acceptance candidate
-Hero accepted = not yet claimed
+Phase 6 = CLOSED / accepted
 ```
 
 Evidence: `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md` and
@@ -626,8 +624,11 @@ P6.5 = **documented / owner accepted** (`docs/19` §28).
 
 P6.6 = **storybook_verified / owner accepted** — see `docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`.
 
-Phase 6 exit = **acceptance candidate** — see `docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md` §30.
+Phase 6 = **CLOSED / accepted** — see `docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md` §31
+(exit candidate basis §30).
 
-Hero **accepted** = **not yet claimed**.
+Current Hero lifecycle = **`accepted`** (terminal tracer lifecycle; P6.6 established
+`storybook_verified` only — see `docs/22`).
 
-Catalogue / generator / ejection = **not authorized**.
+Catalogue / generator / ejection = **not authorized**. CatalogueItem **RELEASED**,
+package release, and Hex release = **not claimed**.
