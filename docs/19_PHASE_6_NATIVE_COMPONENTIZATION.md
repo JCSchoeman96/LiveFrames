@@ -33,7 +33,7 @@ P6.1 starts from clean `main` at:
 PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
 approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A
-styling-bridge architecture is proposed in
+styling-bridge architecture is approved in
 `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B implementation
 and later slices remain unauthorized until separately accepted.
 
