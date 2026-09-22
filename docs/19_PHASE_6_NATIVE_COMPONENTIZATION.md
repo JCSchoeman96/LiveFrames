@@ -539,10 +539,11 @@ business-logic leakage = 0
 production code changed = 0
 generated artifacts changed = 0
 reviewed API proposal head = 6eda7ba9a66e16c2902868a82a3621d2d3267c92
-P6 lifecycle = authorized → api_proposed → api_approved → implemented
+P6 lifecycle = authorized → api_proposed → api_approved → implemented → semantic_verified
 P6.1 = api_approved
 P6.2 = implemented
-P6.3+ = not authorized
+P6.3 = semantic_verified
+P6.4+ = not authorized
 ```
 
 P6.2 implementation is present in
