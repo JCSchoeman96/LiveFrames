@@ -20,6 +20,7 @@ defmodule LiveFramesUmbrella.MixProject do
       setup: ["deps.get"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["assets.setup", "tailwind storybook", "esbuild app", "esbuild storybook"],
+      "live_frames.assets.build": ["live_frames.styling.theme.build", "tailwind live_frames"],
       check: ["format --check-formatted", "compile --warnings-as-errors", "test"]
     ]
   end

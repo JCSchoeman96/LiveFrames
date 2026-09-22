@@ -4,6 +4,13 @@ config :phoenix, :json_library, Jason
 
 config :tailwind,
   version: "4.1.12",
+  live_frames: [
+    args: ~w(
+      --input=assets/css/live_frames.css
+      --output=priv/static/live_frames/css/live_frames.css
+    ),
+    cd: Path.expand("../apps/live_frames", __DIR__)
+  ],
   storybook: [
     args: ~w(--input=assets/css/storybook.css --output=priv/static/assets/css/storybook.css),
     cd: Path.expand("../apps/live_frames_preview", __DIR__)

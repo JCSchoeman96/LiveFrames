@@ -23,6 +23,7 @@ defmodule LiveFramesPreviewWeb.Router do
     get "/health", PageController, :health
     live("/liveframes/lab", ConversionLabLive, :index)
     live("/liveframes/fidelity/hero", FidelityPreviewLive, :index)
+    live("/liveframes/native/hero", NativeHeroPreviewLive, :index)
     live_storybook("/storybook", backend_module: LiveFramesPreviewWeb.Storybook)
   end
 end

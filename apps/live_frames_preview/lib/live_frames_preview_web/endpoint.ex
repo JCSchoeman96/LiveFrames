@@ -9,6 +9,12 @@ defmodule LiveFramesPreviewWeb.Endpoint do
     gzip: false,
     only: ~w(assets robots.txt)
 
+  plug Plug.Static,
+    at: "/liveframes/library",
+    from: :live_frames,
+    gzip: false,
+    only: ~w(live_frames)
+
   plug Plug.Session,
     store: :cookie,
     key: "_live_frames_key",

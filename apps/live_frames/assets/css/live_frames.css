@@ -1,0 +1,6 @@
+@layer theme, components;
+
+@import "tailwindcss/theme.css" layer(theme);
+
+@import "./theme/lf_theme.css";
+@import "./components/sections/hero.css";

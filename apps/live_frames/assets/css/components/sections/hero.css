@@ -1,0 +1,170 @@
+@layer components {
+  .lf-hero {
+    --lf-hero-overlay-gradient-desktop: linear-gradient(
+      90deg,
+      hsla(46, 1%, 2%, 0.95) 30%,
+      hsla(0, 0%, 3%, 0.75) 60%,
+      hsla(0, 0%, 6%, 0.46) 90%
+    );
+    --lf-hero-overlay-gradient-intermediate: linear-gradient(
+      180deg,
+      hsla(0, 0%, 0%, 0) 5%,
+      hsla(0, 0%, 5%, 0.39) 20%,
+      hsla(0, 1%, 4%, 0.91) 65%
+    );
+    --lf-hero-media-focal-x: 70%;
+    --lf-hero-media-focal-y: 50%;
+    --lf-hero-media-focal-x-intermediate: 50%;
+    --lf-hero-media-focal-y-intermediate: 50%;
+
+    align-items: center;
+    background-color: var(--lf-color-background-ultra-dark);
+    color: var(--lf-color-text-on-dark);
+    display: flex;
+    flex-direction: column;
+    gap: var(--lf-space-container-gap);
+    isolation: isolate;
+    padding-block: var(--lf-space-section-padding-block);
+    padding-inline: var(--lf-space-gutter);
+    font-size: var(--lf-typography-body-size);
+    line-height: var(--lf-typography-body-line-height);
+    position: relative;
+  }
+
+  .lf-hero__content {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    margin-inline: auto;
+    max-width: min(100%, var(--lf-layout-container-max-width));
+    position: relative;
+    row-gap: var(--lf-space-content-gap);
+    width: 100%;
+    z-index: 1;
+  }
+
+  .lf-hero__heading {
+    color: var(--lf-color-heading-on-dark);
+    font-size: var(--lf-typography-display-size);
+    font-weight: var(--lf-typography-display-weight);
+    line-height: var(--lf-typography-display-line-height);
+  }
+
+  .lf-hero__lede {
+    font-size: var(--lf-typography-body-size);
+    line-height: var(--lf-typography-body-line-height);
+    max-width: 70ch;
+  }
+
+  .lf-hero__actions {
+    column-gap: var(--lf-space-content-gap);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 0;
+    row-gap: var(--lf-space-content-gap);
+    width: 100%;
+  }
+
+  .lf-hero__action--primary > :where(a, button),
+  .lf-hero__action--secondary > :where(a, button) {
+    display: inline-flex;
+    font-size: var(--lf-action-primary-font-size);
+    font-weight: var(--lf-action-primary-font-weight);
+    line-height: var(--lf-action-primary-line-height);
+    min-width: var(--lf-action-primary-min-width);
+    padding-block: var(--lf-action-primary-padding-block);
+    padding-inline: var(--lf-action-primary-padding-inline);
+  }
+
+  .lf-hero__action--primary > :where(a, button) {
+    background-color: var(--lf-action-primary-background);
+    border-color: var(--lf-action-primary-border);
+    border-radius: var(--lf-action-primary-radius);
+    border-style: var(--lf-action-primary-border-style);
+    border-width: var(--lf-action-primary-border-width);
+    color: var(--lf-action-primary-text);
+  }
+
+  .lf-hero__action--primary > :where(a, button):hover {
+    background-color: var(--lf-action-primary-background-hover);
+  }
+
+  .lf-hero__action--primary > :where(a, button):focus-visible {
+    outline-color: var(--lf-action-primary-focus);
+    outline-offset: 2px;
+    outline-style: solid;
+    outline-width: 2px;
+  }
+
+  .lf-hero__action--secondary > :where(a, button) {
+    background-color: var(--lf-action-secondary-background);
+    border-color: var(--lf-action-secondary-border);
+    border-radius: var(--lf-action-primary-radius);
+    border-style: var(--lf-action-primary-border-style);
+    border-width: var(--lf-action-primary-border-width);
+    color: var(--lf-action-secondary-text);
+  }
+
+  .lf-hero__action--secondary > :where(a, button):hover {
+    background-color: var(--lf-action-secondary-background-hover);
+    border-color: var(--lf-action-secondary-border-hover);
+    color: var(--lf-action-secondary-text-hover);
+  }
+
+  .lf-hero__action--secondary > :where(a, button):focus-visible {
+    outline-color: var(--lf-action-secondary-focus);
+    outline-offset: 2px;
+    outline-style: solid;
+    outline-width: 2px;
+  }
+
+  .lf-hero__media {
+    inset: 0;
+    position: absolute;
+    z-index: -1;
+  }
+
+  .lf-hero__media::after {
+    background-image: var(--lf-hero-overlay-gradient-desktop);
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+  }
+
+  .lf-hero__image {
+    height: 100%;
+    inset: 0;
+    object-fit: cover;
+    object-position: var(--lf-hero-media-focal-x) var(--lf-hero-media-focal-y);
+    position: absolute;
+    width: 100%;
+    z-index: -2;
+  }
+
+  @media (max-width: 478px) {
+    .lf-hero__actions > .lf-hero__action {
+      width: 100%;
+    }
+
+    .lf-hero__action--primary > :where(a, button),
+    .lf-hero__action--secondary > :where(a, button) {
+      justify-content: center;
+      width: 100%;
+    }
+  }
+
+  @media (min-width: 479px) and (max-width: 991px) {
+    .lf-hero__media::after {
+      background-image: var(--lf-hero-overlay-gradient-intermediate);
+    }
+
+    .lf-hero__image {
+      object-position: var(--lf-hero-media-focal-x-intermediate)
+        var(--lf-hero-media-focal-y-intermediate);
+    }
+  }
+}
