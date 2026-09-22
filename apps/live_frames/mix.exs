@@ -22,7 +22,7 @@ defmodule LiveFrames.MixProject do
 
   def package do
     [
-      files: ~w(lib mix.exs README.md assets/css priv/token_maps priv/static/live_frames)
+      files: ~w(lib mix.exs assets/css priv/token_maps priv/static/live_frames)
     ]
   end
 end

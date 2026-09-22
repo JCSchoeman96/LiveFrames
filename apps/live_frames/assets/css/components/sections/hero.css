@@ -1,33 +1,29 @@
 @layer components {
   .lf-hero {
+    --lf-hero-overlay-gradient-vertical: linear-gradient(
+      180deg,
+      hsla(0, 0%, 0%, 0) 5%,
+      hsla(0, 0%, 5%, 0.39) 20%,
+      hsla(0, 1%, 4%, 0.91) 65%
+    );
     --lf-hero-overlay-gradient-desktop: linear-gradient(
       90deg,
       hsla(46, 1%, 2%, 0.95) 30%,
       hsla(0, 0%, 3%, 0.75) 60%,
       hsla(0, 0%, 6%, 0.46) 90%
     );
-    --lf-hero-overlay-gradient-intermediate: linear-gradient(
-      180deg,
-      hsla(0, 0%, 0%, 0) 5%,
-      hsla(0, 0%, 5%, 0.39) 20%,
-      hsla(0, 1%, 4%, 0.91) 65%
-    );
-    --lf-hero-media-focal-x: 70%;
-    --lf-hero-media-focal-y: 50%;
-    --lf-hero-media-focal-x-intermediate: 50%;
-    --lf-hero-media-focal-y-intermediate: 50%;
 
     align-items: center;
     background-color: var(--lf-color-background-ultra-dark);
     color: var(--lf-color-text-on-dark);
     display: flex;
     flex-direction: column;
+    font-size: var(--lf-typography-body-size);
     gap: var(--lf-space-container-gap);
     isolation: isolate;
+    line-height: var(--lf-typography-body-line-height);
     padding-block: var(--lf-space-section-padding-block);
     padding-inline: var(--lf-space-gutter);
-    font-size: var(--lf-typography-body-size);
-    line-height: var(--lf-typography-body-line-height);
     position: relative;
   }
 
@@ -37,6 +33,7 @@
     flex-direction: column;
     justify-content: flex-end;
     margin-inline: auto;
+    margin-top: 400px;
     max-width: min(100%, var(--lf-layout-container-max-width));
     position: relative;
     row-gap: var(--lf-space-content-gap);
@@ -49,33 +46,45 @@
     font-size: var(--lf-typography-display-size);
     font-weight: var(--lf-typography-display-weight);
     line-height: var(--lf-typography-display-line-height);
+    margin: 0;
   }
 
   .lf-hero__lede {
     font-size: var(--lf-typography-body-size);
     line-height: var(--lf-typography-body-line-height);
+    margin: 0;
     max-width: 70ch;
   }
 
   .lf-hero__actions {
     column-gap: var(--lf-space-content-gap);
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
+    flex-wrap: nowrap;
     margin-top: 0;
     row-gap: var(--lf-space-content-gap);
     width: 100%;
   }
 
+  .lf-hero__actions > .lf-hero__action {
+    width: 100%;
+  }
+
   .lf-hero__action--primary > :where(a, button),
   .lf-hero__action--secondary > :where(a, button) {
+    align-items: center;
+    box-sizing: border-box;
     display: inline-flex;
+    font-family: inherit;
     font-size: var(--lf-action-primary-font-size);
     font-weight: var(--lf-action-primary-font-weight);
+    justify-content: center;
     line-height: var(--lf-action-primary-line-height);
     min-width: var(--lf-action-primary-min-width);
     padding-block: var(--lf-action-primary-padding-block);
     padding-inline: var(--lf-action-primary-padding-inline);
+    text-decoration: none;
+    width: 100%;
   }
 
   .lf-hero__action--primary > :where(a, button) {
@@ -127,7 +136,7 @@
   }
 
   .lf-hero__media::after {
-    background-image: var(--lf-hero-overlay-gradient-desktop);
+    background-image: var(--lf-hero-overlay-gradient-vertical);
     content: "";
     inset: 0;
     pointer-events: none;
@@ -139,32 +148,35 @@
     height: 100%;
     inset: 0;
     object-fit: cover;
-    object-position: var(--lf-hero-media-focal-x) var(--lf-hero-media-focal-y);
+    object-position: 50% 50%;
     position: absolute;
     width: 100%;
     z-index: -2;
   }
 
-  @media (max-width: 478px) {
+  @media (min-width: 479px) {
+    .lf-hero__actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
     .lf-hero__actions > .lf-hero__action {
-      width: 100%;
+      width: auto;
     }
 
     .lf-hero__action--primary > :where(a, button),
     .lf-hero__action--secondary > :where(a, button) {
-      justify-content: center;
-      width: 100%;
+      width: auto;
     }
   }
 
-  @media (min-width: 479px) and (max-width: 991px) {
+  @media (min-width: 992px) {
     .lf-hero__media::after {
-      background-image: var(--lf-hero-overlay-gradient-intermediate);
+      background-image: var(--lf-hero-overlay-gradient-desktop);
     }
 
     .lf-hero__image {
-      object-position: var(--lf-hero-media-focal-x-intermediate)
-        var(--lf-hero-media-focal-y-intermediate);
+      object-position: 70% 50%;
     }
   }
 }

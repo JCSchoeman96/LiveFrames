@@ -4,8 +4,9 @@
 
 **Plan version:** `v3`
 
-**Status:** `architecture_approved` (active styling contract; P6.4B implementation not
-authorized)
+**Status:** `architecture_approved` (active styling contract); **P6.4B1
+implementation candidate complete** on PR #31 (`implemented candidate`);
+P6.4B2 browser verification **not authorized**, **not started**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -587,26 +588,27 @@ attachment 880 = unavailable
 
 ```text
 P6.4A architecture = approved
-P6.4 workstream = architecture_approved
-P6.4B implementation = not started; not yet authorized
+P6.4 workstream = implemented candidate (P6.4B1 PR #31)
+P6.4B2 browser verification = not authorized; not started
 main P6 lifecycle on main = ... → semantic_verified (unchanged)
 styling_verified = NOT CLAIMED
+P6.4 workstream verified = NOT CLAIMED
 ```
 
 ## 26. P6.4B authorization prerequisites
 
-P6.4 architecture is **approved** on this branch. P6.4B implementation is **not**
-started and **not yet authorized**.
+P6.4 architecture is **approved**. P6.4B1 implementation candidate is **complete**
+on PR #31 (`architecture_approved → implemented candidate`). P6.4B2 browser
+verification is **not** authorized and **not** started.
 
-P6.4B may begin only after:
+P6.4B2 may begin only after:
 
 ```text
-PR #30 merged
-+ clean main verification
-+ separate owner implementation authorization
+P6.4B1 merged to clean main
++ owner authorization for browser/WCAG verification
 ```
 
-Architecture approval is **not** implementation authorization.
+Architecture approval alone is **not** P6.4B2 verification authorization.
 
 P6.4B must deliver: `:live_frames` Tailwind build tooling (`runtime: false`),
 `mix live_frames.assets.build`, Hex `package/0` file inclusion, bounded token

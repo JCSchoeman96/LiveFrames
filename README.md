@@ -52,8 +52,10 @@ Hero India is accepted with the authorized unavailable-image limitation.
 Phase 6 is authorized. The P6.1 native Hero API is approved. The P6.2 native
 Hero implementation is present. P6.3 semantic verification is complete. P6.4A
 styling-bridge architecture is approved in
-`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B implementation is
-not yet authorized; later slices remain unauthorized.
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 native Hero styling
+bridge is an **implemented candidate** on PR #31 (`implemented candidate`). P6.4B2
+browser verification is **not authorized** and **not started**; `styling_verified`
+is **not claimed**. Later slices remain unauthorized.
 
 ## Authority and navigation
 

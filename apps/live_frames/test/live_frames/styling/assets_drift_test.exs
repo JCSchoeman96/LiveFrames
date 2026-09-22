@@ -24,17 +24,22 @@ defmodule LiveFrames.Styling.AssetsDriftTest do
   end
 
   test "committed live_frames.css rebuilds byte-identically" do
-    Mix.Task.run("live_frames.assets.build")
+    rebuild_assets!()
     assert File.exists?(@compiled)
-
-    Mix.Task.run("live_frames.assets.build")
-
     first = File.read!(@compiled)
-    Mix.Task.run("live_frames.assets.build")
+
+    rebuild_assets!()
     second = File.read!(@compiled)
 
     assert first == second
     assert first =~ ".lf-hero"
     refute String.downcase(first) =~ "preflight"
+  end
+
+  defp rebuild_assets! do
+    Mix.Task.reenable("live_frames.assets.build")
+    Mix.Task.reenable("live_frames.styling.theme.build")
+    Mix.Task.reenable("tailwind")
+    Mix.Task.run("live_frames.assets.build")
   end
 end

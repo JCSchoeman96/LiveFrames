@@ -4,6 +4,7 @@ defmodule LiveFrames.Styling.TokenBridge do
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
+  @supported_schema_version "1.0.0"
   @css_variable ~r/^--lf-[a-z0-9]+(?:-[a-z0-9]+)*$/
   @unsafe_value ~r/[{};\\]/
   @unsafe_external_url ~r/url\s*\(\s*(?:["']\s*|\/\*.*?\*\/\s*)*(?:https?:|\/\/|javascript:)/is
@@ -45,12 +46,71 @@ defmodule LiveFrames.Styling.TokenBridge do
   defp validate_mapping(token_set, mapping) do
     entries = mapping["entries"] || []
 
-    with :ok <- validate_duplicate_paths(entries),
+    with :ok <- validate_mapping_header(mapping),
+         :ok <- validate_mapping_entries_structure(entries),
+         :ok <- validate_duplicate_paths(entries),
          :ok <- validate_duplicate_css_variables(entries),
          :ok <- validate_duplicate_tailwind_aliases(entries) do
       validate_entries_resolvable(token_set, entries)
     end
   end
+
+  defp validate_mapping_header(mapping) do
+    cond do
+      mapping["schema_version"] != @supported_schema_version ->
+        {:error, {:unsupported_mapping_schema, mapping["schema_version"]}}
+
+      not (is_binary(mapping["mapping_version"]) and mapping["mapping_version"] != "") ->
+        {:error, {:invalid_mapping_version, mapping["mapping_version"]}}
+
+      not is_list(mapping["entries"]) ->
+        {:error, {:invalid_mapping_entries, mapping["entries"]}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_mapping_entries_structure(entries) when is_list(entries) do
+    Enum.reduce_while(entries, :ok, fn entry, :ok ->
+      case validate_mapping_entry_structure(entry) do
+        :ok -> {:cont, :ok}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_mapping_entry_structure(entry) when is_map(entry) do
+    name = entry["css_variable"]
+
+    cond do
+      not css_variable?(name) ->
+        {:error, {:invalid_css_variable, name}}
+
+      entry["tailwind_alias"] not in [nil, ""] ->
+        {:error, {:unsupported_tailwind_alias, entry["tailwind_alias"]}}
+
+      valid_mapping_entry_shape?(entry) ->
+        :ok
+
+      true ->
+        {:error, {:invalid_mapping_entry, entry}}
+    end
+  end
+
+  defp validate_mapping_entry_structure(entry),
+    do: {:error, {:invalid_mapping_entry, entry}}
+
+  defp valid_mapping_entry_shape?(%{"compose" => %{"type" => "fluid_px_pair"} = compose}) do
+    required = ["min", "max", "viewport_min", "viewport_max"]
+    Enum.all?(required, &(is_binary(compose[&1]) and compose[&1] != ""))
+  end
+
+  defp valid_mapping_entry_shape?(%{"token_set_path" => path})
+       when is_binary(path) and path != "",
+       do: true
+
+  defp valid_mapping_entry_shape?(_), do: false
 
   defp validate_duplicate_paths(entries) do
     paths =
@@ -77,7 +137,7 @@ defmodule LiveFrames.Styling.TokenBridge do
     aliases =
       entries
       |> Enum.map(& &1["tailwind_alias"])
-      |> Enum.reject(&is_nil/1)
+      |> Enum.reject(&(&1 in [nil, ""]))
 
     case duplicate_values(aliases) do
       [] -> :ok
@@ -108,21 +168,15 @@ defmodule LiveFrames.Styling.TokenBridge do
   end
 
   defp resolve_entry(%{"css_variable" => name} = entry, token_set) do
-    cond do
-      not css_variable?(name) ->
-        {:error, {:invalid_css_variable, name}}
+    case entry do
+      %{"compose" => %{"type" => "fluid_px_pair"} = compose} ->
+        fluid_px_pair(token_set, name, compose)
 
-      true ->
-        case entry do
-          %{"compose" => %{"type" => "fluid_px_pair"} = compose} ->
-            fluid_px_pair(token_set, name, compose)
+      %{"token_set_path" => path} ->
+        token_value(token_set, name, path)
 
-          %{"token_set_path" => path} ->
-            token_value(token_set, name, path)
-
-          _ ->
-            {:error, {:invalid_mapping_entry, entry}}
-        end
+      _ ->
+        {:error, {:invalid_mapping_entry, entry}}
     end
   end
 
@@ -169,9 +223,8 @@ defmodule LiveFrames.Styling.TokenBridge do
   defp css_value(%Token{resolved_value: value}) when is_float(value),
     do: {:ok, format_float(value)}
 
-  defp css_value(%Token{resolved_value: %{"type" => "responsive", "min" => min, "max" => max}})
-       when is_binary(min) and is_binary(max),
-       do: {:ok, "clamp(#{min}, #{max}, #{max})"}
+  defp css_value(%Token{resolved_value: %{"type" => "responsive"}}),
+    do: {:error, :non_serializable_resolved_value}
 
   defp css_value(_token), do: {:error, :non_serializable_resolved_value}
 
