@@ -4,7 +4,9 @@
 `semantic_verified`; P6.4 workstream **`verified`** (P6.4B1 merged; P6.4B2 browser
 verification owner-accepted in
 `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); Hero lifecycle current =
-**`styling_verified`**; P6.5 not yet authorized; P6.6 not authorized
+**`styling_verified`** (pending owner approval of P6.5 documentation for
+**`documented`**); P6.5 documentation = **`documented candidate`**; P6.6 not
+authorized
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -531,7 +533,7 @@ These are the gates for the remaining native-component slices. P6.1 is approved.
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). Hero lifecycle: `styling_verified`. P6.4B1 merged; P6.4B2 owner-accepted. |
-| P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | Not started; not authorized. |
+| P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | **`documented candidate`** — `docs/11`, `docs/16`, `hero.ex` module docs, README; independent review and owner approval required for **`documented`**. Hero remains **`styling_verified`** until then. |
 | P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
 | Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
 
@@ -630,14 +632,39 @@ P6.4 workstream = verified
 Hero lifecycle current = styling_verified
 P6.4B1 = merged
 P6.4B2 = verified / owner accepted
-P6.5 = not yet authorized
+P6.5 = documented candidate (see §28)
 P6.6 = not authorized
 ```
 
-P6.5 may begin only after:
+P6.5 consumer documentation surfaces are recorded in §28. Owner-approved
+**`documented`** requires independent review PASS and explicit acceptance; this
+PR does not self-approve that transition.
+
+## 28. P6.5 documentation candidate record
+
+P6.5 turns the verified native Hero into consumer-facing documentation only. No
+Hero markup, attrs, slots, CSS, tokens, or preview runtime changes are in scope.
 
 ```text
-PR #32 merged
-+ clean synchronized main
-+ separate owner authorization
+P6.4 = verified
+Hero lifecycle = styling_verified (unchanged until owner accepts documented)
+P6.5 state = documented candidate
+P6.6 = not authorized
 ```
+
+Documentation surfaces produced in this candidate:
+
+| Surface | Role |
+| --- | --- |
+| `docs/11_CSS_AND_TAILWIND_STRATEGY.md` | Cross-cutting CSS/Tailwind strategy, public `--lf-*` vs private Hero hooks |
+| `docs/16_PACKAGE_AND_GENERATOR_MODEL.md` | Phoenix consumer package guide, CSS paths, Plug.Static, Hero API |
+| `apps/live_frames/lib/live_frames/components/sections/hero.ex` | `@moduledoc` / `@doc` consumer contract at source |
+| `README.md` | Concise consumer navigation |
+| `docs/19` (this section) | Lifecycle **`documented candidate`** record |
+
+Durable consumer homes (post-review): **`docs/16`** for integration, **`docs/11`**
+for styling boundaries. Architecture history remains **`docs/20`**; browser
+evidence remains **`docs/21`**.
+
+Forbidden in P6.5: advancing Hero to **`documented`**, **`storybook_verified`**,
+**`storybook`**, or **`accepted`** without owner gates; P6.6 Storybook work.

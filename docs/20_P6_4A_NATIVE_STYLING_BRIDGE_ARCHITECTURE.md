@@ -593,26 +593,24 @@ P6.4B1 implementation = merged
 P6.4B2 browser verification = verified / owner accepted
 P6.4 workstream = verified
 Hero lifecycle = styling_verified
-P6.5 documentation = not yet authorized
+P6.5 consumer documentation = documented candidate (see docs/11, docs/16, docs/19 §28)
 P6.6 Storybook = not authorized
 ```
 
 Evidence: `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md` and
 `docs/evidence/p6_4b2_native_hero/`. Independent browser review **PASS**;
-owner evidence gate **APPROVED** (PR #32). PR #32 merge to clean synchronized
-`main` remains required before P6.5.
+owner evidence gate **APPROVED** (PR #32).
 
-## 26. P6.5 authorization prerequisites
+## 26. P6.5 consumer documentation handoff
 
-P6.4 styling verification is **complete** on the PR #32 branch. P6.5
-documentation is **not** authorized by this acceptance.
+P6.4 architecture and verification history remain in this document (`docs/20`).
+**Phoenix consumers** should use:
 
-P6.5 may begin only after:
+- **`docs/16_PACKAGE_AND_GENERATOR_MODEL.md`** — package integration, precompiled
+  CSS, optional Tailwind v4 source, Plug.Static, Hero API;
+- **`docs/11_CSS_AND_TAILWIND_STRATEGY.md`** — public `--lf-*` vs private Hero
+  CSS, Preflight posture, override safety.
 
-```text
-PR #32 merged
-+ clean synchronized main
-+ separate owner authorization
-```
-
-P6.6 Storybook remains unauthorized until P6.5 and separate owner acceptance.
+P6.5 records **`documented candidate`** in `docs/19` §28. Owner-approved
+**`documented`** and P6.6 Storybook require separate gates; P6.6 remains
+unauthorized until accepted.
