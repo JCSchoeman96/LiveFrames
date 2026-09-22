@@ -7,7 +7,8 @@
 **Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4B1
 merged**; **P6.4B2 browser verification verified / owner accepted**
 (`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); **P6.4 workstream
-`verified`**; **Hero lifecycle `styling_verified`**
+`verified`**; **Hero lifecycle `documented`**; **P6.5 consumer documentation
+documented / owner accepted**; **P6.6 Storybook not yet authorized**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -592,9 +593,9 @@ P6.4A architecture = approved
 P6.4B1 implementation = merged
 P6.4B2 browser verification = verified / owner accepted
 P6.4 workstream = verified
-Hero lifecycle = styling_verified
-P6.5 consumer documentation = documented candidate (see docs/11, docs/16, docs/19 §28)
-P6.6 Storybook = not authorized
+Hero lifecycle = documented
+P6.5 consumer documentation = documented / owner accepted (see docs/11, docs/16, docs/19 §28)
+P6.6 Storybook = not yet authorized
 ```
 
 Evidence: `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md` and
@@ -608,9 +609,10 @@ P6.4 architecture and verification history remain in this document (`docs/20`).
 
 - **`docs/16_PACKAGE_AND_GENERATOR_MODEL.md`** — package integration, precompiled
   CSS, optional Tailwind v4 source, Plug.Static, Hero API;
-- **`docs/11_CSS_AND_TAILWIND_STRATEGY.md`** — public `--lf-*` vs private Hero
-  CSS, Preflight posture, override safety.
+- **`docs/11_CSS_AND_TAILWIND_STRATEGY.md`** — public `--lf-*` theme surface,
+  semantic class namespace, `--lf-hero-*` composition boundaries, Preflight
+  posture, override safety.
 
-P6.5 records **`documented candidate`** in `docs/19` §28. Owner-approved
-**`documented`** and P6.6 Storybook require separate gates; P6.6 remains
-unauthorized until accepted.
+P6.5 is **documented / owner accepted** (`docs/19` §28). P6.6 Storybook is **not
+yet authorized** until PR #33 merge, clean synchronized `main`, and separate
+owner authorization.

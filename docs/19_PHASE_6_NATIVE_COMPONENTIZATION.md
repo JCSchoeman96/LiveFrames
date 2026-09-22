@@ -3,10 +3,10 @@
 **Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
 `semantic_verified`; P6.4 workstream **`verified`** (P6.4B1 merged; P6.4B2 browser
 verification owner-accepted in
-`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); Hero lifecycle current =
-**`styling_verified`** (pending owner approval of P6.5 documentation for
-**`documented`**); P6.5 documentation = **`documented candidate`**; P6.6 not
-authorized
+`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); Hero lifecycle =
+**`documented`**; P6.5 documentation = **documented / owner accepted**
+(owner-reviewed head `31416d7f545fa194b92303afe0a2503142516227`); P6.6 **not
+yet authorized**
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -525,16 +525,16 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified` and Hero lifecycle is `styling_verified`; P6.5 and P6.6 remain unauthorized until separately accepted.
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified`; Hero lifecycle is **`documented`**; P6.5 documentation is **owner accepted**; P6.6 is not yet authorized.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
-| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). Hero lifecycle: `styling_verified`. P6.4B1 merged; P6.4B2 owner-accepted. |
-| P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | **`documented candidate`** — `docs/11`, `docs/16`, `hero.ex` module docs, README; independent review and owner approval required for **`documented`**. Hero remains **`styling_verified`** until then. |
-| P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
+| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). P6.4B1 merged; P6.4B2 owner-accepted. |
+| P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | **`documented` / owner accepted** — surfaces in §28; consumer guides: `docs/11`, `docs/16`; module docs in `hero.ex`; README navigation. Hero lifecycle: **`documented`**. |
+| P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; **not yet authorized** (requires PR #33 merge, clean synchronized `main`, and separate owner authorization). |
 | Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
 
 ## 25. P6.1 completion record
@@ -629,42 +629,41 @@ to clean synchronized `main` remains the publication gate.
 ```text
 P6.3 = semantic_verified
 P6.4 workstream = verified
-Hero lifecycle current = styling_verified
+Hero lifecycle at P6.4 close = styling_verified
 P6.4B1 = merged
 P6.4B2 = verified / owner accepted
-P6.5 = documented candidate (see §28)
-P6.6 = not authorized
 ```
 
-P6.5 consumer documentation surfaces are recorded in §28. Owner-approved
-**`documented`** requires independent review PASS and explicit acceptance; this
-PR does not self-approve that transition.
+Current Hero lifecycle and P6.5 acceptance are recorded in §28.
 
-## 28. P6.5 documentation candidate record
+## 28. P6.5 documentation owner acceptance record
 
-P6.5 turns the verified native Hero into consumer-facing documentation only. No
-Hero markup, attrs, slots, CSS, tokens, or preview runtime changes are in scope.
+Owner documentation review **APPROVED** at head
+`31416d7f545fa194b92303afe0a2503142516227` (PR #33). P6.5 records
+consumer-facing documentation only; no Hero markup, attrs, slots, CSS, tokens,
+or preview runtime changes were in scope.
 
 ```text
+P6.3 = semantic_verified
 P6.4 = verified
-Hero lifecycle = styling_verified (unchanged until owner accepts documented)
-P6.5 state = documented candidate
-P6.6 = not authorized
+Hero lifecycle = documented
+P6.5 = documented / owner accepted
+P6.6 = not yet authorized
 ```
 
-Documentation surfaces produced in this candidate:
+Owner-approved documentation surfaces:
 
 | Surface | Role |
 | --- | --- |
-| `docs/11_CSS_AND_TAILWIND_STRATEGY.md` | Cross-cutting CSS/Tailwind strategy, public `--lf-*` vs private Hero hooks |
+| `docs/11_CSS_AND_TAILWIND_STRATEGY.md` | Cross-cutting CSS/Tailwind strategy and theme boundaries |
 | `docs/16_PACKAGE_AND_GENERATOR_MODEL.md` | Phoenix consumer package guide, CSS paths, Plug.Static, Hero API |
 | `apps/live_frames/lib/live_frames/components/sections/hero.ex` | `@moduledoc` / `@doc` consumer contract at source |
 | `README.md` | Concise consumer navigation |
-| `docs/19` (this section) | Lifecycle **`documented candidate`** record |
 
-Durable consumer homes (post-review): **`docs/16`** for integration, **`docs/11`**
-for styling boundaries. Architecture history remains **`docs/20`**; browser
-evidence remains **`docs/21`**.
+Durable consumer homes: **`docs/16`** for integration, **`docs/11`** for styling
+boundaries. Architecture history remains **`docs/20`**; browser evidence remains
+**`docs/21`**.
 
-Forbidden in P6.5: advancing Hero to **`documented`**, **`storybook_verified`**,
-**`storybook`**, or **`accepted`** without owner gates; P6.6 Storybook work.
+P6.6 Storybook may begin only after PR #33 merge, clean synchronized `main`, and
+separate owner authorization. Do not advance Hero beyond **`documented`** without
+later gates (`storybook_verified`, `accepted`).
