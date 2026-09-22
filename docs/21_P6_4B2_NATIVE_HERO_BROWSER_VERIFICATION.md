@@ -1,6 +1,7 @@
 # P6.4B2 — Native Hero browser verification
 
-**Status:** `verified candidate` (independent browser review and owner approval still required)
+**Status:** `verified` (independent browser review **PASS**; owner evidence gate
+**APPROVED**)
 
 **Base SHA:** `29706d0bba4edbea632a6eec4afef4f5fcd4a5d1`
 
@@ -13,6 +14,21 @@
 **Browser:** Google Chrome `153.0.8010.52` on Linux x86_64
 
 **Evidence:** `docs/evidence/p6_4b2_native_hero/` (screenshots + `manifest.json`)
+
+**Governance (owner acceptance):**
+
+```text
+Independent browser review = PASS
+Reviewed PR candidate head = 1377ec4e00cde43f09c91ad9b99ec31a58d80fc7
+Owner evidence gate = APPROVED
+P6.4B2 browser verification = verified
+P6.4 workstream = verified
+Hero lifecycle = styling_verified
+P6.5+ = not yet authorized
+```
+
+Status-only commits after `tested_source_sha` do not change measured runtime
+evidence; they record owner-approved lifecycle transitions.
 
 ## Baseline observation (merged B1, no CSS edits)
 
@@ -124,15 +140,16 @@ Focus indicator non-text contrast vs hero background: primary **11.002:1**, seco
 - Primary: **button**; secondary: **anchor**.
 - Overlay pseudo-element not exposed as content.
 
-## Lifecycle claims (candidate only)
+## Lifecycle record (owner accepted)
 
 ```text
 P6.4B1 implementation = merged
-P6.4B2 browser verification = verified candidate
-P6.4 workstream = verified candidate
-Main Hero lifecycle = semantic_verified
-styling_verified = NOT CLAIMED (independent + owner review pending)
-P6.5+ = NOT AUTHORIZED
+P6.4B2 browser verification = verified / owner accepted
+P6.4 workstream = verified
+Hero lifecycle = styling_verified
+P6.5 documentation = not yet authorized
+P6.6 Storybook = not authorized
 ```
 
-**Do not merge** on browser evidence alone; owner review performs durable `verified` / `styling_verified` transitions.
+PR #32 merge to clean synchronized `main` remains the final publication gate
+before P6.5. Do **not** merge without owner merge authorization.
