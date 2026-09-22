@@ -55,10 +55,10 @@ styling-bridge architecture is approved in
 `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 native Hero styling
 bridge is **merged** (PR #31). P6.4B2 browser verification is **verified**
 (`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`). P6.4 workstream =
-**verified**; Hero lifecycle = **storybook_verified**. P6.5 = **documented /
-owner accepted**; P6.6 Storybook = **storybook_verified / owner accepted**
-(`docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`). Phase 6 exit = **not
-yet authorized**.
+**verified**; Hero lifecycle = **storybook_verified**. P6.6 = **owner accepted**
+(`docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`). Phase 6 exit =
+**acceptance candidate** (`docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md` §30).
+Hero **accepted** = **not yet claimed**. Catalogue = **not authorized**.
 
 ## Consumer quick start (native Hero)
 
