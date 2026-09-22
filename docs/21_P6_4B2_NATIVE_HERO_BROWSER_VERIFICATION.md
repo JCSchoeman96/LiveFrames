@@ -4,6 +4,10 @@
 
 **Base SHA:** `29706d0bba4edbea632a6eec4afef4f5fcd4a5d1`
 
+**Tested source SHA:** `6b2baff0119edaa0b642aa3bf59781210abbd41a` — exact commit whose Hero runtime source and compiled library CSS were loaded in Chrome for final styling evidence. Later commits on this branch adjust evidence metadata only (manifest/report); runtime diffs from this SHA to current PR head are **zero**.
+
+**PR review head** is obtained from Git/PR metadata, not stored inside `manifest.json`, because embedding the metadata commit’s own SHA in the same commit is self-referential.
+
 **Route:** `/liveframes/native/hero` (preview server port `4010` in this run; default dev `PORT` is `4000`)
 
 **Browser:** Google Chrome `153.0.8010.52` on Linux x86_64
@@ -35,7 +39,13 @@ Smallest Hero-local CSS changes in `apps/live_frames/assets/css/components/secti
 
 Regenerated library CSS via `mix live_frames.assets.build`. Structural regression: `hero_styling_contract_test.exs` asserts both rules.
 
-**Correction cycle 2:** not required.
+**Correction cycle 2:** not required (including after independent composited re-measurement of secondary **normal** actions).
+
+## Evidence integrity (post-review hardening)
+
+Secondary **normal** actions use a transparent fill; text contrast must be measured against **composited** pixels beneath the label (image + overlay + Hero stack), not against `rgba(0,0,0,0)` nor hero fallback alone. Chrome re-measurement at all six viewports used temporary transparent text/border (browser-only, not committed), viewport PNG sampling, and `scrollIntoView` when the control was below the fold at `375×667`.
+
+Manifest schema **`p6_4b2_v2`** replaces invalid `candidate_sha` with **`tested_source_sha`** (see above).
 
 ## Final verified evidence
 
@@ -68,9 +78,20 @@ Boundary notes:
 | lede (composited, all viewports) | white on sampled overlay stack | min **18.58–19.305** | ≥ 4.5 | PASS |
 | primary normal | dark on primary fill | **14.497** | ≥ 4.5 | PASS |
 | primary hover | dark on hover fill | **20.599** | ≥ 4.5 | PASS |
-| secondary normal | accent on hero adjacent | **12.249** effective | ≥ 4.5 | PASS |
+| secondary normal (composited text) | `rgb(255, 212, 78)` on sampled stack under label | per viewport **13.566–14.095**; minimum **13.566** at **375×667**, **478×800**, **479×800** | ≥ 4.5 | PASS |
+| secondary normal (composited border) | accent border on sampled stack at border edge | per viewport **13.586–14.095**; minimum **13.586** at **375×667** (also **478×800**, **479×800**, **991×800**) | ≥ 3.0 | PASS |
 | secondary hover | dark on hover fill | **20.599** | ≥ 4.5 | PASS |
-| secondary border normal | accent border vs hero | **12.249** | ≥ 3.0 | PASS |
+
+Per-viewport secondary **normal** composited text minima:
+
+| viewport | text / composited background | border / composited background |
+| --- | --- | --- |
+| 375×667 | **13.566:1** | **13.586:1** |
+| 478×800 | **13.566:1** | **13.586:1** |
+| 479×800 | **13.566:1** | **13.586:1** |
+| 991×800 | **13.586:1** | **13.586:1** |
+| 992×800 | **14.014:1** | **13.934:1** |
+| 1280×800 | **14.095:1** | **14.095:1** |
 
 ### Keyboard / focus
 

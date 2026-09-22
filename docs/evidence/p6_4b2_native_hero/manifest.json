@@ -1,7 +1,6 @@
 {
-  "schema_version": "p6_4b2_v1",
+  "schema_version": "p6_4b2_v2",
   "base_sha": "29706d0bba4edbea632a6eec4afef4f5fcd4a5d1",
-  "candidate_sha": "6b2baff0119edaa0b642aa3bf59781210abbd41a",
   "browser": "Google Chrome",
   "browser_version": "153.0.8010.52",
   "platform": "Linux x86_64",
@@ -145,16 +144,17 @@
       "result": "PASS"
     },
     "375x667_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "375x667_primary_hover": {
       "text_background_ratio": 20.599,
@@ -205,16 +205,17 @@
       "result": "PASS"
     },
     "478x800_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "478x800_primary_hover": {
       "text_background_ratio": 20.599,
@@ -265,16 +266,17 @@
       "result": "PASS"
     },
     "479x800_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "479x800_primary_hover": {
       "text_background_ratio": 20.599,
@@ -325,16 +327,17 @@
       "result": "PASS"
     },
     "991x800_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.586,
+      "effective_text_ratio": 13.586,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "991x800_primary_hover": {
       "text_background_ratio": 20.599,
@@ -385,16 +388,17 @@
       "result": "PASS"
     },
     "992x800_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 14.014,
+      "effective_text_ratio": 14.014,
+      "border_adjacent_composited_ratio": 13.934,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "992x800_primary_hover": {
       "text_background_ratio": 20.599,
@@ -445,16 +449,17 @@
       "result": "PASS"
     },
     "1280x800_secondary_normal": {
-      "text_background_ratio": 1,
-      "text_adjacent_hero_ratio": null,
-      "effective_text_ratio": 1,
-      "border_adjacent_ratio": 12.249,
-      "colors": {
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "borderColor": "oklch(0.8839 0.154 90.78)",
-        "color": "oklch(0.8839 0.154 90.78)"
-      },
-      "result": "FAIL"
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 14.095,
+      "effective_text_ratio": 14.095,
+      "border_adjacent_composited_ratio": 14.095,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
     },
     "1280x800_primary_hover": {
       "text_background_ratio": 20.599,
@@ -641,5 +646,93 @@
       "change": "Secondary :hover text uses var(--lf-action-primary-text) for readable contrast on hover background."
     }
   ],
-  "wrapper_focus_targets": 0
+  "wrapper_focus_targets": 0,
+  "tested_source_sha": "6b2baff0119edaa0b642aa3bf59781210abbd41a",
+  "secondary_normal_composited": {
+    "375x667": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    },
+    "478x800": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    },
+    "479x800": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.566,
+      "effective_text_ratio": 13.566,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    },
+    "991x800": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 13.586,
+      "effective_text_ratio": 13.586,
+      "border_adjacent_composited_ratio": 13.586,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    },
+    "992x800": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 14.014,
+      "effective_text_ratio": 14.014,
+      "border_adjacent_composited_ratio": 13.934,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    },
+    "1280x800": {
+      "foreground": "rgb(255, 212, 78)",
+      "declared_background": "rgba(0, 0, 0, 0)",
+      "border_color": "rgb(255, 212, 78)",
+      "text_background_ratio": null,
+      "text_adjacent_composited_ratio": 14.095,
+      "effective_text_ratio": 14.095,
+      "border_adjacent_composited_ratio": 14.095,
+      "text_threshold": 4.5,
+      "border_threshold": 3.0,
+      "result": "PASS",
+      "method": "transparent text/border sampling of rendered viewport pixels beneath secondary label region"
+    }
+  },
+  "secondary_normal_overall": {
+    "text_minimum_ratio": 13.566,
+    "text_minimum_viewport": "375x667",
+    "border_minimum_ratio": 13.586,
+    "border_minimum_viewport": "375x667",
+    "result": "PASS"
+  }
 }
