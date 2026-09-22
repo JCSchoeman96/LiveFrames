@@ -4,11 +4,11 @@
 
 **Plan version:** `v3`
 
-**Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4B1
-merged**; **P6.4B2 browser verification verified / owner accepted**
-(`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); **P6.4 workstream
-`verified`**; **Hero lifecycle `documented`**; **P6.5 consumer documentation
-documented / owner accepted**; **P6.6 Storybook not yet authorized**
+**Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4
+workstream `verified`**; **P6.4B1 merged**; **P6.4B2 verified / owner accepted**
+(`docs/21`); **P6.5 documented / owner accepted**; **P6.6 storybook_verified /
+owner accepted** (`docs/22`); **Hero lifecycle `accepted`**; **Phase 6 CLOSED /
+accepted** (`docs/19` §31); catalogue / generator / ejection **not authorized**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -101,16 +101,19 @@ Rules:
 
 - **Current P6.4 workstream state** = `verified` (P6.4A architecture approved;
   P6.4B1 merged; P6.4B2 browser evidence owner-accepted — `docs/21`).
-- **Current main Hero lifecycle state** (on PR #32 branch) = `styling_verified`.
+- **Hero lifecycle at P6.4 close** = `styling_verified` (P6.4B2 owner acceptance).
+- **Current Hero lifecycle** = `accepted` (Phase 6 exit owner-approved; `docs/19` §31).
+- **Phase 6** = **CLOSED / accepted**; catalogue / generator / ejection **not
+  authorized**.
 - Historical: `architecture_proposed → architecture_approved` completed with
   independent architecture review PASS and owner approval (PR #30).
 - Historical: P6.4B implementation required separate owner authorization after
   architecture approval; P6.4B1 delivered `architecture_approved → implemented`.
-- P6.4B2 delivered `implemented → verified` on the workstream; owner acceptance
-  advanced main Hero lifecycle `semantic_verified → styling_verified`.
+- Historical: P6.4B2 delivered `implemented → verified` on the workstream; owner
+  acceptance advanced main Hero lifecycle `semantic_verified → styling_verified`.
 
-Do **not** conflate workstream `verified` with later `documented` /
-`storybook_verified` gates; those remain P6.5+.
+Do **not** conflate P6.4 workstream `verified` with P6.5 documentation, P6.6
+Storybook, or Phase 6 exit acceptance; those are separate gates (`docs/19`).
 
 ### Master-aligned phase gates
 
@@ -593,9 +596,13 @@ P6.4A architecture = approved
 P6.4B1 implementation = merged
 P6.4B2 browser verification = verified / owner accepted
 P6.4 workstream = verified
-Hero lifecycle = documented
-P6.5 consumer documentation = documented / owner accepted (see docs/11, docs/16, docs/19 §28)
-P6.6 Storybook = not yet authorized
+
+Hero lifecycle at P6.4 close = styling_verified
+
+Current Hero lifecycle = accepted
+P6.5 = documented / owner accepted
+P6.6 = storybook_verified / owner accepted
+Phase 6 = CLOSED / accepted
 ```
 
 Evidence: `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md` and
@@ -613,6 +620,15 @@ P6.4 architecture and verification history remain in this document (`docs/20`).
   semantic class namespace, `--lf-hero-*` composition boundaries, Preflight
   posture, override safety.
 
-P6.5 is **documented / owner accepted** (`docs/19` §28). P6.6 Storybook is **not
-yet authorized** until PR #33 merge, clean synchronized `main`, and separate
-owner authorization.
+P6.5 = **documented / owner accepted** (`docs/19` §28).
+
+P6.6 = **storybook_verified / owner accepted** — see `docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`.
+
+Phase 6 = **CLOSED / accepted** — see `docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md` §31
+(exit candidate basis §30).
+
+Current Hero lifecycle = **`accepted`** (terminal tracer lifecycle; P6.6 established
+`storybook_verified` only — see `docs/22`).
+
+Catalogue / generator / ejection = **not authorized**. CatalogueItem **RELEASED**,
+package release, and Hex release = **not claimed**.
