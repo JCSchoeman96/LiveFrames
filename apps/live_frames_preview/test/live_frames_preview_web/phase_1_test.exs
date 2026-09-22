@@ -8,16 +8,17 @@ defmodule LiveFramesPreviewWeb.Phase1Test do
     assert conn.resp_body =~ "LiveFrames Storybook"
   end
 
-  test "storybook has exactly one Phase 1 story", _context do
+  test "Phase 1 proof story remains in Storybook content", _context do
     stories =
       Path.wildcard(Path.expand("../../storybook/**/*.story.exs", __DIR__))
 
-    assert stories == [
-             Path.expand(
-               "../../storybook/components/proof_component.story.exs",
-               __DIR__
-             )
-           ]
+    proof_story =
+      Path.expand(
+        "../../storybook/components/proof_component.story.exs",
+        __DIR__
+      )
+
+    assert proof_story in stories
   end
 
   test "conversion lab renders the static inspection regions", %{conn: conn} do

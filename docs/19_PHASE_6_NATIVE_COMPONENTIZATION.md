@@ -4,9 +4,10 @@
 `semantic_verified`; P6.4 workstream **`verified`** (P6.4B1 merged; P6.4B2 browser
 verification owner-accepted in
 `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); Hero lifecycle =
-**`documented`**; P6.5 documentation = **documented / owner accepted**
-(owner-reviewed head `31416d7f545fa194b92303afe0a2503142516227`); P6.6 **not
-yet authorized**
+**`storybook_verified`**; P6.5 documentation = **documented / owner accepted**
+(owner-reviewed head `31416d7f545fa194b92303afe0a2503142516227`); P6.6 =
+**storybook_verified / owner accepted** (`docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md`);
+Phase 6 exit = **not yet authorized**
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -40,8 +41,10 @@ styling-bridge architecture is approved in
 `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 is merged;
 P6.4B2 browser verification is verified / owner accepted (`docs/21`); P6.4 =
 verified. P6.5 documentation is **documented / owner accepted**; Hero lifecycle
-= **documented**. P6.6 Storybook is **not yet authorized** until PR #33 merge,
-clean synchronized `main`, and separate owner authorization.
+= **storybook_verified**. P6.6 Storybook verification is **storybook_verified /
+owner accepted** (`docs/22`). Phase 6 exit / Hero **accepted** = **not yet
+authorized** (requires PR #34 merge, clean synchronized `main`, and separate
+owner authorization).
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -525,7 +528,7 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified`; Hero lifecycle is **`documented`**; P6.5 documentation is **owner accepted**; P6.6 is not yet authorized.
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified`; Hero lifecycle is **`storybook_verified`**; P6.5 documentation is **owner accepted**; P6.6 Storybook verification is **owner accepted** (§29). Phase 6 exit remains **not yet authorized**.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
@@ -534,8 +537,8 @@ These are the gates for the remaining native-component slices. P6.1 is approved.
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). P6.4B1 merged; P6.4B2 owner-accepted. |
 | P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | **`documented` / owner accepted** — surfaces in §28; consumer guides: `docs/11`, `docs/16`; module docs in `hero.ex`; README navigation. Hero lifecycle: **`documented`**. |
-| P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; **not yet authorized** (requires PR #33 merge, clean synchronized `main`, and separate owner authorization). |
-| Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
+| P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | **`storybook_verified` / owner accepted** — `docs/22`; evidence `docs/evidence/p6_6_native_hero_storybook/`; tested source `ad1c6164afbdc3ee42b47ff7b814a89d5c647935`; independent browser review PASS; owner P6.6 approval APPROVED (§29). Hero lifecycle: **`storybook_verified`**. |
+| Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | **Not yet authorized** — next gate only after PR #34 merged, clean synchronized `main`, and separate owner authorization. Do not begin catalogue, generator/ejection exposure, another tracer, or Hero **`accepted`**. |
 
 ## 25. P6.1 completion record
 
@@ -664,6 +667,41 @@ Durable consumer homes: **`docs/16`** for integration, **`docs/11`** for styling
 boundaries. Architecture history remains **`docs/20`**; browser evidence remains
 **`docs/21`**.
 
-P6.6 Storybook may begin only after PR #33 merge, clean synchronized `main`, and
-separate owner authorization. Do not advance Hero beyond **`documented`** without
-later gates (`storybook_verified`, `accepted`).
+P6.6 Storybook verification owner acceptance is recorded in **`docs/22`** and §29.
+Do not advance Hero to **`accepted`** or authorize Phase 6 exit without the merge
+and authorization gates in §24.
+
+## 29. P6.6 Storybook verification owner acceptance record
+
+Owner P6.6 gate **APPROVED** after independent browser review **PASS** on PR #34.
+This records durable lifecycle transitions only; PR #34 merge to clean synchronized
+`main` remains the publication gate. Production Hero and library CSS were unchanged
+for browser-tested source `ad1c6164afbdc3ee42b47ff7b814a89d5c647935`.
+
+```text
+P6.4 = verified
+P6.5 = documented / owner accepted
+Hero lifecycle = storybook_verified
+P6.6 = storybook_verified / owner accepted
+Phase 6 exit = not yet authorized
+```
+
+```text
+tested Storybook source = ad1c6164afbdc3ee42b47ff7b814a89d5c647935
+independently reviewed candidate head = bab0d7e6024c452d20abb8e2137c7720a0bffc9b
+independent browser review = PASS
+owner P6.6 approval = APPROVED
+```
+
+Owner-accepted evidence surfaces:
+
+| Surface | Role |
+| --- | --- |
+| `apps/live_frames_preview/storybook/components/hero.story.exs` | PhoenixStorybook story module |
+| `apps/live_frames_preview/assets/css/storybook.css` | Storybook CSS entry (package artifact import) |
+| `apps/live_frames_preview/test/live_frames_preview_web/native_hero_storybook_test.exs` | Structural ExUnit verification |
+| `docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md` | Verification authority and browser evidence summary |
+| `docs/evidence/p6_6_native_hero_storybook/` | Manifest and screenshots |
+
+Story module: `LiveFramesPreviewWeb.Storybook.Components.Hero`. Route:
+`/storybook/components/hero`.
