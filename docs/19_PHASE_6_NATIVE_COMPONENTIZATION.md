@@ -1,6 +1,9 @@
 # Phase 6 Native Componentization
 
-**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3 semantic_verified
+**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
+semantic_verified; P6.4 workstream `architecture_approved` (see
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`; P6.4B implementation not
+yet authorized)
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -29,8 +32,10 @@ P6.1 starts from clean `main` at:
 
 PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
-approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4 and
-later remain unauthorized.
+approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A
+styling-bridge architecture is approved in
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B implementation
+and later slices remain unauthorized until separately accepted.
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -362,7 +367,7 @@ does not add tokens.
 | --- | --- | --- | --- |
 | Section background | `color.background.ultra_dark` | Root section background | Existing token is adequate. |
 | Section text | `color.background.ultra_dark.heading` and `.text` | Heading and body text contrast | Existing authority is adequate. |
-| Native Hero/display heading visual scale | `typography.heading.scale.h1`, weight, and line height are valid Phase 5 fidelity authority | Keep the Hero's visual scale independent of the selected HTML heading level | **GAP / P6.4 decision required.** Do not add a token in P6.1. |
+| Native Hero/display heading visual scale | `typography.heading.scale.h1`, weight, and line height are valid Phase 5 fidelity authority | Keep the Hero's visual scale independent of the selected HTML heading level | **Resolved in P6.4A** — Hero display typography via `--lf-typography-display-*` on `.lf-hero__heading`; see `docs/20` §15. |
 | Body typography | `typography.body.scale.medium`, line height | Lede paragraph type | Existing authority is adequate. |
 | Section padding | `spacing.section.padding_block` | Section block padding | Existing authority is adequate. |
 | Gutter | `spacing.gutter.max` and `.min` | Responsive container gutters | Existing authority is adequate. |
@@ -377,14 +382,17 @@ does not add tokens.
 | Outline action hover | Outline background-hover, text-hover, and border-hover tokens | Ordinary hover state | Existing authority is adequate. |
 | Outline action focus-visible | Outline focus token | Visible keyboard focus state | Existing authority is adequate. |
 | Action padding/minimum size | Primary button padding and minimum-width tokens | Usable action hit area | Existing authority is adequate. |
-| Overlay | No adequate native semantic overlay token is proven; accepted evidence contains an unresolved overlay expression | Preserve readable content and keep implementation scoped | Gap recorded. Do not add a token in P6.1. |
-| Image positioning | No native semantic focal-position token is proven | Preserve responsive composition internally | Gap recorded. Do not expose a public attr or add a token in P6.1. |
+| Overlay | No adequate native semantic overlay token is proven; accepted evidence contains an unresolved overlay expression | Preserve readable content and keep implementation scoped | **Resolved in P6.4A** — component-private `--lf-hero-overlay-*` in `hero.css`; no global overlay token. See `docs/20` §16. |
+| Image positioning | No native semantic focal-position token is proven | Preserve responsive composition internally | **Resolved in P6.4A** — component-private focal variables; no public attr. See `docs/20` §17. |
 
 The native Hero/display heading visual-scale gap is separate from heading
-semantics. P6.4 must either introduce or derive a semantic Hero/display
-heading token, or formally document an existing token as a visual-scale token
-independent of the HTML heading level. The overlay semantic token and image
-focal-position semantic token remain unresolved. P6.1 adds none of them.
+semantics. P6.1 recorded display heading scale, overlay, and focal positioning
+as gaps without adding tokens. P6.4A now resolves their **architectural**
+treatment in `docs/20`: Hero display typography uses source-independent native
+visual aliases independent of HTML heading level; overlay remains
+component-private; focal positioning remains component-private with no public
+breakpoint attrs. P6.4B still must **implement and visually verify** those
+decisions. No `styling_verified` claim exists yet.
 
 ## 17. Tailwind and CSS boundary
 
@@ -510,17 +518,17 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4 and later slices remain
-unauthorized.
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved (workstream `architecture_approved`); P6.4B implementation is not yet authorized; P6.5+ remain unauthorized until accepted.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
-| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | Not started; not authorized. |
-| P6.5 Storybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
-| P6.6 acceptance and catalogue readiness | Owner accepts semantic/styling/Storybook evidence before any catalogue or generation/ejection exposure. | Not started; not authorized. |
+| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `architecture_approved` (`docs/20`). P6.4B implementation: not started; not yet authorized. |
+| P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | Not started; not authorized. |
+| P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
+| Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
 
 ## 25. P6.1 completion record
 
@@ -543,14 +551,20 @@ P6 lifecycle = authorized → api_proposed → api_approved → implemented → 
 P6.1 = api_approved
 P6.2 = implemented
 P6.3 = semantic_verified
-P6.4+ = not authorized
+P6.4 workstream = architecture_approved
+P6.4 implementation = not authorized
+P6.4B implementation = not started; not yet authorized
+P6.5+ = not authorized
 ```
 
-P6.2 implementation is present in
+P6.4A proposed styling-bridge architecture → independent architecture review
+PASS → owner architecture approval (PR #30 branch). P6.2 implementation is present in
 `apps/live_frames/lib/live_frames/components/sections/hero.ex`. P6.3 semantic
 verification is complete in
 `apps/live_frames/test/live_frames/components/sections/hero_semantics_test.exs`.
-The styling bridge, Storybook, and acceptance remain unstarted.
+P6.4A styling-bridge architecture is recorded in `docs/20`. P6.4B styling
+implementation, P6.5 documentation, P6.6 Storybook, and Phase 6 acceptance
+remain unstarted and unauthorized.
 
 ## 26. P6.3 semantic verification record
 
@@ -575,7 +589,10 @@ P6 lifecycle = authorized → api_proposed → api_approved → implemented → 
 P6.1 = api_approved
 P6.2 = implemented
 P6.3 = semantic_verified
-P6.4+ = not authorized
+P6.4 workstream = architecture_approved
+P6.4 implementation = not authorized
+P6.4B implementation = not started; not yet authorized
+P6.5+ = not authorized
 ```
 
 Evidence:
