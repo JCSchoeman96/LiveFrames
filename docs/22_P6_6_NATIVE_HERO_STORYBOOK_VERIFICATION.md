@@ -1,6 +1,6 @@
 # P6.6 — Native Hero PhoenixStorybook verification
 
-**Status:** `storybook_verified` **candidate** (browser evidence complete; independent owner review required)
+**Status:** `storybook_verified` / **owner accepted** (independent browser review PASS; owner P6.6 gate APPROVED)
 
 **Authorized base SHA:** `35e35a53114088da5e5d6185c69323f87ada22a7`
 
@@ -16,17 +16,23 @@
 
 **Evidence:** `docs/evidence/p6_6_native_hero_storybook/` (`manifest.json` + screenshots)
 
-## Governance (candidate)
+## Governance
 
 ```text
 P6.4 = verified
 P6.5 = documented / owner accepted
-Hero lifecycle = documented
-P6.6 = storybook_verified candidate
-Phase 6 exit = not authorized
+Hero lifecycle = storybook_verified
+P6.6 = storybook_verified / owner accepted
+Phase 6 exit = not yet authorized
 ```
 
-Do **not** treat Hero as `storybook_verified` or Phase 6 as accepted until owner review.
+**Independent browser review:** PASS
+
+**Reviewed candidate head:** `bab0d7e6024c452d20abb8e2137c7720a0bffc9b`
+
+**Owner P6.6 gate:** APPROVED
+
+Do **not** advance Hero to **`accepted`** or authorize Phase 6 exit / catalogue work until PR #34 is merged, `main` is clean and synchronized, and separate owner authorization is recorded.
 
 ## Storybook CSS consumption
 
