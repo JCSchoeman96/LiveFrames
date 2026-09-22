@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0.0",
+  "mapping_version": "native_hero_v1",
+  "entries": [
+    {
+      "token_set_path": "color.background.ultra_dark",
+      "css_variable": "--lf-color-background-ultra-dark"
+    },
+    {
+      "token_set_path": "color.background.ultra_dark.text",
+      "css_variable": "--lf-color-text-on-dark"
+    },
+    {
+      "token_set_path": "color.background.ultra_dark.heading",
+      "css_variable": "--lf-color-heading-on-dark"
+    },
+    {
+      "token_set_path": "typography.heading.scale.h1",
+      "css_variable": "--lf-typography-display-size"
+    },
+    {
+      "token_set_path": "typography.heading.font_weight",
+      "css_variable": "--lf-typography-display-weight"
+    },
+    {
+      "token_set_path": "typography.heading.line_height",
+      "css_variable": "--lf-typography-display-line-height"
+    },
+    {
+      "token_set_path": "typography.body.scale.medium",
+      "css_variable": "--lf-typography-body-size"
+    },
+    {
+      "token_set_path": "typography.body.line_height",
+      "css_variable": "--lf-typography-body-line-height"
+    },
+    {
+      "token_set_path": "spacing.section.padding_block",
+      "css_variable": "--lf-space-section-padding-block"
+    },
+    {
+      "compose": {
+        "type": "fluid_px_pair",
+        "min": "spacing.gutter.min",
+        "max": "spacing.gutter.max",
+        "viewport_min": "layout.viewport.min",
+        "viewport_max": "layout.viewport.max"
+      },
+      "css_variable": "--lf-space-gutter"
+    },
+    {
+      "token_set_path": "spacing.content_gap",
+      "css_variable": "--lf-space-content-gap"
+    },
+    {
+      "token_set_path": "spacing.container_gap",
+      "css_variable": "--lf-space-container-gap"
+    },
+    {
+      "token_set_path": "layout.viewport.max",
+      "css_variable": "--lf-layout-container-max-width"
+    },
+    {
+      "token_set_path": "button.primary.background",
+      "css_variable": "--lf-action-primary-background"
+    },
+    {
+      "token_set_path": "button.primary.background_hover",
+      "css_variable": "--lf-action-primary-background-hover"
+    },
+    {
+      "token_set_path": "button.primary.text",
+      "css_variable": "--lf-action-primary-text"
+    },
+    {
+      "token_set_path": "button.primary.border",
+      "css_variable": "--lf-action-primary-border"
+    },
+    {
+      "token_set_path": "button.primary.border_width",
+      "css_variable": "--lf-action-primary-border-width"
+    },
+    {
+      "token_set_path": "button.primary.border_style",
+      "css_variable": "--lf-action-primary-border-style"
+    },
+    {
+      "token_set_path": "button.primary.focus",
+      "css_variable": "--lf-action-primary-focus"
+    },
+    {
+      "token_set_path": "button.primary.radius",
+      "css_variable": "--lf-action-primary-radius"
+    },
+    {
+      "token_set_path": "button.primary.padding_inline",
+      "css_variable": "--lf-action-primary-padding-inline"
+    },
+    {
+      "token_set_path": "button.primary.padding_block",
+      "css_variable": "--lf-action-primary-padding-block"
+    },
+    {
+      "token_set_path": "button.primary.min_width",
+      "css_variable": "--lf-action-primary-min-width"
+    },
+    {
+      "token_set_path": "button.primary.font_size",
+      "css_variable": "--lf-action-primary-font-size"
+    },
+    {
+      "token_set_path": "button.primary.font_weight",
+      "css_variable": "--lf-action-primary-font-weight"
+    },
+    {
+      "token_set_path": "button.primary.line_height",
+      "css_variable": "--lf-action-primary-line-height"
+    },
+    {
+      "token_set_path": "button.primary.outline.background",
+      "css_variable": "--lf-action-secondary-background"
+    },
+    {
+      "token_set_path": "button.primary.outline.background_hover",
+      "css_variable": "--lf-action-secondary-background-hover"
+    },
+    {
+      "token_set_path": "button.primary.outline.border",
+      "css_variable": "--lf-action-secondary-border"
+    },
+    {
+      "token_set_path": "button.primary.outline.border_hover",
+      "css_variable": "--lf-action-secondary-border-hover"
+    },
+    {
+      "token_set_path": "button.primary.outline.focus",
+      "css_variable": "--lf-action-secondary-focus"
+    },
+    {
+      "token_set_path": "button.primary.outline.text",
+      "css_variable": "--lf-action-secondary-text"
+    },
+    {
+      "token_set_path": "button.primary.outline.text_hover",
+      "css_variable": "--lf-action-secondary-text-hover"
+    }
+  ]
+}

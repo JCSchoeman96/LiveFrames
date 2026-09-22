@@ -9,12 +9,20 @@ defmodule LiveFrames.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: [
         {:phoenix_live_view, "~> 1.2.11"},
-        {:jason, "~> 1.4"}
-      ]
+        {:jason, "~> 1.4"},
+        {:tailwind, "~> 0.5.1", runtime: false}
+      ],
+      package: package()
     ]
   end
 
   def application do
     [extra_applications: [:logger], mod: {LiveFrames.Application, []}]
+  end
+
+  def package do
+    [
+      files: ~w(lib mix.exs assets/css priv/token_maps priv/static/live_frames)
+    ]
   end
 end

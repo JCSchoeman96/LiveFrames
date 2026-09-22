@@ -25,14 +25,20 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
-      - name: Build browser assets
-        run: mix assets.build
-
       - name: Check formatting
         run: mix format --check-formatted
 
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
+
+      - name: Build browser assets
+        run: mix assets.build
+
+      - name: Verify committed styling artifacts have zero drift
+        run: |
+          git diff --exit-code -- \
+            apps/live_frames/assets/css/theme/lf_theme.css \
+            apps/live_frames/priv/static/live_frames/css/live_frames.css
 
       - name: Run tests
         run: mix test
