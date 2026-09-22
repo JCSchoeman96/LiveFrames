@@ -1,6 +1,6 @@
 # Phase 6 Native Componentization
 
-**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented
+**Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3 semantic_verified
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -29,8 +29,8 @@ P6.1 starts from clean `main` at:
 
 PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
-approved. P6.2 is implemented, and P6.3 and later remain
-unauthorized.
+approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4 and
+later remain unauthorized.
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -510,14 +510,14 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 and later slices remain
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4 and later slices remain
 unauthorized.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
-| P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, keyboard focus, escaping, runtime guards, and edge cases verified. | Not authorized. |
+| P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
 | P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | Not started; not authorized. |
 | P6.5 Storybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
 | P6.6 acceptance and catalogue readiness | Owner accepts semantic/styling/Storybook evidence before any catalogue or generation/ejection exposure. | Not started; not authorized. |
@@ -539,12 +539,59 @@ business-logic leakage = 0
 production code changed = 0
 generated artifacts changed = 0
 reviewed API proposal head = 6eda7ba9a66e16c2902868a82a3621d2d3267c92
-P6 lifecycle = authorized → api_proposed → api_approved → implemented
+P6 lifecycle = authorized → api_proposed → api_approved → implemented → semantic_verified
 P6.1 = api_approved
 P6.2 = implemented
-P6.3+ = not authorized
+P6.3 = semantic_verified
+P6.4+ = not authorized
 ```
 
 P6.2 implementation is present in
-`apps/live_frames/lib/live_frames/components/sections/hero.ex`. Semantic
-verification, styling bridge, Storybook, and acceptance remain unstarted.
+`apps/live_frames/lib/live_frames/components/sections/hero.ex`. P6.3 semantic
+verification is complete in
+`apps/live_frames/test/live_frames/components/sections/hero_semantics_test.exs`.
+The styling bridge, Storybook, and acceptance remain unstarted.
+
+## 26. P6.3 semantic verification record
+
+P6.3 authorized the transition from `implemented` to `semantic_verified` for
+the native Hero. It verified semantic HEEx behavior only. It did not verify
+visual focus styling, contrast, responsive CSS, Tailwind/token integration,
+Storybook, or browser visual acceptance. Those remain P6.4 and later work.
+
+```text
+semantic structure = pass
+HEEx escaping = pass
+image semantics = pass
+action semantics = pass
+runtime guards = pass
+semantic keyboard behavior = pass
+source leakage = 0
+production corrections = 0
+visual focus styling = not verified (deferred to P6.4)
+contrast = not verified (deferred to P6.4)
+responsive styling = not started
+P6 lifecycle = authorized → api_proposed → api_approved → implemented → semantic_verified
+P6.1 = api_approved
+P6.2 = implemented
+P6.3 = semantic_verified
+P6.4+ = not authorized
+```
+
+Evidence:
+
+- root semantic structure, exactly-one heading, optional-content omission, and
+  deterministic rendering verified in `hero_semantics_test.exs`;
+- heading, lede, id, class, image_src, and image_alt escaping verified with
+  adversarial values; HEEx remains the serializer authority;
+- global consumer attrs (`data-*`, `aria-*`, `title`, explicit `tabindex`)
+  pass through; default LiveFrames output does not introduce component-owned
+  `tabindex`, `phx-click`, `role`, `aria-label`, or `hidden`;
+- image states (absent, informative, decorative, alt-without-src, missing-alt
+  guard) verified; no fabricated image ARIA;
+- native primary button and secondary link slot content preserved unchanged;
+  component-owned positive tabindex = 0; component-owned hidden focus target =
+  0; component-owned event behavior = 0;
+- slot cardinality guards and O(1) validation preserved; P6.2 contract tests
+  remain authoritative for the heading-level matrix and duplicate-slot errors;
+- production `hero.ex` unchanged; no semantic defect required correction.

@@ -6,7 +6,7 @@ authority for the recorded gates and Phase 6 entry criteria
 **Scope:** Phase 5 hardening, responsive fidelity, acceptance, and Phase 6 entry criteria
 **Supersedes:** No existing architecture authority
 **Refines:** `docs/00_LIVEFRAMES_MASTER_SPEC.md` Phase 5 execution and acceptance
-**Does not authorize:** repository visibility changes, deletion of published history, licensing conclusions, P6.3+ implementation, or catalogue expansion. P6.2 remains subject to the clean-`main` prerequisite recorded in the approved P6.1 authority.
+**Does not authorize:** repository visibility changes, deletion of published history, licensing conclusions, P6.4+ implementation, or catalogue expansion. P6.2 remains subject to the clean-`main` prerequisite recorded in the approved P6.1 authority.
 
 **Current status:**
 
@@ -24,9 +24,10 @@ authority for the recorded gates and Phase 6 entry criteria
 * Phase 6 = authorized
 * P6.1 = `api_approved`
 * P6.2 = implemented
-* P6.3+ = not authorized
+* P6.3 = semantic_verified
+* P6.4+ = not authorized
 * native Hero implementation = present
-* semantic verification = not complete
+* semantic verification = complete
 * styling bridge = not complete
 
 ---
@@ -2565,5 +2566,5 @@ Only then should component catalogue breadth accelerate.
 Phase 5C-D records the legal transition from `runtime_clean` to `accepted` and
 closes Master Phase 5. P5-H2 Bricks Result lifecycle hardening is complete.
 Phase 6 is authorized. P6.1 is `api_approved`. P6.2 native Hero
-implementation is present. Semantic verification and the styling bridge are
-not complete. P6.3 and later Phase 6 work are not authorized.
+implementation is present. P6.3 semantic verification is complete. The styling
+bridge is not complete. P6.4 and later Phase 6 work are not authorized.
