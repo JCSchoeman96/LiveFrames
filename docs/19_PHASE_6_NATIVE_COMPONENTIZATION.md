@@ -1,8 +1,9 @@
 # Phase 6 Native Componentization
 
 **Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
-semantic_verified; P6.4 workstream `architecture_proposed` (see
-`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`)
+semantic_verified; P6.4 workstream `architecture_approved` (see
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`; P6.4B implementation not
+yet authorized)
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -517,14 +518,14 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is proposed; P6.4B+ remain unauthorized until accepted.
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved (workstream `architecture_approved`); P6.4B implementation is not yet authorized; P6.5+ remain unauthorized until accepted.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
-| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `architecture_proposed` (`docs/20`). Implementation: not authorized. |
+| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `architecture_approved` (`docs/20`). P6.4B implementation: not started; not yet authorized. |
 | P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | Not started; not authorized. |
 | P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
 | Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
@@ -550,12 +551,14 @@ P6 lifecycle = authorized → api_proposed → api_approved → implemented → 
 P6.1 = api_approved
 P6.2 = implemented
 P6.3 = semantic_verified
-P6.4 workstream = architecture_proposed
+P6.4 workstream = architecture_approved
 P6.4 implementation = not authorized
+P6.4B implementation = not started; not yet authorized
 P6.5+ = not authorized
 ```
 
-P6.2 implementation is present in
+P6.4A proposed styling-bridge architecture → independent architecture review
+PASS → owner architecture approval (PR #30 branch). P6.2 implementation is present in
 `apps/live_frames/lib/live_frames/components/sections/hero.ex`. P6.3 semantic
 verification is complete in
 `apps/live_frames/test/live_frames/components/sections/hero_semantics_test.exs`.
@@ -586,8 +589,9 @@ P6 lifecycle = authorized → api_proposed → api_approved → implemented → 
 P6.1 = api_approved
 P6.2 = implemented
 P6.3 = semantic_verified
-P6.4 workstream = architecture_proposed
+P6.4 workstream = architecture_approved
 P6.4 implementation = not authorized
+P6.4B implementation = not started; not yet authorized
 P6.5+ = not authorized
 ```
 

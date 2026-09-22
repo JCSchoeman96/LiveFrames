@@ -2,9 +2,10 @@
 
 **Plan ID:** `p6-4a-styling-bridge-architecture`
 
-**Plan version:** `v2`
+**Plan version:** `v3`
 
-**Status:** `architecture_proposed` (design authority; implementation not authorized)
+**Status:** `architecture_approved` (active styling contract; P6.4B implementation not
+authorized)
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -26,6 +27,10 @@ authority. On conflict for styling delivery, this document wins until amended.
   breakpoints only, `@theme` alias model, repository vs package paths, Hex
   inclusion contract, library build-tool ownership, committed-artifact drift
   gates, token-map single authority, action direct-root selectors.
+- `v3` — Owner architecture approval recorded (`architecture_approved`);
+  explicit P6.4B visual accessibility verification checklist (§21); P6.4B
+  implementation remains not authorized until merge, clean `main`, and separate
+  owner implementation authorization.
 
 ## 1. Goal
 
@@ -70,7 +75,8 @@ authorized
 ```
 
 On `main` today the Hero stops at `semantic_verified`. `styling_verified` is
-**not** claimed by P6.4A.
+**not** claimed. Workstream `architecture_approved` does not advance the main
+Hero lifecycle.
 
 P6.4 workstream `verified` is the evidence required for the main transition:
 
@@ -82,19 +88,22 @@ semantic_verified → styling_verified
 
 ```text
 unplanned
-→ architecture_proposed        ← P6.4A (this document)
-→ architecture_approved        ← owner architecture review (not claimed here)
-→ implemented                  ← P6.4B styling implementation
+→ architecture_proposed        ← P6.4A architecture proposal (recorded)
+→ architecture_approved        ← independent review PASS + owner approval (current)
+→ implemented                  ← P6.4B styling implementation (not started)
 → verified                     ← P6.4B browser/visual verification
 ```
 
 Rules:
 
-- **P6.4A candidate state** = `architecture_proposed` only.
-- `architecture_proposed → architecture_approved` requires **owner** architecture
-  review (including merge of this PR when accepted).
-- **P6.4B implementation** begins only from `architecture_approved`.
-- P6.4B implementation: `architecture_approved → implemented`.
+- **Current P6.4 workstream state** = `architecture_approved` (independent
+  architecture review PASS; owner architecture approval granted on PR #30).
+- `architecture_proposed → architecture_approved` is complete on this branch;
+  merge to clean `main` remains the durable publication gate for the contract.
+- **P6.4B implementation** is **not** authorized by architecture approval alone.
+  P6.4B requires PR #30 merged, clean `main` verification, and **separate**
+  owner implementation authorization.
+- When authorized, P6.4B implementation: `architecture_approved → implemented`.
 - P6.4B verification: `implemented → verified`.
 
 Do **not** conflate workstream `verified` with main `styling_verified`; the
@@ -504,14 +513,53 @@ Hero must never invoke a compiler at request time.
 
 ## 21. P6.4B browser verification plan (before P6.6 Storybook)
 
+P6.4B visual accessibility verification plan = **explicit** (checklist below).
+None of these checks pass until P6.4B implementation and browser evidence exist.
+Do **not** claim contrast verified, focus styling verified, WCAG compliance, or
+a full accessibility pass from P6.4A architecture approval alone.
+
 | Item | Specification |
 | --- | --- |
 | Verification host | `live_frames_preview` (`mix phx.server`) |
 | Route (P6.4B) | `/liveframes/native/hero` |
 | **Verification viewports** | `375×667`, `478×800`, `479×800`, `991×800`, `992×800`, `1280×800` |
 | Boundary intent | `478/479` = narrow transition; `991/992` = intermediate/desktop transition; `1280` = representative desktop check **only** (no CSS behavior invented at 1280) |
-| Hover / focus / contrast / actions / overlay / focal | Per prior P6.4A criteria; synthetic image only |
+| Demo media | Synthetic/demo-owned image only; attachment 880 unavailable |
 | Authority CSS | Package-relative `priv/static/live_frames/css/live_frames.css` from library build |
+
+### P6.4B mandatory acceptance evidence (not yet performed)
+
+**Contrast (styled presentation):**
+
+- heading text contrast
+- lede text contrast
+- primary action text/background/border contrast
+- secondary action text/background/border contrast
+
+**Interaction visibility:**
+
+- primary `:hover` visibly distinguishable
+- secondary `:hover` visibly distinguishable
+- primary `:focus-visible` clearly visible
+- secondary `:focus-visible` clearly visible
+
+**Keyboard:**
+
+- Tab traversal reaches supplied native action roots
+- focus order follows DOM/action order
+- action slot wrappers do not become extra focus targets
+
+**Responsive actions** (at viewports `375`, `478`, `479`, `991`, `992`, `1280`):
+
+- narrow action stacking/full-width behavior verified
+- intermediate behavior verified
+- desktop behavior verified
+
+**Media and overlay:**
+
+- overlay preserves text readability
+- image `object-fit` behavior verified
+- image focal shift verified across `478/479` and `991/992` boundaries
 
 Storybook remains P6.6.
 
@@ -538,17 +586,27 @@ attachment 880 = unavailable
 ## 25. P6.4A completion record
 
 ```text
-P6.4 workstream = architecture_proposed
-architecture_approved = NOT CLAIMED (owner review pending)
-P6.4 implementation = NOT AUTHORIZED
+P6.4A architecture = approved
+P6.4 workstream = architecture_approved
+P6.4B implementation = not started; not yet authorized
 main P6 lifecycle on main = ... → semantic_verified (unchanged)
 styling_verified = NOT CLAIMED
 ```
 
 ## 26. P6.4B authorization prerequisites
 
-P6.4B may begin only after **owner** transitions the workstream to
-`architecture_approved` on clean `main` containing this document.
+P6.4 architecture is **approved** on this branch. P6.4B implementation is **not**
+started and **not yet authorized**.
+
+P6.4B may begin only after:
+
+```text
+PR #30 merged
++ clean main verification
++ separate owner implementation authorization
+```
+
+Architecture approval is **not** implementation authorization.
 
 P6.4B must deliver: `:live_frames` Tailwind build tooling (`runtime: false`),
 `mix live_frames.assets.build`, Hex `package/0` file inclusion, bounded token
