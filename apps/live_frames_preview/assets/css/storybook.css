@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "../../../live_frames/priv/static/live_frames/css/live_frames.css";
 
 @source "../../lib/live_frames_preview_web";
 @source "../../storybook";
