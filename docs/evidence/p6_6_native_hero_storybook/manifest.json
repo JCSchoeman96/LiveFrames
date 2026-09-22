@@ -1,0 +1,92 @@
+{
+  "schema_version": "p6_6_storybook_v1",
+  "authorized_base_sha": "35e35a53114088da5e5d6185c69323f87ada22a7",
+  "tested_source_sha": "ad1c6164afbdc3ee42b47ff7b814a89d5c647935",
+  "browser": "Chromium (HeadlessChrome)",
+  "browser_version": "152.0.0.0",
+  "platform": "Linux x86_64",
+  "storybook_route": "/storybook/components/hero",
+  "preview_port": 4521,
+  "story_module": "LiveFramesPreviewWeb.Storybook.Components.Hero",
+  "production_function": "LiveFrames.Components.Sections.Hero.hero/1",
+  "variation_ids": ["default", "informative_media", "no_media", "minimal"],
+  "synthetic_media_path": "/assets/native/hero-demo.svg",
+  "attachment_880_referenced": false,
+  "css_boundary": {
+    "storybook_stylesheet": "apps/live_frames_preview/assets/css/storybook.css",
+    "imported_artifact": "apps/live_frames/priv/static/live_frames/css/live_frames.css",
+    "authored_lf_hero_rules_in_storybook_css": 0
+  },
+  "narrow_result": {
+    "viewport": "375x800",
+    "pass": true,
+    "content_margin_top": "400px",
+    "actions_flex_direction": "column",
+    "object_fit": "cover",
+    "object_position": "50% 50%",
+    "color_scheme": "light",
+    "horizontal_overflow": "none"
+  },
+  "desktop_result": {
+    "viewport": "1280x900",
+    "pass": true,
+    "content_margin_top": "400px",
+    "actions_flex_direction": "row",
+    "actions_flex_wrap": "wrap",
+    "object_fit": "cover",
+    "object_position": "70% 50%",
+    "horizontal_overflow": "none"
+  },
+  "hover_result": {
+    "pass": true,
+    "target": "secondary_action anchor :hover",
+    "note": "Secondary hover presentation changed under real pointer hover (border/background tokens)."
+  },
+  "keyboard_result": {
+    "pass": true,
+    "hero_relative_order": ["primary", "secondary"],
+    "visible_focus_on_both": true
+  },
+  "variation_semantic_results": {
+    "informative_media": {
+      "pass": true,
+      "img_present": true,
+      "non_empty_alt": true
+    },
+    "no_media": {
+      "pass": true,
+      "no_lf_hero__media": true,
+      "no_img": true,
+      "heading_level": 3
+    },
+    "minimal": {
+      "pass": true,
+      "heading_only": true,
+      "no_lede": true,
+      "no_actions": true,
+      "no_media": true
+    }
+  },
+  "storybook_documentation_surface": {
+    "pass": true,
+    "source": "production hero/1 @doc via PhoenixStorybook function story"
+  },
+  "runtime_console_errors": 0,
+  "network_failures": 0,
+  "network_checks": {
+    "/storybook/components/hero": 200,
+    "/assets/css/storybook.css": 200,
+    "/assets/native/hero-demo.svg": 200
+  },
+  "screenshots": [
+    "default_375x800.png",
+    "default_1280x900.png",
+    "informative_media_1280.png",
+    "no_media_1280.png",
+    "minimal_1280.png"
+  ],
+  "correction_cycles_used": 0,
+  "overall_status": "storybook_verified_candidate",
+  "hero_lifecycle": "documented",
+  "phase_6_exit": "not_authorized"
+}
