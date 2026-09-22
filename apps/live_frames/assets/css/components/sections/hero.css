@@ -20,6 +20,7 @@
     flex-direction: column;
     font-size: var(--lf-typography-body-size);
     gap: var(--lf-space-container-gap);
+    color-scheme: light;
     isolation: isolate;
     line-height: var(--lf-typography-body-line-height);
     padding-block: var(--lf-space-section-padding-block);
@@ -119,7 +120,7 @@
   .lf-hero__action--secondary > :where(a, button):hover {
     background-color: var(--lf-action-secondary-background-hover);
     border-color: var(--lf-action-secondary-border-hover);
-    color: var(--lf-action-secondary-text-hover);
+    color: var(--lf-action-primary-text);
   }
 
   .lf-hero__action--secondary > :where(a, button):focus-visible {

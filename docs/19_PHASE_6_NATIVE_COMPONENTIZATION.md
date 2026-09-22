@@ -1,9 +1,10 @@
 # Phase 6 Native Componentization
 
 **Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
-semantic_verified; P6.4 workstream **implemented candidate** (P6.4B1 styling
-bridge on PR #31; see `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`;
-P6.4B2 browser verification **not authorized**, **not started**)
+`semantic_verified`; P6.4 workstream **`verified`** (P6.4B1 merged; P6.4B2 browser
+verification owner-accepted in
+`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); Hero lifecycle current =
+**`styling_verified`**; P6.5 not yet authorized; P6.6 not authorized
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero
@@ -34,8 +35,11 @@ PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
 approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A
 styling-bridge architecture is approved in
-`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B implementation
-and later slices remain unauthorized until separately accepted.
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 implementation is
+merged; P6.4B2 browser verification is owner-accepted (`docs/21`). P6.5
+documentation and P6.6 Storybook remain unauthorized until separately accepted
+(P6.5 requires PR #32 merged to clean synchronized `main` plus separate owner
+authorization).
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
@@ -391,8 +395,9 @@ as gaps without adding tokens. P6.4A now resolves their **architectural**
 treatment in `docs/20`: Hero display typography uses source-independent native
 visual aliases independent of HTML heading level; overlay remains
 component-private; focal positioning remains component-private with no public
-breakpoint attrs. P6.4B still must **implement and visually verify** those
-decisions. No `styling_verified` claim exists yet.
+breakpoint attrs. P6.4B **implemented and visually verified** those decisions;
+owner acceptance records Hero lifecycle **`styling_verified`** (evidence in
+`docs/21`).
 
 ## 17. Tailwind and CSS boundary
 
@@ -518,14 +523,14 @@ Stop the Phase 6 work and record the exact blocker if:
 
 ## 24. Acceptance gates
 
-These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved (workstream `architecture_approved`); P6.4B implementation is not yet authorized; P6.5+ remain unauthorized until accepted.
+These are the gates for the remaining native-component slices. P6.1 is approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A architecture is approved; P6.4B1 is merged; P6.4B2 browser verification is owner-accepted; P6.4 workstream is `verified` and Hero lifecycle is `styling_verified`; P6.5 and P6.6 remain unauthorized until separately accepted.
 
 | Slice | Required result | Current state |
 | --- | --- | --- |
 | P6.1 API proposal | Owner-approved proposal records category, module/function, complete attrs and slots, runtime guards, semantics, accessibility, behavior ownership, token map, responsive boundary, styling boundary, rejected alternatives, and stop conditions. | `authorized → api_proposed → api_approved` complete. |
 | P6.2 implementation | Approved contract implemented as one stateless Phoenix function component with no production or source-runtime leakage, starting from clean `main` containing this authority. | `api_approved → implemented` complete. |
 | P6.3 semantic verification | Rendered markup, heading semantics, slots, image semantics, semantic keyboard focus, escaping, runtime guards, and edge cases verified. | `implemented → semantic_verified` complete. |
-| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `architecture_approved` (`docs/20`). P6.4B implementation: not started; not yet authorized. |
+| P6.4 styling bridge | Token-backed Tailwind/CSS implementation preserves responsive intent and ordinary selectors/pseudo-states without new unapproved tokens. | P6.4 workstream: `verified` (`docs/20`, `docs/21`). Hero lifecycle: `styling_verified`. P6.4B1 merged; P6.4B2 owner-accepted. |
 | P6.5 documentation | Consumer integration, CSS import paths, theme override boundaries, and styling contract documented. | Not started; not authorized. |
 | P6.6 PhoenixStorybook verification | Native Hero story uses approved API, documents consumer responsibilities, and verifies representative states without claiming source-asset fidelity. | Not started; not authorized. |
 | Phase 6 exit / catalogue | Owner accepts semantic, styling, documentation, and Storybook evidence before catalogue or generation/ejection exposure. | Not started; not authorized. |
@@ -612,3 +617,27 @@ Evidence:
 - slot cardinality guards and O(1) validation preserved; P6.2 contract tests
   remain authoritative for the heading-level matrix and duplicate-slot errors;
 - production `hero.ex` unchanged; no semantic defect required correction.
+
+## 27. P6.4 styling verification record
+
+Owner evidence gate **APPROVED** after independent browser review **PASS** on PR
+#32 (`docs/21`). This records durable lifecycle transitions only; PR #32 merge
+to clean synchronized `main` remains the publication gate.
+
+```text
+P6.3 = semantic_verified
+P6.4 workstream = verified
+Hero lifecycle current = styling_verified
+P6.4B1 = merged
+P6.4B2 = verified / owner accepted
+P6.5 = not yet authorized
+P6.6 = not authorized
+```
+
+P6.5 may begin only after:
+
+```text
+PR #32 merged
++ clean synchronized main
++ separate owner authorization
+```

@@ -9,6 +9,7 @@ defmodule LiveFrames.Styling.HeroStylingContractTest do
     source = css()
 
     assert source =~ "margin-top: 400px"
+    assert source =~ "color-scheme: light"
 
     assert source =~ "--lf-hero-overlay-gradient-vertical"
     assert source =~ "--lf-hero-overlay-gradient-desktop"
@@ -34,6 +35,7 @@ defmodule LiveFrames.Styling.HeroStylingContractTest do
     assert source =~ "text-decoration: none"
 
     assert source =~ ":hover"
+    assert source =~ "color: var(--lf-action-primary-text)"
     assert source =~ ":focus-visible"
     assert source =~ "outline-style: solid"
     assert source =~ "outline-width: 2px"

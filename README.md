@@ -53,9 +53,10 @@ Phase 6 is authorized. The P6.1 native Hero API is approved. The P6.2 native
 Hero implementation is present. P6.3 semantic verification is complete. P6.4A
 styling-bridge architecture is approved in
 `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 native Hero styling
-bridge is an **implemented candidate** on PR #31 (`implemented candidate`). P6.4B2
-browser verification is **not authorized** and **not started**; `styling_verified`
-is **not claimed**. Later slices remain unauthorized.
+bridge is **merged** (PR #31). P6.4B2 browser verification is **verified**
+(`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`). P6.4 workstream =
+**verified**; Hero lifecycle = **styling_verified**. P6.5 documentation = not
+yet authorized; P6.6 Storybook = not authorized.
 
 ## Authority and navigation
 
@@ -67,6 +68,8 @@ is **not claimed**. Later slices remain unauthorized.
   — P6.1 native Hero API proposal and later-slice gates.
 - [P6.4A native styling bridge architecture](docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md)
   — library CSS contract and P6.4B verification plan.
+- [P6.4B2 native Hero browser verification](docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md)
+  — verified browser evidence record (owner accepted).
 - [Source and provenance policy](docs/04_SOURCE_AND_PROVENANCE.md) — canonical
   publication and provenance governance.
 - `apps/live_frames` — reusable compiler library.

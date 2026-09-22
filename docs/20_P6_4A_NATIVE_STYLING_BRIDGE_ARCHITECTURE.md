@@ -4,9 +4,10 @@
 
 **Plan version:** `v3`
 
-**Status:** `architecture_approved` (active styling contract); **P6.4B1
-implementation candidate complete** on PR #31 (`implemented candidate`);
-P6.4B2 browser verification **not authorized**, **not started**
+**Status:** P6.4A architecture **`approved`** (active styling contract); **P6.4B1
+merged**; **P6.4B2 browser verification verified / owner accepted**
+(`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`); **P6.4 workstream
+`verified`**; **Hero lifecycle `styling_verified`**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor
@@ -75,9 +76,9 @@ authorized
 → accepted
 ```
 
-On `main` today the Hero stops at `semantic_verified`. `styling_verified` is
-**not** claimed. Workstream `architecture_approved` does not advance the main
-Hero lifecycle.
+After owner acceptance of P6.4B2 browser evidence (PR #32 branch;
+`docs/21`), the Hero lifecycle is recorded at **`styling_verified`**. Merge of
+PR #32 to clean synchronized `main` remains the durable publication gate.
 
 P6.4 workstream `verified` is the evidence required for the main transition:
 
@@ -91,24 +92,24 @@ semantic_verified → styling_verified
 unplanned
 → architecture_proposed        ← P6.4A architecture proposal (recorded)
 → architecture_approved        ← independent review PASS + owner approval (current)
-→ implemented                  ← P6.4B styling implementation (not started)
-→ verified                     ← P6.4B browser/visual verification
+→ implemented                  ← P6.4B1 styling implementation (merged)
+→ verified                     ← P6.4B2 browser/visual verification (owner accepted)
 ```
 
 Rules:
 
-- **Current P6.4 workstream state** = `architecture_approved` (independent
-  architecture review PASS; owner architecture approval granted on PR #30).
-- `architecture_proposed → architecture_approved` is complete on this branch;
-  merge to clean `main` remains the durable publication gate for the contract.
-- **P6.4B implementation** is **not** authorized by architecture approval alone.
-  P6.4B requires PR #30 merged, clean `main` verification, and **separate**
-  owner implementation authorization.
-- When authorized, P6.4B implementation: `architecture_approved → implemented`.
-- P6.4B verification: `implemented → verified`.
+- **Current P6.4 workstream state** = `verified` (P6.4A architecture approved;
+  P6.4B1 merged; P6.4B2 browser evidence owner-accepted — `docs/21`).
+- **Current main Hero lifecycle state** (on PR #32 branch) = `styling_verified`.
+- Historical: `architecture_proposed → architecture_approved` completed with
+  independent architecture review PASS and owner approval (PR #30).
+- Historical: P6.4B implementation required separate owner authorization after
+  architecture approval; P6.4B1 delivered `architecture_approved → implemented`.
+- P6.4B2 delivered `implemented → verified` on the workstream; owner acceptance
+  advanced main Hero lifecycle `semantic_verified → styling_verified`.
 
-Do **not** conflate workstream `verified` with main `styling_verified`; the
-latter is recorded on the main Hero lifecycle after P6.4B evidence is accepted.
+Do **not** conflate workstream `verified` with later `documented` /
+`storybook_verified` gates; those remain P6.5+.
 
 ### Master-aligned phase gates
 
@@ -528,7 +529,7 @@ a full accessibility pass from P6.4A architecture approval alone.
 | Demo media | Synthetic/demo-owned image only; attachment 880 unavailable |
 | Authority CSS | Package-relative `priv/static/live_frames/css/live_frames.css` from library build |
 
-### P6.4B mandatory acceptance evidence (not yet performed)
+### P6.4B mandatory acceptance evidence (performed — `docs/21`)
 
 **Contrast (styled presentation):**
 
@@ -584,33 +585,34 @@ Ordinary CSS for states and pseudo-elements; Hero does not invent `:nth-child()`
 attachment 880 = unavailable
 ```
 
-## 25. P6.4A completion record
+## 25. P6.4 completion record
 
 ```text
 P6.4A architecture = approved
-P6.4 workstream = implemented candidate (P6.4B1 PR #31)
-P6.4B2 browser verification = not authorized; not started
-main P6 lifecycle on main = ... → semantic_verified (unchanged)
-styling_verified = NOT CLAIMED
-P6.4 workstream verified = NOT CLAIMED
+P6.4B1 implementation = merged
+P6.4B2 browser verification = verified / owner accepted
+P6.4 workstream = verified
+Hero lifecycle = styling_verified
+P6.5 documentation = not yet authorized
+P6.6 Storybook = not authorized
 ```
 
-## 26. P6.4B authorization prerequisites
+Evidence: `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md` and
+`docs/evidence/p6_4b2_native_hero/`. Independent browser review **PASS**;
+owner evidence gate **APPROVED** (PR #32). PR #32 merge to clean synchronized
+`main` remains required before P6.5.
 
-P6.4 architecture is **approved**. P6.4B1 implementation candidate is **complete**
-on PR #31 (`architecture_approved → implemented candidate`). P6.4B2 browser
-verification is **not** authorized and **not** started.
+## 26. P6.5 authorization prerequisites
 
-P6.4B2 may begin only after:
+P6.4 styling verification is **complete** on the PR #32 branch. P6.5
+documentation is **not** authorized by this acceptance.
+
+P6.5 may begin only after:
 
 ```text
-P6.4B1 merged to clean main
-+ owner authorization for browser/WCAG verification
+PR #32 merged
++ clean synchronized main
++ separate owner authorization
 ```
 
-Architecture approval alone is **not** P6.4B2 verification authorization.
-
-P6.4B must deliver: `:live_frames` Tailwind build tooling (`runtime: false`),
-`mix live_frames.assets.build`, Hex `package/0` file inclusion, bounded token
-bridge builder + drift gates, `hero.css`, compiled CSS drift gate, verification
-route, and workstream `implemented → verified` before main `styling_verified`.
+P6.6 Storybook remains unauthorized until P6.5 and separate owner acceptance.
