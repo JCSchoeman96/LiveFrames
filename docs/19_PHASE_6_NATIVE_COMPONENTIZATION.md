@@ -37,11 +37,11 @@ PR #26 is merged at that same SHA. Master Phase 5 is closed. P5-H0, P5-H1,
 and P5-H2 are complete. Phase 6 is explicitly owner-authorized. P6.1 is
 approved. P6.2 is implemented. P6.3 semantic verification is complete. P6.4A
 styling-bridge architecture is approved in
-`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 implementation is
-merged; P6.4B2 browser verification is owner-accepted (`docs/21`). P6.5
-documentation and P6.6 Storybook remain unauthorized until separately accepted
-(P6.5 requires PR #32 merged to clean synchronized `main` plus separate owner
-authorization).
+`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 is merged;
+P6.4B2 browser verification is verified / owner accepted (`docs/21`); P6.4 =
+verified. P6.5 documentation is **documented / owner accepted**; Hero lifecycle
+= **documented**. P6.6 Storybook is **not yet authorized** until PR #33 merge,
+clean synchronized `main`, and separate owner authorization.
 
 The accepted fidelity evidence establishes a dark section with a large
 heading, bounded lede, two action roles, a full-section cover backdrop,
