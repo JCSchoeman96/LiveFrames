@@ -55,8 +55,19 @@ styling-bridge architecture is approved in
 `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 native Hero styling
 bridge is **merged** (PR #31). P6.4B2 browser verification is **verified**
 (`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`). P6.4 workstream =
-**verified**; Hero lifecycle = **styling_verified**. P6.5 documentation = not
-yet authorized; P6.6 Storybook = not authorized.
+**verified**; Hero lifecycle = **documented**. P6.5 = **documented / owner
+accepted**; P6.6 Storybook = **not yet authorized**.
+
+## Consumer quick start (native Hero)
+
+Assumes `:live_frames` is already a Mix dependency. Load CSS (precompiled path
+preferred), then render `LiveFrames.Components.Sections.Hero.hero/1`; consumer
+owns action behavior and public `--lf-*` theme overrides.
+
+- [Package and consumer integration](docs/16_PACKAGE_AND_GENERATOR_MODEL.md)
+- [CSS and Tailwind strategy](docs/11_CSS_AND_TAILWIND_STRATEGY.md)
+- [Phase 6 lifecycle authority](docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md)
+- [P6.4B2 browser verification](docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md)
 
 ## Authority and navigation
 
@@ -66,8 +77,12 @@ yet authorized; P6.6 Storybook = not authorized.
   — current execution order and gates.
 - [Phase 6 native componentization authority](docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md)
   — P6.1 native Hero API proposal and later-slice gates.
+- [CSS and Tailwind strategy](docs/11_CSS_AND_TAILWIND_STRATEGY.md) — public/private
+  CSS boundaries and override rules.
+- [Package and generator model](docs/16_PACKAGE_AND_GENERATOR_MODEL.md) — consumer
+  integration, Plug.Static, and Hero API usage.
 - [P6.4A native styling bridge architecture](docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md)
-  — library CSS contract and P6.4B verification plan.
+  — P6.4 architecture history; integration details in docs/11 and docs/16.
 - [P6.4B2 native Hero browser verification](docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md)
   — verified browser evidence record (owner accepted).
 - [Source and provenance policy](docs/04_SOURCE_AND_PROVENANCE.md) — canonical

@@ -1,5 +1,22 @@
 defmodule LiveFrames.Components.Sections.Hero do
-  @moduledoc false
+  @moduledoc """
+  Dark section Hero for Phoenix applications.
+
+  Call `hero/1` with required `heading`, optional `heading_level` (default `2`,
+  integers `1..6`), optional `lede`, and optional `image_src` / `image_alt`.
+  When `image_src` is present, `image_alt` must be a binary: use `""` for a
+  decorative image or non-empty text for an informative image. Omit `image_src`
+  for a Hero without media.
+
+  Slots `primary_action` and `secondary_action` each accept at most one entry.
+  Supply one native interactive root per slot (for example a `<button>` or
+  `<.link>`). LiveFrames styles presentation only; destinations, events, and
+  labels are consumer-owned.
+
+  Requires LiveFrames CSS (precompiled or source-built). Theme customization
+  uses public `--lf-*` variables; see `docs/16_PACKAGE_AND_GENERATOR_MODEL.md`
+  and `docs/11_CSS_AND_TAILWIND_STRATEGY.md`.
+  """
 
   use Phoenix.Component
 
@@ -15,6 +32,13 @@ defmodule LiveFrames.Components.Sections.Hero do
   slot(:primary_action)
   slot(:secondary_action)
 
+  @doc """
+  Renders the Hero section.
+
+  Public attrs: `heading`, `heading_level`, `lede`, `image_src`, `image_alt`,
+  `id`, `class`, and global `rest`. Slots: `primary_action`, `secondary_action`
+  (0 or 1 entry each). See module documentation for image-alt rules and CSS requirements.
+  """
   def hero(assigns) do
     validate_contract!(assigns)
 
