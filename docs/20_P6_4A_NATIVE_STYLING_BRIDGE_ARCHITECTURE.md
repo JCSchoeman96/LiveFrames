@@ -5,8 +5,8 @@
 **Plan version:** `v3`
 
 **Status:** `architecture_approved` (active styling contract); **P6.4B1
-implementation candidate complete** on PR #31 (`implemented candidate`);
-P6.4B2 browser verification **not authorized**, **not started**
+merged**; **P6.4B2 verified candidate** (`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`);
+`styling_verified` **not claimed**
 
 **Scope:** First native Hero styling bridge, package CSS contract, Tailwind v4
 boundary, token bridge, P6.4B verification plan, and future generator/editor

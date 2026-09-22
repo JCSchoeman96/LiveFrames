@@ -1,9 +1,9 @@
 # Phase 6 Native Componentization
 
 **Status:** Phase 6 authorized; P6.1 API approved; P6.2 implemented; P6.3
-semantic_verified; P6.4 workstream **implemented candidate** (P6.4B1 styling
-bridge on PR #31; see `docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`;
-P6.4B2 browser verification **not authorized**, **not started**)
+semantic_verified; P6.4 workstream **verified candidate** (P6.4B1 merged;
+P6.4B2 browser evidence in `docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`;
+`styling_verified` **not claimed**)
 
 This document is the execution authority for the native componentization
 programme. It records the proposed public API for the first native Hero

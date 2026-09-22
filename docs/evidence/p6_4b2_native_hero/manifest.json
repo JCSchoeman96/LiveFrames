@@ -1,0 +1,645 @@
+{
+  "schema_version": "p6_4b2_v1",
+  "base_sha": "29706d0bba4edbea632a6eec4afef4f5fcd4a5d1",
+  "candidate_sha": "29706d0bba4edbea632a6eec4afef4f5fcd4a5d1",
+  "browser": "Google Chrome",
+  "browser_version": "153.0.8010.52",
+  "platform": "Linux x86_64",
+  "route": "/liveframes/native/hero",
+  "preview_port": 4010,
+  "baseline_authored_hashes": {
+    "hero.ex": "e91d73fe8b8e4559b6403a92ec926191a491eae11238c9e98573ec1c49d00af8",
+    "hero.css": "9596be797fa74f6d236366a35173fdbfd323342a90dccc4cde17662671d2876c",
+    "lf_theme.css": "574c5917f238405ba9e8c05891f460567fc952ad52def4c391edffd85290cfed",
+    "live_frames.css": "885ec43298623eb2a2b1279cac094c4c9df1514c6e938a3a7c30835695032a9f"
+  },
+  "viewport_results": {
+    "375x667": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "375x667.png"
+    },
+    "478x800": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "478x800.png"
+    },
+    "479x800": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "479x800.png"
+    },
+    "991x800": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "991x800.png"
+    },
+    "992x800": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "992x800.png"
+    },
+    "1280x800": {
+      "horizontal_overflow": "none",
+      "overlay_readability": "PASS",
+      "screenshot": "1280x800.png"
+    }
+  },
+  "computed_responsive_properties": {
+    "375x667": {
+      "actions_flex_direction": "column",
+      "actions_flex_wrap": "nowrap",
+      "primary_wrap_width": "341.094px",
+      "secondary_wrap_width": "341.094px",
+      "primary_control_width": "341.094px",
+      "secondary_control_width": "341.094px",
+      "object_fit": "cover",
+      "object_position": "50% 50%",
+      "overlay_background_image": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+      "content_margin_top": "400px"
+    },
+    "478x800": {
+      "actions_flex_direction": "column",
+      "actions_flex_wrap": "nowrap",
+      "primary_wrap_width": "431px",
+      "secondary_wrap_width": "431px",
+      "primary_control_width": "431px",
+      "secondary_control_width": "431px",
+      "object_fit": "cover",
+      "object_position": "50% 50%",
+      "overlay_background_image": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+      "content_margin_top": "400px"
+    },
+    "479x800": {
+      "actions_flex_direction": "row",
+      "actions_flex_wrap": "wrap",
+      "primary_wrap_width": "140px",
+      "secondary_wrap_width": "140px",
+      "primary_control_width": "140px",
+      "secondary_control_width": "140px",
+      "object_fit": "cover",
+      "object_position": "50% 50%",
+      "overlay_background_image": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+      "content_margin_top": "400px"
+    },
+    "991x800": {
+      "actions_flex_direction": "row",
+      "actions_flex_wrap": "wrap",
+      "primary_wrap_width": "140px",
+      "secondary_wrap_width": "140px",
+      "primary_control_width": "140px",
+      "secondary_control_width": "140px",
+      "object_fit": "cover",
+      "object_position": "50% 50%",
+      "overlay_background_image": "linear-gradient(rgba(0, 0, 0, 0) 5%, rgba(13, 13, 13, 0.39) 20%, rgba(10, 10, 10, 0.91) 65%)",
+      "content_margin_top": "400px"
+    },
+    "992x800": {
+      "actions_flex_direction": "row",
+      "actions_flex_wrap": "wrap",
+      "primary_wrap_width": "140px",
+      "secondary_wrap_width": "140px",
+      "primary_control_width": "140px",
+      "secondary_control_width": "140px",
+      "object_fit": "cover",
+      "object_position": "70% 50%",
+      "overlay_background_image": "linear-gradient(90deg, rgba(5, 5, 5, 0.95) 30%, rgba(8, 8, 8, 0.75) 60%, rgba(15, 15, 15, 0.46) 90%)",
+      "content_margin_top": "400px"
+    },
+    "1280x800": {
+      "actions_flex_direction": "row",
+      "actions_flex_wrap": "wrap",
+      "primary_wrap_width": "140.391px",
+      "secondary_wrap_width": "143.422px",
+      "primary_control_width": "140.391px",
+      "secondary_control_width": "143.422px",
+      "object_fit": "cover",
+      "object_position": "70% 50%",
+      "overlay_background_image": "linear-gradient(90deg, rgba(5, 5, 5, 0.95) 30%, rgba(8, 8, 8, 0.75) 60%, rgba(15, 15, 15, 0.46) 90%)",
+      "content_margin_top": "400px"
+    }
+  },
+  "contrast_measurements": {
+    "375x667_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.028,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "375x667_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "375x667_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "375x667_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "375x667_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "375x667_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "478x800_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 18.883,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "478x800_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "478x800_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "478x800_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "478x800_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "478x800_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "479x800_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.169,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "479x800_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "479x800_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "479x800_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "479x800_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "479x800_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "991x800_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "991x800_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "991x800_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "991x800_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "991x800_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "991x800_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "992x800_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 16.858,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "992x800_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 18.58,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "992x800_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "992x800_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "992x800_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "992x800_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "1280x800_heading": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 17.928,
+      "threshold": 3.0,
+      "result": "PASS"
+    },
+    "1280x800_lede": {
+      "foreground": "rgb(255, 255, 255)",
+      "min_composited_ratio": 19.305,
+      "threshold": 4.5,
+      "result": "PASS"
+    },
+    "1280x800_primary_normal": {
+      "text_background_ratio": 14.497,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 14.497,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(0.8839 0.154 90.78)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "1280x800_secondary_normal": {
+      "text_background_ratio": 1,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 1,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.8839 0.154 90.78)"
+      },
+      "result": "FAIL"
+    },
+    "1280x800_primary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 12.249,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(0.8839 0.154 90.78)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    },
+    "1280x800_secondary_hover": {
+      "text_background_ratio": 20.599,
+      "text_adjacent_hero_ratio": null,
+      "effective_text_ratio": 20.599,
+      "border_adjacent_ratio": 17.404,
+      "colors": {
+        "backgroundColor": "oklch(1 0 180)",
+        "borderColor": "oklch(1 0 180)",
+        "color": "oklch(0.1 0.024 90.78)"
+      },
+      "result": "PASS"
+    }
+  },
+  "keyboard_order": [
+    {
+      "step": 1,
+      "tag": "button",
+      "text_preview": "Get started",
+      "focus_visible": true,
+      "hero_action_wrapper": false
+    },
+    {
+      "step": 2,
+      "tag": "a",
+      "text_preview": "Learn more",
+      "focus_visible": true,
+      "hero_action_wrapper": false
+    },
+    {
+      "step": 3,
+      "tag": "body",
+      "text_preview": "Build faster with native LiveFrames\n    ",
+      "focus_visible": false,
+      "hero_action_wrapper": false
+    },
+    {
+      "step": 4,
+      "tag": "button",
+      "text_preview": "Get started",
+      "focus_visible": true,
+      "hero_action_wrapper": false
+    },
+    {
+      "step": 5,
+      "tag": "a",
+      "text_preview": "Learn more",
+      "focus_visible": true,
+      "hero_action_wrapper": false
+    }
+  ],
+  "hover_measurements": {
+    "375x667": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    },
+    "478x800": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    },
+    "479x800": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    },
+    "991x800": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    },
+    "992x800": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    },
+    "1280x800": {
+      "primary_hover_text_bg_ratio": 20.599,
+      "secondary_hover_text_bg_ratio": 20.599,
+      "primary_hover_visible": true,
+      "secondary_hover_visible": true
+    }
+  },
+  "focus_measurements": {
+    "primary": {
+      "classes": "",
+      "focusVisible": true,
+      "outline": {
+        "color": "oklch(0.85 0.154 90.78)",
+        "offset": "2px",
+        "style": "solid",
+        "width": "2px"
+      },
+      "tag": "button",
+      "text": "Get started"
+    },
+    "secondary": {
+      "classes": "",
+      "focusVisible": true,
+      "outline": {
+        "color": "oklch(0.65 0.153 90.7741)",
+        "offset": "2px",
+        "style": "solid",
+        "width": "2px"
+      },
+      "tag": "a",
+      "text": "Learn more"
+    },
+    "primary_outline_vs_hero_ratio": 11.002,
+    "secondary_outline_vs_hero_ratio": 5.363
+  },
+  "color_scheme_test_results": {
+    "375x667": {
+      "host_color_scheme": "dark",
+      "heading_color": "rgb(255, 255, 255)",
+      "lede_color": "rgb(255, 255, 255)",
+      "heading_min_composited_ratio": 19.028,
+      "lede_min_composited_ratio": 19.305,
+      "result": "PASS",
+      "screenshot": "color_scheme_dark_375x667.png"
+    },
+    "1280x800": {
+      "host_color_scheme": "dark",
+      "heading_color": "rgb(255, 255, 255)",
+      "lede_color": "rgb(255, 255, 255)",
+      "heading_min_composited_ratio": 17.928,
+      "lede_min_composited_ratio": 19.305,
+      "result": "PASS",
+      "screenshot": "color_scheme_dark_1280x800.png"
+    }
+  },
+  "runtime_error_count": 0,
+  "failed_network_requests": 0,
+  "screenshot_filenames": [
+    "1280x800.png",
+    "375x667.png",
+    "478x800.png",
+    "479x800.png",
+    "991x800.png",
+    "992x800.png",
+    "color_scheme_dark_1280x800.png",
+    "color_scheme_dark_375x667.png"
+  ],
+  "overall_status": "verified_candidate",
+  "baseline_failures": [
+    {
+      "item": "secondary_action_hover_text_background",
+      "before_ratio": 1.441,
+      "threshold": 4.5,
+      "viewport": "375x667"
+    },
+    {
+      "item": "host_color_scheme_dark_heading_lede",
+      "before_heading": "rgb(0, 0, 0)",
+      "before_lede": "rgb(0, 0, 0)",
+      "viewport": "375x667"
+    }
+  ],
+  "corrections": [
+    {
+      "file": "apps/live_frames/assets/css/components/sections/hero.css",
+      "change": "Set color-scheme: light on .lf-hero for fixed dark presentation under host dark color-scheme."
+    },
+    {
+      "file": "apps/live_frames/assets/css/components/sections/hero.css",
+      "change": "Secondary :hover text uses var(--lf-action-primary-text) for readable contrast on hover background."
+    }
+  ],
+  "wrapper_focus_targets": 0
+}
