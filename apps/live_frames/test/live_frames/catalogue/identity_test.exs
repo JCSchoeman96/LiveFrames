@@ -57,6 +57,39 @@ defmodule LiveFrames.Catalogue.IdentityTest do
     end
   end
 
+  describe "slug/1 derivation" do
+    test "rejects invalid namespace" do
+      assert {:error, diagnostics} = Identity.slug("other.section.hero")
+      assert diagnostic(diagnostics, "catalogue.identity.id_invalid")
+    end
+
+    test "rejects invalid ID kind" do
+      assert {:error, diagnostics} = Identity.slug("live_frames.sections.hero")
+      assert diagnostic(diagnostics, "catalogue.identity.kind_invalid")
+    end
+  end
+
+  describe "canonical_path/2 derivation" do
+    test "rejects invalid namespace" do
+      assert {:error, diagnostics} = Identity.canonical_path("other.section.hero", "section")
+      assert diagnostic(diagnostics, "catalogue.identity.id_invalid")
+    end
+
+    test "rejects invalid ID kind" do
+      assert {:error, diagnostics} =
+               Identity.canonical_path("live_frames.sections.hero", "section")
+
+      assert diagnostic(diagnostics, "catalogue.identity.kind_invalid")
+    end
+
+    test "rejects ID kind vs supplied kind mismatch" do
+      assert {:error, diagnostics} =
+               Identity.canonical_path("live_frames.page.hero", "section")
+
+      assert diagnostic(diagnostics, "catalogue.identity.kind_mismatch")
+    end
+  end
+
   test "rejects manifest kind mismatch when ID grammar is otherwise valid" do
     manifest = synthetic_manifest("live_frames.section.hero", "page")
     path = "apps/live_frames/priv/catalogue/sections/hero.json"

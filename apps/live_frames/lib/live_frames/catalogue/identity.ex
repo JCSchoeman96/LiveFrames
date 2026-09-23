@@ -35,21 +35,9 @@ defmodule LiveFrames.Catalogue.Identity do
 
   @spec slug(String.t()) :: {:ok, String.t()} | {:error, [diagnostic()]}
   def slug(id) when is_binary(id) do
-    case parse_segments(id) do
-      {:ok, _namespace, _kind, key} ->
-        cond do
-          not key_matches?(key) ->
-            id_invalid(id, "ID key segment is invalid.")
-
-          windows_reserved?(key) ->
-            {:error, [slug_reserved(id, key)]}
-
-          true ->
-            {:ok, key}
-        end
-
-      {:error, diagnostics} ->
-        {:error, diagnostics}
+    case validated_v1_identity(id) do
+      {:ok, _id_kind, key} -> {:ok, key}
+      {:error, diagnostics} -> {:error, diagnostics}
     end
   end
 
@@ -57,8 +45,8 @@ defmodule LiveFrames.Catalogue.Identity do
 
   @spec canonical_path(String.t(), String.t()) :: {:ok, String.t()} | {:error, [diagnostic()]}
   def canonical_path(id, kind) when is_binary(id) and is_binary(kind) do
-    with {:ok, _namespace, _id_kind, key} <- parse_segments(id),
-         :ok <- validate_key_for_derivation(id, key),
+    with {:ok, id_kind, key} <- validated_v1_identity(id),
+         :ok <- ensure_supplied_kind_matches_id(id, kind, id_kind),
          {:ok, directory} <- kind_directory(kind) do
       {:ok, "#{@catalogue_root}/#{directory}/#{key}.json"}
     end
@@ -122,16 +110,9 @@ defmodule LiveFrames.Catalogue.Identity do
     do: [id_invalid("id", "ID must be a string.")]
 
   defp validate_id_structure(id) do
-    case parse_segments(id) do
-      {:error, diagnostics} ->
-        diagnostics
-
-      {:ok, namespace, id_kind, key} ->
-        []
-        |> maybe_add(namespace != @namespace, id_invalid(id, "Namespace must be live_frames."))
-        |> maybe_add(id_kind not in @kinds, kind_invalid(id, id_kind))
-        |> maybe_add(not key_matches?(key), id_invalid(id, "ID key segment is invalid."))
-        |> maybe_add(windows_reserved?(key), slug_reserved(id, key))
+    case validated_v1_identity(id) do
+      {:ok, _, _} -> []
+      {:error, diagnostics} -> diagnostics
     end
   end
 
@@ -149,15 +130,42 @@ defmodule LiveFrames.Catalogue.Identity do
   end
 
   defp canonical_path_for_valid_id(id, manifest_kind) do
-    with {:ok, _namespace, id_kind, key} <- parse_segments(id),
-         true <- id_kind in @kinds,
-         true <- key_matches?(key),
-         false <- windows_reserved?(key),
-         true <- id_kind == manifest_kind,
-         {:ok, directory} <- kind_directory(manifest_kind) do
-      {:ok, "#{@catalogue_root}/#{directory}/#{key}.json"}
-    else
-      _ -> :error
+    case canonical_path(id, manifest_kind) do
+      {:ok, path} -> {:ok, path}
+      {:error, _} -> :error
+    end
+  end
+
+  defp validated_v1_identity(id) do
+    case parse_segments(id) do
+      {:error, diagnostics} ->
+        {:error, diagnostics}
+
+      {:ok, namespace, id_kind, key} ->
+        diagnostics =
+          []
+          |> maybe_add(namespace != @namespace, id_invalid(id, "Namespace must be live_frames."))
+          |> maybe_add(id_kind not in @kinds, kind_invalid(id, id_kind))
+          |> maybe_add(not key_matches?(key), id_invalid(id, "ID key segment is invalid."))
+          |> maybe_add(windows_reserved?(key), slug_reserved(id, key))
+
+        case diagnostics do
+          [] -> {:ok, id_kind, key}
+          _ -> {:error, diagnostics}
+        end
+    end
+  end
+
+  defp ensure_supplied_kind_matches_id(id, supplied_kind, id_kind) do
+    cond do
+      supplied_kind not in @kinds ->
+        {:error, [kind_invalid(id, supplied_kind)]}
+
+      id_kind != supplied_kind ->
+        {:error, [kind_mismatch(id, supplied_kind, id_kind)]}
+
+      true ->
+        :ok
     end
   end
 
@@ -197,19 +205,6 @@ defmodule LiveFrames.Catalogue.Identity do
       true ->
         [namespace, kind, key] = segments
         {:ok, namespace, kind, key}
-    end
-  end
-
-  defp validate_key_for_derivation(id, key) do
-    cond do
-      not key_matches?(key) ->
-        {:error, [id_invalid(id, "ID key segment is invalid.")]}
-
-      windows_reserved?(key) ->
-        {:error, [slug_reserved(id, key)]}
-
-      true ->
-        :ok
     end
   end
 
