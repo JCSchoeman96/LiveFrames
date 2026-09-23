@@ -29,7 +29,7 @@ The canonical root is:
 apps/live_frames/priv/catalogue/
 ~~~
 
-The immutable, globally unique, human-readable ID is the CatalogueItem identity. Examples:
+The immutable, globally unique, human-readable ID is the semantic CatalogueItem identity. These examples illustrate IDs; they do not define a formal grammar:
 
 ~~~text
 live_frames.primitive.icon
@@ -51,16 +51,19 @@ page
 template
 ~~~
 
-For v1, an ID has three dot-separated segments: the live_frames namespace,
-one allowed kind, and a lower snake_case semantic key. The kind segment must
-equal the manifest kind. The complete ID is globally unique. Both ID and kind
-become immutable when the manifest is admitted. An ID remains reserved after
-WITHDRAWN or RETIRED and must never be reused.
+The ID's meaning and the manifest's kind must agree. Fundamentally different
+concepts must have different IDs. The complete ID is globally unique. Both ID
+and kind become immutable when the manifest is admitted. An ID remains reserved
+after WITHDRAWN or RETIRED and must never be reused.
 
-The machine slug is the semantic_key segment. The canonical path pattern is
-apps/live_frames/priv/catalogue/{directory-for-kind}/{semantic_key}.json,
-using the directory table below. The manifest has no separately mutable slug
-field.
+The exact formal ID grammar, segment count, character grammar or regex, and
+deeper namespace rules are deferred until they receive explicit approval. G1
+does not prescribe an ID pattern.
+
+The machine slug is derived deterministically from the immutable ID. The
+canonical manifest path is derived deterministically from the ID, kind, and
+derived slug, using the kind-to-directory mapping below. There is no separately
+mutable slug authority. The exact slug derivation rule is not fixed here.
 
 | Kind | Directory |
 | --- | --- |
@@ -196,7 +199,18 @@ Agents may validate evidence presence, references, and shape. They must not inve
 
 The fingerprint protects the documented, consumer-facing component contract. It must remain unchanged when an internal refactor preserves that contract.
 
-The fingerprint algorithm and canonical serialization must be deterministic and explicitly versioned. G1 does not select a digest algorithm or byte serialization. The exact v1 algorithm and serialization must be selected and owner-approved during the separately authorized implementation plan, before fingerprint implementation begins. An algorithm or version change must not masquerade as a component contract change. G1 has no fingerprint implementation.
+The fingerprint covers only the normalized public consumer contract described
+below. Normalization and serialization must yield a deterministic fingerprint.
+The fingerprint algorithm must have an explicit, durable version. Internal or
+private refactors that preserve the public contract must not change the
+fingerprint.
+
+G1 does not select a hash or digest, algorithm identifier, serialization,
+ordering, canonical representation, or detailed normalization rules. These
+choices require explicit owner approval during separately authorized
+implementation planning. A fingerprint algorithm or version change must not be
+represented as a component contract change. G1 has no fingerprint
+implementation.
 
 The normalized record includes:
 
@@ -206,7 +220,10 @@ The normalized record includes:
 - Documented public capabilities.
 - Documented public CSS and theme contract references, including public --lf-* variables.
 
-Normalize attrs, slots, and other unordered public-contract entries by stable semantic key. Treat constrained values as a set unless their documented order is consumer-observable. Formatting and source declaration order do not affect the fingerprint.
+The normalization and serialization rules must preserve this public-contract
+scope and exclude the private details listed below. Exact ordering, value
+treatment, serialization, and canonicalization rules remain deferred for
+explicit owner approval during implementation planning.
 
 Exclude source paths, line numbers, private helpers, private CSS classes or variables, internal DOM shape, prose formatting, and Storybook ordering. If a change affects a documented consumer-visible contract, the fingerprint changes. If only private implementation details change, it does not.
 
