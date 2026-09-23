@@ -110,5 +110,7 @@ is a DOM child. Promote a child to a reusable component or primitive only when
 its independent semantics, consumers, and lifecycle are proven by more than a
 single fixture or when a later tracer supplies that evidence.
 
-These rules intentionally leave the future catalogue, ejection format, and
-broader Hero taxonomy open for later evidence.
+Catalogue identity, taxonomy, lifecycle, and manifest authority are defined in
+docs/23_CATALOGUE_ARCHITECTURE.md; CatalogueItem versioning is defined in
+docs/24_CATALOGUE_VERSIONING_POLICY.md. Production component source remains
+the authority for actual attrs, slots, rendering, and runtime behavior.

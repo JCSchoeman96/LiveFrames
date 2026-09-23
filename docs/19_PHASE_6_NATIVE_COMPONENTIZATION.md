@@ -101,7 +101,8 @@ authorized
 
 `blocked` is an exceptional state and must carry an explicit blocking reason.
 It is not a retry or recovery mechanism. `accepted` is terminal for this
-tracer lifecycle. It is distinct from a future CatalogueItem lifecycle.
+tracer lifecycle. It is distinct from the CatalogueItem lifecycle that was
+future at Phase 6 and is now defined in docs/23.
 
 The reviewed lifecycle transition is:
 
@@ -802,10 +803,12 @@ Hero native-tracer lifecycle:
 storybook_verified → accepted
 ```
 
-is distinct from the Master Spec CatalogueItem lifecycle:
+is distinct from the G1 CatalogueItem lifecycle now defined in docs/23:
 
 ```text
-DRAFT → GENERATED → REVIEWED → APPROVED → RELEASED → DEPRECATED
+DRAFT → VALIDATED → REVIEWED → APPROVED → RELEASED → DEPRECATED → RETIRED
+Pre-release side exit: DRAFT | VALIDATED | REVIEWED | APPROVED → WITHDRAWN
+Repeated release: RELEASED → RELEASED via publish_new_version
 ```
 
 Phase 6 exit (candidate or owner-accepted close) does **not** mean CatalogueItem
@@ -917,12 +920,14 @@ Hero native tracer lifecycle:
 … → storybook_verified → accepted
 ```
 
-is distinct from CatalogueItem:
+is distinct from the G1 CatalogueItem lifecycle now defined in docs/23:
 
 ```text
-DRAFT → GENERATED → REVIEWED → APPROVED → RELEASED → DEPRECATED
+DRAFT → VALIDATED → REVIEWED → APPROVED → RELEASED → DEPRECATED → RETIRED
+Pre-release side exit: DRAFT | VALIDATED | REVIEWED | APPROVED → WITHDRAWN
+Repeated release: RELEASED → RELEASED via publish_new_version
 ```
 
-No CatalogueItem state is advanced by Phase 6 Hero acceptance. Catalogue,
+No CatalogueItem state was advanced by Phase 6 Hero acceptance. Catalogue,
 generator, ejection, package release, and Hex release remain **not authorized /
 not claimed**.
