@@ -157,14 +157,22 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | component.module, component.function | References to the production component export. |
 | contract.fingerprint_algorithm, contract.fingerprint | Versioned fingerprint of the normalized public contract. |
 | storybook.module | Reference to the PhoenixStorybook module that contains the production component's story. The manifest may record variation IDs when explicitly needed. It does not require a second story identifier. |
-| docs | Structured references to item documentation. |
-| provenance | Structured source-group, authority, and evidence references. This area does not store competing provenance status. |
+| docs | Required JSON object containing structured references to item documentation. The exact nested reference schema is not defined by #40. |
+| provenance | Required JSON object containing structured source-group, authority, and evidence references. The exact nested reference schema is not defined by #40. This area must not duplicate or infer mutable provenance/publication status from docs/04. |
 | distribution.library, distribution.generator, distribution.ejection | Independent capability declarations with evidence references for any capability marked supported. |
 | release.version | Proposed or current CatalogueItem SemVer, governed by docs/24. |
 | Optional package linkage | Observational fields such as introduced_in_package or last_changed_in_package. These do not define CatalogueItem version. |
 | lifecycle.last_transition | The most recent action, state change, and required evidence references. |
 | deprecation | Whole-item deprecation rationale and related metadata when applicable. |
 | superseded_by | Replacement CatalogueItem ID when a replacement exists. |
+
+**Owner approval (#40 schema clarification, 2026-09-23):** v1 requires both
+`docs` and `provenance` to be JSON objects. They may contain arrays or other
+JSON-compatible values inside those objects where later approved reference
+schemas require them. An empty object is structurally valid at the #40 schema
+layer; later lifecycle/evidence validation determines whether sufficient
+references exist for a target state. #40 must not invent nested keys or infer
+provenance/publication status.
 
 The manifest stores current state, the last transition, and the evidence references required for that state. It does not contain a large append-only event history. Git history is the durable transition history.
 
