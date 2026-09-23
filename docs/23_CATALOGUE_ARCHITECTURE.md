@@ -248,35 +248,222 @@ Agents may validate evidence presence, references, and shape. They must not inve
 
 ## 8. Contract fingerprint
 
-The fingerprint protects the documented, consumer-facing component contract. It must remain unchanged when an internal refactor preserves that contract.
+The fingerprint protects the documented, consumer-facing component contract. It
+is a deterministic contract-drift detector; it is not the sole SemVer or
+compatibility oracle. Internal or private refactors that preserve the public
+contract must not change the fingerprint.
 
-The fingerprint covers only the normalized public consumer contract described
-below. Normalization and serialization must yield a deterministic fingerprint.
-The fingerprint algorithm must have an explicit, durable version. Internal or
-private refactors that preserve the public contract must not change the
-fingerprint.
+**Owner approval (#39, 2026-09-23):** G1 v1 uses the exact algorithm contract
+below.
 
-G1 does not select a hash or digest, algorithm identifier, serialization,
-ordering, canonical representation, or detailed normalization rules. These
-choices require explicit owner approval during separately authorized
-implementation planning. A fingerprint algorithm or version change must not be
-represented as a component contract change. G1 has no fingerprint
-implementation.
+### v1 fingerprint algorithm
 
-The normalized record includes:
+| Rule | Value |
+| --- | --- |
+| Algorithm identifier | `lf-contract-v1-jcs-sha256` |
+| Normalized document format | `lf-contract-v1` |
+| Canonical serialization | RFC 8785 JSON Canonicalization Scheme (JCS) |
+| Digest | SHA-256 over the exact UTF-8 JCS bytes |
+| Stored fingerprint | Exactly 64 lowercase hexadecimal characters |
+| Unicode normalization | None; preserve exact Unicode string content |
+| Unknown algorithm identifier | Validation failure |
 
-- Component module and exported function.
-- Public attrs: names, types, requiredness, default semantics, and constrained values.
-- Public slots: names, cardinality, and requiredness.
-- Documented public capabilities.
-- Documented public CSS and theme contract references, including public --lf-* variables.
+The manifest stores both
+`contract.fingerprint_algorithm = "lf-contract-v1-jcs-sha256"` and the
+resulting lowercase hexadecimal `contract.fingerprint`.
 
-The normalization and serialization rules must preserve this public-contract
-scope and exclude the private details listed below. Exact ordering, value
-treatment, serialization, and canonicalization rules remain deferred for
-explicit owner approval during implementation planning.
+The hash input is a separate normalized public-contract document. The Catalogue
+manifest itself is not hashed. Catalogue ID, lifecycle state, CatalogueItem
+SemVer, Storybook metadata, provenance, source paths, package metadata, and the
+fingerprint fields themselves are not part of the normalized contract document.
 
-Exclude source paths, line numbers, private helpers, private CSS classes or variables, internal DOM shape, prose formatting, and Storybook ordering. If a change affects a documented consumer-visible contract, the fingerprint changes. If only private implementation details change, it does not.
+The normalized top-level document has exactly these conceptual areas:
+
+~~~json
+{
+  "format": "lf-contract-v1",
+  "component": {
+    "module": "LiveFrames.Components.Sections.Hero",
+    "function": "hero"
+  },
+  "attrs": [],
+  "slots": [],
+  "capabilities": [],
+  "css_theme_contract": []
+}
+~~~
+
+The component module uses the fully-qualified normal Elixir module name without
+the internal `Elixir.` prefix. The exported function is an exact string.
+Changing either changes the public contract fingerprint.
+
+### Public attributes
+
+Each public attribute normalizes to a record containing exactly the public
+semantics required by G1:
+
+~~~text
+name
+type
+required
+default
+constraints
+~~~
+
+Attribute records are sorted by `name`; source declaration order is ignored.
+
+Types use an explicit representation rather than `inspect/1`. Built-in types
+record their stable public type name. Struct/module-backed types record their
+fully-qualified public module name. A future type form that has no approved
+canonical representation is unsupported and fingerprint extraction must fail.
+
+Defaults distinguish the absence of a declared default from an explicit default
+whose value is `nil`:
+
+~~~json
+{"present": false}
+~~~
+
+~~~json
+{"present": true, "value": null}
+~~~
+
+This distinction is part of the normalized public contract.
+
+### Canonical values
+
+Fingerprint extraction must never use arbitrary Elixir `inspect/1` output as a
+canonical value representation.
+
+The v1 canonical value algebra is:
+
+| Elixir/public value | Canonical meaning |
+| --- | --- |
+| `nil` | JSON null |
+| boolean | JSON boolean |
+| UTF-8 binary/string | Exact JSON string |
+| integer | Tagged exact base-10 integer string |
+| float | Tagged exact IEEE-754 binary64 bit-pattern representation |
+| atom | Tagged exact atom-name string |
+| list | Tagged ordered sequence of recursively canonical values |
+| tuple | Tagged ordered sequence of recursively canonical values |
+| map | Tagged canonical key/value entries sorted by canonical key representation |
+| finite range | Tagged exact range semantics when the range itself is the value |
+| unsupported/opaque term | Deterministic extraction failure |
+
+Functions, PIDs, ports, references, and opaque values without an explicitly
+approved canonicalizer are unsupported. Validation must fail rather than fall
+back to source text, `inspect/1`, or another unstable representation.
+
+### Constraints
+
+Only machine-significant public constraints enter the normalized contract.
+Documentation examples that do not constrain accepted consumer input do not.
+
+An exhaustive allowed-values constraint is a semantic **set**. Its members are
+canonicalized, duplicates are invalid, and the canonical member
+representations are sorted before JCS serialization. Source ordering therefore
+does not affect the fingerprint.
+
+Equivalent exhaustive constraints such as the same finite values declared in a
+different order must fingerprint identically. A finite range used as an
+exhaustive values constraint normalizes to the same accepted-value set as the
+equivalent explicit finite values.
+
+For public global-attribute extensions, any explicitly supported added names or
+prefixes are normalized as sorted unique semantic sets. Changing that supported
+surface changes the fingerprint.
+
+### Public slots
+
+Each v1 public slot normalizes to:
+
+~~~text
+name
+required
+min_entries
+max_entries
+~~~
+
+`max_entries = null` means unbounded. Slot records are sorted by `name`;
+source declaration order and Storybook ordering are ignored.
+
+If repository-owned component validation narrows a slot's documented public
+cardinality beyond the framework declaration, the normalized record must reflect
+the documented public consumer contract.
+
+### Capabilities and CSS/theme contract
+
+`capabilities` and `css_theme_contract` are sorted, unique semantic sets of
+stable public identifiers.
+
+The CSS/theme set records documented public extension-point identifiers such as
+public `--lf-*` custom-property names. It does not record their current
+generated values merely because those values changed, and it excludes
+component-private `--lf-hero-*` variables, private selectors, private classes,
+private DOM shape, and implementation-only styling details.
+
+Removing, renaming, or adding a documented public extension-point identifier is
+a public-contract change and therefore changes the fingerprint.
+
+### Deterministic ordering
+
+Normalize unordered semantic collections before JCS serialization:
+
+| Collection | v1 treatment |
+| --- | --- |
+| JSON object properties | RFC 8785 JCS ordering |
+| attrs | Sort by canonical attr name |
+| slots | Sort by canonical slot name |
+| exhaustive allowed values | Unique semantic set; canonicalize then sort |
+| capabilities | Unique semantic set; sort |
+| CSS/theme contract identifiers | Unique semantic set; sort |
+| list/tuple default values where order is observable | Preserve order |
+| maps | Ignore source key order; sort canonical key/value representation |
+| source declaration order | Ignore unless order is itself public semantics |
+
+Equivalent normalized public contracts must therefore produce byte-identical JCS
+input and the same SHA-256 fingerprint.
+
+### Algorithm migration
+
+The algorithm identifier is durable and participates in validation dispatch.
+Unknown algorithm identifiers fail closed.
+
+A future algorithm change, for example from
+`lf-contract-v1-jcs-sha256` to a separately approved v2 identifier, is an
+explicit tooling/schema metadata migration. It does **not** by itself represent
+a component-contract change and must not require a CatalogueItem SemVer bump
+solely because the fingerprint algorithm changed.
+
+Fingerprints produced by different algorithm identifiers are not directly
+comparable. Migration must recompute the fingerprint under the new algorithm,
+record the new identifier, and revalidate the same public contract. It must not
+silently rewrite an algorithm identifier or pretend old and new digests have the
+same comparison domain.
+
+### v1 scope boundary
+
+The G1-approved fingerprint scope covers component module/function, public attrs,
+public slot name/cardinality/requiredness, documented public capabilities, and
+documented public CSS/theme contract references.
+
+G1 v1 does **not** silently expand that scope to arbitrary slot-attribute schemas
+or arbitrary machine-encoded cross-field runtime invariants. A future component
+whose compatibility materially depends on such semantics requires an explicit
+fingerprint-scope extension before those semantics can be claimed as covered by
+the fingerprint.
+
+This limitation does not make such public behavior irrelevant to compatibility.
+`docs/24_CATALOGUE_VERSIONING_POLICY.md` remains the compatibility and SemVer
+authority. The fingerprint assists deterministic drift detection; compatibility
+review remains authoritative.
+
+Exclude source paths, line numbers, private helpers, private CSS classes or
+variables, internal DOM shape, prose formatting, Storybook ordering, Catalogue
+metadata, and implementation-only markup. If a change affects the normalized
+consumer-visible scope above, the fingerprint changes. If only excluded private
+implementation details change, it does not.
 
 ## 9. Storybook evidence
 
