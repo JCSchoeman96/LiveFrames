@@ -19,7 +19,7 @@
 - **First native Hero tracer:** accepted
 - **Hero `accepted`:** terminal only for that native tracer lifecycle
 
-**Related authorities:** `docs/19` = Phase 6 lifecycle/exit; `docs/20` = styling architecture; `docs/21` = P6.4 browser evidence; `docs/22` = P6.6 Storybook evidence.
+**Related authorities:** `docs/19` = Phase 6 lifecycle/exit; `docs/20` = styling architecture; `docs/21` = P6.4 browser evidence; `docs/22` = P6.6 Storybook evidence; `docs/23` = G1 Catalogue architecture; `docs/24` = Catalogue versioning.
 
 ### Source-fidelity limitations (preserved)
 
@@ -37,20 +37,21 @@ full_visual_fidelity = not_claimed
 ### Catalogue and downstream authorization
 
 ```text
-CatalogueItem lifecycle = architectural definition only
+Catalogue architecture authority = docs/23_CATALOGUE_ARCHITECTURE.md
+Catalogue versioning authority = docs/24_CATALOGUE_VERSIONING_POLICY.md
 
-Catalogue implementation = NOT YET AUTHORIZED
+Catalogue implementation = NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved
 
 No CatalogueItem instance/state has been advanced by Phase 6.
 
-Generator/ejection = NOT YET AUTHORIZED
+Generator/ejection = NOT AUTHORIZED
 
 Package/Hex release = NOT CLAIMED
 
-Next native tracer = NOT YET AUTHORIZED
+Next native tracer = NOT AUTHORIZED
 ```
 
-Hero native tracer `accepted` is **not** CatalogueItem `APPROVED` / `RELEASED`.
+Hero native tracer `accepted` is **not** CatalogueItem `APPROVED` / `RELEASED` and does not mean Hero was admitted.
 
 ---
 
@@ -360,19 +361,19 @@ Represents one deterministic conversion attempt and its lifecycle.
 
 ### CatalogueItem
 
-Released or previewable primitive/component/pattern/section/page/template.
+One item represented by a canonical JSON manifest. Identity and lifecycle authority are in docs/23.
 
 ### ComponentContract
 
-The public attrs, slots, events, CSS/token dependencies, asset contract and accessibility expectations of a component.
+The production component owns its actual attrs, slots, rendering, and runtime contract. The Catalogue manifest stores a reference and normalized contract fingerprint; see docs/23.
 
 ### StoryDefinition
 
-Preview variations and states used by PhoenixStorybook.
+A Storybook preview reference and its verification evidence. Storybook is not Catalogue metadata authority; see docs/12_PREVIEW_AND_STORYBOOK.md.
 
 ### ReleaseMetadata
 
-Version, compatibility, deprecation and replacement information.
+CatalogueItem SemVer, compatibility, deprecation, and replacement policy are defined in docs/24.
 
 ---
 
@@ -525,38 +526,17 @@ Terminal: `PASSED`, `FAILED`, `REJECTED`.
 
 ## 8.3 CatalogueItem lifecycle
 
-```text
-DRAFT
-  |
-  v
-GENERATED
-  |
-  v
-REVIEWED
-  |
-  v
-APPROVED
-  |
-  v
-RELEASED
-  |
-  v
-DEPRECATED
-```
+The approved G1 lifecycle is defined in docs/23. Its normal path is:
 
-Guards:
+~~~text
+DRAFT → VALIDATED → REVIEWED → APPROVED → RELEASED → DEPRECATED → RETIRED
+~~~
 
-- `DRAFT -> GENERATED`: component source exists and compiles.
-- `GENERATED -> REVIEWED`: story, docs and tests exist.
-- `REVIEWED -> APPROVED`: architecture + visual + accessibility review accepted.
-- `APPROVED -> RELEASED`: provenance/distribution permissions accepted; version metadata assigned.
-- `RELEASED -> DEPRECATED`: replacement/removal rationale documented.
+The pre-release side exit is DRAFT | VALIDATED | REVIEWED | APPROVED → WITHDRAWN. Repeated releases use RELEASED → RELEASED via publish_new_version.
 
-Terminal: `DEPRECATED`.
+WITHDRAWN and RETIRED are terminal. DEPRECATED may move to RETIRED. docs/23 defines transition guards, effects, and state evidence. docs/24 defines CatalogueItem SemVer.
 
-A deprecated item may contain `superseded_by`, but history must remain traceable.
-
-**Execution status:** The CatalogueItem states and transitions above are architectural definition only. Catalogue implementation is not yet authorized; no CatalogueItem instance has been advanced by Phase 6. See *Current execution checkpoint* at the top of this document.
+No CatalogueItem instance or state has been advanced by Phase 6. Hero native acceptance does not mean Catalogue admission, approval, or release. Catalogue implementation remains NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved.
 
 ---
 
@@ -1662,7 +1642,7 @@ Conceptually:
 
 ## 20.3 No database initially
 
-Story and catalogue metadata remain files/modules.
+Story modules and canonical Catalogue JSON manifests remain source-controlled files. The manifest authority is defined in docs/23.
 
 Add a database only if a future hosted marketplace/CMS requirement proves it necessary.
 
@@ -1825,7 +1805,7 @@ for stable reusable components/tokens/tooling.
 For components intended to become application-owned:
 
 ```text
-mix live_frames.add hero_india
+mix live_frames.add live_frames.section.example
 ```
 
 may generate source under the consuming application's component directory.
@@ -1838,11 +1818,7 @@ Some shared primitives/components may be best used directly from the dependency.
 
 Some complex sections/templates are better ejected.
 
-Each catalogue item should declare distribution mode compatibility:
-
-- dependency
-- ejectable
-- both
+CatalogueItem library, generator, and ejection capabilities are independent declarations. Catalogue release does not require generator or ejection support. See docs/23 and docs/24.
 
 ---
 
@@ -1859,14 +1835,11 @@ LiveFrames.Components.*
 LiveFrames.Sections.*
 ```
 
-Catalogue IDs:
+Catalogue IDs are immutable, globally unique semantic IDs. See docs/23. For example:
 
-```text
-hero_india
-hero_split_001
-features_grid_001
-pricing_cards_001
-```
+~~~text
+live_frames.section.hero
+~~~
 
 Avoid source builder random IDs as public names.
 
@@ -3071,7 +3044,7 @@ The agent must not silently upgrade major framework versions later. Major-versio
 
 # 39. Master Spec STOP Condition
 
-Implementation proceeds phase-by-phase under explicit owner authorization. As of v0.2.0, Master Phase 5 and Phase 6 native componentization (first Hero tracer) are closed; catalogue implementation, generator/ejection, package/Hex release, and the next native tracer are not yet authorized. The long-term roadmap remains under development.
+Implementation proceeds phase-by-phase under explicit owner authorization. Master Phase 5 and Phase 6 native componentization (first Hero tracer) are closed. G1 Catalogue decisions are approved for written-spec capture by docs/23 and docs/24. Catalogue implementation remains NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved. Generator/ejection, package/Hex release, and the next native tracer are not authorized. The long-term roadmap remains under development.
 
 An agent receiving this document must not interpret it as permission to execute the entire roadmap in one run.
 

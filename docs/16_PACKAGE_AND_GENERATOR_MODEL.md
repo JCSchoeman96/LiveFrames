@@ -12,6 +12,19 @@ architecture history: **`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`**.
 Generator/ejection is described here as a **future relationship** only; there is
 no generator implementation in the current package.
 
+## Catalogue and package boundaries
+
+CatalogueItem RELEASED is an item-level Catalogue/distribution state. It does
+not imply Mix, Hex, GitHub, or other package publication. Package publication
+requires separate evidence, and package version is independent of CatalogueItem
+release_version.
+
+Library, generator, and ejection are independent capabilities. Catalogue
+release does not require generator or ejection support. Generator and ejection
+remain unsupported and not authorized. See
+[docs/23_CATALOGUE_ARCHITECTURE.md](23_CATALOGUE_ARCHITECTURE.md) and
+[docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md).
+
 ## 1. Package layout (consumer-relevant paths)
 
 | Path | Role |
