@@ -40,7 +40,11 @@ full_visual_fidelity = not_claimed
 Catalogue architecture authority = docs/23_CATALOGUE_ARCHITECTURE.md
 Catalogue versioning authority = docs/24_CATALOGUE_VERSIONING_POLICY.md
 
-Catalogue implementation = NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved
+Catalogue implementation = NOT AUTHORIZED
+
+Approval or merge of the G1 written architecture authorizes only implementation
+planning and issue decomposition, including GitHub issue creation. Catalogue
+implementation requires separate, explicit owner authorization.
 
 No CatalogueItem instance/state has been advanced by Phase 6.
 
@@ -536,7 +540,12 @@ The pre-release side exit is DRAFT | VALIDATED | REVIEWED | APPROVED → WITHDRA
 
 WITHDRAWN and RETIRED are terminal. DEPRECATED may move to RETIRED. docs/23 defines transition guards, effects, and state evidence. docs/24 defines CatalogueItem SemVer.
 
-No CatalogueItem instance or state has been advanced by Phase 6. Hero native acceptance does not mean Catalogue admission, approval, or release. Catalogue implementation remains NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved.
+No CatalogueItem instance or state has been advanced by Phase 6. Hero native
+acceptance does not mean Catalogue admission, approval, or release. Catalogue
+implementation remains NOT AUTHORIZED. Approval or merge of the G1 written
+architecture authorizes only implementation planning and issue decomposition,
+including GitHub issue creation. Catalogue implementation requires separate,
+explicit owner authorization.
 
 ---
 
@@ -3044,7 +3053,15 @@ The agent must not silently upgrade major framework versions later. Major-versio
 
 # 39. Master Spec STOP Condition
 
-Implementation proceeds phase-by-phase under explicit owner authorization. Master Phase 5 and Phase 6 native componentization (first Hero tracer) are closed. G1 Catalogue decisions are approved for written-spec capture by docs/23 and docs/24. Catalogue implementation remains NOT AUTHORIZED until the written architecture/spec PR is independently reviewed and owner-approved. Generator/ejection, package/Hex release, and the next native tracer are not authorized. The long-term roadmap remains under development.
+Implementation proceeds phase-by-phase under explicit owner authorization. Master
+Phase 5 and Phase 6 native componentization (first Hero tracer) are closed. G1
+Catalogue decisions are approved for written-spec capture by docs/23 and docs/24.
+Catalogue implementation remains NOT AUTHORIZED. Approval or merge of the G1
+written architecture authorizes only implementation planning and issue
+decomposition, including GitHub issue creation. Catalogue implementation
+requires separate, explicit owner authorization. Generator/ejection,
+package/Hex release, and the next native tracer are not authorized. The
+long-term roadmap remains under development.
 
 An agent receiving this document must not interpret it as permission to execute the entire roadmap in one run.
 

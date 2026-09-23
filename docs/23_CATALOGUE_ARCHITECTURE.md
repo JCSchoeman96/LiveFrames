@@ -1,6 +1,6 @@
 # G1 Catalogue architecture
 
-**Status:** G1 architecture decisions are approved for written-spec capture. Catalogue implementation remains **NOT AUTHORIZED** until this written architecture/spec PR is independently reviewed and owner-approved.
+**Status:** G1 architecture decisions are approved for written-spec capture. Catalogue implementation remains **NOT AUTHORIZED**. Approval or merge of the G1 written architecture authorizes only implementation planning and issue decomposition, including GitHub issue creation. Catalogue implementation requires separate, explicit owner authorization.
 
 **Authority:** This document defines Catalogue identity, manifests, admission, lifecycle, validation, Registry, and runtime boundaries. [docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md) defines CatalogueItem SemVer and compatibility policy. [docs/04_SOURCE_AND_PROVENANCE.md](04_SOURCE_AND_PROVENANCE.md) remains the provenance and publication-facts authority.
 
@@ -84,9 +84,9 @@ A mismatch among ID, kind, derived slug, or path is invalid. display_name is mut
 
 A native component must already be in its terminal accepted native lifecycle state before Catalogue admission. Native acceptance does not create, approve, or release a CatalogueItem.
 
-Admission requires an explicit owner-authorized admit_to_catalogue action. It creates the canonical manifest in DRAFT. It does not run a generator, publish a package, claim redistribution clearance, or create a release claim.
+Admission requires an explicit owner-authorized admit_to_catalogue action. Its guard requires a valid Catalogue ID that is globally unique and has never previously been used or reserved by any CatalogueItem. On success, admit_to_catalogue creates the canonical DRAFT manifest and permanently reserves the immutable ID. Admission does not run a generator, publish a package, claim redistribution clearance, or create a release claim. IDs remain reserved forever after WITHDRAWN or RETIRED.
 
-The manifest must include references to the component, a valid Storybook story, documentation, and structured provenance evidence. Admission does not advance any other Catalogue lifecycle state.
+The manifest must include references to the component, its Storybook module, documentation, and structured provenance evidence. Admission does not advance any other Catalogue lifecycle state.
 
 The Phase-6 Hero tracer is accepted in its native lifecycle and has accepted Storybook evidence in [docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md](22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md). Hero has not been admitted to the Catalogue. The ID live_frames.section.hero above is an identity example only.
 
@@ -102,7 +102,7 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | state | Current CatalogueItem lifecycle state. |
 | component.module, component.function | References to the production component export. |
 | contract.fingerprint_algorithm, contract.fingerprint | Versioned fingerprint of the normalized public contract. |
-| storybook.module, storybook.story | References to a valid Storybook module and stable story identifier. |
+| storybook.module | Reference to the PhoenixStorybook module that contains the production component's story. The manifest may record variation IDs when explicitly needed. It does not require a second story identifier. |
 | docs | Structured references to item documentation. |
 | provenance | Structured source-group, authority, and evidence references. This area does not store competing provenance status. |
 | distribution.library, distribution.generator, distribution.ejection | Independent capability declarations with evidence references for any capability marked supported. |
@@ -161,15 +161,15 @@ State changes occur only through explicit transition actions and guards. An arbi
 
 | Action | Transition | Required guard |
 | --- | --- | --- |
-| admit_to_catalogue | Not admitted → DRAFT | Explicit owner authorization; accepted native lifecycle where the item is a native component; unique, reserved identity; required references recorded. |
-| Validate | DRAFT → VALIDATED | State-dependent requirements in §7 pass, including a valid Storybook reference and renderable default evidence. |
-| Record review | VALIDATED → REVIEWED | Independent review evidence identifies the reviewed item and contract. |
-| Approve | REVIEWED → APPROVED | Owner approval evidence exists. Approval is not publication or redistribution clearance. |
-| Release | APPROVED → RELEASED | Valid SemVer, current fingerprint, validated capability claims, and explicit human-governed publication/redistribution clearance evidence exist. |
+| admit_to_catalogue | Not admitted → DRAFT | Explicit owner authorization; accepted native lifecycle where the item is a native component; valid globally unique ID never previously used or reserved by any CatalogueItem; required references recorded. On success, create the canonical DRAFT manifest and permanently reserve the immutable ID. |
+| validate | DRAFT → VALIDATED | State-dependent requirements in §7 pass, including a valid Storybook module reference, production-component target, canonical/default variation, and renderable default evidence. |
+| review | VALIDATED → REVIEWED | Independent review evidence identifies the reviewed item and contract. |
+| approve | REVIEWED → APPROVED | Owner approval evidence exists. Approval is not publication or redistribution clearance. |
+| release | APPROVED → RELEASED | Valid SemVer, current fingerprint, validated capability claims, and explicit human-governed publication/redistribution clearance evidence exist. |
 | publish_new_version | RELEASED → RELEASED | New SemVer is greater than the current version; the bump matches the compatibility classification; current fingerprint, capability evidence, and required clearance evidence pass. |
-| Deprecate | RELEASED → DEPRECATED | Rationale exists; superseded_by is set when a replacement exists. |
-| Retire | DEPRECATED → RETIRED | Explicit owner-authorized retirement evidence exists. |
-| Withdraw | DRAFT or VALIDATED or REVIEWED or APPROVED → WITHDRAWN | Explicit owner-authorized withdrawal action and rationale exist. |
+| deprecate | RELEASED → DEPRECATED | Rationale exists; superseded_by is set when a replacement exists. |
+| retire | DEPRECATED → RETIRED | Explicit owner-authorized retirement evidence exists. |
+| withdraw | DRAFT or VALIDATED or REVIEWED or APPROVED → WITHDRAWN | Explicit owner-authorized withdrawal action and rationale exist. |
 
 A successful transition updates the current state, lifecycle.last_transition, and the evidence references required for the target state in the canonical manifest. The repository commit records the durable history. A transition does not publish a package, run a generator, or infer provenance facts.
 
@@ -181,8 +181,8 @@ Validation requirements become stricter as an item advances. Release-only fields
 
 | Target state | Minimum evidence and checks |
 | --- | --- |
-| DRAFT | Immutable identity and kind; component module/function reference; Storybook module/story reference; documentation references; structured provenance references. |
-| VALIDATED | All references resolve; ID, kind, derived slug, and canonical path agree; schema version is supported; normalized contract fingerprint matches current production contract; the referenced Storybook story renders its canonical/default example. |
+| DRAFT | Immutable identity and kind; component module/function reference; Storybook module reference; documentation references; structured provenance references. |
+| VALIDATED | All references resolve; ID, kind, derived slug, and canonical path agree; schema version is supported; normalized contract fingerprint matches current production contract; the Storybook module exists, targets/references the production component, and its canonical/default variation renders. Any deliberately referenced variation IDs are valid. |
 | REVIEWED | Independent review evidence exists and identifies the item and reviewed contract. |
 | APPROVED | Owner approval evidence exists and records approval for eventual Catalogue release. |
 | RELEASED | Valid CatalogueItem SemVer; current fingerprint; evidence for every capability marked supported; explicit human-governed publication/redistribution clearance. Unknown clearance is insufficient. |
@@ -196,7 +196,7 @@ Agents may validate evidence presence, references, and shape. They must not inve
 
 The fingerprint protects the documented, consumer-facing component contract. It must remain unchanged when an internal refactor preserves that contract.
 
-The v1 algorithm identifier is live_frames.public_contract.sha256.v1. It computes SHA-256 over a normalized public-contract record serialized as canonical UTF-8 JSON with sorted object keys and no insignificant whitespace. The digest is lowercase hexadecimal. This identifier versions both the normalization rules and digest procedure.
+The fingerprint algorithm and canonical serialization must be deterministic and explicitly versioned. G1 does not select a digest algorithm or byte serialization. The exact v1 algorithm and serialization must be selected and owner-approved during the separately authorized implementation plan, before fingerprint implementation begins. An algorithm or version change must not masquerade as a component contract change. G1 has no fingerprint implementation.
 
 The normalized record includes:
 
@@ -212,7 +212,7 @@ Exclude source paths, line numbers, private helpers, private CSS classes or vari
 
 ## 9. Storybook evidence
 
-Every admitted CatalogueItem must reference a valid Storybook story. Storybook is mandatory validation evidence. VALIDATED requires the reference to resolve and the canonical/default story to render.
+Every admitted CatalogueItem must reference its Storybook module. Storybook is mandatory validation evidence. A validator must confirm that the module exists and its story targets or references the production component. It must also confirm that a canonical/default variation exists and renders. Any variation IDs deliberately referenced by the manifest must be valid. No second story identifier is required.
 
 Storybook remains preview and verification authority for its stories. It does not define Catalogue metadata, Catalogue lifecycle, provenance, component API authority, or release state. A Storybook story cannot admit or release an item.
 
@@ -280,4 +280,4 @@ Validation and review must detect at least these failures:
 
 This PR records architecture only. It does not create apps/live_frames/priv/catalogue/, a JSON CatalogueItem manifest, a Catalogue module or Registry, validators, transition functions, fingerprint extraction, dependencies, database/cache/process infrastructure, generator/ejection implementation, native code, package publication, or Catalogue admission.
 
-Catalogue implementation remains **NOT AUTHORIZED** until the written architecture/spec PR is independently reviewed and owner-approved.
+Catalogue implementation remains **NOT AUTHORIZED**. Approval or merge of the G1 written architecture authorizes only implementation planning and issue decomposition, including GitHub issue creation. Catalogue implementation requires separate, explicit owner authorization.

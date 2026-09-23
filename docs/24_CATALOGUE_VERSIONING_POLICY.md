@@ -1,6 +1,6 @@
 # G1 Catalogue versioning policy
 
-**Status:** G1 versioning decisions are approved for written-spec capture. Catalogue implementation remains **NOT AUTHORIZED** until the written architecture/spec PR is independently reviewed and owner-approved.
+**Status:** G1 versioning decisions are approved for written-spec capture. Catalogue implementation remains **NOT AUTHORIZED**. Approval or merge of the G1 written architecture authorizes only implementation planning and issue decomposition, including GitHub issue creation. Catalogue implementation requires separate, explicit owner authorization.
 
 **Authority:** This document defines CatalogueItem release-version semantics and compatibility classification. [docs/23_CATALOGUE_ARCHITECTURE.md](23_CATALOGUE_ARCHITECTURE.md) defines Catalogue identity, lifecycle, manifest ownership, and release guards. [docs/04_SOURCE_AND_PROVENANCE.md](04_SOURCE_AND_PROVENANCE.md) remains the authority for provenance and publication facts.
 

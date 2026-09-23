@@ -8,11 +8,11 @@
 
 - **Phase 6:** CLOSED / accepted
 - **First native Hero tracer:** accepted (terminal for that native tracer lifecycle only; see `docs/19`)
-- **Next programme gate:** Independent review and owner approval of the G1 architecture/spec PR
+- **Next programme gate:** Independent review and owner approval of the G1 architecture/spec PR. Approval or merge authorizes implementation planning and issue decomposition, including GitHub issue creation, only.
 - **G1 architecture decisions:** Approved for written-spec capture in
   [docs/23](23_CATALOGUE_ARCHITECTURE.md) and
   [docs/24](24_CATALOGUE_VERSIONING_POLICY.md)
-- **Catalogue implementation:** NOT AUTHORIZED until that PR is independently reviewed and owner-approved
+- **Catalogue implementation:** NOT AUTHORIZED; implementation requires separate, explicit owner authorization after planning and issue decomposition
 - **Generator/ejection:** NOT AUTHORIZED
 - **Next native tracer:** NOT AUTHORIZED
 
