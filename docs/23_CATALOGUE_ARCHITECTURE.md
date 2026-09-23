@@ -235,6 +235,65 @@ State changes occur only through explicit transition actions and guards. An arbi
 
 A successful transition updates the current state, lifecycle.last_transition, and the evidence references required for the target state in the canonical manifest. The repository commit records the durable history. A transition does not publish a package, run a generator, or infer provenance facts.
 
+**Owner approval (#42 transition contract, 2026-09-23):** G1 v1 stores
+`lifecycle.last_transition` with exactly these fields:
+
+~~~json
+{
+  "action": "review",
+  "from": "VALIDATED",
+  "to": "REVIEWED",
+  "evidence_refs": [
+    "catalogue-review:example"
+  ]
+}
+~~~
+
+- `action` is the exact approved transition-action string.
+- `from` is the previous CatalogueItem state, or JSON `null` only for
+  `admit_to_catalogue`.
+- `to` is the resulting CatalogueItem state.
+- `evidence_refs` is an ordered JSON array of opaque, non-empty strings supplied
+  by the successful transition guard. The lifecycle engine does not invent,
+  resolve, or reinterpret those references.
+- G1 v1 does not store a transition timestamp in the manifest. Repository/Git
+  history is the durable chronological history, and the manifest stores only the
+  most recent transition rather than an append-only event log.
+
+The lifecycle engine consumes guard results through one generic handoff:
+
+~~~text
+{:ok, evidence_refs}
+{:error, diagnostics}
+~~~
+
+A successful guard may advance only an otherwise valid source/action pair. A
+failed guard returns the failure diagnostics and must leave the input manifest
+unchanged, including both `state` and `lifecycle`. Guard-specific logic such as
+fingerprint verification, Storybook verification, provenance/publication
+clearance, and SemVer compatibility remains owned by its dedicated validator;
+the lifecycle engine does not duplicate those rules.
+
+For `admit_to_catalogue`, the lifecycle engine receives a fully constructed,
+structurally valid DRAFT candidate manifest and a successful admission guard.
+The candidate must already have `state = "DRAFT"` and no previous
+`lifecycle.last_transition`. On success, it records:
+
+~~~json
+{
+  "action": "admit_to_catalogue",
+  "from": null,
+  "to": "DRAFT",
+  "evidence_refs": ["..."]
+}
+~~~
+
+Admission through the lifecycle engine does not create a separate unadmitted
+entity, scan the filesystem, create a reservation store, publish a package, or
+infer native/provenance/publication facts. The admission guard is responsible
+for proving the owner authorization, accepted native lifecycle where applicable,
+identity uniqueness/reservation, and required DRAFT references.
+
 No other transitions are defined in G1. Invalid transitions fail deterministically and leave the manifest unchanged. A stale fingerprint or missing evidence blocks the requested transition; it does not authorize direct state edits.
 
 ## 7. State-dependent validation
