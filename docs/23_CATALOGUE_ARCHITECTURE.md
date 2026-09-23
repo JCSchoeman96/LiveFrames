@@ -299,23 +299,48 @@ Changing either changes the public contract fingerprint.
 
 ### Public attributes
 
-Each public attribute normalizes to a record containing exactly the public
-semantics required by G1:
+Each public attribute normalizes to exactly this shape:
 
-~~~text
-name
-type
-required
-default
-constraints
+~~~json
+{
+  "name": "heading_level",
+  "type": {
+    "kind": "builtin",
+    "name": "integer"
+  },
+  "required": false,
+  "default": {
+    "present": true,
+    "value": {
+      "$type": "integer",
+      "value": "2"
+    }
+  },
+  "constraints": {
+    "allowed_values": null,
+    "global_names": [],
+    "global_prefixes": []
+  }
+}
 ~~~
 
-Attribute records are sorted by `name`; source declaration order is ignored.
+Attribute records are sorted by the UTF-8 bytes of the exact `name`; source
+declaration order is ignored.
 
-Types use an explicit representation rather than `inspect/1`. Built-in types
-record their stable public type name. Struct/module-backed types record their
-fully-qualified public module name. A future type form that has no approved
-canonical representation is unsupported and fingerprint extraction must fail.
+Built-in types use:
+
+~~~json
+{"kind":"builtin","name":"integer"}
+~~~
+
+Struct/module-backed types use:
+
+~~~json
+{"kind":"struct","module":"MyApp.User"}
+~~~
+
+A future type form that has no approved canonical representation is unsupported
+and fingerprint extraction must fail.
 
 Defaults distinguish the absence of a declared default from an explicit default
 whose value is `nil`:
@@ -330,26 +355,43 @@ whose value is `nil`:
 
 This distinction is part of the normalized public contract.
 
+For `constraints`, `allowed_values: null` means there is no exhaustive
+allowed-values constraint and is not interchangeable with an empty set.
+`global_names` and `global_prefixes` are always present as arrays and are
+sorted unique semantic sets.
+
 ### Canonical values
 
 Fingerprint extraction must never use arbitrary Elixir `inspect/1` output as a
 canonical value representation.
 
-The v1 canonical value algebra is:
+The v1 canonical value algebra has the exact JSON wire representations below:
 
-| Elixir/public value | Canonical meaning |
+| Elixir/public value | Exact normalized JSON representation |
 | --- | --- |
-| `nil` | JSON null |
-| boolean | JSON boolean |
-| UTF-8 binary/string | Exact JSON string |
-| integer | Tagged exact base-10 integer string |
-| float | Tagged exact IEEE-754 binary64 bit-pattern representation |
-| atom | Tagged exact atom-name string |
-| list | Tagged ordered sequence of recursively canonical values |
-| tuple | Tagged ordered sequence of recursively canonical values |
-| map | Tagged canonical key/value entries sorted by canonical key representation |
-| finite range | Tagged exact range semantics when the range itself is the value |
+| `nil` | JSON `null` |
+| boolean | JSON `true` or `false` |
+| UTF-8 binary/string | JSON string containing the exact supplied Unicode string |
+| integer | `{"$type":"integer","value":"<canonical-decimal>"}` |
+| float | `{"$type":"float64","bits":"<16-lowercase-hex>"}` |
+| atom | `{"$type":"atom","value":"<exact-atom-name>"}` |
+| list | `{"$type":"list","items":[...]}` |
+| tuple | `{"$type":"tuple","items":[...]}` |
+| map | `{"$type":"map","entries":[{"key":...,"value":...},...]}` |
+| finite range when the range itself is the value | `{"$type":"range","first":...,"last":...,"step":...}` |
 | unsupported/opaque term | Deterministic extraction failure |
+
+Canonical integer strings use base-10 with no leading `+`, no leading zeroes
+except the single string `"0"`, and no `"-0"`.
+
+Float `bits` is the exact IEEE-754 binary64 bit pattern rendered as 16
+lowercase hexadecimal characters in big-endian/network byte order. This
+preserves semantically distinct bit patterns such as `0.0` and `-0.0`.
+
+Map keys and values are recursively normalized. Map entries are sorted
+lexicographically by the RFC 8785 JCS UTF-8 bytes of the normalized `key`
+value. Two map keys that produce identical canonical key bytes are invalid and
+must not be silently collapsed.
 
 Functions, PIDs, ports, references, and opaque values without an explicitly
 approved canonicalizer are unsupported. Validation must fail rather than fall
@@ -376,17 +418,20 @@ surface changes the fingerprint.
 
 ### Public slots
 
-Each v1 public slot normalizes to:
+Each v1 public slot normalizes to exactly this shape:
 
-~~~text
-name
-required
-min_entries
-max_entries
+~~~json
+{
+  "name": "primary_action",
+  "required": false,
+  "min_entries": 0,
+  "max_entries": 1
+}
 ~~~
 
-`max_entries = null` means unbounded. Slot records are sorted by `name`;
-source declaration order and Storybook ordering are ignored.
+`max_entries = null` means unbounded. Slot records are sorted by the UTF-8
+bytes of the exact `name`; source declaration order and Storybook ordering are
+ignored.
 
 If repository-owned component validation narrows a slot's documented public
 cardinality beyond the framework declaration, the normalized record must reflect
@@ -415,11 +460,11 @@ Normalize unordered semantic collections before JCS serialization:
 | JSON object properties | RFC 8785 JCS ordering |
 | attrs | Sort by canonical attr name |
 | slots | Sort by canonical slot name |
-| exhaustive allowed values | Unique semantic set; canonicalize then sort |
-| capabilities | Unique semantic set; sort |
-| CSS/theme contract identifiers | Unique semantic set; sort |
+| exhaustive allowed values | Unique semantic set; sort by each value's complete RFC 8785-canonicalized UTF-8 representation |
+| capabilities | Unique strings; sort by UTF-8 bytes |
+| CSS/theme contract identifiers | Unique strings; sort by UTF-8 bytes |
 | list/tuple default values where order is observable | Preserve order |
-| maps | Ignore source key order; sort canonical key/value representation |
+| maps | Ignore source key order; sort entries by the RFC 8785 JCS UTF-8 bytes of each normalized key |
 | source declaration order | Ignore unless order is itself public semantics |
 
 Equivalent normalized public contracts must therefore produce byte-identical JCS
