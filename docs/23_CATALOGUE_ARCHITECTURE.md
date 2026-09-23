@@ -29,41 +29,50 @@ The canonical root is:
 apps/live_frames/priv/catalogue/
 ~~~
 
-The immutable, globally unique, human-readable ID is the semantic CatalogueItem identity. These examples illustrate IDs; they do not define a formal grammar:
+The immutable, globally unique, human-readable ID is the semantic CatalogueItem
+identity. **Owner approval (#38, 2026-09-23):** v1 Catalogue IDs use exactly the
+grammar below. Invalid IDs are rejected; validators must not normalize or coerce
+input into a canonical ID.
+
+### v1 ID contract
+
+| Rule | Value |
+| --- | --- |
+| Shape | `live_frames.<kind>.<key>` |
+| Namespace | Literal `live_frames` in v1 |
+| Segment count | Exactly 3 (no deeper namespaces in v1) |
+| Kind | One of: `primitive`, `component`, `pattern`, `section`, `page`, `template` |
+| Key | Lowercase ASCII snake-case semantic key |
+| Key regex | `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` |
+| Machine slug | Exactly `<key>` (third segment) |
+| Normalization | None; reject invalid input |
+| Case folding | None; uppercase in any segment is invalid |
+| Identity source | The ID itself, never module, file, or source-builder identity |
+
+Third-party or federated publisher namespaces (for example `acme.section.hero`)
+are **not** part of v1. If marketplace or plugin ownership is required later,
+design it explicitly; existing `live_frames.*` IDs remain valid.
+
+The ID's meaning and the manifest's `kind` must agree. Fundamentally different
+concepts must have different IDs. The complete ID is globally unique. Both `id`
+and `kind` are immutable after admission. An ID remains reserved after WITHDRAWN
+or RETIRED and must never be reused.
+
+There is **no `slug` field** in the manifest. Slug and path are derived from
+`id` and `kind` only, so identity does not admit four competing authorities.
+
+### Slug and path derivation
+
+For every valid v1 ID:
 
 ~~~text
-live_frames.primitive.icon
-live_frames.component.avatar
-live_frames.pattern.command_palette
-live_frames.section.hero
-live_frames.page.marketing_home
-live_frames.template.saas_marketing
+id    = live_frames.<kind>.<key>
+slug  = <key>
+path  = <catalogue_root> / <kind_directory> / (<key> <> ".json")
 ~~~
 
-The allowed kind values are:
-
-~~~text
-primitive
-component
-pattern
-section
-page
-template
-~~~
-
-The ID's meaning and the manifest's kind must agree. Fundamentally different
-concepts must have different IDs. The complete ID is globally unique. Both ID
-and kind become immutable when the manifest is admitted. An ID remains reserved
-after WITHDRAWN or RETIRED and must never be reused.
-
-The exact formal ID grammar, segment count, character grammar or regex, and
-deeper namespace rules are deferred until they receive explicit approval. G1
-does not prescribe an ID pattern.
-
-The machine slug is derived deterministically from the immutable ID. The
-canonical manifest path is derived deterministically from the ID, kind, and
-derived slug, using the kind-to-directory mapping below. There is no separately
-mutable slug authority. The exact slug derivation rule is not fixed here.
+Where `<catalogue_root>` is `apps/live_frames/priv/catalogue/` and
+`<kind_directory>` is the plural directory for `<kind>`:
 
 | Kind | Directory |
 | --- | --- |
@@ -74,14 +83,56 @@ mutable slug authority. The exact slug derivation rule is not fixed here.
 | page | pages |
 | template | templates |
 
-For example:
+Examples:
 
 ~~~text
 live_frames.section.hero
+→ kind: section, slug: hero
 → apps/live_frames/priv/catalogue/sections/hero.json
+
+live_frames.pattern.command_palette
+→ kind: pattern, slug: command_palette
+→ apps/live_frames/priv/catalogue/patterns/command_palette.json
 ~~~
 
-A mismatch among ID, kind, derived slug, or path is invalid. display_name is mutable presentation metadata and does not change identity.
+### Collision invariant
+
+One valid Catalogue ID corresponds to exactly one kind, one machine slug, and
+one canonical manifest path. Two different valid v1 IDs cannot derive the same
+path. Duplicate immutable IDs or duplicate canonical paths are validation
+failures. There is no first-wins, overwrite, merge, or auto-renaming behavior.
+
+### Filesystem portability
+
+Reject derived slugs whose basename (case-insensitive) is a Windows-reserved
+device name: `con`, `prn`, `aux`, `nul`, `com1`–`com9`, and `lpt1`–`lpt9`.
+This keeps the Catalogue check-out and packaging reliable across platforms.
+
+### Valid and invalid IDs (v1)
+
+| ID | Result | Reason |
+| --- | --- | --- |
+| `live_frames.primitive.icon` | valid | canonical |
+| `live_frames.component.avatar` | valid | canonical |
+| `live_frames.pattern.command_palette` | valid | snake-case semantic key |
+| `live_frames.section.hero` | valid | canonical |
+| `live_frames.page.marketing_home` | valid | canonical |
+| `live_frames.template.saas_marketing` | valid | canonical |
+| `live_frames.sections.hero` | invalid | kind must be singular canonical kind |
+| `live_frames.section.Hero` | invalid | uppercase |
+| `live_frames.section.hero-split` | invalid | hyphen |
+| `live_frames.section.hero.split` | invalid | fourth segment / deeper namespace |
+| `live_frames.section._hero` | invalid | key regex |
+| `live_frames.section.hero__split` | invalid | non-canonical consecutive separator |
+| `live_frames.hero` | invalid | missing kind |
+| `other.section.hero` | invalid in v1 | namespace is not `live_frames` |
+
+Validators must reject non-canonical forms such as `Live_Frames.Section.Hero` or
+`live_frames.section.hero-split`. They must never silently rewrite them to
+`live_frames.section.hero` or `live_frames.section.hero_split`.
+
+A mismatch among `id`, `kind`, derived slug, or canonical path is invalid.
+`display_name` is mutable presentation metadata and does not change identity.
 
 ## 3. Admission from the native lifecycle
 
@@ -100,7 +151,7 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | Area | Conceptual contents |
 | --- | --- |
 | schema_version | Explicit integer identifying the manifest schema. G1 v1 uses integer 1. It is independent of CatalogueItem SemVer. |
-| id, kind | Immutable identity and one allowed taxonomy value. |
+| id, kind | Immutable identity and one allowed taxonomy value. No separate `slug` field; slug and path are derived per §2. |
 | display_name | Mutable presentation label. |
 | state | Current CatalogueItem lifecycle state. |
 | component.module, component.function | References to the production component export. |
