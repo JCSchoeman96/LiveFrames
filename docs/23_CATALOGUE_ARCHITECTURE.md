@@ -277,7 +277,8 @@ manifest itself is not hashed. Catalogue ID, lifecycle state, CatalogueItem
 SemVer, Storybook metadata, provenance, source paths, package metadata, and the
 fingerprint fields themselves are not part of the normalized contract document.
 
-The normalized top-level document has exactly these conceptual areas:
+The normalized top-level document has exactly these six keys, and all six
+are always present:
 
 ~~~json
 {
