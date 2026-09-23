@@ -48,9 +48,7 @@ defmodule LiveFrames.Catalogue.Manifest do
   def decode(_json),
     do: error("catalogue.manifest.invalid_json", "$", "Manifest input must be JSON text.")
 
-  @doc false
-  @spec from_map(term()) :: {:ok, t()} | {:error, [diagnostic()]}
-  def from_map(manifest) when is_map(manifest) do
+  defp from_map(manifest) when is_map(manifest) do
     case Map.fetch(manifest, "schema_version") do
       :error ->
         error(
@@ -81,7 +79,7 @@ defmodule LiveFrames.Catalogue.Manifest do
     end
   end
 
-  def from_map(_manifest),
+  defp from_map(_manifest),
     do: error("catalogue.manifest.root_not_object", "$", "Expected a JSON object.")
 
   defp error(code, path, message), do: {:error, [%{code: code, path: path, message: message}]}

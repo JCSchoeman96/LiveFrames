@@ -42,6 +42,11 @@ defmodule LiveFrames.Catalogue.ManifestTest do
     refute Map.has_key?(Map.from_struct(manifest), :slug)
   end
 
+  test "does not expose a non-JSON map decoder" do
+    assert Code.ensure_loaded?(Manifest)
+    refute function_exported?(Manifest, :from_map, 1)
+  end
+
   test "decodes equivalent objects with different source key ordering equally" do
     first =
       ~s({"schema_version":1,"id":"live_frames.component.synthetic","kind":"component","display_name":"Synthetic component","state":"DRAFT","component":{"module":"LiveFrames.Components.Synthetic","function":"synthetic"},"storybook":{"module":"LiveFrames.Stories.Synthetic"},"docs":{"guide":{"url":"docs/component.md","labels":{"locale":"en"}}},"provenance":{"sources":[{"name":"synthetic"}]}})
@@ -243,11 +248,16 @@ defmodule LiveFrames.Catalogue.ManifestTest do
       |> update_in(["component"], &Map.put(&1, "module", marker))
       |> encode()
 
-    atom_count_before = :erlang.system_info(:atom_count)
-    assert {:ok, manifest} = Manifest.decode(json)
-    atom_count_after = :erlang.system_info(:atom_count)
+    assert_raise ArgumentError, fn ->
+      String.to_existing_atom(marker)
+    end
 
-    assert atom_count_after == atom_count_before
+    assert {:ok, manifest} = Manifest.decode(json)
+
+    assert_raise ArgumentError, fn ->
+      String.to_existing_atom(marker)
+    end
+
     assert manifest.id == marker
     assert manifest.component["module"] == marker
   end
