@@ -230,6 +230,19 @@ defmodule LiveFrames.Catalogue.LifecycleTest do
       assert diagnostic.path == "lifecycle.last_transition.evidence_refs[1]"
     end
 
+    test "rejects invalid UTF-8 evidence reference member" do
+      manifest = synthetic_manifest("DRAFT")
+      invalid_ref = <<0xFF>>
+
+      assert {:error, diagnostic} =
+               Lifecycle.transition(manifest, "validate", {:ok, ["valid", invalid_ref]})
+
+      assert diagnostic.code == "catalogue.lifecycle.evidence_refs_invalid"
+      assert diagnostic.path == "lifecycle.last_transition.evidence_refs[1]"
+      assert manifest.state == "DRAFT"
+      assert manifest.lifecycle == %{"prior" => "unchanged"}
+    end
+
     test "rejects non-string evidence reference member" do
       manifest = synthetic_manifest("DRAFT")
 

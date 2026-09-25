@@ -155,16 +155,17 @@ defmodule LiveFrames.Catalogue.Lifecycle do
     evidence_refs
     |> Enum.with_index()
     |> Enum.reduce_while(:ok, fn
-      {ref, _index}, :ok when is_binary(ref) and ref != "" ->
-        {:cont, :ok}
-
       {ref, index}, :ok ->
-        {:halt,
-         {:error,
-          evidence_refs_invalid(
-            index,
-            "Each evidence reference must be a non-empty string (got #{inspect(ref)})."
-          )}}
+        if is_binary(ref) and ref != "" and String.valid?(ref) do
+          {:cont, :ok}
+        else
+          {:halt,
+           {:error,
+            evidence_refs_invalid(
+              index,
+              "Each evidence reference must be a non-empty string (got #{inspect(ref)})."
+            )}}
+        end
     end)
     |> case do
       :ok -> :ok
