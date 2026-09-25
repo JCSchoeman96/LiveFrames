@@ -537,7 +537,7 @@ metadata combine into those six keys.
 | `capabilities` | Supplemental structured production-component documentation metadata (§8.2) | Manifest `distribution.*`, inferred behavior from CSS/HEEx |
 | `css_theme_contract` | Supplemental structured metadata (§8.2) | `hero.css`, generated values in `lf_theme.css`, wildcard expansion heuristics |
 | Per-attr global `include:` names on `:global` attrs | Phoenix `__components__/0` reflected attr `opts` (`:include`) | Guessing from examples |
-| Module-level custom global prefixes (`use Phoenix.Component, global_prefixes: ...`) | Supplemental `global_prefixes` in `@liveframes_public_contract_metadata` (§8.2). Phoenix does **not** enumerate these in `__components__/0`; `__global__?/1` may later **validate** a candidate name but must not **discover** the configured prefix set | Inferring prefixes from `__global__?/1`, CSS, or consumer markup |
+| Module-level custom global prefixes (public contract) | Supplemental `global_prefixes` in every persisted function metadata entry (§8.2). This metadata is the fingerprint authority for supplemental module-level prefixes merged into normalized `constraints.global_prefixes`. Phoenix does **not** enumerate `use Phoenix.Component, global_prefixes: ...` in `__components__/0`; the extractor must not claim it can prove undeclared Phoenix configuration. `__global__?/1` may **validate** declared candidates but must not **discover** the complete prefix set | Inferring prefixes from `__global__?/1`, CSS, or consumer markup |
 
 Production component source remains the behavioral authority. The Catalogue
 manifest stores only `contract.fingerprint_algorithm` and
@@ -573,16 +573,21 @@ components satisfy the contract with explicit `Module.register_attribute/3` and
 `@liveframes_public_contract_metadata` as above. The extractor does not evaluate
 component templates or parse documentation strings.
 
-Each function entry in the metadata map is a map that may contain only the
-supplemental keys below. Values must be compile-time literals (no runtime
-calls).
+Each function entry in the metadata map must include `capabilities`,
+`css_theme_contract`, and `global_prefixes` (see absence rules below). It may
+additionally include `slot_cardinality`. No other supplemental keys are allowed.
+Values must be compile-time literals (no runtime calls).
 
-| Supplemental key | Type | Purpose |
-| --- | --- | --- |
-| `slot_cardinality` | Map of slot name string → `{min_entries, max_entries}` | Overrides Phoenix reflection when documented public consumer cardinality is narrower than the framework default (typically `max_entries`) |
-| `capabilities` | Unique string identifiers | Documented public component capability identifiers (§8.4) |
-| `css_theme_contract` | Unique exact `--lf-*` strings | Documented public CSS/theme extension-point identifiers consumers may override |
-| `global_prefixes` | Unique prefix strings ending with `-` | **Machine-readable authority** for module-level `use Phoenix.Component, global_prefixes: ...` prefixes. Required when the module configures custom global prefixes; Phoenix reflection cannot enumerate them (§8.1) |
+| Supplemental key | Required | Type | Purpose |
+| --- | --- | --- | --- |
+| `capabilities` | yes | Unique string identifiers | Documented public component capability identifiers (§8.4) |
+| `css_theme_contract` | yes | Unique exact `--lf-*` strings | Documented public CSS/theme extension-point identifiers consumers may override |
+| `global_prefixes` | yes | Unique prefix strings ending with `-` | **Fingerprint authority** for supplemental module-level public global-attribute prefixes merged into normalized `constraints.global_prefixes` (§8.1). `[]` means the documented public contract declares no supplemental module-level prefixes |
+| `slot_cardinality` | no | Map of slot name string → `{min_entries, max_entries}` | Overrides Phoenix reflection when documented public consumer cardinality is narrower than the framework default (typically `max_entries`) |
+
+Non-empty `global_prefixes` values must be a sorted unique set of valid prefix
+strings (each ending with `-`). Normalization applies the same sorted-unique
+semantic-set rules as other fingerprint collections.
 
 Slot cardinality override records use integer `min_entries` and integer
 `max_entries`, or Elixir `nil` for `max_entries` when unbounded. Normalization
@@ -602,9 +607,9 @@ match the UTF-8 slot `name` strings used in the normalized contract.
 | `capabilities: []` | Empty normalized `capabilities` set (valid only when written docs support that emptiness) |
 | `css_theme_contract` key absent | Extraction **validation failure** |
 | `css_theme_contract: []` | Empty normalized `css_theme_contract` set (valid only when written docs state there are no public `--lf-*` extension points) |
-| `global_prefixes` key absent | Valid only when the production module does **not** declare module-level `global_prefixes` in `use Phoenix.Component`; per-attr `:include` still comes from Phoenix reflection |
-| `global_prefixes` key absent while the module **does** declare module-level `global_prefixes` | Extraction **validation failure** |
-| `global_prefixes: []` | Explicitly no supplemental module-level prefixes (valid only when no `use Phoenix.Component, global_prefixes: ...` is configured) |
+| `global_prefixes` key absent | Extraction **validation failure** (Phoenix 1.2.11 provides no allowed enumerable source to prove absence of module-level configuration) |
+| `global_prefixes: []` | No supplemental module-level public prefixes in the documented contract; normalized `constraints.global_prefixes` for attrs reflects per-attr `:include` from Phoenix reflection only |
+| `global_prefixes` non-empty with invalid prefix shape (not ending in `-`) or duplicate entries | Extraction **validation failure** |
 
 #### 8.3 Phoenix `__components__/0` reflection guard
 
@@ -624,9 +629,9 @@ framework drift. At minimum, for the requested `function` atom:
    the types Phoenix 1.2.11 uses today. Function-component attrs in this list
    must have `:slot` equal to `nil` (slot-local attr definitions belong under
    slot `:attrs`, not the component attr list).
-5. Each slot in `:slots` is a map with `:name`, `:required`, `:opts`, `:doc`,
-   `:line`, `:attrs`, and `:validate_attrs` keys present with the types Phoenix
-   1.2.11 uses today.
+5. Each slot in `:slots` is a map with **exactly** the keys `:name`, `:required`,
+   `:opts`, `:doc`, `:line`, `:attrs`, and `:validate_attrs` (no unexpected
+   keys) and the types Phoenix 1.2.11 uses today.
 
 Any deviation (missing `__components__/0`, unexpected map shape, unknown attr
 `type` form, or unpinned LiveView version) is an extraction **validation
@@ -650,9 +655,9 @@ These names overlap in English but are different contracts:
 
 Manifest distribution flags must never be copied into normalized `capabilities`,
 and normalized capability identifiers must never be inferred from manifest
-distribution fields. Validators compare normalized `capabilities` to
-`@liveframes_public_contract_metadata`; they compare manifest distribution
-claims to implementation/evidence separately.
+distribution fields. Validators compare normalized `capabilities` to persisted
+`@liveframes_public_contract_metadata` retrieved via `module.__info__(:attributes)`;
+they compare manifest distribution claims to implementation/evidence separately.
 
 Capability identifiers are stable lowercase semantic strings. Each identifier
 must match this deterministic regex (UTF-8 bytes of the exact string):
@@ -700,6 +705,9 @@ liveframes.validation.argument_error_on_contract_violation
 | `liveframes.consumer.owns_global_root_attributes` | Consumer-supplied global/root attrs via `rest` and explicit `id`/`class` follow Phoenix/global rules; effects are consumer-owned (`docs/08`). |
 | `liveframes.content.plain_text_heading_and_lede` | `heading` and `lede` are plain-text attrs with HEEx escaping, not arbitrary rich markup slots (`docs/19` §§7–9). |
 | `liveframes.validation.argument_error_on_contract_violation` | Documented invalid combinations raise `ArgumentError` before render (`docs/19` §10.1). |
+
+**`global_prefixes`** — The `:hero` metadata entry must set `global_prefixes: []`
+(no supplemental module-level public prefixes in the documented Hero contract).
 
 **`css_theme_contract` set** (written scope authority: `docs/11` §7–§8 public
 `--lf-*` groups; `docs/16` §8 public styling surfaces). Identifiers are exact
@@ -750,8 +758,9 @@ not stylesheet scraping. The `:hero` metadata entry must list exactly:
 
 Until persisted `@liveframes_public_contract_metadata` is readable from
 `LiveFrames.Components.Sections.Hero` via `__info__(:attributes)` with the
-`:hero` entry matching the tables above, Hero fingerprint extraction must fail
-closed even if Phoenix reflection alone succeeds.
+`:hero` entry matching the tables above (including `global_prefixes: []`),
+Hero fingerprint extraction must fail closed even if Phoenix reflection alone
+succeeds.
 
 ### Capabilities and CSS/theme contract
 
