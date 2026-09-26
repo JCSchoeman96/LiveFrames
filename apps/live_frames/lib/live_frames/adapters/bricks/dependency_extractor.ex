@@ -38,6 +38,12 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   def extract(%{tree: tree, elements: elements}, document, opts) do
     token_set = Keyword.get(opts, :token_set)
 
+    semantic_settings =
+      case Keyword.get(opts, :semantic_settings, []) do
+        names when is_list(names) -> names
+        _value -> []
+      end
+
     {class_dependencies, source_classes, acss_classes, settings_consumed, unsupported_settings,
      responsive, custom_css, variable_values, variable_occurrences, assets, runtime, diagnostics} =
       Enum.reduce(
@@ -48,7 +54,21 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             unsupported_settings_acc, responsive_acc, custom_css_acc, variable_values_acc,
             variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc} ->
           resolved = Map.fetch!(elements, element.id)
-          settings_result = Settings.extract(resolved.settings)
+
+          element_semantic_settings =
+            Enum.filter(semantic_settings, &Map.has_key?(element.settings, &1))
+
+          class_semantic_settings =
+            Enum.filter(semantic_settings, fn name ->
+              Map.has_key?(resolved.settings, name) and not Map.has_key?(element.settings, name)
+            end)
+
+          settings_result =
+            Settings.extract(resolved.settings,
+              semantic_settings: element_semantic_settings,
+              rejected_semantic_settings: class_semantic_settings
+            )
+
           class_records = class_records(resolved, element.id)
           class_names = resolved.class_names
 

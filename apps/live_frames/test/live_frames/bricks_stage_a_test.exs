@@ -122,6 +122,21 @@ defmodule LiveFrames.BricksStageATest do
     assert result.custom_css.base == [".source img { height: 100%; }"]
   end
 
+  test "keeps C-03 semantic settings outside the shared Stage A settings allowlist" do
+    result =
+      Settings.extract(%{
+        "_attributes" => [],
+        "ariaLabel" => "Synthetic label",
+        "customTag" => "details"
+      })
+
+    assert Enum.map(result.unsupported, & &1.source_key) == [
+             "_attributes",
+             "ariaLabel",
+             "customTag"
+           ]
+  end
+
   test "applies Bricks spacing defaultUnit px for bare nonzero margin" do
     # Authority: Bricks 2.3.1 includes/assets.php spacing/dimensions controls
     # append defaultUnit px when the number is numeric and nonzero without a unit.

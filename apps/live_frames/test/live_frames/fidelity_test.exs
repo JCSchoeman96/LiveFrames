@@ -273,6 +273,52 @@ defmodule LiveFrames.FidelityTest do
     assert first.manifest["asset_substitutions"] |> hd() |> Map.fetch!("status") == "unresolved"
   end
 
+  test "revalidates native tags and attributes while protecting generated markup metadata" do
+    document = hero_document()
+
+    root_attributes = %{
+      "tag" => "script",
+      "class" => "injected-class",
+      "style" => "display:none",
+      "onclick" => "alert(1)",
+      "href" => "javascript:alert(1)",
+      "src" => "data:text/html,bad",
+      "data-lf-asset-id" => "forged"
+    }
+
+    root_nodes =
+      map_nodes(document.root_nodes, fn node ->
+        case node.semantic_type do
+          "section" ->
+            %{node | attributes: root_attributes}
+
+          "image" ->
+            %{
+              node
+              | attributes: %{"data-lf-asset-status" => "forged", "data-lf-asset-id" => "forged"}
+            }
+
+          _ ->
+            node
+        end
+      end)
+
+    assert {:ok, bundle} = Fidelity.generate(%{document | root_nodes: root_nodes})
+
+    assert bundle.heex =~ "<section class=\"lf-fidelity-node-000001"
+    assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
+    assert bundle.heex =~ "data-lf-asset-id=\"asset_"
+    refute bundle.heex =~ "<script"
+    refute bundle.heex =~ "injected-class"
+    refute bundle.heex =~ "display:none"
+    refute bundle.heex =~ "onclick=\""
+    refute bundle.heex =~ "href=\""
+    refute bundle.heex =~ "javascript:"
+    refute bundle.heex =~ "src=\""
+    refute bundle.heex =~ "data-lf-asset-id=\"forged\""
+    assert bundle.manifest["diagnostic_counts"]["warning"] > 0
+  end
+
   test "generic generation uses a no-op resolver by default" do
     assert {:ok, bundle} = Fidelity.generate(hero_document())
 
@@ -632,5 +678,12 @@ defmodule LiveFrames.FidelityTest do
 
     {:ok, document} = Bricks.to_ir(@bricks_path, component_id: "sqhmmc", token_set: token_set)
     document
+  end
+
+  defp map_nodes(nodes, fun) do
+    Enum.map(nodes, fn node ->
+      node = fun.(node)
+      %{node | children: map_nodes(node.children, fun)}
+    end)
   end
 end

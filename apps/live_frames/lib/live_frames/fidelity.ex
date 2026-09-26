@@ -6,6 +6,7 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Responsive.BreakpointAuthority
   alias LiveFrames.Responsive.Resolution
+  alias LiveFrames.StaticMarkupContract
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
@@ -123,6 +124,10 @@ defmodule LiveFrames.Fidelity do
     diagnostics = diagnostics ++ deferred_diagnostics ++ responsive_diagnostics
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
+    {element, tag_diagnostics} = element(node)
+    generated_attrs = generated_attrs(node, asset, element)
+    {source_attrs, attribute_diagnostics} = source_attributes(node, element, generated_attrs)
+    attrs = generated_attrs ++ source_attrs
 
     {resolver_result, resolver_diagnostics} =
       source_resolver_result(source_resolver, classes, document.token_set, node)
@@ -133,13 +138,17 @@ defmodule LiveFrames.Fidelity do
     {source_declarations, source_diagnostics} =
       normalize_declarations(resolver_result.declarations, :source_resolver, node)
 
-    diagnostics = diagnostics ++ resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
+    diagnostics =
+      diagnostics ++
+        tag_diagnostics ++
+        attribute_diagnostics ++
+        resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
 
     {%{
        id: node.node_id,
-       element: element(node),
+       element: element,
        content: node.content,
-       attrs: attrs(node, asset),
+       attrs: attrs,
        class: fidelity_class(node.node_id) <> classes,
        styles: styles,
        custom_css: custom_css,
@@ -170,29 +179,138 @@ defmodule LiveFrames.Fidelity do
 
   defp source_classes(_), do: {"", []}
 
-  defp element(%{semantic_type: "section"}), do: "section"
-  defp element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
-  defp element(%{semantic_type: "paragraph"}), do: "p"
-  defp element(%{semantic_type: "button"}), do: "button"
-  defp element(%{semantic_type: "image"}), do: "figure"
+  defp element(node) do
+    case Map.get(node.attributes, "tag") do
+      nil ->
+        {semantic_element(node), []}
 
-  defp element(%{semantic_type: "heading", attributes: %{"tag" => tag}})
-       when tag in ~w(h1 h2 h3 h4 h5 h6), do: tag
+      tag when is_binary(tag) ->
+        if StaticMarkupContract.native_tag?(tag) do
+          {tag, []}
+        else
+          {semantic_element(node), [unsupported_tag_diagnostic(node, tag)]}
+        end
 
-  defp element(%{semantic_type: "heading"}), do: "h2"
-  defp element(_), do: "div"
-
-  defp attrs(%{semantic_type: "button"}, _), do: [{"type", "button"}]
-
-  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset) do
-    [
-      {"data-lf-asset-status", "unresolved"},
-      {"data-lf-asset-id", asset["asset_id"]}
-    ]
-    |> maybe_add_unresolved_asset_label(asset["alt"])
+      tag ->
+        {semantic_element(node), [unsupported_tag_diagnostic(node, tag)]}
+    end
   end
 
-  defp attrs(_, _), do: []
+  defp unsupported_tag_diagnostic(node, tag) do
+    diagnostic(
+      "fidelity.tag.unsupported",
+      "native tag was outside the static markup allowlist",
+      node,
+      %{tag: tag}
+    )
+  end
+
+  defp semantic_element(%{semantic_type: "section"}), do: "section"
+  defp semantic_element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
+  defp semantic_element(%{semantic_type: "paragraph"}), do: "p"
+  defp semantic_element(%{semantic_type: "button"}), do: "button"
+  defp semantic_element(%{semantic_type: "image"}), do: "figure"
+  defp semantic_element(%{semantic_type: "heading"}), do: "h2"
+  defp semantic_element(_), do: "div"
+
+  defp generated_attrs(node, asset, element) do
+    button_attrs = if element == "button", do: [{"type", button_type(node)}], else: []
+
+    button_attrs ++
+      case {node.semantic_type, asset} do
+        {"image", %{"status" => "unresolved"} = unresolved_asset} ->
+          [
+            {"data-lf-asset-status", "unresolved"},
+            {"data-lf-asset-id", unresolved_asset["asset_id"]}
+          ]
+          |> maybe_add_unresolved_asset_label(unresolved_asset["alt"])
+
+        _ ->
+          []
+      end
+  end
+
+  defp source_attributes(node, element, generated_attrs) do
+    owned_names =
+      ["class" | Enum.map(generated_attrs, &elem(&1, 0))]
+      |> MapSet.new()
+
+    node.attributes
+    |> Map.to_list()
+    |> Enum.sort_by(fn {name, _value} -> if is_binary(name), do: name, else: inspect(name) end)
+    |> Enum.reduce({[], []}, fn {name, value}, {attributes, diagnostics} ->
+      cond do
+        name in ["tag", "caption", "link", "outline", "style", "url", "alt"] ->
+          {attributes, diagnostics}
+
+        name == "type" and element == "button" ->
+          if StaticMarkupContract.safe_attribute?(name, value, element) do
+            {attributes, diagnostics}
+          else
+            {attributes,
+             diagnostics ++
+               [
+                 diagnostic(
+                   "fidelity.attribute.unsupported",
+                   "button type was not in the static override allowlist; type=button was retained",
+                   node,
+                   %{attribute_name: name}
+                 )
+               ]}
+          end
+
+        name in ["class", "data-lf-asset-id", "data-lf-asset-status"] or
+            (is_binary(name) and String.starts_with?(name, "data-lf-")) ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "attribute is owned by Fidelity and was not emitted",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
+
+        MapSet.member?(owned_names, name) ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "source attribute cannot replace generated markup metadata",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
+
+        StaticMarkupContract.safe_attribute?(name, value, element) ->
+          {attributes ++ [{name, value}], diagnostics}
+
+        true ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.unsupported",
+                 "source attribute was outside the static markup allowlist",
+                 node,
+                 %{attribute_name: name, native_element: element}
+               )
+             ]}
+      end
+    end)
+  end
+
+  defp button_type(node) do
+    case Map.get(node.attributes, "type") do
+      type when is_binary(type) ->
+        if StaticMarkupContract.safe_attribute?("type", type, "button"), do: type, else: "button"
+
+      _value ->
+        "button"
+    end
+  end
 
   defp maybe_add_unresolved_asset_label(attrs, alt) when is_binary(alt) do
     case String.trim(alt) do
