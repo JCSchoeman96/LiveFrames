@@ -385,7 +385,14 @@ Each public attribute normalizes to exactly this shape:
     }
   },
   "constraints": {
-    "allowed_values": null,
+    "allowed_values": [
+      {"$type":"integer","value":"1"},
+      {"$type":"integer","value":"2"},
+      {"$type":"integer","value":"3"},
+      {"$type":"integer","value":"4"},
+      {"$type":"integer","value":"5"},
+      {"$type":"integer","value":"6"}
+    ],
     "global_names": [],
     "global_prefixes": []
   }
@@ -406,6 +413,42 @@ Struct/module-backed types use:
 ~~~json
 {"kind":"struct","module":"MyApp.User"}
 ~~~
+
+#### Phoenix raw attr type mapping
+
+Map the Phoenix LiveView 1.2.11 raw simple types exactly as follows. The wire
+`name` is the raw atom name without its leading colon:
+
+| Phoenix raw type | `lf-contract-v1` type |
+| --- | --- |
+| `:any` | `{"kind":"builtin","name":"any"}` |
+| `:boolean` | `{"kind":"builtin","name":"boolean"}` |
+| `:integer` | `{"kind":"builtin","name":"integer"}` |
+| `:float` | `{"kind":"builtin","name":"float"}` |
+| `:string` | `{"kind":"builtin","name":"string"}` |
+| `:atom` | `{"kind":"builtin","name":"atom"}` |
+| `:list` | `{"kind":"builtin","name":"list"}` |
+| `:map` | `{"kind":"builtin","name":"map"}` |
+| `:fun` | `{"kind":"builtin","name":"fun"}` |
+| `:global` | `{"kind":"builtin","name":"global"}` |
+
+A raw `{:struct, MyApp.User}` normalizes to:
+
+~~~json
+{"kind":"struct","module":"MyApp.User"}
+~~~
+
+The module string is the fully-qualified normal Elixir module name without the
+internal `Elixir.` prefix. Do not convert a string to an atom.
+
+The raw tuple `{:fun, arity}` is distinct from the simple raw type `:fun`.
+Phoenix LiveView 1.2.11 accepts `{:fun, arity}` whenever `arity` is an
+integer, so the #43D raw authority reader accepts that reflection form. The
+`lf-contract-v1` type algebra has no arity-specific type object, however, so
+#43E normalization must fail closed for `{:fun, arity}`. It must not drop the
+arity, convert the tuple to builtin `fun`, add an `arity` field, or change the
+v1 wire format. This is an unsupported v1 normalization form, not a Phoenix
+reflection failure.
 
 A future type form that has no approved canonical representation is unsupported
 and fingerprint extraction must fail.
@@ -480,9 +523,71 @@ different order must fingerprint identically. A finite range used as an
 exhaustive values constraint normalizes to the same accepted-value set as the
 equivalent explicit finite values.
 
-For public global-attribute extensions, any explicitly supported added names or
-prefixes are normalized as sorted unique semantic sets. Changing that supported
-surface changes the fingerprint.
+In `lf-contract-v1`, `constraints.allowed_values` has exactly two wire forms:
+
+~~~json
+null
+~~~
+
+~~~json
+[
+  {"$type":"integer","value":"1"},
+  {"$type":"integer","value":"2"}
+]
+~~~
+
+`null` means there is no exhaustive constraint. An array means there is an
+exhaustive constraint; `[]` is therefore distinct from `null`. Each array
+member is normalized through the v1 canonical value algebra above. The array is
+a contract collection, not a public Elixir list value, so it is not wrapped in
+`{"$type":"list","items":[...]}`.
+
+Treat the members as a semantic set. Duplicate canonical members are invalid.
+Sort members lexicographically by the complete RFC 8785 JCS UTF-8 bytes of each
+normalized member. Source declaration order is irrelevant.
+
+For v1 `values:` extraction, accept only a proper list or a finite `Range`.
+Normalize each declared member through the canonical value algebra, then apply
+the semantic-set rules above. Thus `values: 1..6` normalizes identically to an
+explicit declaration of `1, 2, 3, 4, 5, 6`; the `Range` itself does not appear
+as `{"$type":"range",...}` in `allowed_values`. The tagged Range
+representation applies when a Range is itself a public value or default.
+
+Phoenix reflection may retain other `Enumerable` values, but v1 normalization
+must reject every form other than a proper list or finite `Range` without
+enumerating or invoking a custom `Enumerable` implementation. This keeps
+extraction deterministic and free of hidden runtime or network side effects.
+This rule sets no maximum member count. A future need for `MapSet` or another
+custom `Enumerable` requires an explicit contract extension.
+
+### Global attribute constraints
+
+Only an attr whose reflected Phoenix type is `:global` may have non-empty
+`constraints.global_names` or `constraints.global_prefixes`. Both arrays remain
+present for every attr. For every non-global attr they are always `[]`.
+
+For a `:global` attr, reflected `opts[:include]` is the sole authority for
+supplemental exact names in `constraints.global_names`:
+
+| Reflected `:include` | Normalized `global_names` |
+| --- | --- |
+| Absent or `nil` | `[]` |
+| Proper list of exact UTF-8 strings | Sorted unique string array |
+
+Treat these names as a semantic set: source order is ignored and duplicate
+source entries collapse to one member. Sort by exact UTF-8 byte order. Do not
+trim, case-fold, normalize Unicode, convert atoms, or coerce other values to
+strings. Non-string entries fail normalization.
+
+For each reflected `:global` attr, the validated sorted-unique
+`metadata.global_prefixes` set returned by #43D becomes that attr's
+`constraints.global_prefixes` exactly. Do not discover prefixes with
+`__global__?/1`; that function remains candidate validation only.
+
+If `metadata.global_prefixes` is non-empty but the reflected component has no
+`:global` attr, normalization fails closed. The six-key v1 document has no
+other place for those public prefixes, and silently omitting them would make
+part of the declared contract fingerprint-invisible.
 
 ### Public slots
 
