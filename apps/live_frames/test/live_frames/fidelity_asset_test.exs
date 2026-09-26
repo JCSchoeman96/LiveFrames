@@ -10,7 +10,7 @@ defmodule LiveFrames.FidelityAssetTest do
   @image_uri "https://images.example.test/uploads/synthetic-image.webp"
 
   test "renders a validated inner image while the wrapper retains source classes" do
-    document = image_document(%{"url" => @image_uri, "alt" => "A & < \"view\""})
+    document = image_document(%{"url" => @image_uri}) |> set_asset_alt("A & < \"view\"")
     assert {:ok, bundle} = Fidelity.generate(document)
 
     assert bundle.heex =~ "<figure class=\"lf-fidelity-node-000001 source-frame\">"
@@ -22,11 +22,17 @@ defmodule LiveFrames.FidelityAssetTest do
   end
 
   test "preserves explicit empty alt and omits alt when source evidence is absent" do
-    empty_alt = image_document(%{"url" => @image_uri, "alt" => ""})
-    no_alt = image_document(%{"url" => @image_uri})
+    empty_alt = image_document(%{}) |> set_asset_alt("")
+    explicit_alt = image_document(%{}) |> set_asset_alt("Synthetic & <caption>")
+    no_alt = image_document(%{})
 
     assert {:ok, empty_bundle} = Fidelity.generate(empty_alt)
     assert empty_bundle.heex =~ "<img src=\"#{@image_uri}\" alt=\"\">"
+
+    assert {:ok, explicit_bundle} = Fidelity.generate(explicit_alt)
+
+    assert explicit_bundle.heex =~
+             "<img src=\"#{@image_uri}\" alt=\"Synthetic &amp; &lt;caption&gt;\">"
 
     assert {:ok, no_alt_bundle} = Fidelity.generate(no_alt)
     assert no_alt_bundle.heex =~ "<img src=\"#{@image_uri}\">"
@@ -79,6 +85,29 @@ defmodule LiveFrames.FidelityAssetTest do
     refute bundle.heex =~ "<img"
     refute bundle.heex =~ "src=\"javascript:"
     assert bundle.manifest["diagnostic_counts"]["warning"] >= 2
+  end
+
+  test "an image node never renders a resolved non-image asset as img" do
+    document = image_document(%{})
+    [asset_id] = hd(document.root_nodes).asset_refs
+    asset = Map.fetch!(document.assets, asset_id)
+    document = %{document | assets: Map.put(document.assets, asset_id, %{asset | kind: "video"})}
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    refute bundle.heex =~ "<img"
+    refute bundle.heex =~ "src=\""
+    assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
+    assert bundle.heex =~ "data-lf-asset-id=\"#{asset_id}\""
+    assert document.assets[asset_id].kind == "video"
+
+    mismatch =
+      Enum.find(bundle.manifest["unresolved_declarations"], fn metadata ->
+        metadata["diagnostic_code"] == "fidelity.asset.kind_mismatch"
+      end)
+
+    assert mismatch["expected_kind"] == "image"
+    assert mismatch["actual_kind"] == "video"
   end
 
   test "keeps unresolved assets as placeholders and omits them only when resolved" do
@@ -155,8 +184,54 @@ defmodule LiveFrames.FidelityAssetTest do
     refute bundle.heex =~ "srcset="
   end
 
+  test "a Frames-shaped placeholder URI is never emitted as an image source" do
+    placeholder_uri = "http://images.example.test/uploads/synthetic-placeholder.svg"
+
+    document =
+      image_document(%{
+        "url" => placeholder_uri,
+        "full" => placeholder_uri,
+        "path" => "/uploads/synthetic-placeholder.svg",
+        "isPlaceholder" => true
+      })
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    refute bundle.heex =~ "<img"
+    refute bundle.heex =~ placeholder_uri
+    assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
+    assert bundle.manifest["asset_substitutions"] |> hd() |> Map.fetch!("status") == "unresolved"
+  end
+
+  test "primary image remains the fallback when responsive sources are present" do
+    alternate_source = %{
+      "id" => "source-mobile",
+      "breakpoint" => "mobile_portrait",
+      "image" =>
+        media_image(%{"size" => "medium", "url" => "https://images.example.test/medium.webp"})
+    }
+
+    document =
+      image_document(%{"size" => "large", "url" => @image_uri}, %{"sources" => [alternate_source]})
+
+    [asset] = Map.values(document.assets)
+    assert asset.uri == @image_uri
+    assert asset.source_trace.source_settings["sources"] == [alternate_source]
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.asset.sources_unsupported"))
+    assert map_size(document.assets) == 1
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.heex =~ "<img src=\"#{@image_uri}\">"
+    refute bundle.heex =~ "<source"
+    refute bundle.heex =~ "srcset="
+  end
+
   defp image_document(image, extra_settings \\ %{}) do
-    settings = Map.merge(%{"image" => image, "tag" => "figure"}, extra_settings)
+    settings =
+      Map.merge(
+        %{"image" => Map.merge(media_image(), image), "tag" => "figure"},
+        extra_settings
+      )
 
     source = %{
       "source" => "bricksCopiedElements",
@@ -186,5 +261,23 @@ defmodule LiveFrames.FidelityAssetTest do
     [node] = document.root_nodes
     node = %{node | source_trace: %{node.source_trace | source_classes: ["source-frame"]}}
     %{document | root_nodes: [node]}
+  end
+
+  defp set_asset_alt(document, alt) do
+    assets = Map.new(document.assets, fn {id, asset} -> {id, %{asset | alt: alt}} end)
+    %{document | assets: assets}
+  end
+
+  defp media_image(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "id" => 42,
+        "filename" => "synthetic-image.webp",
+        "size" => "full",
+        "full" => "https://images.example.test/uploads/synthetic-original.webp",
+        "url" => @image_uri
+      },
+      overrides
+    )
   end
 end

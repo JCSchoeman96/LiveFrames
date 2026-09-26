@@ -44,7 +44,7 @@ defmodule LiveFrames.StaticAsset do
         {:error, :malformed}
 
       String.starts_with?(uri, "/") ->
-        validate_site_path(uri)
+        {:error, :malformed}
 
       true ->
         validate_absolute_uri(uri)
@@ -63,14 +63,11 @@ defmodule LiveFrames.StaticAsset do
     end
   end
 
-  defp validate_site_path(uri) do
-    if uri != "/" and valid_path?(uri), do: {:ok, uri}, else: {:error, :malformed}
-  end
-
   defp validate_absolute_uri(uri) do
     parsed = URI.parse(uri)
+    scheme = if is_binary(parsed.scheme), do: String.downcase(parsed.scheme), else: nil
 
-    if parsed.scheme in ["http", "https"] and valid_host?(parsed.host) and
+    if scheme in ["http", "https"] and valid_host?(parsed.host) and
          valid_port?(parsed.port) and is_nil(parsed.userinfo) and valid_path?(parsed.path) do
       {:ok, uri}
     else
@@ -100,8 +97,11 @@ defmodule LiveFrames.StaticAsset do
 
   defp valid_path?(path) when is_binary(path) and path != "" do
     String.starts_with?(path, "/") and
-      not Regex.match?(~r/(?:\A|\/)\.{1,2}(?:\/|\z)/, path)
+      not traversal_segment?(URI.decode(path))
   end
 
   defp valid_path?(_path), do: false
+
+  defp traversal_segment?(path),
+    do: Regex.match?(~r/(?:\A|\/)\.{1,2}(?:\/|\z)/, path)
 end

@@ -654,6 +654,18 @@ defmodule LiveFrames.IR.Validation do
         trace
       )
 
+  defp require_resolved_uri(diagnostics, :unresolved, nil, _trace), do: diagnostics
+
+  defp require_resolved_uri(diagnostics, :unresolved, _uri, trace),
+    do:
+      error(
+        diagnostics,
+        "ir.asset.unresolved_uri_present",
+        "unresolved assets must have a nil uri",
+        :schema,
+        trace
+      )
+
   defp require_resolved_uri(diagnostics, _status, _uri, _trace), do: diagnostics
 
   defp validate_interactions(interactions, diagnostics)

@@ -1055,6 +1055,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
             "attachment_id" => asset.attachment_id,
             "filename" => asset.filename,
             "url" => asset.url,
+            "full" => asset.full,
+            "path" => asset.path,
+            "size" => asset.size,
             "alt" => asset.alt,
             "dimensions" => asset.dimensions,
             "resolution_reason" => resolution_reason,
@@ -1101,7 +1104,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp asset_inference(%{status: :resolved}),
-    do: "static image URI passed the local compiler safety contract"
+    do: "media-backed Bricks image identity and selected URI passed the local safety contract"
 
   defp asset_inference(asset),
     do: "image source evidence preserved without a URI (#{asset.resolution_reason})"

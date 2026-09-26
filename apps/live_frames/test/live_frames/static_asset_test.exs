@@ -3,8 +3,7 @@ defmodule LiveFrames.StaticAssetTest do
 
   @accepted_uris [
     "http://images.example.test:8443/assets/team.webp",
-    "https://images.example.test/assets/team.webp",
-    "/wp-content/uploads/team.webp"
+    "https://images.example.test/assets/team.webp"
   ]
 
   test "accepts only the validated URI unchanged" do
@@ -55,9 +54,11 @@ defmodule LiveFrames.StaticAssetTest do
   test "rejects malformed static image URIs" do
     for uri <- [
           "assets/team.webp",
+          "/wp-content/uploads/team.webp",
           "http://-invalid.example.test/assets/team.webp",
           "http://images.example.test:70000/assets/team.webp",
           "http://images..example.test/assets/team.webp",
+          "http://images.example.test/assets/%2e%2e/private.webp",
           "http://images.example.test/assets/%zz.webp"
         ] do
       assert validate(uri) == {:error, :malformed}

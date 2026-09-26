@@ -20,7 +20,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     "full" => :full,
     "path" => :path,
     "size" => :size,
-    "alt" => :alt,
+    "isPlaceholder" => :is_placeholder,
+    "useDynamicData" => :use_dynamic_data,
     "__source_id" => :__source_id
   }
 
@@ -136,8 +137,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
     asset_diagnostics =
       assets
-      |> Enum.filter(&(&1.status == :unresolved))
-      |> Enum.map(&asset_diagnostic/1)
+      |> Enum.flat_map(&asset_diagnostics/1)
 
     %{
       class_dependencies: class_dependencies,
@@ -272,6 +272,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     image_map = if is_map(image), do: image, else: %{}
     url = image_value(image_map, "url")
     dynamic? = dynamic_image_source?(image_map)
+    sources_count = responsive_sources_count(element_settings)
 
     {status, uri, resolution_reason} =
       case classify_image_uri(image_map, url, dynamic?) do
@@ -279,19 +280,18 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         {:error, reason} -> {:unresolved, nil, "unresolved_#{reason}"}
       end
 
-    {alt, alt_resolution} = resolve_alt(image_map, element_settings)
-
     %{
       attachment_id: image_value(image_map, "id"),
       filename: image_value(image_map, "filename"),
       url: url,
       uri: uri,
-      alt: alt,
-      alt_resolution: alt_resolution,
+      alt: nil,
+      alt_resolution: "unproven",
       dimensions: image_value(image_map, "dimensions"),
       full: image_value(image_map, "full"),
       path: image_value(image_map, "path"),
       size: image_value(image_map, "size"),
+      sources_count: sources_count,
       resolution_reason: resolution_reason,
       status: status,
       source_id: source_id
@@ -302,72 +302,81 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     do: Map.get(image, key, Map.get(image, Map.fetch!(@image_atom_keys, key)))
 
   defp dynamic_image_source?(image) do
-    case Map.fetch(image, "useDynamicData") do
-      {:ok, value} when value not in [nil, false, ""] -> true
-      _ -> false
+    image_value(image, "useDynamicData") not in [nil, false, ""]
+  end
+
+  defp classify_image_uri(_image, _url, true), do: {:error, :dynamic}
+
+  defp classify_image_uri(image, _url, false) do
+    if image_value(image, "isPlaceholder") == true do
+      {:error, :placeholder}
+    else
+      classify_media_image(image)
     end
   end
 
-  defp classify_image_uri(_image, url, true),
-    do: StaticAsset.validate(url, dynamic?: true)
-
-  defp classify_image_uri(image, url, false) do
-    full = image_value(image, "full")
-
-    case StaticAsset.validate(url) do
-      {:error, reason} ->
-        {:error, reason}
-
-      {:ok, validated_uri} ->
-        if is_binary(full) and full != "" and full != url do
-          case StaticAsset.validate(full) do
-            {:error, reason} -> {:error, reason}
-            {:ok, _full_uri} -> {:error, :malformed}
-          end
-        else
-          {:ok, validated_uri}
-        end
+  defp classify_media_image(image) do
+    with :ok <- validate_media_identity(image),
+         {:ok, selected_uri} <- StaticAsset.validate(image_value(image, "url")),
+         {:ok, _full_uri} <- StaticAsset.validate(image_value(image, "full")) do
+      {:ok, selected_uri}
     end
   end
 
-  defp resolve_alt(image, settings) do
-    image_alt = fetch_source_value(image, "alt")
-    settings_alt = fetch_source_value(settings, "alt")
+  defp validate_media_identity(image) do
+    attachment_id = image_value(image, "id")
+    filename = image_value(image, "filename")
+    size = image_value(image, "size")
 
-    case {image_alt, settings_alt} do
-      {:missing, :missing} ->
-        {nil, "missing"}
+    cond do
+      missing_asset_field?(attachment_id) or missing_asset_field?(filename) or
+          missing_asset_field?(size) ->
+        {:error, :missing}
 
-      {{:value, value}, :missing} when is_binary(value) ->
-        {value, "image_alt"}
+      not is_integer(attachment_id) or attachment_id <= 0 or not is_binary(filename) or
+          not is_binary(size) ->
+        {:error, :malformed}
 
-      {:missing, {:value, value}} when is_binary(value) ->
-        {value, "settings_alt"}
-
-      {{:value, value}, {:value, value}} when is_binary(value) ->
-        {value, "equal_source_values"}
-
-      {{:value, first}, {:value, second}} when is_binary(first) and is_binary(second) ->
-        {nil, "conflicting_source_values"}
-
-      _ ->
-        {nil, "invalid_source_value"}
+      true ->
+        :ok
     end
   end
 
-  defp fetch_source_value(map, key) do
-    atom_key = Map.fetch!(@image_atom_keys, key)
+  defp missing_asset_field?(value), do: value in [nil, false, ""]
 
-    case Map.fetch(map, key) do
-      {:ok, value} ->
-        {:value, value}
+  defp responsive_sources_count(settings) when is_map(settings) do
+    sources = Map.get(settings, "sources", Map.get(settings, :sources))
 
-      :error ->
-        case Map.fetch(map, atom_key) do
-          {:ok, value} -> {:value, value}
-          :error -> :missing
-        end
+    cond do
+      is_list(sources) -> length(sources)
+      is_map(sources) and not is_struct(sources) -> map_size(sources)
+      true -> 0
     end
+  end
+
+  defp responsive_sources_count(_settings), do: 0
+
+  defp asset_diagnostics(asset) do
+    unresolved_diagnostic =
+      if asset.status == :unresolved, do: [asset_diagnostic(asset)], else: []
+
+    sources_diagnostic =
+      if asset.sources_count > 0 do
+        [
+          Diagnostic.new(
+            code: "bricks.asset.sources_unsupported",
+            severity: :warning,
+            source_id: asset.source_id,
+            source_path: "settings.sources",
+            message: "responsive Bricks image sources were preserved but not compiled",
+            metadata: %{"source_count" => asset.sources_count}
+          )
+        ]
+      else
+        []
+      end
+
+    unresolved_diagnostic ++ sources_diagnostic
   end
 
   defp class_records(resolved, source_id) do

@@ -774,6 +774,22 @@ defmodule LiveFrames.Fidelity do
          diagnostics
        ) do
     case Map.fetch(assets, id) do
+      {:ok, %AssetReference{kind: actual_kind} = asset} when actual_kind != "image" ->
+        kind_diagnostic =
+          diagnostic(
+            "fidelity.asset.kind_mismatch",
+            "image nodes can render only image asset references",
+            nil,
+            %{
+              diagnostic_code: "fidelity.asset.kind_mismatch",
+              asset_id: id,
+              expected_kind: "image",
+              actual_kind: actual_kind
+            }
+          )
+
+        unresolved_asset(asset, id, diagnostics ++ [kind_diagnostic])
+
       {:ok, %AssetReference{status: :unresolved} = asset} ->
         unresolved_asset(asset, id, diagnostics)
 
