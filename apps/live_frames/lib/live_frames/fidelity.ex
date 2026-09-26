@@ -6,6 +6,7 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Responsive.BreakpointAuthority
   alias LiveFrames.Responsive.Resolution
+  alias LiveFrames.StaticAsset
   alias LiveFrames.StaticMarkupContract
   alias LiveFrames.StaticNavigation
 
@@ -280,10 +281,8 @@ defmodule LiveFrames.Fidelity do
     button_attrs ++
       case {node.semantic_type, asset} do
         {"image", %{"status" => "unresolved"} = unresolved_asset} ->
-          [
-            {"data-lf-asset-status", "unresolved"},
-            {"data-lf-asset-id", unresolved_asset["asset_id"]}
-          ]
+          [{"data-lf-asset-status", "unresolved"}]
+          |> maybe_add_asset_id(unresolved_asset["asset_id"])
           |> maybe_add_unresolved_asset_label(unresolved_asset["alt"])
 
         _ ->
@@ -303,6 +302,18 @@ defmodule LiveFrames.Fidelity do
       cond do
         name in ["tag", "caption", "link", "outline", "style", "url", "alt", "navigation"] ->
           {attributes, diagnostics}
+
+        name in ["src", "srcset"] ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "image source attributes are owned by the validated asset pipeline",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
 
         name in ["href", "target", "rel"] ->
           {attributes,
@@ -393,6 +404,11 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp maybe_add_unresolved_asset_label(attrs, _), do: attrs
+
+  defp maybe_add_asset_id(attrs, asset_id) when is_binary(asset_id),
+    do: attrs ++ [{"data-lf-asset-id", asset_id}]
+
+  defp maybe_add_asset_id(attrs, _), do: attrs
 
   defp fidelity_class(id), do: "lf-fidelity-" <> String.replace(id, "_", "-")
 
@@ -749,32 +765,101 @@ defmodule LiveFrames.Fidelity do
     end)
   end
 
-  defp asset_decision(%{asset_refs: [id]}, %{assets: assets}, diagnostics) do
-    case assets[id] do
-      %AssetReference{status: :unresolved} = asset ->
-        {%{
-           "status" => "unresolved",
-           "asset_id" => asset.asset_id,
-           "alt" => asset.alt,
-           "attachment_id" => asset.metadata["attachment_id"],
-           "filename" => asset.metadata["filename"]
-         },
-         diagnostics ++
-           [
-             diagnostic(
-               "fidelity.asset.placeholder",
-               "unresolved asset emitted as placeholder",
-               nil,
-               %{asset_id: id}
-             )
-           ]}
+  defp asset_decision(%{semantic_type: "image", asset_refs: []}, _document, diagnostics),
+    do: {nil, diagnostics}
 
-      _ ->
-        {nil, diagnostics}
+  defp asset_decision(
+         %{semantic_type: "image", asset_refs: [id]},
+         %{assets: assets},
+         diagnostics
+       ) do
+    case Map.fetch(assets, id) do
+      {:ok, %AssetReference{status: :unresolved} = asset} ->
+        unresolved_asset(asset, id, diagnostics)
+
+      {:ok, %AssetReference{status: :resolved} = asset} ->
+        case StaticAsset.validate(asset.uri) do
+          {:ok, uri} ->
+            {%{
+               "status" => "resolved",
+               "asset_id" => asset.asset_id,
+               "uri" => uri,
+               "alt" => asset.alt
+             }, diagnostics}
+
+          {:error, reason} ->
+            rejected =
+              diagnostic(
+                "fidelity.asset.uri_rejected",
+                "resolved asset URI failed Fidelity revalidation",
+                nil,
+                %{asset_id: id, reason: Atom.to_string(reason)}
+              )
+
+            unresolved_asset(asset, id, diagnostics ++ [rejected])
+        end
+
+      {:ok, %AssetReference{} = asset} ->
+        status_diagnostic =
+          diagnostic(
+            "fidelity.asset.status_invalid",
+            "asset status was not supported and the image was emitted as a placeholder",
+            nil,
+            %{asset_id: id}
+          )
+
+        unresolved_asset(asset, id, diagnostics ++ [status_diagnostic])
+
+      :error ->
+        missing_diagnostic =
+          diagnostic(
+            "fidelity.asset.reference_missing",
+            "image asset reference was missing from the document registry",
+            nil,
+            %{asset_id: id}
+          )
+
+        unresolved_asset(%AssetReference{asset_id: id}, id, diagnostics ++ [missing_diagnostic])
     end
   end
 
+  defp asset_decision(
+         %{semantic_type: "image", asset_refs: ids},
+         _document,
+         diagnostics
+       )
+       when is_list(ids) and length(ids) > 1 do
+    ambiguity_diagnostic =
+      diagnostic(
+        "fidelity.asset.references_ambiguous",
+        "multiple image asset references cannot be selected deterministically",
+        nil,
+        %{reference_count: length(ids)}
+      )
+
+    unresolved_asset(%AssetReference{}, nil, diagnostics ++ [ambiguity_diagnostic])
+  end
+
   defp asset_decision(_, _, diagnostics), do: {nil, diagnostics}
+
+  defp unresolved_asset(asset, id, diagnostics) do
+    {%{
+       "status" => "unresolved",
+       "asset_id" => asset.asset_id || id,
+       "alt" => asset.alt,
+       "attachment_id" => asset.metadata["attachment_id"],
+       "filename" => asset.metadata["filename"]
+     },
+     diagnostics ++
+       [
+         diagnostic(
+           "fidelity.asset.placeholder",
+           "unresolved asset emitted as placeholder",
+           nil,
+           %{asset_id: id}
+         )
+       ]}
+  end
 
   defp source_resolver_result(source_resolver, classes, token_set, node) do
     context = resolver_context(node)
@@ -1035,10 +1120,17 @@ defmodule LiveFrames.Fidelity do
     content = if is_binary(node.content), do: "<%= #{inspect(node.content)} %>", else: ""
     open = "<#{node.element} #{attrs}>"
 
-    if node.element == "figure" and node.asset,
-      do: open <> content <> render_children(node.children) <> "</figure>",
-      else: open <> content <> render_children(node.children) <> "</#{node.element}>"
+    open <>
+      content <>
+      render_image(node.asset) <> render_children(node.children) <> "</#{node.element}>"
   end
+
+  defp render_image(%{"status" => "resolved", "uri" => uri} = asset) when is_binary(uri) do
+    attrs = [{"src", uri}] ++ if(is_binary(asset["alt"]), do: [{"alt", asset["alt"]}], else: [])
+    "<img #{Enum.map_join(attrs, " ", &serialize_html_attr/1)}>"
+  end
+
+  defp render_image(_asset), do: ""
 
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
 
@@ -1179,7 +1271,10 @@ defmodule LiveFrames.Fidelity do
       "deferred_responsive_count" => deferred_count,
       "deferred_responsive_entries" => deferred_entries,
       "invented_breakpoint_count" => 0,
-      "asset_substitutions" => flat |> Enum.map(& &1.asset) |> Enum.reject(&is_nil/1),
+      "asset_substitutions" =>
+        flat
+        |> Enum.map(& &1.asset)
+        |> Enum.reject(&(is_nil(&1) or &1["status"] != "unresolved")),
       "diagnostic_counts" => Enum.frequencies_by(diagnostics, &Atom.to_string(&1.severity)),
       "generated_heex_sha256" => sha(heex),
       "generated_css_sha256" => sha(css),

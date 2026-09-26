@@ -7,10 +7,22 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.StaticAsset
 
   @variable_mappings %{"--content-gap" => "spacing.content_gap"}
   @known_external_variables ["--overlay-bg", "--neutral-ultra-dark-trans-60"]
   @runtime_fragments ["interaction", "dynamic", "query", "script", "hook", "runtime"]
+  @image_atom_keys %{
+    "url" => :url,
+    "id" => :id,
+    "filename" => :filename,
+    "dimensions" => :dimensions,
+    "full" => :full,
+    "path" => :path,
+    "size" => :size,
+    "alt" => :alt,
+    "__source_id" => :__source_id
+  }
 
   @spec variables(term(), keyword()) :: [map()]
   def variables(values, opts \\ []) do
@@ -73,11 +85,16 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           class_names = resolved.class_names
 
           element_assets =
-            element.settings
-            |> Map.get("image")
-            |> case do
-              nil -> []
-              image -> assets([Map.put(image, "__source_id", element.id)])
+            if element.name == "image" do
+              [
+                asset_record(
+                  Map.get(element.settings, "image", :missing),
+                  element.id,
+                  element.settings
+                )
+              ]
+            else
+              []
             end
 
           runtime_records = runtime_records(element.settings, element.id)
@@ -235,26 +252,122 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp image_sources(%Element{settings: settings}), do: image_sources(Map.get(settings, "image"))
+  defp image_sources(%Element{name: "image", settings: settings, id: source_id}),
+    do: [asset_source(Map.get(settings, "image", :missing), source_id, settings)]
 
-  defp image_sources(%{"id" => _id} = image), do: [image]
-  defp image_sources(%{id: _id} = image), do: [image]
   defp image_sources(%{"image" => image}) when is_map(image), do: [image]
+  defp image_sources(%{image: image}) when is_map(image), do: [image]
+  defp image_sources(%{} = image), do: [image]
   defp image_sources(_value), do: []
 
-  defp asset_record(image) do
-    url = Map.get(image, "url", Map.get(image, :url))
-    resolved = is_binary(url) and byte_size(url) > 0
+  defp asset_source(image, source_id, element_settings),
+    do: %{image: image, source_id: source_id, element_settings: element_settings}
+
+  defp asset_record(%{image: image, source_id: source_id, element_settings: settings}),
+    do: asset_record(image, source_id, settings)
+
+  defp asset_record(image), do: asset_record(image, image_value(image, "__source_id"), %{})
+
+  defp asset_record(image, source_id, element_settings) do
+    image_map = if is_map(image), do: image, else: %{}
+    url = image_value(image_map, "url")
+    dynamic? = dynamic_image_source?(image_map)
+
+    {status, uri, resolution_reason} =
+      case classify_image_uri(image_map, url, dynamic?) do
+        {:ok, validated_uri} -> {:resolved, validated_uri, "resolved_static"}
+        {:error, reason} -> {:unresolved, nil, "unresolved_#{reason}"}
+      end
+
+    {alt, alt_resolution} = resolve_alt(image_map, element_settings)
 
     %{
-      attachment_id: Map.get(image, "id", Map.get(image, :id)),
-      filename: Map.get(image, "filename", Map.get(image, :filename)),
+      attachment_id: image_value(image_map, "id"),
+      filename: image_value(image_map, "filename"),
       url: url,
-      alt: Map.get(image, "alt", Map.get(image, :alt)),
-      dimensions: Map.get(image, "dimensions", Map.get(image, :dimensions)),
-      status: if(resolved, do: :resolved, else: :unresolved),
-      source_id: Map.get(image, "__source_id")
+      uri: uri,
+      alt: alt,
+      alt_resolution: alt_resolution,
+      dimensions: image_value(image_map, "dimensions"),
+      full: image_value(image_map, "full"),
+      path: image_value(image_map, "path"),
+      size: image_value(image_map, "size"),
+      resolution_reason: resolution_reason,
+      status: status,
+      source_id: source_id
     }
+  end
+
+  defp image_value(image, key),
+    do: Map.get(image, key, Map.get(image, Map.fetch!(@image_atom_keys, key)))
+
+  defp dynamic_image_source?(image) do
+    case Map.fetch(image, "useDynamicData") do
+      {:ok, value} when value not in [nil, false, ""] -> true
+      _ -> false
+    end
+  end
+
+  defp classify_image_uri(_image, url, true),
+    do: StaticAsset.validate(url, dynamic?: true)
+
+  defp classify_image_uri(image, url, false) do
+    full = image_value(image, "full")
+
+    case StaticAsset.validate(url) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, validated_uri} ->
+        if is_binary(full) and full != "" and full != url do
+          case StaticAsset.validate(full) do
+            {:error, reason} -> {:error, reason}
+            {:ok, _full_uri} -> {:error, :malformed}
+          end
+        else
+          {:ok, validated_uri}
+        end
+    end
+  end
+
+  defp resolve_alt(image, settings) do
+    image_alt = fetch_source_value(image, "alt")
+    settings_alt = fetch_source_value(settings, "alt")
+
+    case {image_alt, settings_alt} do
+      {:missing, :missing} ->
+        {nil, "missing"}
+
+      {{:value, value}, :missing} when is_binary(value) ->
+        {value, "image_alt"}
+
+      {:missing, {:value, value}} when is_binary(value) ->
+        {value, "settings_alt"}
+
+      {{:value, value}, {:value, value}} when is_binary(value) ->
+        {value, "equal_source_values"}
+
+      {{:value, first}, {:value, second}} when is_binary(first) and is_binary(second) ->
+        {nil, "conflicting_source_values"}
+
+      _ ->
+        {nil, "invalid_source_value"}
+    end
+  end
+
+  defp fetch_source_value(map, key) do
+    atom_key = Map.fetch!(@image_atom_keys, key)
+
+    case Map.fetch(map, key) do
+      {:ok, value} ->
+        {:value, value}
+
+      :error ->
+        case Map.fetch(map, atom_key) do
+          {:ok, value} -> {:value, value}
+          :error -> :missing
+        end
+    end
   end
 
   defp class_records(resolved, source_id) do
@@ -398,7 +511,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         code: "bricks.asset.unresolved",
         severity: :warning,
         source_id: asset.source_id,
-        raw_value: asset,
-        message: "Bricks image asset URL is unresolved"
+        source_path: "image.url",
+        raw_value: asset.url,
+        message: "Bricks image URI remained unresolved (#{asset.resolution_reason})",
+        metadata: %{"resolution_reason" => asset.resolution_reason}
       )
 end

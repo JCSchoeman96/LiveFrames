@@ -619,7 +619,7 @@ defmodule LiveFrames.IR.Validation do
       trace
     )
     |> require_resolved_uri(asset.status, asset.uri, trace)
-    |> require_optional_string(
+    |> validate_asset_alt(
       asset.alt,
       "ir.asset.alt_invalid",
       "asset alt must be a string or nil",
@@ -1026,6 +1026,14 @@ defmodule LiveFrames.IR.Validation do
   defp require_optional_string(diagnostics, value, code, message, trace) do
     require_string(diagnostics, value, code, message, trace)
   end
+
+  defp validate_asset_alt(diagnostics, nil, _code, _message, _trace), do: diagnostics
+
+  defp validate_asset_alt(diagnostics, value, _code, _message, _trace) when is_binary(value),
+    do: diagnostics
+
+  defp validate_asset_alt(diagnostics, _value, code, message, trace),
+    do: error(diagnostics, code, message, :schema, trace)
 
   defp require_object(diagnostics, value, code, message, trace \\ nil) do
     if json_object?(value) do

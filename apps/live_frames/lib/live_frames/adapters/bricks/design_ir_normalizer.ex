@@ -27,6 +27,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
+  alias LiveFrames.StaticAsset
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
@@ -1024,12 +1025,24 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     |> Enum.with_index(1)
     |> Enum.reduce({%{}, %{}}, fn {asset, index}, {assets, by_source} ->
       asset_id = "asset_#{String.pad_leading(Integer.to_string(index), 6, "0")}"
-      trace = asset_trace(asset, trace_index)
 
-      status =
-        if asset.status == :resolved and is_binary(asset.url), do: :resolved, else: :unresolved
+      {status, uri, resolution_reason} =
+        case {asset.status, StaticAsset.validate(asset.uri)} do
+          {:resolved, {:ok, validated_uri}} ->
+            {:resolved, validated_uri, "resolved_static"}
 
-      uri = if status == :resolved, do: asset.url, else: nil
+          {:resolved, {:error, reason}} ->
+            {:unresolved, nil, "unresolved_#{reason}"}
+
+          _ ->
+            {:unresolved, nil, asset.resolution_reason}
+        end
+
+      trace =
+        asset
+        |> Map.put(:status, status)
+        |> Map.put(:resolution_reason, resolution_reason)
+        |> then(&asset_trace(&1, trace_index))
 
       reference = %AssetReference{
         asset_id: asset_id,
@@ -1044,6 +1057,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
             "url" => asset.url,
             "alt" => asset.alt,
             "dimensions" => asset.dimensions,
+            "resolution_reason" => resolution_reason,
+            "alt_resolution" => asset.alt_resolution,
             "source_image" => source_image_metadata(trace),
             "source_node_id" => asset.source_id
           }),
@@ -1058,12 +1073,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp asset_trace(asset, trace_index) do
     case Map.get(trace_index, asset.source_id) do
       %{trace: trace} ->
+        inference = asset_inference(asset)
+
         %{
           trace
           | source_type: "bricks_asset",
             source_path: "#{trace.source_path}.settings.image",
             source_name: "image",
-            inference: "asset registry entry preserves unresolved source evidence"
+            inference: inference,
+            metadata: Map.put(trace.metadata, "asset_resolution", asset.resolution_reason)
         }
 
       nil ->
@@ -1076,11 +1094,17 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           source_settings: %{},
           adapter: "bricks",
           adapter_version: Document.adapter_version(),
-          inference: "asset registry entry preserves unresolved source evidence",
-          metadata: %{}
+          inference: asset_inference(asset),
+          metadata: %{"asset_resolution" => asset.resolution_reason}
         }
     end
   end
+
+  defp asset_inference(%{status: :resolved}),
+    do: "static image URI passed the local compiler safety contract"
+
+  defp asset_inference(asset),
+    do: "image source evidence preserved without a URI (#{asset.resolution_reason})"
 
   defp source_image_metadata(%SourceTrace{source_settings: source_settings}),
     do: Map.get(source_settings, "image")
