@@ -7,6 +7,7 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.Responsive.BreakpointAuthority
   alias LiveFrames.Responsive.Resolution
   alias LiveFrames.StaticMarkupContract
+  alias LiveFrames.StaticNavigation
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
@@ -125,7 +126,8 @@ defmodule LiveFrames.Fidelity do
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
     {element, tag_diagnostics} = element(node)
-    generated_attrs = generated_attrs(node, asset, element)
+    {navigation_attrs, element, navigation_diagnostics} = navigation_markup(node, element)
+    generated_attrs = generated_attrs(node, asset, element) ++ navigation_attrs
     {source_attrs, attribute_diagnostics} = source_attributes(node, element, generated_attrs)
     attrs = generated_attrs ++ source_attrs
 
@@ -141,6 +143,7 @@ defmodule LiveFrames.Fidelity do
     diagnostics =
       diagnostics ++
         tag_diagnostics ++
+        navigation_diagnostics ++
         attribute_diagnostics ++
         resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
 
@@ -209,9 +212,63 @@ defmodule LiveFrames.Fidelity do
   defp semantic_element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
   defp semantic_element(%{semantic_type: "paragraph"}), do: "p"
   defp semantic_element(%{semantic_type: "button"}), do: "button"
+
+  defp semantic_element(%{semantic_type: "link", attributes: %{"navigation" => _navigation}}),
+    do: "a"
+
+  defp semantic_element(%{semantic_type: "link"}), do: "span"
   defp semantic_element(%{semantic_type: "image"}), do: "figure"
   defp semantic_element(%{semantic_type: "heading"}), do: "h2"
   defp semantic_element(_), do: "div"
+
+  defp navigation_markup(node, element) do
+    if node.semantic_type in ["button", "link"] do
+      case Map.get(node.attributes, "navigation") do
+        nav when is_map(nav) ->
+          case StaticNavigation.validate_navigation_map(nav) do
+            {:ok, attrs} ->
+              {attrs, "a", []}
+
+            {:error, reason} ->
+              {[], element,
+               [
+                 diagnostic(
+                   navigation_diagnostic_code(reason),
+                   navigation_diagnostic_message(reason),
+                   node,
+                   %{navigation: nav}
+                 )
+               ]}
+          end
+
+        _other ->
+          {[], element, []}
+      end
+    else
+      {[], element, []}
+    end
+  end
+
+  defp navigation_diagnostic_code(:unsafe), do: "fidelity.navigation.unsafe"
+  defp navigation_diagnostic_code(:malformed), do: "fidelity.navigation.malformed"
+  defp navigation_diagnostic_code(:dynamic), do: "fidelity.navigation.dynamic"
+  defp navigation_diagnostic_code(:missing), do: "fidelity.navigation.missing"
+  defp navigation_diagnostic_code(_reason), do: "fidelity.navigation.rejected"
+
+  defp navigation_diagnostic_message(:unsafe),
+    do: "navigation href used a forbidden URL scheme and was not emitted"
+
+  defp navigation_diagnostic_message(:malformed),
+    do: "navigation href was not a proven static destination and was not emitted"
+
+  defp navigation_diagnostic_message(:dynamic),
+    do: "navigation href requires runtime binding and was not emitted"
+
+  defp navigation_diagnostic_message(:missing),
+    do: "navigation metadata was incomplete and was not emitted"
+
+  defp navigation_diagnostic_message(_reason),
+    do: "navigation metadata failed Fidelity revalidation and was not emitted"
 
   defp generated_attrs(node, asset, element) do
     button_attrs = if element == "button", do: [{"type", button_type(node)}], else: []
@@ -240,8 +297,20 @@ defmodule LiveFrames.Fidelity do
     |> Enum.sort_by(fn {name, _value} -> if is_binary(name), do: name, else: inspect(name) end)
     |> Enum.reduce({[], []}, fn {name, value}, {attributes, diagnostics} ->
       cond do
-        name in ["tag", "caption", "link", "outline", "style", "url", "alt"] ->
+        name in ["tag", "caption", "link", "outline", "style", "url", "alt", "navigation"] ->
           {attributes, diagnostics}
+
+        name in ["href", "target", "rel"] ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.unsupported",
+                 "navigation-owned attributes cannot be supplied through generic source attributes",
+                 node,
+                 %{attribute_name: name, native_element: element}
+               )
+             ]}
 
         name == "type" and element == "button" ->
           if StaticMarkupContract.safe_attribute?(name, value, element) do

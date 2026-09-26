@@ -15,6 +15,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
   alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.Adapters.Bricks.StaticNavigation
   alias LiveFrames.Adapters.Bricks.StaticSemantics
   alias LiveFrames.Adapters.Bricks.ThemeStyles
   alias LiveFrames.Adapters.Bricks.TreeBuilder
@@ -94,7 +95,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     "text",
     "text-basic",
     "button",
-    "image"
+    "image",
+    "text-link"
   ]
 
   @spec normalize(term(), keyword()) ::
@@ -124,6 +126,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
 
       {static_semantics, static_diagnostics} = normalize_static_semantics(tree)
+      {static_navigation, navigation_diagnostics} = StaticNavigation.normalize_tree(tree)
 
       diagnostics =
         load_diagnostics ++
@@ -132,7 +135,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           class_diagnostics ++
           dependencies.diagnostics ++
           unsupported_element_diagnostics(tree) ++
-          static_diagnostics
+          static_diagnostics ++
+          navigation_diagnostics
 
       if blocking?(diagnostics) do
         {:error, to_ir_diagnostics(diagnostics)}
@@ -150,6 +154,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           component_index: component_index(document, component),
           source_diagnostics: diagnostics ++ theme_diagnostics,
           static_semantics: static_semantics,
+          static_navigation: static_navigation,
           container_width: Keyword.get(opts, :container_width),
           theme_styles: theme_styles
         }
@@ -356,11 +361,12 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
 
     trace_metadata =
-      if static_semantics.trace_metadata do
-        Map.put(trace_metadata, "native_semantics", static_semantics.trace_metadata)
-      else
-        trace_metadata
-      end
+      trace_metadata
+      |> maybe_put_trace_metadata("native_semantics", static_semantics.trace_metadata)
+      |> maybe_put_trace_metadata(
+        "static_navigation",
+        Map.fetch!(context.static_navigation, element.id)[:trace_metadata]
+      )
 
     %SourceTrace{
       source_type: "bricks_element",
@@ -408,8 +414,16 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp inference_for(%Element{name: "text-basic"}, _static_semantics),
     do: "text-basic element kept as rich text because paragraph semantics were not proven"
 
+  defp inference_for(%Element{name: "text-link"}, _static_semantics),
+    do: "text-link element mapped to link semantics for static navigation"
+
   defp inference_for(%Element{}, _static_semantics),
     do: "direct mapping from the supported Bricks element type"
+
+  defp maybe_put_trace_metadata(trace_metadata, _key, nil), do: trace_metadata
+
+  defp maybe_put_trace_metadata(trace_metadata, key, value),
+    do: Map.put(trace_metadata, key, value)
 
   defp normalize_static_semantics(tree) do
     Enum.reduce(tree.ordered_elements, {%{}, []}, fn element, {semantics_by_id, diagnostics} ->
@@ -427,6 +441,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     resolved = Map.fetch!(context.resolved.elements, source_id)
     trace = context.trace_index[source_id].trace
     static_semantics = Map.fetch!(context.static_semantics, source_id)
+    static_navigation = Map.fetch!(context.static_navigation, source_id)
 
     semantic_settings =
       Enum.filter(StaticSemantics.source_setting_names(), &Map.has_key?(element.settings, &1))
@@ -450,12 +465,20 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         build_node(child_id, path ++ [child_index], context)
       end)
 
+    attributes =
+      attributes_for(element, static_semantics)
+      |> apply_static_navigation(static_navigation, static_semantics)
+
+    semantic_type =
+      static_navigation[:semantic_type_override] ||
+        semantic_type(element, static_semantics)
+
     DesignNode.new(path,
-      semantic_type: semantic_type(element, static_semantics),
+      semantic_type: semantic_type,
       semantic_role: nil,
       label: element.label,
       content: content_for(element),
-      attributes: attributes_for(element, static_semantics),
+      attributes: attributes,
       styles: styles_for(settings_result, trace, context.token_set, element, context),
       responsive: responsive_for(settings_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
@@ -477,8 +500,24 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp semantic_type(%Element{name: "text-basic"}, _static_semantics), do: "rich_text"
 
   defp semantic_type(%Element{name: "button"}, _static_semantics), do: "button"
+  defp semantic_type(%Element{name: "text-link"}, _static_semantics), do: "link"
   defp semantic_type(%Element{name: "image"}, _static_semantics), do: "image"
   defp semantic_type(%Element{}, _static_semantics), do: "unsupported"
+
+  defp apply_static_navigation(attributes, static_navigation, _static_semantics) do
+    attributes =
+      if static_navigation[:element_tag] do
+        Map.put(attributes, "tag", static_navigation[:element_tag])
+      else
+        attributes
+      end
+
+    if static_navigation[:navigation] do
+      Map.put(attributes, "navigation", static_navigation[:navigation])
+    else
+      attributes
+    end
+  end
 
   defp attributes_for(%Element{settings: settings}, static_semantics) do
     # Keep these established IR evidence fields. Fidelity never emits them as
@@ -496,7 +535,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp content_for(%Element{name: name, settings: settings})
-       when name in ["heading", "text", "text-basic", "button"] do
+       when name in ["heading", "text", "text-basic", "button", "text-link"] do
     case Map.get(settings, "text") do
       value when is_binary(value) -> value
       _value -> nil
@@ -1260,6 +1299,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp category_for("bricks.tag.conflict"), do: :ambiguous_semantics
   defp category_for("bricks.attribute.conflict"), do: :ambiguous_semantics
   defp category_for("bricks.attribute.unsupported"), do: :provenance
+  defp category_for("bricks.navigation." <> _), do: :ambiguous_semantics
   defp category_for("bricks.runtime.unsupported"), do: :interaction_unsupported
 
   defp category_for(code) when is_binary(code) do
