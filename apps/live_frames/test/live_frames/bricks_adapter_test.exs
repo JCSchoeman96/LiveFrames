@@ -101,6 +101,28 @@ defmodule LiveFrames.BricksAdapterTest do
     assert Map.has_key?(document.global_classes, "class-a")
   end
 
+  test "rejects unsupported top-level fields in a component fragment" do
+    source = Map.put(component_fragment(), "totallyUnknownPayload", %{})
+
+    assert {:error, diagnostics} = Bricks.recognize(source)
+    assert Enum.any?(diagnostics, &(&1.code == "bricks.fragment.invalid"))
+  end
+
+  test "rejects component fragments with an empty component collection" do
+    source = Map.put(component_fragment(), "components", [])
+
+    assert {:error, diagnostics} = Bricks.recognize(source)
+    assert Enum.any?(diagnostics, &(&1.code == "bricks.fragment.invalid"))
+  end
+
+  test "accepts component fragments with no global classes" do
+    source = Map.put(component_fragment(), "globalClasses", [])
+
+    assert {:ok, document, []} = Bricks.recognize(source)
+    assert document.source_shape == :component_fragment
+    assert document.global_classes == %{}
+  end
+
   test "keeps component fragments outside Design IR normalization" do
     assert {:error, diagnostics} =
              Bricks.to_ir(component_fragment(),

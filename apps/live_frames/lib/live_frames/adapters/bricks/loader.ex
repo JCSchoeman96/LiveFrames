@@ -136,7 +136,22 @@ defmodule LiveFrames.Adapters.Bricks.Loader do
   end
 
   defp validate_component_fragment(source) do
-    invalid =
+    unsupported_keys =
+      source
+      |> Map.keys()
+      |> Enum.reject(&(&1 in ["components", "globalClasses"]))
+      |> Enum.sort_by(&inspect/1)
+
+    unsupported_key_diagnostics =
+      Enum.map(unsupported_keys, fn key ->
+        diagnostic(
+          "bricks.fragment.invalid",
+          "Bricks component fragment contains an unsupported top-level field",
+          source_path: if(is_binary(key), do: key, else: inspect(key))
+        )
+      end)
+
+    collection_diagnostics =
       Enum.flat_map(
         [
           {"components", "component collection"},
@@ -157,7 +172,23 @@ defmodule LiveFrames.Adapters.Bricks.Loader do
         end
       )
 
-    if invalid == [], do: :ok, else: {:error, invalid}
+    empty_component_diagnostics =
+      if Map.get(source, "components") == [] do
+        [
+          diagnostic(
+            "bricks.fragment.invalid",
+            "Bricks component fragment must contain at least one component",
+            source_path: "components"
+          )
+        ]
+      else
+        []
+      end
+
+    diagnostics =
+      unsupported_key_diagnostics ++ collection_diagnostics ++ empty_component_diagnostics
+
+    if diagnostics == [], do: :ok, else: {:error, diagnostics}
   end
 
   defp build_document(

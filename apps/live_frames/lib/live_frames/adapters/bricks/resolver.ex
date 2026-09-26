@@ -1,6 +1,6 @@
 defmodule LiveFrames.Adapters.Bricks.Resolver do
   @moduledoc """
-  Resolves a copied-content proxy to exactly one Bricks component.
+  Resolves a Bricks component from a copied-content proxy or component fragment.
   """
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
