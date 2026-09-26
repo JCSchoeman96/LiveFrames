@@ -1,5 +1,5 @@
 defmodule LiveFrames.AutomaticCSSAdapterTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
