@@ -240,7 +240,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   defp class_records(resolved, source_id) do
     global =
       Enum.map(resolved.class_refs, fn ref ->
-        %{
+        record = %{
           element_id: source_id,
           class_id: ref.id,
           name: ref.name,
@@ -248,6 +248,16 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           status: ref.status,
           provenance: :global_class
         }
+
+        if ref.resolution_status == :local_resolved and ref.authority_ids == [] do
+          record
+        else
+          Map.merge(record, %{
+            resolution_status: ref.resolution_status,
+            resolution_source: ref.resolution_source,
+            authority_ids: ref.authority_ids
+          })
+        end
       end)
 
     semantic =

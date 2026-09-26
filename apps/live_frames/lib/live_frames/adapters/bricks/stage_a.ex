@@ -151,7 +151,11 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
            %{result | tree: tree}
            |> Result.add_diagnostics(tree_diagnostics)
            |> Result.advance(:tree_built),
-         {:ok, resolved, class_diagnostics} <- ClassResolver.resolve(tree, document),
+         {:ok, resolved, class_diagnostics} <-
+           ClassResolver.resolve(tree, document,
+             external_class_authorities: Keyword.get(opts, :external_class_authorities, [])
+           ),
+         :ok <- validate_class_resolution(class_diagnostics),
          dependencies <-
            DependencyExtractor.extract(resolved, document,
              token_set: Keyword.get(opts, :token_set)
@@ -241,6 +245,12 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
         message: "Bricks element type is preserved but not in the supported Stage A subset"
       )
     end)
+  end
+
+  defp validate_class_resolution(diagnostics) do
+    blocking = Enum.filter(diagnostics, &(&1.severity in [:error, :fatal]))
+
+    if blocking == [], do: :ok, else: {:error, blocking}
   end
 
   defp supported_element?(element),

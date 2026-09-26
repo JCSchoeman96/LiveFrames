@@ -82,6 +82,15 @@ defmodule LiveFrames.Adapters.Bricks.Loader do
   def recognize(_source, _opts),
     do: {:error, [diagnostic("bricks.source.invalid", "Bricks source must be a JSON object")]}
 
+  @doc "Parses an explicitly supplied collection of Bricks global-class records."
+  @spec parse_global_class_records(term()) :: {:ok, map()} | {:error, [Diagnostic.t()]}
+  def parse_global_class_records(records) do
+    case parse_global_classes(records) do
+      {:ok, classes, _order} -> {:ok, classes}
+      {:error, diagnostics} -> {:error, diagnostics}
+    end
+  end
+
   defp copied_elements_envelope?(source) do
     Enum.any?(["source", "sourceUrl", "version", "content"], &Map.has_key?(source, &1))
   end

@@ -108,7 +108,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
            ),
          {:ok, tree, tree_diagnostics} <- TreeBuilder.build(component),
          :ok <- expected_root_count(tree, opts),
-         {:ok, resolved, class_diagnostics} <- ClassResolver.resolve(tree, document) do
+         {:ok, resolved, class_diagnostics} <-
+           ClassResolver.resolve(tree, document,
+             external_class_authorities: Keyword.get(opts, :external_class_authorities, [])
+           ) do
       dependencies = DependencyExtractor.extract(resolved, document, token_set: token_set)
 
       diagnostics =
