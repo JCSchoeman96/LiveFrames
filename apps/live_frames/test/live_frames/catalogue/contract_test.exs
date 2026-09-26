@@ -37,20 +37,7 @@ defmodule LiveFrames.Catalogue.ContractTest.PhoenixFixture do
   end
 end
 
-defmodule LiveFrames.Catalogue.ContractTest.RaisingEnumerable do
-  defstruct []
-end
-
-defimpl Enumerable, for: LiveFrames.Catalogue.ContractTest.RaisingEnumerable do
-  def reduce(_value, _accumulator, _function), do: raise("Enumerable.reduce/3 was invoked")
-  def count(_value), do: raise("Enumerable.count/1 was invoked")
-  def member?(_value, _member), do: raise("Enumerable.member?/2 was invoked")
-  def slice(_value), do: raise("Enumerable.slice/1 was invoked")
-end
-
 defmodule LiveFrames.Catalogue.ContractTest.ManualFixtures do
-  alias LiveFrames.Catalogue.ContractTest.RaisingEnumerable
-
   @base_component %{kind: :def, attrs: [], slots: [], line: 1}
 
   @base_attr %{
@@ -157,7 +144,7 @@ defmodule LiveFrames.Catalogue.ContractTest.ManualFixtures do
     },
     custom_values: %{
       @base_component
-      | attrs: [%{@base_attr | name: :choice, opts: [values: %RaisingEnumerable{}]}]
+      | attrs: [%{@base_attr | name: :choice, opts: [values: []]}]
     },
     improper_values: %{
       @base_component
@@ -238,7 +225,7 @@ defmodule LiveFrames.Catalogue.ContractTest.ManualFixtures do
     deterministic_failures: %{
       @base_component
       | attrs: [
-          %{@base_attr | name: :z_bad, opts: [values: %RaisingEnumerable{}]},
+          %{@base_attr | name: :z_bad, opts: [values: :unsupported]},
           %{@base_attr | name: :a_bad, opts: [default: Date.new!(2020, 1, 1)]}
         ]
     },
@@ -262,8 +249,21 @@ defmodule LiveFrames.Catalogue.ContractTest.ManualFixtures do
     def unquote(function)(assigns), do: assigns
   end
 
-  def __components__, do: @components
+  def __components__ do
+    Map.update!(@components, :custom_values, fn component ->
+      [attr] = component.attrs
+
+      %{component | attrs: [%{attr | opts: Keyword.put(attr.opts, :values, raising_stream())}]}
+    end)
+  end
+
   def __global__?(candidate), do: String.starts_with?(candidate, "x-")
+
+  defp raising_stream do
+    Stream.map([:sentinel], fn _ ->
+      raise "custom Enumerable was enumerated"
+    end)
+  end
 end
 
 defmodule LiveFrames.Catalogue.ContractTest do
@@ -396,6 +396,12 @@ defmodule LiveFrames.Catalogue.ContractTest do
   end
 
   test "rejects custom Enumerable values without invoking their callbacks" do
+    assert {:ok, %{component: %{attrs: [raw_attr]}}} =
+             Reflection.read(ManualFixtures, :custom_values)
+
+    values = Keyword.fetch!(raw_attr.opts, :values)
+    assert Enumerable.impl_for(values) != nil
+
     assert {:error, [diagnostic]} = Contract.normalize(ManualFixtures, :custom_values)
     assert diagnostic.code == "catalogue.contract.normalization.allowed_values_invalid"
     assert diagnostic.path == "$.attrs[0].constraints.allowed_values"
