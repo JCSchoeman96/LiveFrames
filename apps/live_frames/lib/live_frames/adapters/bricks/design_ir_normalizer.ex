@@ -505,13 +505,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp semantic_type(%Element{}, _static_semantics), do: "unsupported"
 
   defp apply_static_navigation(attributes, static_navigation, _static_semantics) do
-    attributes =
-      if static_navigation[:element_tag] do
-        Map.put(attributes, "tag", static_navigation[:element_tag])
-      else
-        attributes
-      end
-
     if static_navigation[:navigation] do
       Map.put(attributes, "navigation", static_navigation[:navigation])
     else

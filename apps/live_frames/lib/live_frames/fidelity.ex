@@ -212,10 +212,6 @@ defmodule LiveFrames.Fidelity do
   defp semantic_element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
   defp semantic_element(%{semantic_type: "paragraph"}), do: "p"
   defp semantic_element(%{semantic_type: "button"}), do: "button"
-
-  defp semantic_element(%{semantic_type: "link", attributes: %{"navigation" => _navigation}}),
-    do: "a"
-
   defp semantic_element(%{semantic_type: "link"}), do: "span"
   defp semantic_element(%{semantic_type: "image"}), do: "figure"
   defp semantic_element(%{semantic_type: "heading"}), do: "h2"
@@ -230,23 +226,31 @@ defmodule LiveFrames.Fidelity do
               {attrs, "a", []}
 
             {:error, reason} ->
-              {[], element,
-               [
-                 diagnostic(
-                   navigation_diagnostic_code(reason),
-                   navigation_diagnostic_message(reason),
-                   node,
-                   %{navigation: nav}
-                 )
-               ]}
+              {[], navigation_fallback_element(node),
+               navigation_rejection_diagnostics(node, nav, reason)}
           end
 
         _other ->
-          {[], element, []}
+          {[], navigation_fallback_element(node), []}
       end
     else
       {[], element, []}
     end
+  end
+
+  defp navigation_fallback_element(%{semantic_type: "link"}), do: "span"
+  defp navigation_fallback_element(%{semantic_type: "button"}), do: "button"
+  defp navigation_fallback_element(_node), do: "div"
+
+  defp navigation_rejection_diagnostics(node, nav, reason) do
+    [
+      diagnostic(
+        navigation_diagnostic_code(reason),
+        navigation_diagnostic_message(reason),
+        node,
+        %{navigation: nav}
+      )
+    ]
   end
 
   defp navigation_diagnostic_code(:unsafe), do: "fidelity.navigation.unsafe"

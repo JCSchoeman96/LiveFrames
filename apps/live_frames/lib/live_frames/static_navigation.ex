@@ -8,30 +8,31 @@ defmodule LiveFrames.StaticNavigation do
 
   @unsafe_scheme ~r/\A(?:javascript|data|vbscript):/i
   @dynamic_template ~r/\A\{[^}]+\}\z/
-  @http_url ~r/\Ahttps?:\/\/\S+\z/i
-  @site_path ~r/\A\/\S*\z/
+  @http_url ~r/\Ahttps?:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[^\s]*)?\z/i
+  @control_or_whitespace ~r/[\s\x00-\x1F\x7F]/
 
   @spec classify_destination(term()) :: :safe | :unsafe | :malformed | :dynamic
   def classify_destination(value) when is_binary(value) do
-    destination = String.trim(value)
-
     cond do
-      destination == "" ->
+      value != String.trim(value) ->
         :malformed
 
-      Regex.match?(@unsafe_scheme, destination) ->
+      value == "" ->
+        :malformed
+
+      Regex.match?(@unsafe_scheme, value) ->
         :unsafe
 
-      Regex.match?(@dynamic_template, destination) ->
+      Regex.match?(@dynamic_template, value) ->
         :dynamic
 
-      String.starts_with?(destination, "#") ->
+      safe_fragment?(value) ->
         :safe
 
-      Regex.match?(@site_path, destination) ->
+      safe_site_path?(value) ->
         :safe
 
-      Regex.match?(@http_url, destination) ->
+      Regex.match?(@http_url, value) ->
         :safe
 
       true ->
@@ -49,6 +50,7 @@ defmodule LiveFrames.StaticNavigation do
   Validates a normalized navigation map from Design IR before emission.
 
   Returns attribute tuples in deterministic order: `href`, then `target`, then `rel`.
+  The emitted `href` is exactly the validated source string (no rewriting).
   """
   @spec validate_navigation_map(map()) ::
           {:ok, [{String.t(), String.t()}]} | {:error, :missing | :unsafe | :malformed | :dynamic}
@@ -69,6 +71,22 @@ defmodule LiveFrames.StaticNavigation do
   end
 
   def validate_navigation_map(_nav), do: {:error, :missing}
+
+  defp safe_fragment?(<<"#">>), do: true
+
+  defp safe_fragment?(<<"#", _rest::binary>> = value) do
+    not Regex.match?(@control_or_whitespace, value)
+  end
+
+  defp safe_fragment?(_value), do: false
+
+  defp safe_site_path?(<<"/">>), do: true
+
+  defp safe_site_path?(<<"/", rest::binary>>) do
+    not String.starts_with?(rest, "/") and not Regex.match?(@control_or_whitespace, rest)
+  end
+
+  defp safe_site_path?(_value), do: false
 
   defp ordered_navigation_attrs(href, target) do
     attrs = [{"href", href}]

@@ -11,7 +11,6 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
   alias LiveFrames.StaticNavigation
 
   @type normalization :: %{
-          optional(:element_tag) => String.t(),
           optional(:semantic_type_override) => String.t(),
           optional(:navigation) => map(),
           diagnostics: [Diagnostic.t()],
@@ -33,41 +32,30 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
       false ->
         %{
           diagnostics: carrier_diagnostics(element),
-          trace_metadata: trace_metadata(element, :not_a_carrier, nil, nil)
+          trace_metadata: non_carrier_trace_metadata(element)
         }
 
       true ->
         case resolve_destination(element) do
-          {:ok, href, target} ->
+          {:ok, href, target, duplicate} when is_boolean(duplicate) ->
             navigation = build_navigation_map(href, target)
 
             %{
-              element_tag: "a",
-              semantic_type_override: semantic_type_override(element),
-              navigation: navigation,
-              diagnostics: [],
-              trace_metadata: trace_metadata(element, :accepted, navigation, nil)
-            }
-
-          {:duplicate, href} ->
-            navigation = build_navigation_map(href, nil)
-
-            %{
-              element_tag: "a",
               semantic_type_override: semantic_type_override(element),
               navigation: navigation,
               diagnostics: [],
               trace_metadata:
-                trace_metadata(element, :accepted_duplicate, navigation, %{
-                  "note" => "equivalent link evidence collapsed"
-                })
+                trace_metadata(
+                  element,
+                  if(duplicate, do: :accepted_duplicate, else: :accepted),
+                  navigation,
+                  if(duplicate, do: %{"note" => "equivalent link evidence collapsed"}, else: nil)
+                )
             }
 
           {:conflict, representations} ->
             %{
-              diagnostics: [
-                conflict_diagnostic(element, representations)
-              ],
+              diagnostics: [conflict_diagnostic(element, representations)],
               trace_metadata: trace_metadata(element, :conflict, nil, representations)
             }
 
@@ -105,6 +93,16 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
     end
   end
 
+  defp non_carrier_trace_metadata(%Element{name: "heading", settings: settings} = element) do
+    if link_object?(settings["link"]) do
+      trace_metadata(element, :unsupported_carrier, nil, settings["link"])
+    else
+      nil
+    end
+  end
+
+  defp non_carrier_trace_metadata(_element), do: nil
+
   defp carrier_diagnostics(%Element{id: source_id, name: name, settings: settings}) do
     if name == "heading" and link_object?(settings["link"]) do
       [
@@ -131,59 +129,49 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
     link_dest = destination_from_link(link_value)
     url_dest = destination_from_url(url_value)
 
-    cond do
-      link_dest == :dynamic or url_dest == :dynamic ->
+    case {link_dest, url_dest} do
+      {:dynamic, _} ->
         {:dynamic, %{"link" => link_value, "url" => url_value}}
 
-      link_dest == :mode_url and url_dest == :dynamic ->
+      {_, :dynamic} ->
         {:dynamic, %{"link" => link_value, "url" => url_value}}
 
-      tuple_destination?(link_dest) and tuple_destination?(url_dest) ->
-        compare_destinations(link_dest, url_dest)
+      {:mode_url, :dynamic} ->
+        {:dynamic, %{"link" => link_value, "url" => url_value}}
 
-      tuple_destination?(link_dest) ->
-        finalize_destination(link_dest)
+      {{:link_object, type, href}, {:settings_url, secondary}} ->
+        compare_destinations(type, href, secondary)
 
-      tuple_destination?(url_dest) ->
-        finalize_destination(url_dest)
+      {{:link_object, type, href}, _} ->
+        finalize_link_object(type, href, false)
 
-      true ->
+      _ ->
         :none
     end
   end
 
-  defp compare_destinations({:link_object, _type, href_a}, {:settings_url, href_b})
-       when href_a == href_b,
-       do: {:duplicate, href_a}
-
-  defp compare_destinations({:link_object, _type, href_a}, {:settings_url, href_b}),
-    do: {:conflict, %{"link" => href_a, "url" => href_b}}
-
-  defp tuple_destination?({:link_object, _, _}), do: true
-  defp tuple_destination?({:settings_url, _}), do: true
-  defp tuple_destination?(_), do: false
-
-  defp finalize_destination({:link_object, type, href}) do
-    cond do
-      not corpus_link_type?(type) ->
-        {:rejected, :unsupported_link_type, %{"type" => type, "url" => href}}
-
-      true ->
-        case StaticNavigation.classify_destination(href) do
-          :safe -> {:ok, href, nil}
-          :unsafe -> {:rejected, :unsafe_destination, href}
-          :dynamic -> {:dynamic, %{"url" => href}}
-          :malformed -> {:rejected, :malformed_destination, href}
-        end
+  defp compare_destinations(type, href_a, href_b) do
+    if not corpus_link_type?(type) do
+      {:rejected, :unsupported_link_type, %{"type" => type, "url" => href_a}}
+    else
+      if href_a == href_b do
+        finalize_link_object(type, href_a, true)
+      else
+        {:conflict, %{"link" => href_a, "url" => href_b}}
+      end
     end
   end
 
-  defp finalize_destination({:settings_url, href}) do
-    case StaticNavigation.classify_destination(href) do
-      :safe -> {:ok, href, nil}
-      :unsafe -> {:rejected, :unsafe_destination, href}
-      :dynamic -> {:dynamic, %{"url" => href}}
-      :malformed -> {:rejected, :malformed_destination, href}
+  defp finalize_link_object(type, href, duplicate?) do
+    if not corpus_link_type?(type) do
+      {:rejected, :unsupported_link_type, %{"type" => type, "url" => href}}
+    else
+      case StaticNavigation.classify_destination(href) do
+        :safe -> {:ok, href, nil, duplicate?}
+        :unsafe -> {:rejected, :unsafe_destination, href}
+        :dynamic -> {:dynamic, %{"url" => href}}
+        :malformed -> {:rejected, :malformed_destination, href}
+      end
     end
   end
 

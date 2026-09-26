@@ -329,7 +329,6 @@ defmodule LiveFrames.BricksStaticNavigationTest do
           semantic_type: "link",
           content: "Away",
           attributes: %{
-            "tag" => "a",
             "navigation" => %{"href" => "https://example.test/away", "target" => "_blank"}
           },
           source_trace: %SourceTrace{
@@ -378,7 +377,6 @@ defmodule LiveFrames.BricksStaticNavigationTest do
           semantic_type: "button",
           content: "Go",
           attributes: %{
-            "tag" => "a",
             "navigation" => %{"href" => "https://example.test/go", "target" => "_blank"}
           },
           source_trace: %SourceTrace{
@@ -461,6 +459,231 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     assert {:ok, bundle} = Fidelity.generate(document)
     assert bundle.heex =~ "synthetic-class"
     assert bundle.heex =~ ~s(href="/home")
+  end
+
+  test "protocol-relative destinations are rejected and never emitted" do
+    for href <- ["//example.test/path", " //example.test/path"] do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :malformed
+
+      assert {:ok, document} =
+               to_ir([
+                 source_element("root", "block", 0, %{}, ["nav"]),
+                 source_element("nav", "text-link", "root", %{
+                   "text" => "Bad",
+                   "link" => external_link(href)
+                 })
+               ])
+
+      refute node_by_source_id(document, "nav").attributes["navigation"]
+
+      assert {:ok, bundle} = Fidelity.generate(document)
+      refute bundle.heex =~ ~s(href="#{href}")
+      refute bundle.heex =~ "//example.test"
+    end
+  end
+
+  test "static settings.url alone does not authorize navigation" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["nav"]),
+               source_element("nav", "text-link", "root", %{
+                 "text" => "Home",
+                 "url" => "/home"
+               })
+             ])
+
+    node = node_by_source_id(document, "nav")
+    assert node.attributes["url"] == "/home"
+    refute node.attributes["navigation"]
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.missing"))
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ ~s(href="/home")
+    assert bundle.heex =~ "<span"
+  end
+
+  test "unsupported link type with matching settings.url is rejected not duplicated" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["btn"]),
+               source_element("btn", "button", "root", %{
+                 "text" => "Go",
+                 "link" => %{"type" => "internal", "url" => "/same"},
+                 "url" => "/same"
+               })
+             ])
+
+    refute node_by_source_id(document, "btn").attributes["navigation"]
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.rejected"))
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ ~s(href="/same")
+  end
+
+  test "heading with link object is unsupported carrier without href" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["title"]),
+               source_element("title", "heading", "root", %{
+                 "text" => "Title",
+                 "link" => external_link("#")
+               })
+             ])
+
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.unsupported_carrier"))
+    refute node_by_source_id(document, "title").attributes["navigation"]
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ ~s(href="#")
+  end
+
+  test "image link url mode does not become static navigation" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["logo"]),
+               source_element("logo", "image", "root", %{
+                 "link" => "url",
+                 "url" => %{"type" => "meta", "useDynamicData" => "{site_url}"}
+               })
+             ])
+
+    refute node_by_source_id(document, "logo").attributes["navigation"]
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ ~s(href=")
+  end
+
+  test "image lightbox link does not become static navigation" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["shot"]),
+               source_element("shot", "image", "root", %{
+                 "link" => "lightbox",
+                 "image" => %{"url" => "https://example.test/x.jpg"}
+               })
+             ])
+
+    refute node_by_source_id(document, "shot").attributes["navigation"]
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ "<a"
+  end
+
+  test "raw source tag a cannot bypass the navigation pipeline" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["nav"]),
+               source_element("nav", "text-link", "root", %{
+                 "text" => "Home",
+                 "tag" => "a",
+                 "link" => external_link("/home")
+               })
+             ])
+
+    node = node_by_source_id(document, "nav")
+    refute node.attributes["tag"] == "a"
+    assert node.attributes["navigation"]["href"] == "/home"
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.heex =~ ~s(href="/home")
+    assert bundle.heex =~ "<a"
+  end
+
+  test "accepted navigation does not store tag a in Design IR" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["btn"]),
+               source_element("btn", "button", "root", %{
+                 "text" => "Go",
+                 "link" => external_link("/go")
+               })
+             ])
+
+    node = node_by_source_id(document, "btn")
+    assert node.attributes["navigation"]["href"] == "/go"
+    refute node.attributes["tag"] == "a"
+  end
+
+  test "Fidelity rejects malicious navigation IR without emitting anchor markup" do
+    document = %DesignDocument{
+      ir_version: DesignDocument.current_ir_version(),
+      source_metadata: %{},
+      token_set: %{},
+      root_nodes: [
+        DesignNode.new([1],
+          semantic_type: "link",
+          content: "Bad",
+          attributes: %{
+            "tag" => "a",
+            "navigation" => %{"href" => "javascript:alert(1)"}
+          },
+          source_trace: %SourceTrace{
+            source_type: "synthetic",
+            source_id: "nav",
+            source_path: "synthetic",
+            source_name: "text-link",
+            adapter: "test",
+            adapter_version: "test",
+            inference: "test"
+          }
+        )
+      ],
+      assets: %{},
+      interactions: %{},
+      diagnostics: [],
+      provenance: %{}
+    }
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.heex =~ "<span"
+    refute bundle.heex =~ "<a"
+    refute bundle.heex =~ "javascript:"
+    assert bundle.manifest["diagnostic_counts"]["warning"] > 0
+  end
+
+  test "Fidelity falls back to button when button navigation revalidation fails" do
+    document = %DesignDocument{
+      ir_version: DesignDocument.current_ir_version(),
+      source_metadata: %{},
+      token_set: %{},
+      root_nodes: [
+        DesignNode.new([1],
+          semantic_type: "button",
+          content: "Go",
+          attributes: %{
+            "tag" => "a",
+            "navigation" => %{"href" => "data:text/html,bad"}
+          },
+          source_trace: %SourceTrace{
+            source_type: "synthetic",
+            source_id: "btn",
+            source_path: "synthetic",
+            source_name: "button",
+            adapter: "test",
+            adapter_version: "test",
+            inference: "test"
+          }
+        )
+      ],
+      assets: %{},
+      interactions: %{},
+      diagnostics: [],
+      provenance: %{}
+    }
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.heex =~ "<button"
+    assert bundle.heex =~ ~s(type="button")
+    refute bundle.heex =~ "<a"
+  end
+
+  test "ordinary elements do not receive static_navigation provenance metadata" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["box"]),
+               source_element("box", "div", "root", %{})
+             ])
+
+    node = node_by_source_id(document, "box")
+    refute get_in(node.source_trace.metadata, ["static_navigation"])
   end
 
   test "Design IR version remains 1.0.0" do

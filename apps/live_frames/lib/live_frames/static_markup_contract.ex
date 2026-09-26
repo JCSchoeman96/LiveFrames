@@ -7,7 +7,6 @@ defmodule LiveFrames.StaticMarkupContract do
   """
 
   @native_tags ~w(
-    a
     button
     details
     div
