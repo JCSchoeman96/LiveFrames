@@ -39,6 +39,38 @@ defmodule LiveFrames.BricksDesignIRTest do
     token_set
   end
 
+  defp synthetic_copied_elements_source do
+    %{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/export.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "label" => "Synthetic"}],
+      "components" => [
+        %{
+          "id" => "component-a",
+          "elements" => [
+            %{
+              "id" => "root",
+              "name" => "div",
+              "parent" => 0,
+              "settings" => %{"_cssGlobalClasses" => ["opaque-class-id"]}
+            }
+          ]
+        }
+      ],
+      "globalClasses" => []
+    }
+  end
+
+  defp synthetic_external_class_authority do
+    %{
+      id: "synthetic-site-classes",
+      global_classes: [
+        %{"id" => "opaque-class-id", "name" => "synthetic-class", "settings" => %{}}
+      ]
+    }
+  end
+
   defp document do
     assert {:ok, document} =
              Bricks.to_ir(@fixture_path,
@@ -101,6 +133,29 @@ defmodule LiveFrames.BricksDesignIRTest do
                "3f6ee6",
                "8ae908"
              ]
+  end
+
+  test "normalizes an external class authority through the existing Design IR provenance" do
+    source = synthetic_copied_elements_source()
+
+    assert {:ok, document} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set(),
+               external_class_authorities: [synthetic_external_class_authority()]
+             )
+
+    assert IR.validate(document) == :ok
+    refute Enum.any?(document.diagnostics, &(&1.code == "bricks.class.unresolved_external"))
+    assert node_by_source_id(document, "root").source_trace.source_classes == ["synthetic-class"]
+
+    assert [class_dependency] =
+             document.provenance["dependency_summary"]["class_dependencies"]
+
+    assert class_dependency["class_id"] == "opaque-class-id"
+    assert class_dependency["name"] == "synthetic-class"
+    assert class_dependency["resolution_status"] == "external_resolved"
+    assert class_dependency["authority_ids"] == ["synthetic-site-classes"]
   end
 
   test "retains source content, classes, settings, and ten source traces" do

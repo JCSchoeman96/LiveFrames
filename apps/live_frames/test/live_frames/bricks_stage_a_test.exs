@@ -29,6 +29,73 @@ defmodule LiveFrames.BricksStageATest do
     token_set
   end
 
+  defp fragment_source do
+    %{
+      "components" => [
+        %{
+          "id" => "component-a",
+          "elements" => [
+            %{
+              "id" => "root",
+              "name" => "div",
+              "parent" => 0,
+              "settings" => %{"_cssGlobalClasses" => ["opaque-class-id"]}
+            }
+          ]
+        }
+      ],
+      "globalClasses" => []
+    }
+  end
+
+  defp copied_elements_source do
+    fragment_source()
+    |> Map.merge(%{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/export.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "label" => "Synthetic"}]
+    })
+  end
+
+  defp external_class_authority do
+    %{
+      id: "synthetic-site-classes",
+      global_classes: [
+        %{"id" => "opaque-class-id", "name" => "synthetic-class", "settings" => %{}}
+      ]
+    }
+  end
+
+  test "rejects component fragments at the Stage A source boundary" do
+    assert {:error, [diagnostic]} =
+             StageA.generate(fragment_source(), component_id: "component-a")
+
+    assert diagnostic.code == "bricks.source.fragment_stage_a_unsupported"
+    assert diagnostic.severity == :error
+    refute diagnostic.code == "bricks.stage_a.failed"
+  end
+
+  test "generates Stage A artifacts and external class provenance from a copied-elements source" do
+    assert {:ok, result} =
+             StageA.generate(copied_elements_source(),
+               component_id: "component-a",
+               external_class_authorities: [external_class_authority()]
+             )
+
+    assert result.status == :completed
+    assert result.artifacts["index.html"] =~ "synthetic-class"
+    refute result.artifacts["index.html"] =~ "opaque-class-id"
+    refute result.artifacts["index.html"] =~ "bricks-source-class"
+
+    assert [class_dependency] = result.report["classes"]["applied"]
+    assert class_dependency["class_id"] == "opaque-class-id"
+    assert class_dependency["name"] == "synthetic-class"
+    assert class_dependency["resolution_status"] == "external_resolved"
+    assert class_dependency["authority_ids"] == ["synthetic-site-classes"]
+    assert Jason.decode!(result.artifacts["report.json"]) == result.report
+  end
+
   test "resolves applied global classes and ACSS names" do
     {:ok, source, _} = Bricks.from_file(fixture_path())
     {:ok, _proxy, component, _} = Bricks.resolve(source, component_id: "sqhmmc")

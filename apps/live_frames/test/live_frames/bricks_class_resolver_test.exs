@@ -38,6 +38,16 @@ defmodule LiveFrames.BricksClassResolverTest do
     }
   end
 
+  defp copied_elements_source(references) do
+    source(references)
+    |> Map.merge(%{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/export.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "label" => "Synthetic"}]
+    })
+  end
+
   defp resolve_classes(
          references,
          local_classes \\ [],
@@ -167,7 +177,7 @@ defmodule LiveFrames.BricksClassResolverTest do
     assert diagnostic.severity == :error
     assert diagnostic.metadata["class_id"] == "class-a"
 
-    {:ok, document, []} = Bricks.recognize(source(["class-a"]))
+    {:ok, document, []} = Bricks.recognize(copied_elements_source(["class-a"]))
 
     assert {:error, [stage_a_diagnostic]} =
              StageA.generate(document,
