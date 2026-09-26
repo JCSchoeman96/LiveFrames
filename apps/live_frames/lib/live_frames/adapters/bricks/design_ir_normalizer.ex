@@ -101,6 +101,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   def normalize(source, opts) when is_list(opts) do
     with {:ok, token_set} <- validate_token_set(Keyword.get(opts, :token_set)),
          {:ok, document, load_diagnostics} <- load_source(source, opts),
+         :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
            Resolver.resolve(document,
              component_id: Keyword.get(opts, :component_id, @default_component_id)
@@ -207,6 +208,20 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
        )
      ]}
   end
+
+  defp validate_source_shape(%Document{source_shape: :component_fragment}) do
+    {:error,
+     [
+       BricksDiagnostic.new(
+         code: "bricks.source.fragment_conversion_unsupported",
+         severity: :error,
+         source_path: "components",
+         message: "Bricks component fragments are not supported for Design IR normalization"
+       )
+     ]}
+  end
+
+  defp validate_source_shape(_document), do: :ok
 
   defp expected_root_count(tree, opts) do
     expected = Keyword.get(opts, :expected_root_count, 1)

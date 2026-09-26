@@ -67,36 +67,133 @@ defmodule LiveFrames.Adapters.Bricks.Loader do
   def recognize(source, opts \\ [])
 
   def recognize(source, opts) when is_map(source) do
-    with {:ok, envelope, diagnostics} <- validate_envelope(source, opts),
-         {:ok, proxies, proxy_order} <- parse_proxies(Map.get(source, "content")),
-         {:ok, components, component_order} <- parse_components(Map.get(source, "components")),
-         {:ok, classes, class_order} <- parse_global_classes(Map.get(source, "globalClasses")) do
-      bytes = Keyword.get(opts, :source_bytes, Jason.encode!(source))
+    cond do
+      copied_elements_envelope?(source) ->
+        recognize_copied_elements_envelope(source, opts)
 
-      document = %Document{
-        source: envelope.source,
-        source_url: envelope.source_url,
-        payload_version: envelope.payload_version,
-        adapter_version: Document.adapter_version(),
-        source_label: Keyword.get(opts, :source_label, "inline"),
-        source_hash: hash(bytes),
-        content_proxies: proxies,
-        content_proxy_order: proxy_order,
-        components: components,
-        component_order: component_order,
-        global_classes: classes,
-        global_class_order: class_order,
-        raw: source
-      }
+      component_fragment_candidate?(source) ->
+        recognize_component_fragment(source, opts)
 
-      {:ok, document, diagnostics}
-    else
-      {:error, diagnostics} -> {:error, sort_diagnostics(diagnostics)}
+      true ->
+        recognize_copied_elements_envelope(source, opts)
     end
   end
 
   def recognize(_source, _opts),
     do: {:error, [diagnostic("bricks.source.invalid", "Bricks source must be a JSON object")]}
+
+  defp copied_elements_envelope?(source) do
+    Enum.any?(["source", "sourceUrl", "version", "content"], &Map.has_key?(source, &1))
+  end
+
+  defp component_fragment_candidate?(source) do
+    Map.has_key?(source, "components") or Map.has_key?(source, "globalClasses")
+  end
+
+  defp recognize_copied_elements_envelope(source, opts) do
+    with {:ok, envelope, diagnostics} <- validate_envelope(source, opts),
+         {:ok, proxies, proxy_order} <- parse_proxies(Map.get(source, "content")),
+         {:ok, components, component_order} <- parse_components(Map.get(source, "components")),
+         {:ok, classes, class_order} <- parse_global_classes(Map.get(source, "globalClasses")) do
+      build_document(
+        source,
+        opts,
+        :copied_elements_envelope,
+        envelope,
+        proxies,
+        proxy_order,
+        components,
+        component_order,
+        classes,
+        class_order,
+        diagnostics
+      )
+    else
+      {:error, diagnostics} -> {:error, sort_diagnostics(diagnostics)}
+    end
+  end
+
+  defp recognize_component_fragment(source, opts) do
+    with :ok <- validate_component_fragment(source),
+         {:ok, components, component_order} <- parse_components(Map.get(source, "components")),
+         {:ok, classes, class_order} <- parse_global_classes(Map.get(source, "globalClasses")) do
+      build_document(
+        source,
+        opts,
+        :component_fragment,
+        %{},
+        %{},
+        [],
+        components,
+        component_order,
+        classes,
+        class_order,
+        []
+      )
+    else
+      {:error, diagnostics} -> {:error, sort_diagnostics(diagnostics)}
+    end
+  end
+
+  defp validate_component_fragment(source) do
+    invalid =
+      Enum.flat_map(
+        [
+          {"components", "component collection"},
+          {"globalClasses", "global class collection"}
+        ],
+        fn {key, label} ->
+          if is_list(Map.get(source, key)) do
+            []
+          else
+            [
+              diagnostic(
+                "bricks.fragment.invalid",
+                "Bricks fragment #{label} has an invalid shape",
+                source_path: key
+              )
+            ]
+          end
+        end
+      )
+
+    if invalid == [], do: :ok, else: {:error, invalid}
+  end
+
+  defp build_document(
+         source,
+         opts,
+         source_shape,
+         source_metadata,
+         proxies,
+         proxy_order,
+         components,
+         component_order,
+         classes,
+         class_order,
+         diagnostics
+       ) do
+    bytes = Keyword.get(opts, :source_bytes, Jason.encode!(source))
+
+    document = %Document{
+      source_shape: source_shape,
+      source: Map.get(source_metadata, :source),
+      source_url: Map.get(source_metadata, :source_url),
+      payload_version: Map.get(source_metadata, :payload_version),
+      adapter_version: Document.adapter_version(),
+      source_label: Keyword.get(opts, :source_label, "inline"),
+      source_hash: hash(bytes),
+      content_proxies: proxies,
+      content_proxy_order: proxy_order,
+      components: components,
+      component_order: component_order,
+      global_classes: classes,
+      global_class_order: class_order,
+      raw: source
+    }
+
+    {:ok, document, diagnostics}
+  end
 
   defp validate_envelope(source, opts) do
     fields = [

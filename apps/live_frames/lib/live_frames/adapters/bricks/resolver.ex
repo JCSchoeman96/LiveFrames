@@ -11,6 +11,18 @@ defmodule LiveFrames.Adapters.Bricks.Resolver do
           {:ok, term(), term(), [Diagnostic.t()]} | {:error, [Diagnostic.t()]}
   def resolve(document, opts \\ [])
 
+  def resolve(%Document{source_shape: :component_fragment} = document, opts) do
+    component_id = option(opts, :component_id)
+
+    with {:ok, component} <- select_fragment_component(document, component_id),
+         :ok <- validate_component(component) do
+      {:ok, nil, component, []}
+    else
+      {:error, diagnostics} when is_list(diagnostics) -> {:error, diagnostics}
+      {:error, diagnostic} -> {:error, [diagnostic]}
+    end
+  end
+
   def resolve(%Document{} = document, opts) do
     component_id = option(opts, :component_id)
     proxies = ordered_proxies(document)
@@ -27,6 +39,51 @@ defmodule LiveFrames.Adapters.Bricks.Resolver do
 
   def resolve(_document, _opts),
     do: {:error, [diagnostic("bricks.source.invalid", "Cannot resolve a non-Bricks document")]}
+
+  defp select_fragment_component(document, component_id) when is_binary(component_id) do
+    fetch_fragment_component(document, component_id)
+  end
+
+  defp select_fragment_component(document, nil) do
+    case ordered_component_ids(document) do
+      [component_id] ->
+        fetch_fragment_component(document, component_id)
+
+      [] ->
+        {:error, diagnostic("bricks.component.missing", "No component was found in the fragment")}
+
+      _component_ids ->
+        {:error,
+         diagnostic(
+           "bricks.component.ambiguous",
+           "Multiple fragment components require explicit selection"
+         )}
+    end
+  end
+
+  defp select_fragment_component(_document, _component_id),
+    do:
+      {:error, diagnostic("bricks.component.missing", "Requested component ID must be a string")}
+
+  defp fetch_fragment_component(document, component_id) do
+    case Map.fetch(document.components, component_id) do
+      {:ok, component} ->
+        {:ok, component}
+
+      :error ->
+        {:error,
+         diagnostic("bricks.component.missing", "Requested fragment component was not found",
+           source_id: component_id
+         )}
+    end
+  end
+
+  defp ordered_component_ids(document) do
+    case Map.get(document, :component_order, []) do
+      [] -> document.components |> Map.keys() |> Enum.sort()
+      ids -> ids
+    end
+  end
 
   defp ordered_proxies(document) do
     order = Map.get(document, :content_proxy_order, [])
