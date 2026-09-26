@@ -1,5 +1,5 @@
 defmodule LiveFrames.AutomaticCSSAdapterTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
@@ -348,9 +348,12 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   end
 
   test "normalization and serialization are deterministic and do not create atoms from source keys" do
-    settings = Map.put(minimal_settings(), "arbitrary-untrusted-key-9931", "value")
+    settings = Map.put(minimal_settings(), "measured-untrusted-key-9931", "value")
     reversed = Map.new(Enum.reverse(Map.to_list(settings)))
-    _ = AutomaticCSS.normalize(minimal_settings())
+
+    warmup_settings = Map.put(minimal_settings(), "warmup-untrusted-key-9930", "value")
+    assert {:ok, _warmup_tokens, _warmup_diagnostics} = AutomaticCSS.normalize(warmup_settings)
+
     atom_count_before = :erlang.system_info(:atom_count)
 
     assert {:ok, first, first_diagnostics} = AutomaticCSS.normalize(settings)
