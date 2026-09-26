@@ -201,7 +201,7 @@ defmodule LiveFrames.Catalogue.Contract.Reflection do
     if module_style_atom?(module), do: :ok, else: attr_error(path)
   end
 
-  defp validate_attr_type({:fun, arity}, _path) when is_integer(arity), do: :ok
+  defp validate_attr_type({:fun, arity}, _path) when is_integer(arity) and arity >= 0, do: :ok
 
   defp validate_attr_type(_type, path), do: attr_error(path)
 
@@ -481,8 +481,13 @@ defmodule LiveFrames.Catalogue.Contract.Reflection do
 
   defp valid_cardinality?(_value), do: false
 
-  defp slot_cardinality_path(key) when is_binary(key),
-    do: "$.metadata.slot_cardinality.#{key}"
+  defp slot_cardinality_path(key) when is_binary(key) do
+    if String.valid?(key) do
+      "$.metadata.slot_cardinality.#{key}"
+    else
+      "$.metadata.slot_cardinality"
+    end
+  end
 
   defp slot_cardinality_path(_key), do: "$.metadata.slot_cardinality"
 

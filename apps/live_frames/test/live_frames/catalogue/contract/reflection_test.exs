@@ -72,6 +72,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     :attr_unknown_type,
     :attr_invalid_struct_type,
     :attr_invalid_fun_arity,
+    :attr_negative_fun_arity,
     :attr_unknown_option,
     :slot_extra_key,
     :slot_option,
@@ -90,6 +91,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     :prefix_unsorted,
     :prefix_duplicate,
     :cardinality_unknown_slot,
+    :cardinality_invalid_utf8_key,
     :cardinality_invalid_tuple,
     :cardinality_negative_min,
     :cardinality_max_below_min
@@ -121,6 +123,8 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
               prefix_duplicate: %{@empty_metadata | global_prefixes: ["a-", "a-"]},
               cardinality_unknown_slot:
                 Map.put(@empty_metadata, :slot_cardinality, %{"missing" => {0, 1}}),
+              cardinality_invalid_utf8_key:
+                Map.put(@empty_metadata, :slot_cardinality, %{<<0xFF>> => {0, 1}}),
               cardinality_unbounded:
                 Map.put(@empty_metadata, :slot_cardinality, %{"actions" => {0, nil}}),
               cardinality_invalid_tuple:
@@ -174,6 +178,10 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
       @base_component
       | attrs: [%{@base_attr | type: {:fun, :two}}]
     },
+    attr_negative_fun_arity: %{
+      @base_component
+      | attrs: [%{@base_attr | type: {:fun, -1}}]
+    },
     attr_unknown_option: %{
       @base_component
       | attrs: [%{@base_attr | opts: [unknown: true]}]
@@ -207,6 +215,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     prefix_unsorted: @base_component,
     prefix_duplicate: @base_component,
     cardinality_unknown_slot: @base_component,
+    cardinality_invalid_utf8_key: @base_component,
     cardinality_unbounded: @base_component,
     cardinality_invalid_tuple: @base_component,
     cardinality_negative_min: @base_component,
@@ -464,6 +473,8 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
            "$.component.attrs[0].type"},
           {:attr_invalid_fun_arity, "catalogue.contract.reflection.attr_invalid",
            "$.component.attrs[0].type"},
+          {:attr_negative_fun_arity, "catalogue.contract.reflection.attr_invalid",
+           "$.component.attrs[0].type"},
           {:attr_unknown_option, "catalogue.contract.reflection.attr_invalid",
            "$.component.attrs[0].opts"},
           {:slot_extra_key, "catalogue.contract.reflection.slot_invalid", "$.component.slots[0]"},
@@ -569,6 +580,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
 
     for function <- [
           :cardinality_unknown_slot,
+          :cardinality_invalid_utf8_key,
           :cardinality_invalid_tuple,
           :cardinality_negative_min,
           :cardinality_max_below_min
@@ -578,7 +590,11 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
         "catalogue.contract.reflection.metadata_invalid",
         if(function == :cardinality_unknown_slot,
           do: "$.metadata.slot_cardinality.missing",
-          else: "$.metadata.slot_cardinality.actions"
+          else:
+            if(function == :cardinality_invalid_utf8_key,
+              do: "$.metadata.slot_cardinality",
+              else: "$.metadata.slot_cardinality.actions"
+            )
         )
       )
     end
