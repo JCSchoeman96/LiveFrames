@@ -72,7 +72,6 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     :attr_unknown_type,
     :attr_invalid_struct_type,
     :attr_invalid_fun_arity,
-    :attr_negative_fun_arity,
     :attr_unknown_option,
     :slot_extra_key,
     :slot_option,
@@ -147,7 +146,8 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     {:fun_value, :fun},
     {:global_value, :global},
     {:struct_value, {:struct, Date}},
-    {:function_arity_value, {:fun, 2}}
+    {:function_arity_value, {:fun, 2}},
+    {:negative_function_arity_value, {:fun, -1}}
   ]
 
   @recognized_type_attrs (for {name, type} <- @recognized_type_pairs do
@@ -177,10 +177,6 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.ManualFixtures do
     attr_invalid_fun_arity: %{
       @base_component
       | attrs: [%{@base_attr | type: {:fun, :two}}]
-    },
-    attr_negative_fun_arity: %{
-      @base_component
-      | attrs: [%{@base_attr | type: {:fun, -1}}]
     },
     attr_unknown_option: %{
       @base_component
@@ -319,7 +315,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest.MultipleMetadata do
 end
 
 defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias LiveFrames.Catalogue.Contract.Reflection
   alias LiveFrames.Catalogue.Contract.ReflectionTest.GlobalCandidateFixtures
@@ -413,7 +409,8 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
              :fun,
              :global,
              {:struct, Date},
-             {:fun, 2}
+             {:fun, 2},
+             {:fun, -1}
            ]
 
     assert metadata == %{capabilities: [], css_theme_contract: [], global_prefixes: []}
@@ -472,8 +469,6 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
           {:attr_invalid_struct_type, "catalogue.contract.reflection.attr_invalid",
            "$.component.attrs[0].type"},
           {:attr_invalid_fun_arity, "catalogue.contract.reflection.attr_invalid",
-           "$.component.attrs[0].type"},
-          {:attr_negative_fun_arity, "catalogue.contract.reflection.attr_invalid",
            "$.component.attrs[0].type"},
           {:attr_unknown_option, "catalogue.contract.reflection.attr_invalid",
            "$.component.attrs[0].opts"},
