@@ -136,9 +136,6 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
       {_, :dynamic} ->
         {:dynamic, %{"link" => link_value, "url" => url_value}}
 
-      {:mode_url, :dynamic} ->
-        {:dynamic, %{"link" => link_value, "url" => url_value}}
-
       {{:link_object, type, href}, {:settings_url, secondary}} ->
         compare_destinations(type, href, secondary)
 

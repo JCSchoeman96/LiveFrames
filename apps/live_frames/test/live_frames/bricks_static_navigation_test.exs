@@ -482,6 +482,78 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     end
   end
 
+  test "rejects reverse solidus in site and http destinations" do
+    malformed = [
+      "/\\evil.example/path",
+      "/foo\\bar",
+      "https://example.test/\\evil",
+      "https://example.test/foo\\bar"
+    ]
+
+    for href <- malformed do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :malformed
+
+      assert {:ok, document} =
+               to_ir([
+                 source_element("root", "block", 0, %{}, ["nav"]),
+                 source_element("nav", "text-link", "root", %{
+                   "text" => "Bad",
+                   "link" => external_link(href)
+                 })
+               ])
+
+      refute node_by_source_id(document, "nav").attributes["navigation"]
+      assert {:ok, bundle} = Fidelity.generate(document)
+      refute bundle.heex =~ "<a"
+    end
+  end
+
+  test "accepts legitimate site paths and fragments" do
+    for href <- ["/", "/home", "/foo/bar", "/foo//bar", "#", "#fragment"] do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :safe
+    end
+
+    assert LiveFrames.StaticNavigation.classify_destination("/template/slide-navigation-alpha/") ==
+             :safe
+  end
+
+  test "rejects malformed http hosts" do
+    for href <- [
+          "https://.",
+          "https://-",
+          "https://example..com/",
+          "https://-example.com/",
+          "https://example-.com/",
+          "https://999.999.999.999/"
+        ] do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :malformed
+    end
+  end
+
+  test "accepts bounded http hosts and paths" do
+    for href <- [
+          "https://example.test/",
+          "http://example.test/path",
+          "https://sub.example.test/path"
+        ] do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :safe
+    end
+
+    assert LiveFrames.StaticNavigation.classify_destination("https://example.test/safe") == :safe
+  end
+
+  test "validates http port range without rewriting" do
+    assert LiveFrames.StaticNavigation.classify_destination("https://example.test:443/path") ==
+             :safe
+
+    assert LiveFrames.StaticNavigation.classify_destination("https://example.test:65535/path") ==
+             :safe
+
+    for href <- ["https://example.test:65536/path", "https://example.test:99999/path"] do
+      assert LiveFrames.StaticNavigation.classify_destination(href) == :malformed
+    end
+  end
+
   test "static settings.url alone does not authorize navigation" do
     assert {:ok, document} =
              to_ir([

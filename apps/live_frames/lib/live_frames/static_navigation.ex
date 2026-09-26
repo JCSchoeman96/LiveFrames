@@ -8,8 +8,10 @@ defmodule LiveFrames.StaticNavigation do
 
   @unsafe_scheme ~r/\A(?:javascript|data|vbscript):/i
   @dynamic_template ~r/\A\{[^}]+\}\z/
-  @http_url ~r/\Ahttps?:\/\/[a-zA-Z0-9.-]+(?::\d+)?(?:\/[^\s]*)?\z/i
   @control_or_whitespace ~r/[\s\x00-\x1F\x7F]/
+  @dns_label ~r/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/
+  @max_dns_name_length 253
+  @max_dns_label_length 63
 
   @spec classify_destination(term()) :: :safe | :unsafe | :malformed | :dynamic
   def classify_destination(value) when is_binary(value) do
@@ -32,7 +34,7 @@ defmodule LiveFrames.StaticNavigation do
       safe_site_path?(value) ->
         :safe
 
-      Regex.match?(@http_url, value) ->
+      safe_http_url?(value) ->
         :safe
 
       true ->
@@ -75,7 +77,7 @@ defmodule LiveFrames.StaticNavigation do
   defp safe_fragment?(<<"#">>), do: true
 
   defp safe_fragment?(<<"#", _rest::binary>> = value) do
-    not Regex.match?(@control_or_whitespace, value)
+    not String.contains?(value, "\\") and not Regex.match?(@control_or_whitespace, value)
   end
 
   defp safe_fragment?(_value), do: false
@@ -83,10 +85,109 @@ defmodule LiveFrames.StaticNavigation do
   defp safe_site_path?(<<"/">>), do: true
 
   defp safe_site_path?(<<"/", rest::binary>>) do
-    not String.starts_with?(rest, "/") and not Regex.match?(@control_or_whitespace, rest)
+    not String.starts_with?(rest, "/") and
+      not String.contains?(rest, "\\") and
+      not Regex.match?(@control_or_whitespace, rest)
   end
 
   defp safe_site_path?(_value), do: false
+
+  defp safe_http_url?(value) do
+    case Regex.run(~r/\Ahttps?:\/\/(.+)\z/i, value, capture: :all_but_first) do
+      [remainder] ->
+        not String.contains?(value, "\\") and
+          not Regex.match?(@control_or_whitespace, value) and
+          case split_http_remainder(remainder) do
+            {:ok, host, port, path_suffix} ->
+              valid_port?(port) and valid_ascii_host?(host) and
+                valid_http_path_suffix?(path_suffix)
+
+            :error ->
+              false
+          end
+
+      _ ->
+        false
+    end
+  end
+
+  defp split_http_remainder(remainder) do
+    case String.split(remainder, "/", parts: 2) do
+      [authority] ->
+        parse_authority(authority, "")
+
+      [authority, path] ->
+        parse_authority(authority, "/" <> path)
+    end
+  end
+
+  defp parse_authority(authority, path_suffix) do
+    cond do
+      authority == "" or String.contains?(authority, "@") ->
+        :error
+
+      true ->
+        case String.split(authority, ":", parts: 2) do
+          [host] ->
+            {:ok, host, nil, path_suffix}
+
+          [host, port] ->
+            if host != "" and port_digits_only?(port) do
+              {:ok, host, port, path_suffix}
+            else
+              :error
+            end
+
+          _ ->
+            :error
+        end
+    end
+  end
+
+  defp valid_http_path_suffix?(path_suffix) do
+    path_suffix == "" or
+      (String.starts_with?(path_suffix, "/") and
+         not Regex.match?(@control_or_whitespace, path_suffix))
+  end
+
+  defp port_digits_only?(port), do: Regex.match?(~r/^\d+$/, port)
+
+  defp valid_port?(nil), do: true
+
+  defp valid_port?(port) when is_binary(port) do
+    case Integer.parse(port) do
+      {value, ""} when value >= 0 and value <= 65_535 -> true
+      _ -> false
+    end
+  end
+
+  defp valid_ascii_host?(host) do
+    host != "" and byte_size(host) <= @max_dns_name_length and
+      if ipv4_host?(host), do: valid_ipv4_host?(host), else: valid_dns_host?(host)
+  end
+
+  defp ipv4_host?(host), do: Regex.match?(~r/^(\d{1,3}\.){3}\d{1,3}$/, host)
+
+  defp valid_ipv4_host?(host) do
+    host
+    |> String.split(".")
+    |> Enum.all?(fn octet ->
+      case Integer.parse(octet) do
+        {value, ""} when value >= 0 and value <= 255 -> true
+        _ -> false
+      end
+    end)
+  end
+
+  defp valid_dns_host?(host) do
+    labels = String.split(host, ".")
+
+    labels != [] and
+      Enum.all?(labels, fn label ->
+        byte_size(label) >= 1 and byte_size(label) <= @max_dns_label_length and
+          Regex.match?(@dns_label, label)
+      end)
+  end
 
   defp ordered_navigation_attrs(href, target) do
     attrs = [{"href", href}]
