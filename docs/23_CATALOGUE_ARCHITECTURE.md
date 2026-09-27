@@ -158,7 +158,7 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | contract.fingerprint_algorithm, contract.fingerprint | Versioned fingerprint of the normalized public contract. |
 | `storybook.module`, optional `storybook.variation_ids` | Required inert JSON string naming the PhoenixStorybook module for the production component's story, plus an optional JSON array of additional variation IDs deliberately referenced as evidence. The exact wire contract is in §9. No second story identifier is required. |
 | docs | Required JSON object containing structured references to item documentation. The exact nested reference schema is not defined by #40. |
-| provenance | Required JSON object containing structured source-group, authority, and evidence references. The exact nested reference schema is not defined by #40. This area must not duplicate or infer mutable provenance/publication status from docs/04. |
+| provenance | Required JSON object containing structured source-group, authority, and evidence references. The dedicated #45 contract is defined in §10. The general Schema.V1 decoder checks only that this value is a JSON object; it does not enforce the nested #45 reference shape. This area must not duplicate or infer mutable provenance/publication status from docs/04. |
 | distribution.library, distribution.generator, distribution.ejection | Independent capability declarations with evidence references for any capability marked supported. |
 | release.version | Proposed or current CatalogueItem SemVer, governed by docs/24. |
 | Optional package linkage | Observational fields such as introduced_in_package or last_changed_in_package. These do not define CatalogueItem version. |
@@ -169,9 +169,11 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 **Owner approval (#40 schema clarification, 2026-09-23):** v1 requires both
 `docs` and `provenance` to be JSON objects. They may contain arrays or other
 JSON-compatible values inside those objects where later approved reference
-schemas require them. An empty object is structurally valid at the #40 schema
-layer; later lifecycle/evidence validation determines whether sufficient
-references exist for a target state. #40 must not invent nested keys or infer
+schemas require them. An empty object is structurally valid at the #40
+Schema.V1 layer. That decoder does not enforce the nested provenance rules in
+§10; the dedicated #45 validator owns those checks. Later lifecycle/evidence
+validation determines whether sufficient references exist for a target
+state. The schema layer must not invent nested keys or infer
 provenance/publication status.
 
 The manifest stores current state, the last transition, and the evidence references required for that state. It does not contain a large append-only event history. Git history is the durable transition history.
@@ -227,8 +229,8 @@ State changes occur only through explicit transition actions and guards. An arbi
 | validate | DRAFT → VALIDATED | State-dependent requirements in §7 pass, including a valid Storybook module reference, production-component target, canonical/default variation, and renderable default evidence. |
 | review | VALIDATED → REVIEWED | Independent review evidence identifies the reviewed item and contract. |
 | approve | REVIEWED → APPROVED | Owner approval evidence exists. Approval is not publication or redistribution clearance. |
-| release | APPROVED → RELEASED | Valid SemVer, current fingerprint, validated capability claims, and explicit human-governed publication/redistribution clearance evidence exist. |
-| publish_new_version | RELEASED → RELEASED | New SemVer is greater than the current version; the bump matches the compatibility classification; current fingerprint, capability evidence, and required clearance evidence pass. |
+| release | APPROVED → RELEASED | Valid SemVer, current fingerprint, validated capability claims, and the human-governed provenance release-clearance predicate in §10 pass. |
+| publish_new_version | RELEASED → RELEASED | New SemVer is greater than the current version; the bump matches the compatibility classification; current fingerprint, capability evidence, and provenance release clearance under §10 pass. |
 | deprecate | RELEASED → DEPRECATED | Rationale exists; superseded_by is set when a replacement exists. |
 | retire | DEPRECATED → RETIRED | Explicit owner-authorized retirement evidence exists. |
 | withdraw | DRAFT or VALIDATED or REVIEWED or APPROVED → WITHDRAWN | Explicit owner-authorized withdrawal action and rationale exist. |
@@ -306,7 +308,7 @@ Validation requirements become stricter as an item advances. Release-only fields
 | VALIDATED | All references resolve; ID, kind, derived slug, and canonical path agree; schema version is supported; normalized contract fingerprint matches current production contract; the Storybook module resolves to the caller-supplied production target, its exact `default` variation exists and renders, and every explicitly referenced variation ID exists. See §9 for the Storybook evidence contract. |
 | REVIEWED | Independent review evidence exists and identifies the item and reviewed contract. |
 | APPROVED | Owner approval evidence exists and records approval for eventual Catalogue release. |
-| RELEASED | Valid CatalogueItem SemVer; current fingerprint; evidence for every capability marked supported; explicit human-governed publication/redistribution clearance. Unknown clearance is insufficient. |
+| RELEASED | Valid CatalogueItem SemVer; current fingerprint; evidence for every capability marked supported; the human-governed provenance release-clearance predicate in §10. Unknown clearance is insufficient. |
 | DEPRECATED | Whole-item deprecation rationale; superseded_by when a replacement exists. |
 | RETIRED | Retirement evidence and preserved historical identity. |
 | WITHDRAWN | Withdrawal rationale and preserved identity reservation. |
@@ -1084,11 +1086,223 @@ cannot admit or release an item.
 
 ## 10. Provenance and distribution capabilities
 
-The Catalogue manifest references provenance. It does not own provenance truth. Keep docs/04_SOURCE_AND_PROVENANCE.md as the canonical authority. Do not duplicate mutable fields such as redistribution_status or publication_state in Catalogue manifests. Store structured references to source groups, authorities, and evidence instead.
+The Catalogue manifest stores provenance references only. It does not own
+mutable provenance facts, internal-use status, redistribution status,
+publication state, license conclusions, clearance state, or human approval
+decisions. docs/04_SOURCE_AND_PROVENANCE.md is the canonical authority for
+those facts and recorded decisions.
 
-APPROVED is not permission to distribute. The APPROVED → RELEASED transition requires explicit human-governed publication and redistribution clearance evidence. Unknown redistribution status is insufficient. Agents must never infer or invent clearance.
+### Manifest reference contract
 
-Library, generator, and ejection are independent distribution capabilities. Catalogue release does not require generator or ejection support. Mark a capability supported only when its implementation, tests, documentation, and compatibility contract exist. Generator and ejection remain unsupported and not authorized. A false supported claim blocks validation or release.
+For G1, the Catalogue manifest's provenance object contains exactly one
+defined key: references. Any other top-level key fails dedicated #45
+validation. The references value is a non-empty JSON array. Each entry has
+exactly these keys:
+
+~~~json
+{
+  "provenance": {
+    "references": [
+      {
+        "source_group": "Synthetic source group",
+        "authority": "docs/04_SOURCE_AND_PROVENANCE.md",
+        "evidence_refs": [
+          "path/to/evidence"
+        ]
+      }
+    ]
+  }
+}
+~~~
+
+Each entry identifies a source group and the evidence on which the
+CatalogueItem depends. An empty references array is not sufficient provenance
+evidence. The validator must not infer references from a component path,
+Storybook, source directories, repository presence, Hero identity, or
+conversion artifacts.
+
+Each reference object contains exactly:
+
+- source_group
+- authority
+- evidence_refs
+
+Unknown extra keys fail the dedicated #45 validation. They must not be
+silently retained as authority. In particular, reference objects must not
+copy internal_use_status, redistribution_status, publication_state, license
+facts or conclusions, human approvals, or clearance state.
+
+source_group is an exact, non-empty, valid UTF-8 string. It is an opaque
+identity supplied by the canonical provenance authority. Do not trim it,
+change its case, slugify it, normalize Unicode, derive it from a path, or
+convert it to an atom.
+
+For G1, authority is exactly the string
+docs/04_SOURCE_AND_PROVENANCE.md. Store it as an inert string. It identifies
+the authority contract. Do not treat it as a filesystem permission, Markdown
+parser target, URL, module name, or network location.
+
+evidence_refs is a non-empty JSON array of exact, non-empty, valid UTF-8
+strings. Duplicate members are invalid. Array ordering does not confer
+authority. Do not trim, normalize, silently deduplicate, atomize, or resolve
+these strings as paths.
+
+Two manifest references with the same exact authority and source_group are
+duplicates and fail validation. Do not merge them or choose one.
+
+### Caller-supplied provenance resolution
+
+The :live_frames library validates only supplied facts and reference
+integrity. It must not parse docs/04 Markdown, scrape the repository register,
+scan sources/ or fixtures/, infer a source group from a path, infer clearance
+from repository location, make network requests, or query a database. Trusted
+caller or governance code supplies already-resolved provenance authority
+records.
+
+For #45 G1 validation, each resolved record is an exact string-keyed map with
+exactly these keys:
+
+- source_group
+- authority
+- evidence_refs
+- redistribution_status
+- publication_state
+- clearance_evidence_refs
+
+Conceptual example:
+
+~~~json
+{
+  "source_group": "Synthetic cleared fixture",
+  "authority": "docs/04_SOURCE_AND_PROVENANCE.md",
+  "evidence_refs": [
+    "test/evidence/source",
+    "test/evidence/clearance"
+  ],
+  "redistribution_status": "approved",
+  "publication_state": "public_safe",
+  "clearance_evidence_refs": [
+    "test/evidence/clearance"
+  ]
+}
+~~~
+
+These fields are a read-only resolved snapshot of the external authority. They
+are not copied into the Catalogue manifest.
+
+In a resolved record, source_group and authority are exact, non-empty, valid
+UTF-8 strings. authority must be the supported G1 identifier above.
+evidence_refs is a non-empty list of exact, non-empty, valid UTF-8 strings
+with no duplicates. redistribution_status and publication_state are exact,
+valid UTF-8 strings supplied by the authority. Do not normalize or reinterpret
+unknown values. clearance_evidence_refs is a list of exact, non-empty, valid
+UTF-8 strings with no duplicates. It must be non-empty for positive release
+clearance.
+
+A manifest reference resolves only by exact authority and source_group
+match. Every manifest reference must match exactly one supplied record. Zero
+matches and multiple matches both fail deterministically. Fuzzy matching is
+not allowed.
+
+Every manifest evidence_refs member must exist exactly in the matching
+resolved record's evidence_refs. Otherwise the manifest reference is dangling
+and validation fails. Repository file existence does not resolve an evidence
+reference; the supplied authority record establishes the relationship.
+Resolved records that the manifest does not reference are irrelevant to that
+manifest and must not be attached automatically.
+
+### Release-clearance predicate
+
+A referenced resolved source record satisfies G1 Catalogue release clearance
+only when all of these conditions hold:
+
+1. redistribution_status == "approved".
+2. publication_state == "public_safe".
+3. clearance_evidence_refs is non-empty.
+4. Every clearance_evidence_refs member exists exactly in that record's
+   evidence_refs.
+
+The exact positive redistribution_status value is "approved".
+explicitly_allowed is conceptual wording for explicit evidence supporting
+that fact, not another machine value. redistribution_status == "unknown"
+does not satisfy the predicate. publication_state is separate;
+publication_state != "public_safe" fails, including states such as
+discovered, classified, internal_use_approved, redistribution_review,
+private_only, rejected, and removed_from_active_use. Lifecycle progression
+does not imply clearance.
+
+Every source group referenced by a CatalogueItem must satisfy the predicate.
+One unresolved or failing source blocks release clearance. There is no
+any-of, majority, or best-effort rule. A favorable status without
+clearance_evidence_refs fails, and dangling clearance evidence fails.
+internal_use_status is not an input to this release predicate. Even
+internal_use_status == "approved" does not establish redistribution or
+publication clearance.
+
+Catalogue state APPROVED records owner approval for eventual Catalogue
+release only. It does not satisfy provenance clearance. For example:
+
+~~~text
+Catalogue state = APPROVED
+resolved redistribution_status = unknown
+
+release clearance = FAIL
+~~~
+
+For synthetic positive test cases, use a test-owned synthetic provenance
+record. Do not mark Hero, Bricks, or Automatic.css source groups as cleared to
+create a passing example.
+
+On success, clearance evaluation returns the union of all referenced records'
+clearance_evidence_refs as unique exact strings sorted by UTF-8 byte order.
+The output must not depend on manifest reference order, resolved-record input
+order, or map iteration order.
+
+### Validator and lifecycle boundary
+
+The dedicated #45 validator may expose separate operations to validate
+reference resolution and evaluate release clearance. Exact function names are
+for the later implementation slice. Clearance evaluation may return the
+existing Lifecycle guard shape:
+
+~~~elixir
+{:ok, evidence_refs}
+{:error, diagnostics}
+~~~
+
+The validator supplies evidence or diagnostics and does not mutate state. It
+must not call Lifecycle.transition/3. Later orchestration combines SemVer,
+fingerprint, capability, and provenance-clearance results before a release
+action. This section freezes the provenance portion of that guard; docs/24
+remains authoritative for SemVer.
+
+:live_frames does not need Postgres, Redis, ETS, Cachex, GenServer, Oban, or
+PubSub for provenance resolution. Runtime network access, runtime filesystem
+scans, and per-request parsing remain prohibited. Resolution is explicit
+validation input.
+
+### Human governance and separate capabilities
+
+A successful clearance check means only that caller-supplied canonical
+provenance authority facts satisfy the project's documented release
+predicate. It does not mean an agent or code independently determined
+copyright ownership, license validity, legality, redistribution permission,
+or legal sufficiency. Human-governed authority remains responsible for those
+facts.
+
+Source location in sources/, fixtures/, or Git, or an existing public
+location, does not prove redistribution approval. A rewritten or native
+component, successful conversion, Storybook verification, or Catalogue
+APPROVED state also does not prove release clearance. Current Hero, Bricks,
+and Automatic.css redistribution remains unresolved and not public_safe.
+
+Library, generator, and ejection are independent distribution capabilities.
+Provenance clearance does not establish distribution.library,
+distribution.generator, or distribution.ejection. Catalogue release does
+not require generator or ejection support. Mark a capability supported only
+when its implementation, tests, documentation, and compatibility contract
+exist. Generator and ejection remain unsupported and not authorized. A false
+supported claim blocks validation or release.
 
 ## 11. Registry and public discovery
 
