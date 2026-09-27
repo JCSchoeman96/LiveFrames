@@ -308,13 +308,20 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
       Enum.any?(@structured_roots, fn root ->
         is_binary(diagnostic.source_path) and
           String.starts_with?(diagnostic.source_path, root) and
-          String.contains?(diagnostic.message || "", "must be an object")
+          malformed_shape_message?(diagnostic.message)
       end)
 
     if malformed?,
       do: Map.put(metadata, "style_layer_state", "malformed_layer"),
       else: metadata
   end
+
+  defp malformed_shape_message?(message) when is_binary(message),
+    do:
+      String.contains?(message, "must be an object") or
+        String.contains?(message, "must be a string")
+
+  defp malformed_shape_message?(_message), do: false
 
   defp precedence_diagnostic(%{state: :unresolved_precedence} = resolution) do
     [

@@ -80,6 +80,19 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert root(document).styles["row-gap"].value == "2rem"
   end
 
+  test "tags malformed structured leaves on their existing Settings diagnostic" do
+    document =
+      document(
+        ["class-a"],
+        [class("class-a", %{"_background" => %{"color" => %{"raw" => 42}}})]
+      )
+
+    [diagnostic] = Enum.filter(document.diagnostics, &(&1.code == "bricks.setting.unsupported"))
+    assert diagnostic.metadata["style_layer_state"] == "malformed_layer"
+    assert diagnostic.metadata["class_id"] == "class-a"
+    assert diagnostic.metadata["source_path"] == "_background.color.raw"
+  end
+
   test "omits a conflicting class margin property and retains both contributors" do
     document =
       document(
@@ -136,6 +149,19 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert style.metadata["precedence"] == "equivalent_duplicate"
     assert Enum.map(style.metadata["contributors"], & &1["class_id"]) == ["class-a", "class-b"]
     assert precedence_diagnostics(document) == []
+  end
+
+  test "does not treat zero and zero pixels as equivalent values" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [class("class-a", %{"_width" => "0"}), class("class-b", %{"_width" => "0px"})]
+      )
+
+    refute Map.has_key?(root(document).styles, "width")
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "width"
+    assert diagnostic.metadata["conflict"] == "class_conflict"
   end
 
   test "same direct scalar source key keeps the established element-local override" do
