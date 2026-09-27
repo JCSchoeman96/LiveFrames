@@ -47,7 +47,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     "_overflow" => "overflow"
   }
 
-  @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
+  @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
   @css_integer_pattern ~r/^[+-]?\d+$/
   @numeric_prefix_pattern ~r/^[+-]?(?:\d|\.)/
   @css_wide_keywords ["inherit", "initial", "revert", "revert-layer", "unset"]
@@ -538,19 +538,8 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
           {:number, number} ->
             if css_number_positive?(number), do: {:ok, value}, else: :unresolved
 
-          :invalid ->
-            if positive_ratio_expression?(value),
-              do: safe_style_value(value, :other),
-              else: :unresolved
-
-          :other ->
-            if String.contains?(value, "/") do
-              if positive_ratio_expression?(value),
-                do: safe_style_value(value, :other),
-                else: :unresolved
-            else
-              safe_style_value(value, :other)
-            end
+          _classification ->
+            safe_aspect_ratio_fallback(value)
         end
     end
   end
@@ -607,6 +596,22 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
 
       _parts ->
         false
+    end
+  end
+
+  defp safe_aspect_ratio_fallback(value) do
+    cond do
+      value == "auto" or value in @css_wide_keywords ->
+        safe_style_value(value, :other)
+
+      String.starts_with?(value, @numeric_expression_prefixes) ->
+        safe_style_value(value, :other)
+
+      positive_ratio_expression?(value) ->
+        safe_style_value(value, :other)
+
+      true ->
+        :unresolved
     end
   end
 

@@ -79,21 +79,39 @@ defmodule LiveFrames.BricksStructuredStylesTest do
   end
 
   test "applies narrow numeric rules to order, flex-grow, opacity, and aspect-ratio" do
-    for order <- ["7", "0", "-2", "+3"] do
+    for order <- ["7", "0", "-2", "-1", "+3"] do
       assert %{"order" => ^order} = Settings.extract(%{"_order" => order}).base_styles
     end
 
-    assert %{"flex-grow" => "0"} = Settings.extract(%{"_flexGrow" => "0"}).base_styles
-    assert %{"flex-grow" => "1.25"} = Settings.extract(%{"_flexGrow" => "1.25"}).base_styles
-    assert %{"flex-grow" => "inherit"} = Settings.extract(%{"_flexGrow" => "inherit"}).base_styles
-    assert %{"opacity" => "0"} = Settings.extract(%{"_opacity" => "0"}).base_styles
-    assert %{"opacity" => "0.5"} = Settings.extract(%{"_opacity" => "0.5"}).base_styles
-    assert %{"opacity" => ".5"} = Settings.extract(%{"_opacity" => ".5"}).base_styles
-    assert %{"opacity" => "1"} = Settings.extract(%{"_opacity" => "1"}).base_styles
+    accepted_css_numbers = [
+      "0",
+      "1",
+      "+1",
+      "1.0",
+      "0.5",
+      ".5",
+      "1e2",
+      "1e+2",
+      "1e-2",
+      "1.25e-2"
+    ]
+
+    for number <- accepted_css_numbers do
+      assert %{"flex-grow" => ^number} = Settings.extract(%{"_flexGrow" => number}).base_styles
+    end
+
+    for number <- ["0", "1", "+1", "1.0", "0.5", ".5", "1e-2", "1.25e-2"] do
+      assert %{"opacity" => ^number} = Settings.extract(%{"_opacity" => number}).base_styles
+    end
+
     assert %{"opacity" => "1e-9999"} = Settings.extract(%{"_opacity" => "1e-9999"}).base_styles
+    assert %{"flex-grow" => "inherit"} = Settings.extract(%{"_flexGrow" => "inherit"}).base_styles
 
     assert %{"aspect-ratio" => "16 / 9"} =
              Settings.extract(%{"_aspectRatio" => "16 / 9"}).base_styles
+
+    assert %{"aspect-ratio" => "auto"} =
+             Settings.extract(%{"_aspectRatio" => "auto"}).base_styles
 
     assert %{"aspect-ratio" => "auto 16 / 9"} =
              Settings.extract(%{"_aspectRatio" => "auto 16 / 9"}).base_styles
@@ -101,14 +119,40 @@ defmodule LiveFrames.BricksStructuredStylesTest do
     assert %{"aspect-ratio" => "1.5"} =
              Settings.extract(%{"_aspectRatio" => "1.5"}).base_styles
 
+    assert %{"aspect-ratio" => ".75"} =
+             Settings.extract(%{"_aspectRatio" => ".75"}).base_styles
+
     assert %{"aspect-ratio" => "1e-9999"} =
              Settings.extract(%{"_aspectRatio" => "1e-9999"}).base_styles
 
+    for keyword <- ["inherit", "initial", "revert", "revert-layer", "unset"] do
+      assert %{"aspect-ratio" => ^keyword} =
+               Settings.extract(%{"_aspectRatio" => keyword}).base_styles
+    end
+
+    for expression <- ["var(--c05-aspect-ratio, 16 / 9)", "calc(16 / 9)"] do
+      assert %{"aspect-ratio" => ^expression} =
+               Settings.extract(%{"_aspectRatio" => expression}).base_styles
+    end
+
     rejected = [
+      {"_flexGrow", "1."},
+      {"_flexGrow", "1.e2"},
+      {"_flexGrow", "."},
+      {"_flexGrow", "1e"},
+      {"_flexGrow", "1e+"},
+      {"_flexGrow", "1e-"},
       {"_order", "1.2"},
       {"_order", "1e2"},
       {"_order", "1e"},
       {"_order", "auto"},
+      {"_opacity", "1."},
+      {"_opacity", "1.e2"},
+      {"_opacity", "."},
+      {"_opacity", "1e"},
+      {"_opacity", "1e+"},
+      {"_opacity", "1e-"},
+      {"_opacity", "1e2"},
       {"_flexGrow", "-1"},
       {"_flexGrow", "-0e-9999"},
       {"_flexGrow", "1e"},
@@ -122,10 +166,16 @@ defmodule LiveFrames.BricksStructuredStylesTest do
       {"_opacity", "1.00000000000000001"},
       {"_aspectRatio", "0"},
       {"_aspectRatio", "-1"},
+      {"_aspectRatio", "1."},
+      {"_aspectRatio", "1.e2"},
       {"_aspectRatio", "1e"},
       {"_aspectRatio", "0 / 1"},
       {"_aspectRatio", "-1 / 2"},
       {"_aspectRatio", "1 / 0"},
+      {"_aspectRatio", "foo"},
+      {"_aspectRatio", "wide"},
+      {"_aspectRatio", "ratio"},
+      {"_aspectRatio", "16px"},
       {"_aspectRatio", "foo/bar"}
     ]
 
@@ -134,6 +184,15 @@ defmodule LiveFrames.BricksStructuredStylesTest do
       assert result.base_styles == %{}
       assert result.unresolved_values[source_key] == value
     end
+
+    assert {:ok, document} =
+             Bricks.to_ir(source(%{"_aspectRatio" => "foo"}),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.css =~ "aspect-ratio:"
   end
 
   test "rejects unsafe declarations before they reach generated CSS" do
