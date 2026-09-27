@@ -1,3 +1,106 @@
+defmodule LiveFrames.Catalogue.FingerprintTest.InvarianceFixture do
+  @variant_key {__MODULE__, :reflection_variant}
+
+  @alpha_attr %{
+    slot: nil,
+    name: :alpha,
+    type: :string,
+    required: true,
+    opts: [],
+    doc: nil,
+    line: 1
+  }
+
+  @zeta_attr %{
+    slot: nil,
+    name: :zeta,
+    type: :integer,
+    required: false,
+    opts: [],
+    doc: nil,
+    line: 1
+  }
+
+  @slot_attr %{
+    slot: :alpha_slot,
+    name: :label,
+    type: :string,
+    required: false,
+    opts: [],
+    doc: nil,
+    line: 1
+  }
+
+  @alpha_slot %{
+    name: :alpha_slot,
+    required: false,
+    opts: [],
+    doc: nil,
+    line: 1,
+    attrs: [@slot_attr],
+    validate_attrs: true
+  }
+
+  @zeta_slot %{
+    name: :zeta_slot,
+    required: true,
+    opts: [],
+    doc: nil,
+    line: 1,
+    attrs: [],
+    validate_attrs: true
+  }
+
+  @baseline_component %{
+    kind: :def,
+    attrs: [@alpha_attr, @zeta_attr],
+    slots: [@alpha_slot, @zeta_slot],
+    line: 1
+  }
+
+  Module.register_attribute(__MODULE__, :liveframes_public_contract_metadata, persist: true)
+
+  @liveframes_public_contract_metadata %{
+    sample: %{capabilities: [], css_theme_contract: [], global_prefixes: []}
+  }
+
+  def sample(assigns), do: assigns
+
+  def __components__ do
+    %{sample: component_for(Process.get(@variant_key, :baseline))}
+  end
+
+  defp component_for(:baseline), do: @baseline_component
+
+  defp component_for(:reordered) do
+    %{
+      @baseline_component
+      | attrs: Enum.reverse(@baseline_component.attrs),
+        slots: Enum.reverse(@baseline_component.slots)
+    }
+  end
+
+  defp component_for(:private_noise) do
+    %{
+      @baseline_component
+      | line: 999,
+        attrs: Enum.map(@baseline_component.attrs, &private_noise_attr/1),
+        slots: Enum.map(@baseline_component.slots, &private_noise_slot/1)
+    }
+  end
+
+  defp private_noise_attr(attr), do: %{attr | doc: "Private/source prose changed", line: 999}
+
+  defp private_noise_slot(slot) do
+    %{
+      slot
+      | doc: "Private/source prose changed",
+        line: 999,
+        attrs: Enum.map(slot.attrs, &private_noise_attr/1)
+    }
+  end
+end
+
 defmodule LiveFrames.Catalogue.FingerprintTest.EmptyFixture do
   @sample_component %{kind: :def, attrs: [], slots: [], line: 1}
 
@@ -79,6 +182,30 @@ defmodule LiveFrames.Catalogue.FingerprintTest do
   @fixture_jcs "{\"attrs\":[],\"capabilities\":[],\"component\":{\"function\":\"sample\",\"module\":\"LiveFrames.Catalogue.FingerprintTest.EmptyFixture\"},\"css_theme_contract\":[],\"format\":\"lf-contract-v1\",\"slots\":[]}"
 
   @fixture_digest "6066360be7fe83418176cbe3cc6660a46ecd3d965916c190e9a78c113487a740"
+
+  test "equivalent public-contract reflection ordering fingerprints identically" do
+    {baseline_contract, baseline_fingerprint} = invariance_snapshot(:baseline)
+    {reordered_contract, reordered_fingerprint} = invariance_snapshot(:reordered)
+
+    assert {:ok, baseline_document} = baseline_contract
+    assert {:ok, reordered_document} = reordered_contract
+    assert baseline_document == reordered_document
+
+    assert {:ok, _result} = baseline_fingerprint
+    assert baseline_fingerprint == reordered_fingerprint
+  end
+
+  test "fingerprint-excluded reflection metadata changes do not change the fingerprint" do
+    {baseline_contract, baseline_fingerprint} = invariance_snapshot(:baseline)
+    {private_noise_contract, private_noise_fingerprint} = invariance_snapshot(:private_noise)
+
+    assert {:ok, baseline_document} = baseline_contract
+    assert {:ok, private_noise_document} = private_noise_contract
+    assert baseline_document == private_noise_document
+
+    assert {:ok, _result} = baseline_fingerprint
+    assert baseline_fingerprint == private_noise_fingerprint
+  end
 
   test "returns the single approved algorithm identifier" do
     assert Fingerprint.algorithm() == @algorithm
@@ -341,5 +468,29 @@ defmodule LiveFrames.Catalogue.FingerprintTest do
       "fingerprint_algorithm" => @algorithm,
       "fingerprint" => @fixture_digest
     }
+  end
+
+  defp invariance_snapshot(variant) do
+    with_invariance_variant(variant, fn ->
+      {
+        Contract.normalize(LiveFrames.Catalogue.FingerprintTest.InvarianceFixture, :sample),
+        Fingerprint.compute(LiveFrames.Catalogue.FingerprintTest.InvarianceFixture, :sample)
+      }
+    end)
+  end
+
+  defp with_invariance_variant(variant, fun) do
+    key = {LiveFrames.Catalogue.FingerprintTest.InvarianceFixture, :reflection_variant}
+    previous = Process.get(key, :unset)
+    Process.put(key, variant)
+
+    try do
+      fun.()
+    after
+      case previous do
+        :unset -> Process.delete(key)
+        previous_variant -> Process.put(key, previous_variant)
+      end
+    end
   end
 end
