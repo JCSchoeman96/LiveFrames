@@ -1,12 +1,15 @@
 # Source and provenance
 
 This is LiveFrames’ canonical durable policy for source provenance and
-publication state. The [Master Specification](00_LIVEFRAMES_MASTER_SPEC.md)
-remains the architecture/product authority, and the [Phase 5 hardening and
-acceptance authority](18_PHASE_5_HARDENING_AND_ACCEPTANCE.md) remains the
-current execution authority. This document owns the provenance facts,
-publication lifecycle, source-location boundaries, and current governance
-register used by both.
+publication state. It owns mutable provenance facts, internal-use status,
+redistribution status, publication state, and recorded human governance
+decisions. Other documents may define how they consume these facts, but they
+must not duplicate or supersede them. The [Master
+Specification](00_LIVEFRAMES_MASTER_SPEC.md) remains the architecture/product
+authority, and the [Phase 5 hardening and acceptance
+authority](18_PHASE_5_HARDENING_AND_ACCEPTANCE.md) remains the current
+execution authority. This document provides the governance register used by
+both.
 
 This policy records repository evidence; it does not make a legal conclusion.
 Unknown ownership, license, project-use, or redistribution facts remain
@@ -30,6 +33,15 @@ Every source record must keep these facts separate:
 `redistribution_status = approved`. `redistribution_status = unknown` means
 redistribution is unresolved; it does not mean that the material is illegal,
 that ownership is disproven, or that a license conclusion has been made.
+
+For G1 Catalogue release clearance, the exact positive redistribution fact is
+`redistribution_status == "approved"`. The older term
+`explicitly_allowed` describes explicit evidence supporting that fact. It is
+not another literal `redistribution_status` value. `unknown` remains
+unresolved and does not satisfy the positive check.
+
+`publication_state == "public_safe"` is a separate positive publication fact.
+Neither field sets, replaces, or implies the other.
 
 The `SourceArtifact` conversion lifecycle in the Master Specification is a
 separate concern. It must not be used as a substitute for this publication
@@ -140,7 +152,7 @@ public redistribution.
 For new material:
 
 ```text
-redistribution != explicitly_allowed
+redistribution_status != "approved"
     ↓
 MUST NOT be newly added to public fixtures/ or public sources/
 ```
@@ -150,6 +162,10 @@ material, screenshots, assets, copied CSS/JS, Figma exports, Webflow exports,
 and other third-party source evidence. Existing public material is not
 retroactively cleared by this rule; its unresolved status is recorded below
 for explicit human governance review.
+
+Internal-use approval, a native rewrite, successful conversion, Storybook
+verification, Catalogue `APPROVED`, repository presence, or existing public
+location does not supply either positive fact.
 
 ## Source-location boundaries
 
