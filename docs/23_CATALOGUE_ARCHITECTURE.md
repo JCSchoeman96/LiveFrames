@@ -156,7 +156,7 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | state | Current CatalogueItem lifecycle state. |
 | component.module, component.function | References to the production component export. |
 | contract.fingerprint_algorithm, contract.fingerprint | Versioned fingerprint of the normalized public contract. |
-| storybook.module | Reference to the PhoenixStorybook module that contains the production component's story. The manifest may record variation IDs when explicitly needed. It does not require a second story identifier. |
+| `storybook.module`, optional `storybook.variation_ids` | Required inert JSON string naming the PhoenixStorybook module for the production component's story, plus an optional JSON array of additional variation IDs deliberately referenced as evidence. The exact wire contract is in §9. No second story identifier is required. |
 | docs | Required JSON object containing structured references to item documentation. The exact nested reference schema is not defined by #40. |
 | provenance | Required JSON object containing structured source-group, authority, and evidence references. The exact nested reference schema is not defined by #40. This area must not duplicate or infer mutable provenance/publication status from docs/04. |
 | distribution.library, distribution.generator, distribution.ejection | Independent capability declarations with evidence references for any capability marked supported. |
@@ -302,8 +302,8 @@ Validation requirements become stricter as an item advances. Release-only fields
 
 | Target state | Minimum evidence and checks |
 | --- | --- |
-| DRAFT | Immutable identity and kind; component module/function reference; Storybook module reference; documentation references; structured provenance references. |
-| VALIDATED | All references resolve; ID, kind, derived slug, and canonical path agree; schema version is supported; normalized contract fingerprint matches current production contract; the Storybook module exists, targets/references the production component, and its canonical/default variation renders. Any deliberately referenced variation IDs are valid. |
+| DRAFT | Immutable identity and kind; component module/function reference; Storybook reference shape; documentation references; structured provenance references. |
+| VALIDATED | All references resolve; ID, kind, derived slug, and canonical path agree; schema version is supported; normalized contract fingerprint matches current production contract; the Storybook module resolves to the caller-supplied production target, its exact `default` variation exists and renders, and every explicitly referenced variation ID exists. See §9 for the Storybook evidence contract. |
 | REVIEWED | Independent review evidence exists and identifies the item and reviewed contract. |
 | APPROVED | Owner approval evidence exists and records approval for eventual Catalogue release. |
 | RELEASED | Valid CatalogueItem SemVer; current fingerprint; evidence for every capability marked supported; explicit human-governed publication/redistribution clearance. Unknown clearance is insufficient. |
@@ -385,7 +385,14 @@ Each public attribute normalizes to exactly this shape:
     }
   },
   "constraints": {
-    "allowed_values": null,
+    "allowed_values": [
+      {"$type":"integer","value":"1"},
+      {"$type":"integer","value":"2"},
+      {"$type":"integer","value":"3"},
+      {"$type":"integer","value":"4"},
+      {"$type":"integer","value":"5"},
+      {"$type":"integer","value":"6"}
+    ],
     "global_names": [],
     "global_prefixes": []
   }
@@ -406,6 +413,42 @@ Struct/module-backed types use:
 ~~~json
 {"kind":"struct","module":"MyApp.User"}
 ~~~
+
+#### Phoenix raw attr type mapping
+
+Map the Phoenix LiveView 1.2.11 raw simple types exactly as follows. The wire
+`name` is the raw atom name without its leading colon:
+
+| Phoenix raw type | `lf-contract-v1` type |
+| --- | --- |
+| `:any` | `{"kind":"builtin","name":"any"}` |
+| `:boolean` | `{"kind":"builtin","name":"boolean"}` |
+| `:integer` | `{"kind":"builtin","name":"integer"}` |
+| `:float` | `{"kind":"builtin","name":"float"}` |
+| `:string` | `{"kind":"builtin","name":"string"}` |
+| `:atom` | `{"kind":"builtin","name":"atom"}` |
+| `:list` | `{"kind":"builtin","name":"list"}` |
+| `:map` | `{"kind":"builtin","name":"map"}` |
+| `:fun` | `{"kind":"builtin","name":"fun"}` |
+| `:global` | `{"kind":"builtin","name":"global"}` |
+
+A raw `{:struct, MyApp.User}` normalizes to:
+
+~~~json
+{"kind":"struct","module":"MyApp.User"}
+~~~
+
+The module string is the fully-qualified normal Elixir module name without the
+internal `Elixir.` prefix. Do not convert a string to an atom.
+
+The raw tuple `{:fun, arity}` is distinct from the simple raw type `:fun`.
+Phoenix LiveView 1.2.11 accepts `{:fun, arity}` whenever `arity` is an
+integer, so the #43D raw authority reader accepts that reflection form. The
+`lf-contract-v1` type algebra has no arity-specific type object, however, so
+#43E normalization must fail closed for `{:fun, arity}`. It must not drop the
+arity, convert the tuple to builtin `fun`, add an `arity` field, or change the
+v1 wire format. This is an unsupported v1 normalization form, not a Phoenix
+reflection failure.
 
 A future type form that has no approved canonical representation is unsupported
 and fingerprint extraction must fail.
@@ -480,9 +523,71 @@ different order must fingerprint identically. A finite range used as an
 exhaustive values constraint normalizes to the same accepted-value set as the
 equivalent explicit finite values.
 
-For public global-attribute extensions, any explicitly supported added names or
-prefixes are normalized as sorted unique semantic sets. Changing that supported
-surface changes the fingerprint.
+In `lf-contract-v1`, `constraints.allowed_values` has exactly two wire forms:
+
+~~~json
+null
+~~~
+
+~~~json
+[
+  {"$type":"integer","value":"1"},
+  {"$type":"integer","value":"2"}
+]
+~~~
+
+`null` means there is no exhaustive constraint. An array means there is an
+exhaustive constraint; `[]` is therefore distinct from `null`. Each array
+member is normalized through the v1 canonical value algebra above. The array is
+a contract collection, not a public Elixir list value, so it is not wrapped in
+`{"$type":"list","items":[...]}`.
+
+Treat the members as a semantic set. Duplicate canonical members are invalid.
+Sort members lexicographically by the complete RFC 8785 JCS UTF-8 bytes of each
+normalized member. Source declaration order is irrelevant.
+
+For v1 `values:` extraction, accept only a proper list or a finite `Range`.
+Normalize each declared member through the canonical value algebra, then apply
+the semantic-set rules above. Thus `values: 1..6` normalizes identically to an
+explicit declaration of `1, 2, 3, 4, 5, 6`; the `Range` itself does not appear
+as `{"$type":"range",...}` in `allowed_values`. The tagged Range
+representation applies when a Range is itself a public value or default.
+
+Phoenix reflection may retain other `Enumerable` values, but v1 normalization
+must reject every form other than a proper list or finite `Range` without
+enumerating or invoking a custom `Enumerable` implementation. This keeps
+extraction deterministic and free of hidden runtime or network side effects.
+This rule sets no maximum member count. A future need for `MapSet` or another
+custom `Enumerable` requires an explicit contract extension.
+
+### Global attribute constraints
+
+Only an attr whose reflected Phoenix type is `:global` may have non-empty
+`constraints.global_names` or `constraints.global_prefixes`. Both arrays remain
+present for every attr. For every non-global attr they are always `[]`.
+
+For a `:global` attr, reflected `opts[:include]` is the sole authority for
+supplemental exact names in `constraints.global_names`:
+
+| Reflected `:include` | Normalized `global_names` |
+| --- | --- |
+| Absent or `nil` | `[]` |
+| Proper list of exact UTF-8 strings | Sorted unique string array |
+
+Treat these names as a semantic set: source order is ignored and duplicate
+source entries collapse to one member. Sort by exact UTF-8 byte order. Do not
+trim, case-fold, normalize Unicode, convert atoms, or coerce other values to
+strings. Non-string entries fail normalization.
+
+For each reflected `:global` attr, the validated sorted-unique
+`metadata.global_prefixes` set returned by #43D becomes that attr's
+`constraints.global_prefixes` exactly. Do not discover prefixes with
+`__global__?/1`; that function remains candidate validation only.
+
+If `metadata.global_prefixes` is non-empty but the reflected component has no
+`:global` attr, normalization fails closed. The six-key v1 document has no
+other place for those public prefixes, and silently omitting them would make
+part of the declared contract fingerprint-invisible.
 
 ### Public slots
 
@@ -839,11 +944,143 @@ implementation details change, it does not.
 
 ## 9. Storybook evidence
 
-Every admitted CatalogueItem must reference its Storybook module. Storybook is mandatory validation evidence. A validator must confirm that the module exists and its story targets or references the production component. It must also confirm that a canonical/default variation exists and renders. Any variation IDs deliberately referenced by the manifest must be valid. No second story identifier is required.
+Every admitted CatalogueItem references its Storybook module. Storybook is mandatory verification evidence for `VALIDATED`; it does not grant Catalogue authority. The manifest records only the Storybook reference fields defined here.
 
-Storybook remains preview and verification authority for its stories. It does not define Catalogue metadata, Catalogue lifecycle, provenance, component API authority, or release state. A Storybook story cannot admit or release an item.
+### Manifest reference fields
 
-The accepted Phase-6 Hero Storybook evidence is recorded in docs/22. It proves that the accepted native Hero has a verified story; it does not prove Catalogue admission.
+At the existing manifest structural-validation layer, `storybook.module` is a
+required JSON string. It is an inert, exact module-reference string, for example:
+
+~~~json
+{
+  "storybook": {
+    "module": "LiveFramesPreviewWeb.Storybook.Components.Hero"
+  }
+}
+~~~
+
+Preserve the supplied string exactly. Do not trim it, change its case, or
+otherwise normalize it. The string does not authorize module loading and must
+never be converted into a module or atom.
+
+The only optional variation-reference key is `storybook.variation_ids`:
+
+~~~json
+{
+  "storybook": {
+    "module": "LiveFramesPreviewWeb.Storybook.Components.Hero",
+    "variation_ids": ["informative_media", "minimal"]
+  }
+}
+~~~
+
+When present, `storybook.variation_ids` must be a JSON array. Each member must
+be an exact, non-empty, valid UTF-8 string. `null`, a scalar string, numbers,
+atoms, objects, nested arrays, empty strings, invalid UTF-8, and duplicate IDs
+are invalid. Do not convert member values. No alternate variation-reference
+key is defined.
+
+Variation IDs are a semantic set. Array order does not change the referenced
+evidence, and Storybook variation ordering is not Catalogue authority. Duplicate
+IDs are invalid rather than repeated evidence.
+
+### Required default and additional variation evidence
+
+The canonical/default variation ID is exactly `default`. In PhoenixStorybook's
+story implementation this is the variation with `%Variation{id: :default, ...}`;
+the manifest and verification comparison use the string `"default"`. Do not
+derive the canonical variation from list position, render order, or a
+PhoenixStorybook defaulting choice.
+
+Every `VALIDATED` Storybook reference must expose a variation with the exact ID
+`default`, whether or not `storybook.variation_ids` is present. That variation
+must render through the preview application's real PhoenixStorybook rendering
+surface. The default ID is mandatory independently and need not appear in
+`storybook.variation_ids`.
+
+A story that exists, targets the supplied production component, and exposes
+other valid variations but lacks `default` fails `VALIDATED` Storybook evidence
+validation deterministically.
+
+`storybook.variation_ids` records only additional variation IDs deliberately
+referenced as evidence by the CatalogueItem. It is not the complete inventory of
+variations in the story. A story may define other valid variations that the
+manifest does not name. Every ID that the manifest does name must exist; an
+unknown ID is a deterministic validation failure and must not be ignored.
+
+### Storybook authority and module resolution
+
+Storybook remains preview and verification authority for its stories. It does
+not define Catalogue metadata, lifecycle, provenance, component API authority,
+or release state. Storybook `attributes()`, `slots()`, variation attributes,
+variation ordering, and documentation must not define or override public-contract
+fingerprint inputs such as attrs, types, requiredness, defaults, allowed values,
+slots and slot cardinality, capabilities, or the CSS/theme contract. Storybook
+also does not define component lifecycle, SemVer, provenance, or distribution.
+
+Manifest-controlled values are inert strings. Code must not call
+`String.to_atom/1`, `String.to_existing_atom/1`, `Module.concat/1`, or
+`:erlang.binary_to_atom/2` on `storybook.module` or any
+`storybook.variation_ids` member. The `:live_frames` library must not resolve a
+module from the manifest string.
+
+Trusted preview or umbrella application code supplies the already-resolved
+Storybook module atom and the production component target. The validator
+compares the resolved module's normal module-name string with the exact
+`storybook.module` string. For a function-component story, the resolved story's
+`function/0` must identify the exact supplied production component export. For
+Hero, `LiveFramesPreviewWeb.Storybook.Components.Hero.function()` must target
+`LiveFrames.Components.Sections.Hero.hero/1`. The validator must not infer the
+production target from Storybook attrs, slots, or documentation.
+
+The preview verification surface may use the story module's `variations/0` to
+obtain PhoenixStorybook variations. It compares their IDs with `"default"` and
+the manifest's explicitly referenced variation IDs. A trusted story may
+represent those IDs as existing atoms such as `:default` or
+`:informative_media`; validation converts those atoms to strings with the safe
+`Atom.to_string/1` operation for exact comparison. It never converts manifest
+strings to atoms. Do not trim, case-fold, normalize hyphens or underscores, or
+apply Unicode normalization.
+
+### Library and preview responsibilities
+
+Code under `apps/live_frames/` may validate only inert Storybook reference data:
+manifest shape, the `storybook.module` string, the optional
+`storybook.variation_ids` shape and member rules, duplicate IDs, and equality
+between the manifest module string and a caller-supplied resolved module. It
+must not depend on `phoenix_storybook` or `live_frames_preview`, load `.story.exs`
+files, scan Storybook directories, render stories, call the preview router, or
+make network requests.
+
+Checks that require PhoenixStorybook belong under
+`apps/live_frames_preview/` or an umbrella verification surface allowed to
+depend on both applications. That surface owns checking that the resolved story
+module exists and is loaded, has the required behaviour functions, targets the
+supplied production component, exposes `default`, exposes every explicitly
+referenced variation ID, and renders the default variation. The required story
+functions include `function/0` and `variations/0`.
+
+Default renderability is a preview integration property. Verify it through the
+real PhoenixStorybook rendering surface mounted by the preview application,
+using local or CI verification. It does not require production polling, remote
+HTTP requests, a runtime Storybook API, or an external Storybook server. Route
+and path mechanics remain preview-verification details and are not persisted as
+Catalogue authority. A preview test may exercise the local Phoenix endpoint
+through normal Phoenix test infrastructure. Do not implement a fake renderer in
+`:live_frames`.
+
+This evidence contract does not add a composite `VALIDATED` lifecycle guard.
+The dedicated Storybook verification result may be consumed by later lifecycle
+orchestration.
+
+### Hero evidence boundary
+
+The accepted Phase-6 Hero story in [docs/22](22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md)
+may serve as positive verification evidence. Its current variations are
+`default`, `informative_media`, `no_media`, and `minimal`; a test manifest need
+not list every one. Hero Storybook validation evidence does not admit Hero to the
+Catalogue. No Hero Catalogue manifest is defined here, and a Storybook story
+cannot admit or release an item.
 
 ## 10. Provenance and distribution capabilities
 

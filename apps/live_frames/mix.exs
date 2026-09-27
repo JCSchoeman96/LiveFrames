@@ -10,6 +10,7 @@ defmodule LiveFrames.MixProject do
       deps: [
         {:phoenix_live_view, "~> 1.2.11"},
         {:jason, "~> 1.4"},
+        {:jcs, "== 0.2.0"},
         {:tailwind, "~> 0.5.1", runtime: false}
       ],
       package: package()

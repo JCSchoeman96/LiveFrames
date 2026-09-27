@@ -20,6 +20,65 @@ defmodule LiveFrames.Components.Sections.Hero do
 
   use Phoenix.Component
 
+  Module.register_attribute(
+    __MODULE__,
+    :liveframes_public_contract_metadata,
+    persist: true
+  )
+
+  @liveframes_public_contract_metadata %{
+    hero: %{
+      slot_cardinality: %{
+        "primary_action" => {0, 1},
+        "secondary_action" => {0, 1}
+      },
+      capabilities: [
+        "liveframes.consumer.owns_action_navigation_and_events",
+        "liveframes.consumer.owns_global_root_attributes",
+        "liveframes.content.plain_text_heading_and_lede",
+        "liveframes.integration.requires_liveframes_css",
+        "liveframes.validation.argument_error_on_contract_violation"
+      ],
+      css_theme_contract: [
+        "--lf-action-primary-background",
+        "--lf-action-primary-background-hover",
+        "--lf-action-primary-border",
+        "--lf-action-primary-border-style",
+        "--lf-action-primary-border-width",
+        "--lf-action-primary-focus",
+        "--lf-action-primary-font-size",
+        "--lf-action-primary-font-weight",
+        "--lf-action-primary-line-height",
+        "--lf-action-primary-min-width",
+        "--lf-action-primary-padding-block",
+        "--lf-action-primary-padding-inline",
+        "--lf-action-primary-radius",
+        "--lf-action-primary-text",
+        "--lf-action-secondary-background",
+        "--lf-action-secondary-background-hover",
+        "--lf-action-secondary-border",
+        "--lf-action-secondary-border-hover",
+        "--lf-action-secondary-focus",
+        "--lf-action-secondary-text",
+        "--lf-action-secondary-text-hover",
+        "--lf-color-background-ultra-dark",
+        "--lf-color-heading-on-dark",
+        "--lf-color-text-on-dark",
+        "--lf-layout-container-max-width",
+        "--lf-space-container-gap",
+        "--lf-space-content-gap",
+        "--lf-space-gutter",
+        "--lf-space-section-padding-block",
+        "--lf-typography-body-line-height",
+        "--lf-typography-body-size",
+        "--lf-typography-display-line-height",
+        "--lf-typography-display-size",
+        "--lf-typography-display-weight"
+      ],
+      global_prefixes: []
+    }
+  }
+
   attr(:heading, :string, required: true)
   attr(:heading_level, :integer, default: 2, values: 1..6)
   attr(:lede, :string, default: nil)
