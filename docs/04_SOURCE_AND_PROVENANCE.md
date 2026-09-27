@@ -153,7 +153,6 @@ For new material:
 
 ```text
 redistribution_status != "approved"
-or publication_state != "public_safe"
     ↓
 MUST NOT be newly added to public fixtures/ or public sources/
 ```
