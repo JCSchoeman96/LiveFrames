@@ -14,7 +14,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
-  alias LiveFrames.Adapters.Bricks.Settings
   alias LiveFrames.Adapters.Bricks.StaticNavigation
   alias LiveFrames.Adapters.Bricks.StaticSemantics
   alias LiveFrames.Adapters.Bricks.ThemeStyles
@@ -444,19 +443,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     static_semantics = Map.fetch!(context.static_semantics, source_id)
     static_navigation = Map.fetch!(context.static_navigation, source_id)
 
-    semantic_settings =
-      Enum.filter(StaticSemantics.source_setting_names(), &Map.has_key?(element.settings, &1))
-
-    rejected_semantic_settings =
-      Enum.filter(StaticSemantics.source_setting_names(), fn name ->
-        Map.has_key?(resolved.settings, name) and not Map.has_key?(element.settings, name)
-      end)
-
-    settings_result =
-      Settings.extract(resolved.settings,
-        semantic_settings: semantic_settings,
-        rejected_semantic_settings: rejected_semantic_settings
-      )
+    style_result = Map.fetch!(context.dependencies.style_results, source_id)
 
     children =
       context.tree.children_by_id
@@ -480,8 +467,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       label: element.label,
       content: content_for(element),
       attributes: attributes,
-      styles: styles_for(settings_result, trace, context.token_set, element, context),
-      responsive: responsive_for(settings_result, trace, resolved.class_names, element, context),
+      styles: styles_for(style_result, trace, context.token_set, element, context),
+      responsive: responsive_for(style_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
       asset_refs: Map.get(context.asset_ids_by_source, source_id, []),
       children: children,
@@ -538,26 +525,33 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp content_for(_element), do: nil
 
-  defp styles_for(settings_result, trace, token_set, element, context) do
+  defp styles_for(style_result, trace, token_set, element, context) do
     styles =
-      Enum.reduce(settings_result.base_styles, %{}, fn {property, value}, styles ->
-        source_key = source_key_for(settings_result.consumed, property, nil)
-        style_trace = style_trace(trace, source_key)
+      Enum.reduce(style_result.base_styles, %{}, fn {property, declaration}, styles ->
+        declaration_trace = style_declaration_trace(trace, declaration)
+        metadata = declaration_metadata(declaration)
 
-        Map.put(
-          styles,
-          property,
-          normalize_style(value, property, style_trace, token_set,
-            metadata: %{"source_key" => source_key}
-          )
-        )
+        style =
+          case declaration.kind do
+            :gradient ->
+              declaration
+              |> gradient_style(declaration_trace)
+              |> merge_style_metadata(metadata)
+
+            _kind ->
+              normalize_style(declaration.value, property, declaration_trace, token_set,
+                metadata: metadata
+              )
+          end
+
+        Map.put(styles, property, style)
       end)
 
     styles =
-      Enum.reduce(settings_result.unresolved_values, styles, fn {source_key, value}, styles ->
+      Enum.reduce(style_result.unresolved_values, styles, fn {source_key, value}, styles ->
         property = unresolved_property(source_key)
 
-        Map.put(
+        Map.put_new(
           styles,
           property,
           StyleValue.unresolved(value,
@@ -572,7 +566,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       end)
 
     styles =
-      Enum.reduce(settings_result.custom_css.base, styles, fn value, styles ->
+      Enum.reduce(style_result.custom_css.base, styles, fn value, styles ->
         source_key = "_cssCustom"
 
         Map.put(
@@ -592,18 +586,45 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
       end)
 
-    styles =
-      Enum.reduce(settings_result.gradients, styles, fn gradient, styles ->
-        source_key = gradient.source_key
-
-        Map.put(
-          styles,
-          gradient.property,
-          gradient_style(gradient, style_trace(trace, source_key))
-        )
-      end)
-
     merge_intrinsic_styles(styles, element, trace, context)
+  end
+
+  defp style_declaration_trace(trace, declaration) do
+    source_path = declaration.source_path || declaration.source_key
+
+    path =
+      case declaration.origin do
+        :global_class ->
+          "#{trace.source_path}.class_refs[#{declaration.class_reference_index}].settings.#{source_path}"
+
+        :element_local ->
+          "#{trace.source_path}.settings.#{source_path}"
+      end
+
+    %{
+      trace
+      | source_type: "bricks_style",
+        source_path: path,
+        source_name: source_path,
+        inference: "style declaration normalized from its source layer"
+    }
+  end
+
+  defp declaration_metadata(declaration) do
+    %{
+      "source_key" => declaration.source_root_key,
+      "source_path" => declaration.source_path,
+      "precedence" => declaration.precedence,
+      "contributors" => declaration.contributors
+    }
+    |> maybe_put_metadata("breakpoint", declaration.breakpoint)
+  end
+
+  defp maybe_put_metadata(metadata, _key, nil), do: metadata
+  defp maybe_put_metadata(metadata, key, value), do: Map.put(metadata, key, value)
+
+  defp merge_style_metadata(%StyleValue{} = style, metadata) do
+    %{style | metadata: Map.merge(style.metadata, metadata)}
   end
 
   # Bricks frontend `.brxe-container` / `.brxe-section` intrinsic layout.
@@ -817,15 +838,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
   end
 
-  defp source_key_for(consumed, property, breakpoint) do
-    case Enum.find(consumed, fn record ->
-           record.property == property and record.breakpoint == breakpoint
-         end) do
-      %{source_key: source_key} -> source_key
-      _record -> property
-    end
-  end
-
   defp unresolved_property("_margin." <> side), do: "margin-" <> side
   defp unresolved_property("_border.radius." <> side), do: "border-" <> side <> "-radius"
   defp unresolved_property(source_key), do: String.trim_leading(source_key, "_")
@@ -944,8 +956,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     )
   end
 
-  defp responsive_for(settings_result, trace, source_classes, element, context) do
-    settings_result.responsive
+  defp responsive_for(style_result, trace, source_classes, element, context) do
+    style_result.responsive
     |> Enum.group_by(& &1.breakpoint)
     |> Enum.sort_by(fn {breakpoint, _records} -> breakpoint end)
     |> Map.new(fn {breakpoint, records} ->
@@ -959,7 +971,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           style =
             case record.kind do
               :gradient ->
-                gradient_style(record, record_trace)
+                record
+                |> gradient_style(record_trace)
+                |> merge_style_metadata(declaration_metadata(record))
 
               :custom_css ->
                 StyleValue.complex_css(
@@ -976,7 +990,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
               _kind ->
                 normalize_style(record.value, property, record_trace, context.token_set,
-                  metadata: %{"source_key" => record.source_key, "breakpoint" => breakpoint}
+                  metadata:
+                    record
+                    |> declaration_metadata()
+                    |> Map.put("breakpoint", breakpoint)
                 )
             end
 
@@ -999,24 +1016,48 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp responsive_trace(trace, source_classes, element, breakpoint, record) do
+    source_path = Map.get(record, :source_path) || record.source_key
+
+    path =
+      case Map.get(record, :origin) do
+        :global_class ->
+          "#{trace.source_path}.class_refs[#{Map.get(record, :class_reference_index)}].settings.#{source_path}"
+
+        :element_local ->
+          "#{trace.source_path}.settings.#{source_path}"
+
+        _origin ->
+          "#{trace.source_path}.settings.#{source_path}"
+      end
+
+    metadata = %{
+      "source_key" => Map.get(record, :source_root_key) || record.source_key,
+      "breakpoint" => breakpoint,
+      "min_width" => nil,
+      "max_width" => nil,
+      "resolution_status" => "unresolved"
+    }
+
+    metadata =
+      if is_list(Map.get(record, :contributors)),
+        do:
+          Map.merge(metadata, %{
+            "precedence" => Map.get(record, :precedence),
+            "contributors" => Map.get(record, :contributors)
+          }),
+        else: metadata
+
     %SourceTrace{
       source_type: "bricks_responsive",
       source_id: element.id,
-      source_path: "#{trace.source_path}.settings.#{record.source_key}",
+      source_path: path,
       source_name: breakpoint,
       source_classes: source_classes,
       source_settings: trace.source_settings,
       adapter: trace.adapter,
       adapter_version: trace.adapter_version,
       inference: "responsive source name preserved without an invented numeric threshold",
-      metadata:
-        json_safe(%{
-          "source_key" => record.source_key,
-          "breakpoint" => breakpoint,
-          "min_width" => nil,
-          "max_width" => nil,
-          "resolution_status" => "unresolved"
-        })
+      metadata: json_safe(metadata)
     }
   end
 
@@ -1321,6 +1362,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp category_for("bricks.attribute.unsupported"), do: :provenance
   defp category_for("bricks.navigation." <> _), do: :ambiguous_semantics
   defp category_for("bricks.runtime.unsupported"), do: :interaction_unsupported
+  defp category_for("bricks.style.precedence_conflict"), do: :unsupported_style
 
   defp category_for(code) when is_binary(code) do
     cond do

@@ -260,7 +260,7 @@ defmodule LiveFrames.BricksClassResolverTest do
     assert Enum.any?(diagnostics, &(&1.code == "bricks.source.fragment_conversion_unsupported"))
   end
 
-  test "authority lookup preserves class reference order and element settings override classes" do
+  test "class reference order is retained and same-key local settings win in the compatibility map" do
     local_a = class("class-a", "alpha", %{"_width" => "100px", "_height" => "20px"})
     external_b = class("class-b", "beta", %{"_height" => "10px"})
 
