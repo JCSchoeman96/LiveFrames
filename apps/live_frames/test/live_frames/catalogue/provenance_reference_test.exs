@@ -515,6 +515,283 @@ defmodule LiveFrames.Catalogue.ProvenanceReferenceTest do
     end
   end
 
+  test "returns clearance evidence for a fully cleared DRAFT source" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record = cleared_record("Synthetic source A", ["test/evidence/clearance-a"])
+
+    assert manifest.state == "DRAFT"
+    assert ProvenanceReference.validate(manifest, [record]) == :ok
+
+    assert ProvenanceReference.release_clearance(manifest, [record]) ==
+             {:ok, ["test/evidence/clearance-a"]}
+  end
+
+  test "combines cleared synthetic source evidence and deduplicates shared refs" do
+    references = [
+      reference("Synthetic source A"),
+      reference("Synthetic source B")
+    ]
+
+    records = [
+      cleared_record(
+        "Synthetic source A",
+        ["test/evidence/shared", "test/evidence/clearance-a"]
+      ),
+      cleared_record(
+        "Synthetic source B",
+        ["test/evidence/shared", "test/evidence/clearance-b"]
+      )
+    ]
+
+    assert ProvenanceReference.release_clearance(decoded_manifest(references), records) ==
+             {:ok,
+              [
+                "test/evidence/clearance-a",
+                "test/evidence/clearance-b",
+                "test/evidence/shared"
+              ]}
+  end
+
+  test "sorts clearance evidence by UTF-8 byte order" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record = cleared_record("Synthetic source A", ["é", "z", "a"])
+
+    assert ProvenanceReference.release_clearance(manifest, [record]) ==
+             {:ok, ["a", "z", "é"]}
+  end
+
+  test "returns the same evidence when reference, record, and clearance orders change" do
+    references = [reference("Synthetic source A"), reference("Synthetic source B")]
+
+    records = [
+      cleared_record(
+        "Synthetic source A",
+        ["clearance/z", "clearance/a"]
+      ),
+      cleared_record(
+        "Synthetic source B",
+        ["clearance/shared", "clearance/b"]
+      )
+    ]
+
+    expected = {:ok, ["clearance/a", "clearance/b", "clearance/shared", "clearance/z"]}
+
+    assert ProvenanceReference.release_clearance(decoded_manifest(references), records) ==
+             expected
+
+    reordered_records =
+      records
+      |> Enum.reverse()
+      |> Enum.map(&Map.update!(&1, "clearance_evidence_refs", fn refs -> Enum.reverse(refs) end))
+
+    assert ProvenanceReference.release_clearance(
+             decoded_manifest(Enum.reverse(references)),
+             reordered_records
+           ) == expected
+  end
+
+  test "requires redistribution status to equal approved exactly" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    for status <- ["unknown", "future_value", "", "approved ", "Approved", "explicitly_allowed"] do
+      record =
+        cleared_record(
+          "Synthetic source A",
+          ["test/evidence/clearance-a"],
+          %{"redistribution_status" => status}
+        )
+
+      assert_diagnostic(
+        ProvenanceReference.release_clearance(manifest, [record]),
+        "catalogue.provenance_reference.redistribution_not_approved",
+        "provenance.references[0]"
+      )
+    end
+  end
+
+  test "APPROVED Catalogue state does not clear unknown redistribution status" do
+    manifest =
+      decoded_manifest([reference("Synthetic source A")])
+      |> Map.put(:state, "APPROVED")
+
+    record =
+      cleared_record(
+        "Synthetic source A",
+        ["test/evidence/clearance-a"],
+        %{"redistribution_status" => "unknown"}
+      )
+
+    assert_diagnostic(
+      ProvenanceReference.release_clearance(manifest, [record]),
+      "catalogue.provenance_reference.redistribution_not_approved",
+      "provenance.references[0]"
+    )
+  end
+
+  test "requires public_safe publication state" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    for state <- ["classified", "private_only"] do
+      record =
+        cleared_record(
+          "Synthetic source A",
+          ["test/evidence/clearance-a"],
+          %{"publication_state" => state}
+        )
+
+      assert_diagnostic(
+        ProvenanceReference.release_clearance(manifest, [record]),
+        "catalogue.provenance_reference.publication_not_public_safe",
+        "provenance.references[0]"
+      )
+    end
+  end
+
+  test "requires at least one clearance evidence ref while validate remains structural" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record = cleared_record("Synthetic source A", [])
+
+    assert ProvenanceReference.validate(manifest, [record]) == :ok
+
+    assert_diagnostic(
+      ProvenanceReference.release_clearance(manifest, [record]),
+      "catalogue.provenance_reference.clearance_evidence_missing",
+      "provenance.references[0]"
+    )
+  end
+
+  test "requires every clearance evidence ref to exist in the matching record" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record =
+      cleared_record(
+        "Synthetic source A",
+        ["test/evidence/clearance-missing-first", "test/evidence/clearance-missing-second"],
+        %{"evidence_refs" => ["test/evidence/source-a", "test/evidence/clearance-a"]}
+      )
+
+    assert ProvenanceReference.validate(manifest, [record]) == :ok
+
+    assert {:error, [diagnostic]} = ProvenanceReference.release_clearance(manifest, [record])
+    assert diagnostic.code == "catalogue.provenance_reference.clearance_evidence_dangling"
+    assert diagnostic.path == "provenance.references[0]"
+    assert diagnostic.message =~ "test/evidence/clearance-missing-first"
+  end
+
+  test "requires every referenced source to pass before returning evidence" do
+    manifest =
+      decoded_manifest([reference("Synthetic source A"), reference("Synthetic source B")])
+
+    record_a = cleared_record("Synthetic source A", ["test/evidence/clearance-a"])
+
+    record_b =
+      cleared_record(
+        "Synthetic source B",
+        ["test/evidence/clearance-b"],
+        %{"redistribution_status" => "unknown"}
+      )
+
+    assert_diagnostic(
+      ProvenanceReference.release_clearance(manifest, [record_a, record_b]),
+      "catalogue.provenance_reference.redistribution_not_approved",
+      "provenance.references[1]"
+    )
+  end
+
+  test "chooses the first clearance failure by manifest reference order" do
+    references = [reference("Synthetic source A"), reference("Synthetic source B")]
+
+    record_a =
+      cleared_record(
+        "Synthetic source A",
+        ["test/evidence/clearance-a"],
+        %{"publication_state" => "classified"}
+      )
+
+    record_b =
+      cleared_record(
+        "Synthetic source B",
+        ["test/evidence/clearance-b"],
+        %{"redistribution_status" => "unknown"}
+      )
+
+    reversed_records = [record_b, record_a]
+
+    assert_diagnostic(
+      ProvenanceReference.release_clearance(decoded_manifest(references), reversed_records),
+      "catalogue.provenance_reference.publication_not_public_safe",
+      "provenance.references[0]"
+    )
+
+    assert_diagnostic(
+      ProvenanceReference.release_clearance(
+        decoded_manifest(Enum.reverse(references)),
+        reversed_records
+      ),
+      "catalogue.provenance_reference.redistribution_not_approved",
+      "provenance.references[0]"
+    )
+  end
+
+  test "ignores valid unreferenced uncleared records and their evidence" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record_a = cleared_record("Synthetic source A", ["test/evidence/clearance-a"])
+
+    record_b =
+      cleared_record(
+        "Synthetic source B",
+        ["test/evidence/unreferenced-clearance"],
+        %{"redistribution_status" => "unknown", "publication_state" => "private_only"}
+      )
+
+    assert ProvenanceReference.release_clearance(manifest, [record_a, record_b]) ==
+             {:ok, ["test/evidence/clearance-a"]}
+  end
+
+  test "propagates #45A diagnostics unchanged before clearance evaluation" do
+    manifest =
+      decoded_manifest([
+        reference("Synthetic source A", %{"evidence_refs" => ["test/evidence/dangling"]})
+      ])
+
+    record = cleared_record("Synthetic source A", ["test/evidence/source-a"])
+
+    expected = ProvenanceReference.validate(manifest, [record])
+
+    assert_diagnostic(
+      expected,
+      "catalogue.provenance_reference.evidence_ref_dangling",
+      "provenance.references[0].evidence_refs[0]"
+    )
+
+    assert ProvenanceReference.release_clearance(manifest, [record]) == expected
+  end
+
+  test "propagates #45A shape failures for malformed unreferenced records" do
+    manifest = decoded_manifest([reference("Synthetic source A")])
+
+    record_a = cleared_record("Synthetic source A", ["test/evidence/clearance-a"])
+
+    malformed_record_b =
+      resolved_record("Synthetic source B")
+      |> Map.delete("publication_state")
+
+    expected = ProvenanceReference.validate(manifest, [record_a, malformed_record_b])
+
+    assert ProvenanceReference.release_clearance(manifest, [record_a, malformed_record_b]) ==
+             expected
+
+    assert_diagnostic(
+      expected,
+      "catalogue.provenance_reference.resolved_record_invalid",
+      "resolved_records[1]"
+    )
+  end
+
   defp reference(source_group, overrides \\ %{}) do
     Map.merge(
       %{
@@ -537,6 +814,25 @@ defmodule LiveFrames.Catalogue.ProvenanceReferenceTest do
         "clearance_evidence_refs" => []
       },
       overrides
+    )
+  end
+
+  defp cleared_record(
+         source_group,
+         clearance_evidence_refs,
+         overrides \\ %{}
+       ) do
+    resolved_record(
+      source_group,
+      Map.merge(
+        %{
+          "evidence_refs" => Enum.uniq(["test/evidence/source-a" | clearance_evidence_refs]),
+          "redistribution_status" => "approved",
+          "publication_state" => "public_safe",
+          "clearance_evidence_refs" => clearance_evidence_refs
+        },
+        overrides
+      )
     )
   end
 

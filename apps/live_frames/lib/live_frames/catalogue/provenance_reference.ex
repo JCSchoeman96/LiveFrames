@@ -33,6 +33,26 @@ defmodule LiveFrames.Catalogue.ProvenanceReference do
     )
   end
 
+  @spec release_clearance(Manifest.t(), term()) ::
+          {:ok, [String.t()]} | {:error, [Manifest.diagnostic()]}
+  def release_clearance(manifest, resolved_records) do
+    case validate(manifest, resolved_records) do
+      :ok ->
+        with {:ok, evidence_refs} <-
+               evaluate_clearance_references(
+                 manifest.provenance["references"],
+                 resolved_records,
+                 0,
+                 []
+               ) do
+          {:ok, evidence_refs |> List.flatten() |> Enum.uniq() |> Enum.sort()}
+        end
+
+      error ->
+        error
+    end
+  end
+
   defp validate_provenance(provenance) when is_map(provenance) do
     if exact_keys?(provenance, @provenance_keys) do
       provenance
@@ -276,6 +296,58 @@ defmodule LiveFrames.Catalogue.ProvenanceReference do
     end
   end
 
+  defp evaluate_clearance_references([], _resolved_records, _index, evidence_refs) do
+    {:ok, evidence_refs}
+  end
+
+  defp evaluate_clearance_references([reference | rest], resolved_records, index, evidence_refs) do
+    record =
+      Enum.find(resolved_records, fn record ->
+        record["authority"] == reference["authority"] and
+          record["source_group"] == reference["source_group"]
+      end)
+
+    path = "provenance.references[#{index}]"
+
+    case evaluate_record_clearance(record, path) do
+      {:ok, clearance_evidence_refs} ->
+        evaluate_clearance_references(
+          rest,
+          resolved_records,
+          index + 1,
+          [clearance_evidence_refs | evidence_refs]
+        )
+
+      error ->
+        error
+    end
+  end
+
+  defp evaluate_record_clearance(record, path) do
+    cond do
+      record["redistribution_status"] != "approved" ->
+        redistribution_not_approved(path)
+
+      record["publication_state"] != "public_safe" ->
+        publication_not_public_safe(path)
+
+      record["clearance_evidence_refs"] == [] ->
+        clearance_evidence_missing(path)
+
+      true ->
+        case first_dangling_clearance_evidence_ref(record) do
+          nil -> {:ok, record["clearance_evidence_refs"]}
+          evidence_ref -> clearance_evidence_dangling(path, evidence_ref)
+        end
+    end
+  end
+
+  defp first_dangling_clearance_evidence_ref(record) do
+    Enum.find(record["clearance_evidence_refs"], fn evidence_ref ->
+      evidence_ref not in record["evidence_refs"]
+    end)
+  end
+
   defp resolve_references(references, resolved_records) do
     resolve_references(references, resolved_records, 0)
   end
@@ -375,6 +447,38 @@ defmodule LiveFrames.Catalogue.ProvenanceReference do
       "catalogue.provenance_reference.resolved_record_invalid",
       path,
       "Expected a string-keyed provenance record with exactly the required fields."
+    )
+  end
+
+  defp redistribution_not_approved(path) do
+    error(
+      "catalogue.provenance_reference.redistribution_not_approved",
+      path,
+      "The matching resolved record's redistribution_status is not exactly \"approved\"."
+    )
+  end
+
+  defp publication_not_public_safe(path) do
+    error(
+      "catalogue.provenance_reference.publication_not_public_safe",
+      path,
+      "The matching resolved record's publication_state is not exactly \"public_safe\"."
+    )
+  end
+
+  defp clearance_evidence_missing(path) do
+    error(
+      "catalogue.provenance_reference.clearance_evidence_missing",
+      path,
+      "The matching resolved record has no clearance evidence references."
+    )
+  end
+
+  defp clearance_evidence_dangling(path, evidence_ref) do
+    error(
+      "catalogue.provenance_reference.clearance_evidence_dangling",
+      path,
+      "Clearance evidence reference #{inspect(evidence_ref)} is absent from the matching resolved record's evidence_refs."
     )
   end
 
