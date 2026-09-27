@@ -127,6 +127,20 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert contributor["source_path"] == "_width"
   end
 
+  test "identical unsafe values retain evidence without claiming a normalized duplicate" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [class("class-a", %{"_width" => 12}), class("class-b", %{"_width" => 12})]
+      )
+
+    style = root(document).styles["width"]
+    assert %StyleValue{kind: :unresolved, value: 12} = style
+    assert style.metadata["precedence"] == "identical_unresolved_evidence"
+    assert length(style.metadata["contributors"]) == 2
+    assert precedence_diagnostics(document) == []
+  end
+
   test "a conflict suppresses only its property" do
     document =
       document(

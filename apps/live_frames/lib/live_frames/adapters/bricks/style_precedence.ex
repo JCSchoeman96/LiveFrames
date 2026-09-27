@@ -156,7 +156,7 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
 
   defp classify([declaration]) do
     if unresolved_declaration?(declaration) do
-      {:retain_unresolved, declaration, :unique, "unique"}
+      {:retain_unresolved, declaration, :unresolved_value, "unresolved_value"}
     else
       {:emit, declaration, :unique, "unique"}
     end
@@ -172,7 +172,8 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
 
       Enum.all?(declarations, &unresolved_declaration?/1) and
           Enum.all?(values, &(&1 === hd(values))) ->
-        {:retain_unresolved, hd(declarations), :equivalent_duplicate, "equivalent_duplicate"}
+        {:retain_unresolved, hd(declarations), :unresolved_duplicate_evidence,
+         "identical_unresolved_evidence"}
 
       element_local_override?(declarations) ->
         local = Enum.find(declarations, &(&1.origin == :element_local))
