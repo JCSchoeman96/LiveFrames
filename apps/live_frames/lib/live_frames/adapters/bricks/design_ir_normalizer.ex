@@ -548,21 +548,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       end)
 
     styles =
-      Enum.reduce(style_result.unresolved_values, styles, fn {source_key, value}, styles ->
-        property = unresolved_property(source_key)
+      Enum.reduce(style_result.unresolved_styles, styles, fn declaration, styles ->
+        if is_nil(declaration.breakpoint) do
+          style =
+            unresolved_style_value(declaration, style_declaration_trace(trace, declaration))
 
-        Map.put_new(
-          styles,
-          property,
-          StyleValue.unresolved(value,
-            source_expression: if(is_binary(value), do: value, else: nil),
-            source_trace: style_trace(trace, source_key),
-            metadata: %{
-              "source_key" => source_key,
-              "reason" => "source value has no proven CSS unit or representation"
-            }
-          )
-        )
+          Map.put(styles, declaration.property, style)
+        else
+          styles
+        end
       end)
 
     styles =
@@ -606,8 +600,22 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       | source_type: "bricks_style",
         source_path: path,
         source_name: source_path,
-        inference: "style declaration normalized from its source layer"
+        inference:
+          if(Map.get(declaration, :normalization_state) == :unresolved,
+            do: "style value retained with source-layer provenance after validation",
+            else: "style declaration normalized from its source layer"
+          )
     }
+  end
+
+  defp unresolved_style_value(declaration, trace) do
+    StyleValue.unresolved(declaration.value,
+      source_expression: if(is_binary(declaration.value), do: declaration.value, else: nil),
+      source_trace: trace,
+      metadata:
+        declaration_metadata(declaration)
+        |> Map.put("reason", declaration.reason)
+    )
   end
 
   defp declaration_metadata(declaration) do
@@ -838,10 +846,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
   end
 
-  defp unresolved_property("_margin." <> side), do: "margin-" <> side
-  defp unresolved_property("_border.radius." <> side), do: "border-" <> side <> "-radius"
-  defp unresolved_property(source_key), do: String.trim_leading(source_key, "_")
-
   defp style_trace(trace, source_key) do
     %{
       trace
@@ -957,7 +961,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp responsive_for(style_result, trace, source_classes, element, context) do
-    style_result.responsive
+    (style_result.responsive ++
+       Enum.filter(style_result.unresolved_styles, &(&1.breakpoint != nil)))
     |> Enum.group_by(& &1.breakpoint)
     |> Enum.sort_by(fn {breakpoint, _records} -> breakpoint end)
     |> Map.new(fn {breakpoint, records} ->
@@ -987,6 +992,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
                   source_trace: record_trace,
                   metadata: %{"source_key" => record.source_key}
                 )
+
+              :style
+              when is_map_key(record, :normalization_state) and
+                     record.normalization_state == :unresolved ->
+                unresolved_style_value(record, record_trace)
 
               _kind ->
                 normalize_style(record.value, property, record_trace, context.token_set,

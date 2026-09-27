@@ -93,6 +93,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
       responsive: [],
       custom_css: %{base: [], responsive: []},
       declarations: [],
+      unresolved_declarations: [],
       consumed: [],
       unsupported: [],
       unresolved_values: %{},
@@ -164,7 +165,15 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
         end
 
       :unresolved ->
-        add_unresolved(result, key, value, "Style value is not unambiguous CSS")
+        add_unresolved_style(
+          result,
+          base_key,
+          key,
+          property,
+          value,
+          breakpoint,
+          "Style value is not unambiguous CSS"
+        )
     end
   end
 
@@ -203,10 +212,13 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
               end
 
             :unresolved ->
-              add_unresolved(
+              add_unresolved_style(
                 result,
+                "_margin",
                 "#{key}.#{side}",
+                property,
                 side_value,
+                breakpoint,
                 "Box value has no proven CSS unit"
               )
           end
@@ -275,10 +287,13 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
               end
 
             :unresolved ->
-              add_unresolved(
+              add_unresolved_style(
                 result,
+                "_border",
                 "#{key}.radius.#{side}",
+                property,
                 side_value,
+                breakpoint,
                 "Border radius has no proven CSS unit"
               )
           end
@@ -319,7 +334,15 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
             end
 
           :unresolved ->
-            add_unresolved(result, "#{key}.color.raw", raw, "Background color is not safe CSS")
+            add_unresolved_style(
+              result,
+              "_background",
+              "#{key}.color.raw",
+              "background",
+              raw,
+              breakpoint,
+              "Background color is not safe CSS"
+            )
         end
 
       nil ->
@@ -586,6 +609,33 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
         message: message
       )
     )
+  end
+
+  defp add_unresolved_style(
+         result,
+         source_root_key,
+         source_path,
+         property,
+         raw_value,
+         breakpoint,
+         message
+       ) do
+    record = %{
+      kind: :style,
+      property: property,
+      value: raw_value,
+      raw_value: raw_value,
+      breakpoint: breakpoint,
+      source_key: source_root_key,
+      source_root_key: source_root_key,
+      source_path: source_path,
+      normalization_state: :unresolved,
+      reason: message
+    }
+
+    result
+    |> add_unresolved(source_path, raw_value, message)
+    |> Map.update!(:unresolved_declarations, &(&1 ++ [record]))
   end
 
   defp add_diagnostic(result, diagnostic),

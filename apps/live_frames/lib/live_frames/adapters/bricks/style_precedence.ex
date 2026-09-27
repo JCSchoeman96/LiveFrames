@@ -58,8 +58,13 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
         Enum.map(extraction.declarations, &add_layer_provenance(&1, layer))
       end)
 
+    unresolved_declarations =
+      Enum.flat_map(extractions, fn {layer, extraction} ->
+        Enum.map(extraction.unresolved_declarations, &add_layer_provenance(&1, layer))
+      end)
+
     resolutions =
-      declarations
+      (declarations ++ unresolved_declarations)
       |> Enum.group_by(&{&1.property, &1.breakpoint})
       |> Enum.sort_by(fn {{property, breakpoint}, _declarations} ->
         {property, breakpoint || ""}
@@ -77,7 +82,7 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
         (emitted_responsive(resolutions) ++ custom_css_responsive)
         |> Enum.sort_by(&{&1.breakpoint || "", &1.property || "", &1.source_key}),
       custom_css: custom_css,
-      unresolved_values: unresolved_values(extractions),
+      unresolved_styles: unresolved_styles(resolutions),
       resolutions: resolutions,
       consumed: extraction_records(extractions, :consumed),
       unsupported: extraction_records(extractions, :unsupported),
@@ -108,6 +113,27 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
           contributors: contributors
         }
 
+      {:retain_unresolved, declaration, state, precedence} ->
+        unresolved =
+          declaration
+          |> Map.put(:precedence, precedence)
+          |> Map.put(:contributors, contributors)
+          |> Map.put(:resolution_state, state)
+
+        %{
+          property: property,
+          breakpoint: breakpoint,
+          state: state,
+          resolution_path: [
+            "observed_declaration",
+            "normalization_unresolved",
+            Atom.to_string(state)
+          ],
+          emitted: nil,
+          unresolved: unresolved,
+          contributors: contributors
+        }
+
       {:unresolved, state, reason} ->
         %{
           property: property,
@@ -128,28 +154,47 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
     end
   end
 
-  defp classify([declaration]),
-    do: {:emit, declaration, :unique, "unique"}
+  defp classify([declaration]) do
+    if unresolved_declaration?(declaration) do
+      {:retain_unresolved, declaration, :unique, "unique"}
+    else
+      {:emit, declaration, :unique, "unique"}
+    end
+  end
 
   defp classify(declarations) do
     values = Enum.map(declarations, & &1.value)
 
     cond do
-      Enum.all?(values, &(&1 === hd(values))) ->
+      Enum.all?(declarations, &(not unresolved_declaration?(&1))) and
+          Enum.all?(values, &(&1 === hd(values))) ->
         {:emit, hd(declarations), :equivalent_duplicate, "equivalent_duplicate"}
+
+      Enum.all?(declarations, &unresolved_declaration?/1) and
+          Enum.all?(values, &(&1 === hd(values))) ->
+        {:retain_unresolved, hd(declarations), :equivalent_duplicate, "equivalent_duplicate"}
 
       element_local_override?(declarations) ->
         local = Enum.find(declarations, &(&1.origin == :element_local))
 
-        {:emit, local, :element_override, "element_local_same_source_key_project_contract"}
+        if unresolved_declaration?(local) do
+          {:retain_unresolved, local, :element_override,
+           "element_local_same_source_key_project_contract"}
+        else
+          {:emit, local, :element_override, "element_local_same_source_key_project_contract"}
+        end
 
-      class_value_conflict?(declarations) ->
+      Enum.all?(declarations, &(not unresolved_declaration?(&1))) and
+          class_value_conflict?(declarations) ->
         {:unresolved, :class_conflict, "class_conflict"}
 
       true ->
         {:unresolved, :unresolved_precedence, "unresolved_precedence"}
     end
   end
+
+  defp unresolved_declaration?(declaration),
+    do: Map.get(declaration, :normalization_state) == :unresolved
 
   defp element_local_override?(declarations) do
     class_declarations = Enum.filter(declarations, &(&1.origin == :global_class))
@@ -198,7 +243,7 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
       authority_ids: layer.authority_ids,
       class_reference_index: layer.class_reference_index,
       element_source_id: layer.source_id,
-      state: :normalized
+      state: Map.get(declaration, :normalization_state, :normalized)
     })
   end
 
@@ -286,9 +331,10 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
     |> Enum.map(&elem(&1, 1))
   end
 
-  defp unresolved_values(extractions) do
-    Enum.reduce(extractions, %{}, fn {_layer, extraction}, unresolved ->
-      Map.merge(unresolved, extraction.unresolved_values)
+  defp unresolved_styles(resolutions) do
+    resolutions
+    |> Enum.flat_map(fn resolution ->
+      if is_map(resolution[:unresolved]), do: [resolution.unresolved], else: []
     end)
   end
 

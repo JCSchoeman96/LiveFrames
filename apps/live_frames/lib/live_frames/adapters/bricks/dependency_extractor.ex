@@ -132,7 +132,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           values = Enum.flat_map(layers, &strings(&1.settings))
 
           occurrences =
-            resolved_variable_occurrences(resolved.settings, layers, element.id)
+            layer_variable_occurrences(layers, element.id)
 
           style_results_acc = Map.put(style_results_acc, element.id, style_result)
 
@@ -140,7 +140,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             layer_diagnostics_for_reporting(style_result.diagnostics) ++
               compatibility_diagnostics(
                 add_source(compatibility_settings_result.diagnostics, element.id),
-                style_result.diagnostics
+                style_result
               )
 
           {
@@ -213,7 +213,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       path =
         case layer.origin do
           :global_class ->
-            "settings.class_refs[#{layer.class_reference_index}].#{layer.class_id}.settings"
+            "settings.class_refs[#{layer.class_reference_index}].settings"
 
           :element_local ->
             "settings"
@@ -223,18 +223,6 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp resolved_variable_occurrences(effective_settings, layers, source_id) do
-    effective_occurrences = variable_occurrences(effective_settings, source_id, "settings", [])
-    effective_keys = MapSet.new(effective_occurrences, &{&1.name, &1.expression})
-
-    additional_layer_occurrences =
-      layers
-      |> layer_variable_occurrences(source_id)
-      |> Enum.reject(&MapSet.member?(effective_keys, {&1.name, &1.expression}))
-
-    effective_occurrences ++ additional_layer_occurrences
-  end
-
   defp layer_diagnostics_for_reporting(diagnostics) do
     Enum.filter(diagnostics, fn diagnostic ->
       diagnostic.code == "bricks.style.precedence_conflict" or
@@ -242,16 +230,26 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp compatibility_diagnostics(diagnostics, layer_diagnostics) do
+  defp compatibility_diagnostics(diagnostics, style_result) do
     malformed_paths =
-      layer_diagnostics
+      style_result.diagnostics
       |> Enum.filter(&(&1.metadata["style_layer_state"] == "malformed_layer"))
       |> Enum.map(& &1.source_path)
       |> MapSet.new()
 
+    precedence_conflict_paths =
+      style_result.resolutions
+      |> Enum.filter(&(&1.state == :unresolved_precedence))
+      |> Enum.flat_map(
+        &Enum.map(&1.contributors, fn contributor -> contributor["source_path"] end)
+      )
+      |> MapSet.new()
+
     Enum.reject(diagnostics, fn diagnostic ->
-      diagnostic.code == "bricks.setting.unsupported" and
-        MapSet.member?(malformed_paths, diagnostic.source_path)
+      (diagnostic.code == "bricks.setting.unsupported" and
+         MapSet.member?(malformed_paths, diagnostic.source_path)) or
+        (diagnostic.code == "bricks.setting.value_unresolved" and
+           MapSet.member?(precedence_conflict_paths, diagnostic.source_path))
     end)
   end
 

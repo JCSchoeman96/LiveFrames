@@ -113,6 +113,18 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
              "class-a",
              "class-b"
            ]
+
+    refute Enum.any?(document.diagnostics, &(&1.code == "bricks.setting.value_unresolved"))
+  end
+
+  test "a single unsafe value remains unresolved with its layer provenance" do
+    document = document(["class-a"], [class("class-a", %{"_width" => 12})])
+
+    style = root(document).styles["width"]
+    assert %StyleValue{kind: :unresolved, value: 12} = style
+    assert [contributor] = style.metadata["contributors"]
+    assert contributor["class_id"] == "class-a"
+    assert contributor["source_path"] == "_width"
   end
 
   test "a conflict suppresses only its property" do
@@ -162,6 +174,23 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert [diagnostic] = precedence_diagnostics(document)
     assert diagnostic.metadata["property"] == "width"
     assert diagnostic.metadata["conflict"] == "class_conflict"
+  end
+
+  test "different unsafe values from class layers do not select an unresolved style winner" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [class("class-a", %{"_width" => 12}), class("class-b", %{"_width" => 24})]
+      )
+
+    refute Map.has_key?(root(document).styles, "width")
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "width"
+
+    assert Enum.map(diagnostic.metadata["contributors"], & &1["class_id"]) == [
+             "class-a",
+             "class-b"
+           ]
   end
 
   test "same direct scalar source key keeps the established element-local override" do
@@ -374,7 +403,35 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
              "--class-b-width"
            ]
 
+    assert Enum.find(variables, &(&1["name"] == "--class-a-width"))["occurrences"]
+           |> Enum.map(& &1["source_path"]) == ["settings.class_refs[0].settings._width"]
+
+    assert Enum.find(variables, &(&1["name"] == "--class-b-width"))["occurrences"]
+           |> Enum.map(& &1["source_path"]) == ["settings.class_refs[1].settings._width"]
+
     refute Map.has_key?(root(document).styles, "width")
     assert length(precedence_diagnostics(document)) == 1
+  end
+
+  test "equivalent variable declarations retain every class source path" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_width" => "var(--shared-width)"}),
+          class("class-b", %{"_width" => "var(--shared-width)"})
+        ]
+      )
+
+    variable =
+      Enum.find(
+        document.provenance["dependency_summary"]["variables"],
+        &(&1["name"] == "--shared-width")
+      )
+
+    assert Enum.map(variable["occurrences"], & &1["source_path"]) == [
+             "settings.class_refs[0].settings._width",
+             "settings.class_refs[1].settings._width"
+           ]
   end
 end
