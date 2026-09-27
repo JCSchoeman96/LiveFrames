@@ -242,6 +242,25 @@ defmodule LiveFrames.IRTest do
            end)
   end
 
+  test "asset URI presence matches the resolved and unresolved lifecycle" do
+    document = valid_document()
+    asset = Map.fetch!(document.assets, "asset_001")
+
+    assert asset.status == :resolved
+    assert is_binary(asset.uri)
+    assert IR.validate(document) == :ok
+
+    unresolved_without_uri = %{asset | status: :unresolved, uri: nil}
+    assert IR.validate(%{document | assets: %{"asset_001" => unresolved_without_uri}}) == :ok
+
+    unresolved_with_uri = %{asset | status: :unresolved}
+
+    assert {:error, diagnostics} =
+             IR.validate(%{document | assets: %{"asset_001" => unresolved_with_uri}})
+
+    assert Enum.any?(diagnostics, &(&1.code == "ir.asset.unresolved_uri_present"))
+  end
+
   test "validation reports duplicate nodes and missing references" do
     node = hd(valid_document().root_nodes)
 

@@ -37,14 +37,30 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   @spec style_properties() :: map()
   def style_properties, do: @style_properties
 
-  @spec extract(term()) :: map()
-  def extract(settings) when is_map(settings) do
+  @spec extract(term(), keyword()) :: map()
+  def extract(settings, opts \\ [])
+
+  def extract(settings, opts) when is_map(settings) and is_list(opts) do
+    semantic_settings =
+      case Keyword.get(opts, :semantic_settings, []) do
+        names when is_list(names) -> names
+        _value -> []
+      end
+
+    rejected_semantic_settings =
+      case Keyword.get(opts, :rejected_semantic_settings, []) do
+        names when is_list(names) -> names
+        _value -> []
+      end
+
     settings
     |> Enum.sort_by(fn {key, _value} -> to_string(key) end)
-    |> Enum.reduce(empty_result(settings), &consume/2)
+    |> Enum.reduce(empty_result(settings), fn pair, result ->
+      consume(pair, result, semantic_settings, rejected_semantic_settings)
+    end)
   end
 
-  def extract(settings) do
+  def extract(settings, _opts) do
     result = empty_result(settings)
     add_unsupported(result, "<settings>", settings, "Bricks settings must be an object")
   end
@@ -63,11 +79,21 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     }
   end
 
-  defp consume({key, value}, result) when is_binary(key) do
+  defp consume({key, value}, result, semantic_settings, rejected_semantic_settings)
+       when is_binary(key) do
     {base_key, breakpoint} = split_key(key)
 
     cond do
-      base_key in @semantic_settings or base_key == "_cssGlobalClasses" ->
+      base_key in rejected_semantic_settings ->
+        add_unsupported(
+          result,
+          key,
+          value,
+          "Bricks class settings cannot supply element native semantics or source attributes"
+        )
+
+      base_key in @semantic_settings or base_key in semantic_settings or
+          base_key == "_cssGlobalClasses" ->
         add_consumed(result, key, nil, value, breakpoint)
 
       base_key == "_cssCustom" ->
@@ -98,7 +124,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     end
   end
 
-  defp consume({_key, value}, result),
+  defp consume({_key, value}, result, _semantic_settings, _rejected_semantic_settings),
     do: add_unsupported(result, "<non-string-key>", value, "Bricks setting keys must be strings")
 
   defp consume_simple_style(result, key, base_key, value, breakpoint) do

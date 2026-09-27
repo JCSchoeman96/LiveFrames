@@ -7,10 +7,23 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.StaticAsset
 
   @variable_mappings %{"--content-gap" => "spacing.content_gap"}
   @known_external_variables ["--overlay-bg", "--neutral-ultra-dark-trans-60"]
   @runtime_fragments ["interaction", "dynamic", "query", "script", "hook", "runtime"]
+  @image_atom_keys %{
+    "url" => :url,
+    "id" => :id,
+    "filename" => :filename,
+    "dimensions" => :dimensions,
+    "full" => :full,
+    "path" => :path,
+    "size" => :size,
+    "isPlaceholder" => :is_placeholder,
+    "useDynamicData" => :use_dynamic_data,
+    "__source_id" => :__source_id
+  }
 
   @spec variables(term(), keyword()) :: [map()]
   def variables(values, opts \\ []) do
@@ -38,6 +51,12 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   def extract(%{tree: tree, elements: elements}, document, opts) do
     token_set = Keyword.get(opts, :token_set)
 
+    semantic_settings =
+      case Keyword.get(opts, :semantic_settings, []) do
+        names when is_list(names) -> names
+        _value -> []
+      end
+
     {class_dependencies, source_classes, acss_classes, settings_consumed, unsupported_settings,
      responsive, custom_css, variable_values, variable_occurrences, assets, runtime, diagnostics} =
       Enum.reduce(
@@ -48,16 +67,35 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             unsupported_settings_acc, responsive_acc, custom_css_acc, variable_values_acc,
             variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc} ->
           resolved = Map.fetch!(elements, element.id)
-          settings_result = Settings.extract(resolved.settings)
+
+          element_semantic_settings =
+            Enum.filter(semantic_settings, &Map.has_key?(element.settings, &1))
+
+          class_semantic_settings =
+            Enum.filter(semantic_settings, fn name ->
+              Map.has_key?(resolved.settings, name) and not Map.has_key?(element.settings, name)
+            end)
+
+          settings_result =
+            Settings.extract(resolved.settings,
+              semantic_settings: element_semantic_settings,
+              rejected_semantic_settings: class_semantic_settings
+            )
+
           class_records = class_records(resolved, element.id)
           class_names = resolved.class_names
 
           element_assets =
-            element.settings
-            |> Map.get("image")
-            |> case do
-              nil -> []
-              image -> assets([Map.put(image, "__source_id", element.id)])
+            if element.name == "image" do
+              [
+                asset_record(
+                  Map.get(element.settings, "image", :missing),
+                  element.id,
+                  element.settings
+                )
+              ]
+            else
+              []
             end
 
           runtime_records = runtime_records(element.settings, element.id)
@@ -99,8 +137,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
     asset_diagnostics =
       assets
-      |> Enum.filter(&(&1.status == :unresolved))
-      |> Enum.map(&asset_diagnostic/1)
+      |> Enum.flat_map(&asset_diagnostics/1)
 
     %{
       class_dependencies: class_dependencies,
@@ -215,32 +252,161 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp image_sources(%Element{settings: settings}), do: image_sources(Map.get(settings, "image"))
+  defp image_sources(%Element{name: "image", settings: settings, id: source_id}),
+    do: [asset_source(Map.get(settings, "image", :missing), source_id, settings)]
 
-  defp image_sources(%{"id" => _id} = image), do: [image]
-  defp image_sources(%{id: _id} = image), do: [image]
   defp image_sources(%{"image" => image}) when is_map(image), do: [image]
+  defp image_sources(%{image: image}) when is_map(image), do: [image]
+  defp image_sources(%{} = image), do: [image]
   defp image_sources(_value), do: []
 
-  defp asset_record(image) do
-    url = Map.get(image, "url", Map.get(image, :url))
-    resolved = is_binary(url) and byte_size(url) > 0
+  defp asset_source(image, source_id, element_settings),
+    do: %{image: image, source_id: source_id, element_settings: element_settings}
 
-    %{
-      attachment_id: Map.get(image, "id", Map.get(image, :id)),
-      filename: Map.get(image, "filename", Map.get(image, :filename)),
+  defp asset_record(%{image: image, source_id: source_id, element_settings: settings}),
+    do: asset_record(image, source_id, settings)
+
+  defp asset_record(image), do: asset_record(image, image_value(image, "__source_id"), %{})
+
+  defp asset_record(image, source_id, element_settings) do
+    image_map = if is_map(image), do: image, else: %{}
+    url = image_value(image_map, "url")
+    dynamic? = dynamic_image_source?(image_map)
+    sources_count = responsive_sources_count(element_settings)
+
+    {status, uri, resolution_reason} =
+      case classify_image_uri(image_map, url, dynamic?) do
+        {:ok, validated_uri} -> {:resolved, validated_uri, "resolved_static"}
+        {:error, reason} -> {:unresolved, nil, "unresolved_#{reason}"}
+      end
+
+    asset = %{
+      attachment_id: image_value(image_map, "id"),
+      filename: image_value(image_map, "filename"),
       url: url,
-      alt: Map.get(image, "alt", Map.get(image, :alt)),
-      dimensions: Map.get(image, "dimensions", Map.get(image, :dimensions)),
-      status: if(resolved, do: :resolved, else: :unresolved),
-      source_id: Map.get(image, "__source_id")
+      uri: uri,
+      alt: nil,
+      alt_resolution: "unproven",
+      dimensions: image_value(image_map, "dimensions"),
+      full: image_value(image_map, "full"),
+      path: image_value(image_map, "path"),
+      size: image_value(image_map, "size"),
+      sources_count: sources_count,
+      resolution_reason: resolution_reason,
+      status: status,
+      source_id: source_id
     }
+
+    if custom_caption?(element_settings), do: Map.put(asset, :custom_caption?, true), else: asset
+  end
+
+  defp image_value(image, key),
+    do: Map.get(image, key, Map.get(image, Map.fetch!(@image_atom_keys, key)))
+
+  defp dynamic_image_source?(image) do
+    image_value(image, "useDynamicData") not in [nil, false, ""]
+  end
+
+  defp classify_image_uri(_image, _url, true), do: {:error, :dynamic}
+
+  defp classify_image_uri(image, _url, false) do
+    if image_value(image, "isPlaceholder") == true do
+      {:error, :placeholder}
+    else
+      classify_media_image(image)
+    end
+  end
+
+  defp classify_media_image(image) do
+    with :ok <- validate_media_identity(image),
+         {:ok, selected_uri} <- StaticAsset.validate(image_value(image, "url")),
+         {:ok, _full_uri} <- StaticAsset.validate(image_value(image, "full")) do
+      {:ok, selected_uri}
+    end
+  end
+
+  defp validate_media_identity(image) do
+    attachment_id = image_value(image, "id")
+    filename = image_value(image, "filename")
+    size = image_value(image, "size")
+
+    cond do
+      missing_asset_field?(attachment_id) or missing_asset_field?(filename) or
+          missing_asset_field?(size) ->
+        {:error, :missing}
+
+      not is_integer(attachment_id) or attachment_id <= 0 or not is_binary(filename) or
+          not is_binary(size) ->
+        {:error, :malformed}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp missing_asset_field?(value), do: value in [nil, false, ""]
+
+  defp responsive_sources_count(settings) when is_map(settings) do
+    sources = Map.get(settings, "sources", Map.get(settings, :sources))
+
+    cond do
+      is_list(sources) -> length(sources)
+      is_map(sources) and not is_struct(sources) -> map_size(sources)
+      true -> 0
+    end
+  end
+
+  defp responsive_sources_count(_settings), do: 0
+
+  defp custom_caption?(settings) when is_map(settings),
+    do: Map.get(settings, "caption", Map.get(settings, :caption)) == "custom"
+
+  defp custom_caption?(_settings), do: false
+
+  defp asset_diagnostics(asset) do
+    unresolved_diagnostic =
+      if asset.status == :unresolved, do: [asset_diagnostic(asset)], else: []
+
+    sources_diagnostic =
+      if asset.sources_count > 0 do
+        [
+          Diagnostic.new(
+            code: "bricks.asset.sources_unsupported",
+            severity: :warning,
+            source_id: asset.source_id,
+            source_path: "settings.sources",
+            message: "responsive Bricks image sources were preserved but not compiled",
+            metadata: %{"source_count" => asset.sources_count}
+          )
+        ]
+      else
+        []
+      end
+
+    caption_diagnostic =
+      if Map.get(asset, :custom_caption?, false) do
+        [
+          Diagnostic.new(
+            code: "bricks.asset.caption_unsupported",
+            severity: :warning,
+            source_id: asset.source_id,
+            source_path: "settings.caption",
+            message:
+              "Bricks image caption structure and content were preserved as evidence but not compiled in C-04B",
+            metadata: %{"caption_mode" => "custom"}
+          )
+        ]
+      else
+        []
+      end
+
+    unresolved_diagnostic ++ sources_diagnostic ++ caption_diagnostic
   end
 
   defp class_records(resolved, source_id) do
     global =
       Enum.map(resolved.class_refs, fn ref ->
-        %{
+        record = %{
           element_id: source_id,
           class_id: ref.id,
           name: ref.name,
@@ -248,6 +414,16 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           status: ref.status,
           provenance: :global_class
         }
+
+        if ref.resolution_status == :local_resolved and ref.authority_ids == [] do
+          record
+        else
+          Map.merge(record, %{
+            resolution_status: ref.resolution_status,
+            resolution_source: ref.resolution_source,
+            authority_ids: ref.authority_ids
+          })
+        end
       end)
 
     semantic =
@@ -368,7 +544,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         code: "bricks.asset.unresolved",
         severity: :warning,
         source_id: asset.source_id,
-        raw_value: asset,
-        message: "Bricks image asset URL is unresolved"
+        source_path: "image.url",
+        raw_value: asset.url,
+        message: "Bricks image URI remained unresolved (#{asset.resolution_reason})",
+        metadata: %{"resolution_reason" => asset.resolution_reason}
       )
 end

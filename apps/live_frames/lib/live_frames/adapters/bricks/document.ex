@@ -1,6 +1,6 @@
 defmodule LiveFrames.Adapters.Bricks.Document do
   @moduledoc """
-  Recognized Bricks copied-elements envelope.
+  Recognized Bricks copied-elements envelope or component fragment.
   """
 
   alias LiveFrames.Adapters.Bricks.Component
@@ -10,6 +10,7 @@ defmodule LiveFrames.Adapters.Bricks.Document do
   @adapter_version "1.0.0"
 
   @type t :: %__MODULE__{
+          source_shape: :copied_elements_envelope | :component_fragment | nil,
           source: String.t() | nil,
           source_url: String.t() | nil,
           payload_version: String.t() | nil,
@@ -25,7 +26,8 @@ defmodule LiveFrames.Adapters.Bricks.Document do
           raw: map()
         }
 
-  defstruct source: nil,
+  defstruct source_shape: nil,
+            source: nil,
             source_url: nil,
             payload_version: nil,
             adapter_version: @adapter_version,

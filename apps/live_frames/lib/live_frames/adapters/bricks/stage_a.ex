@@ -137,7 +137,8 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
       |> Result.advance(:recognized)
       |> Result.advance(:validated)
 
-    with {:ok, proxy, component, resolve_diagnostics} <-
+    with :ok <- validate_source_shape(document),
+         {:ok, proxy, component, resolve_diagnostics} <-
            Bricks.resolve(document,
              component_id: Keyword.get(opts, :component_id, @default_component_id)
            ),
@@ -151,7 +152,11 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
            %{result | tree: tree}
            |> Result.add_diagnostics(tree_diagnostics)
            |> Result.advance(:tree_built),
-         {:ok, resolved, class_diagnostics} <- ClassResolver.resolve(tree, document),
+         {:ok, resolved, class_diagnostics} <-
+           ClassResolver.resolve(tree, document,
+             external_class_authorities: Keyword.get(opts, :external_class_authorities, [])
+           ),
+         :ok <- validate_class_resolution(class_diagnostics),
          dependencies <-
            DependencyExtractor.extract(resolved, document,
              token_set: Keyword.get(opts, :token_set)
@@ -242,6 +247,26 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
       )
     end)
   end
+
+  defp validate_class_resolution(diagnostics) do
+    blocking = Enum.filter(diagnostics, &(&1.severity in [:error, :fatal]))
+
+    if blocking == [], do: :ok, else: {:error, blocking}
+  end
+
+  defp validate_source_shape(%Document{source_shape: :component_fragment}) do
+    {:error,
+     [
+       Diagnostic.new(
+         code: "bricks.source.fragment_stage_a_unsupported",
+         severity: :error,
+         source_path: "components",
+         message: "Bricks component fragments are not supported for Stage A generation"
+       )
+     ]}
+  end
+
+  defp validate_source_shape(_document), do: :ok
 
   defp supported_element?(element),
     do:

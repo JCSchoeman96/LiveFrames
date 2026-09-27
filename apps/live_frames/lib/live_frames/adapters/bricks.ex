@@ -1,6 +1,6 @@
 defmodule LiveFrames.Adapters.Bricks do
   @moduledoc """
-  Public source-specific boundary for Bricks copied-elements extraction.
+  Public source-specific boundary for Bricks copied-elements and component-fragment intake.
   """
 
   alias LiveFrames.Adapters.Bricks.Document

@@ -6,6 +6,9 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Responsive.BreakpointAuthority
   alias LiveFrames.Responsive.Resolution
+  alias LiveFrames.StaticAsset
+  alias LiveFrames.StaticMarkupContract
+  alias LiveFrames.StaticNavigation
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
@@ -123,6 +126,11 @@ defmodule LiveFrames.Fidelity do
     diagnostics = diagnostics ++ deferred_diagnostics ++ responsive_diagnostics
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
+    {element, tag_diagnostics} = element(node)
+    {navigation_attrs, element, navigation_diagnostics} = navigation_markup(node, element)
+    generated_attrs = generated_attrs(node, asset, element) ++ navigation_attrs
+    {source_attrs, attribute_diagnostics} = source_attributes(node, element, generated_attrs)
+    attrs = generated_attrs ++ source_attrs
 
     {resolver_result, resolver_diagnostics} =
       source_resolver_result(source_resolver, classes, document.token_set, node)
@@ -133,13 +141,18 @@ defmodule LiveFrames.Fidelity do
     {source_declarations, source_diagnostics} =
       normalize_declarations(resolver_result.declarations, :source_resolver, node)
 
-    diagnostics = diagnostics ++ resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
+    diagnostics =
+      diagnostics ++
+        tag_diagnostics ++
+        navigation_diagnostics ++
+        attribute_diagnostics ++
+        resolver_diagnostics ++ base_diagnostics ++ source_diagnostics
 
     {%{
        id: node.node_id,
-       element: element(node),
+       element: element,
        content: node.content,
-       attrs: attrs(node, asset),
+       attrs: attrs,
        class: fidelity_class(node.node_id) <> classes,
        styles: styles,
        custom_css: custom_css,
@@ -170,29 +183,222 @@ defmodule LiveFrames.Fidelity do
 
   defp source_classes(_), do: {"", []}
 
-  defp element(%{semantic_type: "section"}), do: "section"
-  defp element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
-  defp element(%{semantic_type: "paragraph"}), do: "p"
-  defp element(%{semantic_type: "button"}), do: "button"
-  defp element(%{semantic_type: "image"}), do: "figure"
+  defp element(node) do
+    case Map.get(node.attributes, "tag") do
+      nil ->
+        {semantic_element(node), []}
 
-  defp element(%{semantic_type: "heading", attributes: %{"tag" => tag}})
-       when tag in ~w(h1 h2 h3 h4 h5 h6), do: tag
+      tag when is_binary(tag) ->
+        if StaticMarkupContract.native_tag?(tag) do
+          {tag, []}
+        else
+          {semantic_element(node), [unsupported_tag_diagnostic(node, tag)]}
+        end
 
-  defp element(%{semantic_type: "heading"}), do: "h2"
-  defp element(_), do: "div"
-
-  defp attrs(%{semantic_type: "button"}, _), do: [{"type", "button"}]
-
-  defp attrs(%{semantic_type: "image"}, %{"status" => "unresolved"} = asset) do
-    [
-      {"data-lf-asset-status", "unresolved"},
-      {"data-lf-asset-id", asset["asset_id"]}
-    ]
-    |> maybe_add_unresolved_asset_label(asset["alt"])
+      tag ->
+        {semantic_element(node), [unsupported_tag_diagnostic(node, tag)]}
+    end
   end
 
-  defp attrs(_, _), do: []
+  defp unsupported_tag_diagnostic(node, tag) do
+    diagnostic(
+      "fidelity.tag.unsupported",
+      "native tag was outside the static markup allowlist",
+      node,
+      %{tag: tag}
+    )
+  end
+
+  defp semantic_element(%{semantic_type: "section"}), do: "section"
+  defp semantic_element(%{semantic_type: type}) when type in ["container", "generic"], do: "div"
+  defp semantic_element(%{semantic_type: "paragraph"}), do: "p"
+  defp semantic_element(%{semantic_type: "button"}), do: "button"
+  defp semantic_element(%{semantic_type: "link"}), do: "span"
+
+  defp semantic_element(%{semantic_type: "image"} = node) do
+    if Map.get(node.attributes, "caption") == "custom", do: "figure", else: "img"
+  end
+
+  defp semantic_element(%{semantic_type: "heading"}), do: "h2"
+  defp semantic_element(_), do: "div"
+
+  defp navigation_markup(node, element) do
+    if node.semantic_type in ["button", "link"] do
+      case Map.get(node.attributes, "navigation") do
+        nav when is_map(nav) ->
+          case StaticNavigation.validate_navigation_map(nav) do
+            {:ok, attrs} ->
+              {attrs, "a", []}
+
+            {:error, reason} ->
+              {[], navigation_fallback_element(node),
+               navigation_rejection_diagnostics(node, nav, reason)}
+          end
+
+        _other ->
+          {[], navigation_fallback_element(node), []}
+      end
+    else
+      {[], element, []}
+    end
+  end
+
+  defp navigation_fallback_element(%{semantic_type: "link"}), do: "span"
+  defp navigation_fallback_element(%{semantic_type: "button"}), do: "button"
+  defp navigation_fallback_element(_node), do: "div"
+
+  defp navigation_rejection_diagnostics(node, nav, reason) do
+    [
+      diagnostic(
+        navigation_diagnostic_code(reason),
+        navigation_diagnostic_message(reason),
+        node,
+        %{navigation: nav}
+      )
+    ]
+  end
+
+  defp navigation_diagnostic_code(:unsafe), do: "fidelity.navigation.unsafe"
+  defp navigation_diagnostic_code(:malformed), do: "fidelity.navigation.malformed"
+  defp navigation_diagnostic_code(:dynamic), do: "fidelity.navigation.dynamic"
+  defp navigation_diagnostic_code(:missing), do: "fidelity.navigation.missing"
+  defp navigation_diagnostic_code(_reason), do: "fidelity.navigation.rejected"
+
+  defp navigation_diagnostic_message(:unsafe),
+    do: "navigation href used a forbidden URL scheme and was not emitted"
+
+  defp navigation_diagnostic_message(:malformed),
+    do: "navigation href was not a proven static destination and was not emitted"
+
+  defp navigation_diagnostic_message(:dynamic),
+    do: "navigation href requires runtime binding and was not emitted"
+
+  defp navigation_diagnostic_message(:missing),
+    do: "navigation metadata was incomplete and was not emitted"
+
+  defp navigation_diagnostic_message(_reason),
+    do: "navigation metadata failed Fidelity revalidation and was not emitted"
+
+  defp generated_attrs(node, asset, element) do
+    button_attrs = if element == "button", do: [{"type", button_type(node)}], else: []
+
+    button_attrs ++
+      case {node.semantic_type, asset} do
+        {"image", %{"status" => "unresolved"} = unresolved_asset} ->
+          [{"data-lf-asset-status", "unresolved"}]
+          |> maybe_add_asset_id(unresolved_asset["asset_id"])
+          |> maybe_add_unresolved_asset_label(unresolved_asset["alt"])
+
+        _ ->
+          []
+      end
+  end
+
+  defp source_attributes(node, element, generated_attrs) do
+    owned_names =
+      ["class" | Enum.map(generated_attrs, &elem(&1, 0))]
+      |> MapSet.new()
+
+    node.attributes
+    |> Map.to_list()
+    |> Enum.sort_by(fn {name, _value} -> if is_binary(name), do: name, else: inspect(name) end)
+    |> Enum.reduce({[], []}, fn {name, value}, {attributes, diagnostics} ->
+      cond do
+        name in ["tag", "caption", "link", "outline", "style", "url", "alt", "navigation"] ->
+          {attributes, diagnostics}
+
+        name in ["src", "srcset"] ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "image source attributes are owned by the validated asset pipeline",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
+
+        name in ["href", "target", "rel"] ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.unsupported",
+                 "navigation-owned attributes cannot be supplied through generic source attributes",
+                 node,
+                 %{attribute_name: name, native_element: element}
+               )
+             ]}
+
+        name == "type" and element == "button" ->
+          if StaticMarkupContract.safe_attribute?(name, value, element) do
+            {attributes, diagnostics}
+          else
+            {attributes,
+             diagnostics ++
+               [
+                 diagnostic(
+                   "fidelity.attribute.unsupported",
+                   "button type was not in the static override allowlist; type=button was retained",
+                   node,
+                   %{attribute_name: name}
+                 )
+               ]}
+          end
+
+        name in ["class", "data-lf-asset-id", "data-lf-asset-status"] or
+            (is_binary(name) and String.starts_with?(name, "data-lf-")) ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "attribute is owned by Fidelity and was not emitted",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
+
+        MapSet.member?(owned_names, name) ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.protected",
+                 "source attribute cannot replace generated markup metadata",
+                 node,
+                 %{attribute_name: name}
+               )
+             ]}
+
+        StaticMarkupContract.safe_attribute?(name, value, element) ->
+          {attributes ++ [{name, value}], diagnostics}
+
+        true ->
+          {attributes,
+           diagnostics ++
+             [
+               diagnostic(
+                 "fidelity.attribute.unsupported",
+                 "source attribute was outside the static markup allowlist",
+                 node,
+                 %{attribute_name: name, native_element: element}
+               )
+             ]}
+      end
+    end)
+  end
+
+  defp button_type(node) do
+    case Map.get(node.attributes, "type") do
+      type when is_binary(type) ->
+        if StaticMarkupContract.safe_attribute?("type", type, "button"), do: type, else: "button"
+
+      _value ->
+        "button"
+    end
+  end
 
   defp maybe_add_unresolved_asset_label(attrs, alt) when is_binary(alt) do
     case String.trim(alt) do
@@ -202,6 +408,11 @@ defmodule LiveFrames.Fidelity do
   end
 
   defp maybe_add_unresolved_asset_label(attrs, _), do: attrs
+
+  defp maybe_add_asset_id(attrs, asset_id) when is_binary(asset_id),
+    do: attrs ++ [{"data-lf-asset-id", asset_id}]
+
+  defp maybe_add_asset_id(attrs, _), do: attrs
 
   defp fidelity_class(id), do: "lf-fidelity-" <> String.replace(id, "_", "-")
 
@@ -558,32 +769,117 @@ defmodule LiveFrames.Fidelity do
     end)
   end
 
-  defp asset_decision(%{asset_refs: [id]}, %{assets: assets}, diagnostics) do
-    case assets[id] do
-      %AssetReference{status: :unresolved} = asset ->
-        {%{
-           "status" => "unresolved",
-           "asset_id" => asset.asset_id,
-           "alt" => asset.alt,
-           "attachment_id" => asset.metadata["attachment_id"],
-           "filename" => asset.metadata["filename"]
-         },
-         diagnostics ++
-           [
-             diagnostic(
-               "fidelity.asset.placeholder",
-               "unresolved asset emitted as placeholder",
-               nil,
-               %{asset_id: id}
-             )
-           ]}
+  defp asset_decision(%{semantic_type: "image", asset_refs: []}, _document, diagnostics),
+    do: {nil, diagnostics}
 
-      _ ->
-        {nil, diagnostics}
+  defp asset_decision(
+         %{semantic_type: "image", asset_refs: [id]},
+         %{assets: assets},
+         diagnostics
+       ) do
+    case Map.fetch(assets, id) do
+      {:ok, %AssetReference{kind: actual_kind} = asset} when actual_kind != "image" ->
+        kind_diagnostic =
+          diagnostic(
+            "fidelity.asset.kind_mismatch",
+            "image nodes can render only image asset references",
+            nil,
+            %{
+              diagnostic_code: "fidelity.asset.kind_mismatch",
+              asset_id: id,
+              expected_kind: "image",
+              actual_kind: actual_kind
+            }
+          )
+
+        unresolved_asset(asset, id, diagnostics ++ [kind_diagnostic])
+
+      {:ok, %AssetReference{status: :unresolved} = asset} ->
+        unresolved_asset(asset, id, diagnostics)
+
+      {:ok, %AssetReference{status: :resolved} = asset} ->
+        case StaticAsset.validate(asset.uri) do
+          {:ok, uri} ->
+            {%{
+               "status" => "resolved",
+               "asset_id" => asset.asset_id,
+               "uri" => uri,
+               "alt" => asset.alt
+             }, diagnostics}
+
+          {:error, reason} ->
+            rejected =
+              diagnostic(
+                "fidelity.asset.uri_rejected",
+                "resolved asset URI failed Fidelity revalidation",
+                nil,
+                %{asset_id: id, reason: Atom.to_string(reason)}
+              )
+
+            unresolved_asset(asset, id, diagnostics ++ [rejected])
+        end
+
+      {:ok, %AssetReference{} = asset} ->
+        status_diagnostic =
+          diagnostic(
+            "fidelity.asset.status_invalid",
+            "asset status was not supported and the image was emitted as a placeholder",
+            nil,
+            %{asset_id: id}
+          )
+
+        unresolved_asset(asset, id, diagnostics ++ [status_diagnostic])
+
+      :error ->
+        missing_diagnostic =
+          diagnostic(
+            "fidelity.asset.reference_missing",
+            "image asset reference was missing from the document registry",
+            nil,
+            %{asset_id: id}
+          )
+
+        unresolved_asset(%AssetReference{asset_id: id}, id, diagnostics ++ [missing_diagnostic])
     end
   end
 
+  defp asset_decision(
+         %{semantic_type: "image", asset_refs: ids},
+         _document,
+         diagnostics
+       )
+       when is_list(ids) and length(ids) > 1 do
+    ambiguity_diagnostic =
+      diagnostic(
+        "fidelity.asset.references_ambiguous",
+        "multiple image asset references cannot be selected deterministically",
+        nil,
+        %{reference_count: length(ids)}
+      )
+
+    unresolved_asset(%AssetReference{}, nil, diagnostics ++ [ambiguity_diagnostic])
+  end
+
   defp asset_decision(_, _, diagnostics), do: {nil, diagnostics}
+
+  defp unresolved_asset(asset, id, diagnostics) do
+    {%{
+       "status" => "unresolved",
+       "asset_id" => asset.asset_id || id,
+       "alt" => asset.alt,
+       "attachment_id" => asset.metadata["attachment_id"],
+       "filename" => asset.metadata["filename"]
+     },
+     diagnostics ++
+       [
+         diagnostic(
+           "fidelity.asset.placeholder",
+           "unresolved asset emitted as placeholder",
+           nil,
+           %{asset_id: id}
+         )
+       ]}
+  end
 
   defp source_resolver_result(source_resolver, classes, token_set, node) do
     context = resolver_context(node)
@@ -833,21 +1129,39 @@ defmodule LiveFrames.Fidelity do
       "<%!-- DO NOT EDIT: generated by mix live_frames.fidelity.generate --%>\n" <>
         Enum.map_join(nodes, "\n", &render_node/1) <> "\n"
 
+  defp render_node(%{element: "img"} = node) do
+    attrs = serialize_node_attributes(node, image_attributes(node.asset))
+    "<img #{attrs}>"
+  end
+
   defp render_node(node) do
-    attrs = Enum.map_join(node.attrs, " ", &serialize_html_attr/1)
-
-    class_attr = serialize_html_attr({"class", String.trim(node.class)})
-
-    attrs =
-      class_attr <> if(attrs == "", do: "", else: " " <> attrs)
+    attrs = serialize_node_attributes(node, [])
 
     content = if is_binary(node.content), do: "<%= #{inspect(node.content)} %>", else: ""
     open = "<#{node.element} #{attrs}>"
 
-    if node.element == "figure" and node.asset,
-      do: open <> content <> render_children(node.children) <> "</figure>",
-      else: open <> content <> render_children(node.children) <> "</#{node.element}>"
+    open <>
+      content <>
+      render_image(node.asset) <> render_children(node.children) <> "</#{node.element}>"
   end
+
+  defp serialize_node_attributes(node, pipeline_attributes) do
+    attrs = Enum.map_join(node.attrs ++ pipeline_attributes, " ", &serialize_html_attr/1)
+    class_attr = serialize_html_attr({"class", String.trim(node.class)})
+    class_attr <> if(attrs == "", do: "", else: " " <> attrs)
+  end
+
+  defp render_image(%{"status" => "resolved", "uri" => uri} = asset) when is_binary(uri) do
+    "<img #{Enum.map_join(image_attributes(asset), " ", &serialize_html_attr/1)}>"
+  end
+
+  defp render_image(_asset), do: ""
+
+  defp image_attributes(%{"status" => "resolved", "uri" => uri} = asset) when is_binary(uri) do
+    [{"src", uri}] ++ if(is_binary(asset["alt"]), do: [{"alt", asset["alt"]}], else: [])
+  end
+
+  defp image_attributes(_asset), do: []
 
   defp render_children(children), do: Enum.map_join(children, "\n", &render_node/1)
 
@@ -988,7 +1302,10 @@ defmodule LiveFrames.Fidelity do
       "deferred_responsive_count" => deferred_count,
       "deferred_responsive_entries" => deferred_entries,
       "invented_breakpoint_count" => 0,
-      "asset_substitutions" => flat |> Enum.map(& &1.asset) |> Enum.reject(&is_nil/1),
+      "asset_substitutions" =>
+        flat
+        |> Enum.map(& &1.asset)
+        |> Enum.reject(&(is_nil(&1) or &1["status"] != "unresolved")),
       "diagnostic_counts" => Enum.frequencies_by(diagnostics, &Atom.to_string(&1.severity)),
       "generated_heex_sha256" => sha(heex),
       "generated_css_sha256" => sha(css),
