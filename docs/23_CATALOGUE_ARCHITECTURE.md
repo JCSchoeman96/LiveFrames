@@ -10,7 +10,7 @@ This is architecture documentation. It does not claim a Catalogue implementation
 
 | Concern | Authority |
 | --- | --- |
-| Catalogue identity, taxonomy, state, release metadata, references, compatibility, deprecation, supersession, distribution-capability declarations | Canonical Catalogue manifest described here |
+| Catalogue identity, taxonomy, state, release metadata, references, deprecation, supersession, distribution-capability declarations | Canonical Catalogue manifest described here |
 | Actual component module, attrs, slots, rendering, runtime behavior, and public component contract | Production component source and its documentation |
 | Story preview and render verification | Storybook story and verification evidence |
 | Source origin, rights, provenance, publication facts, and clearance evidence | docs/04 |
@@ -160,7 +160,7 @@ The following table documents the approved reference-oriented v1 shape. It is a 
 | docs | Required JSON object containing structured references to item documentation. The exact nested reference schema is not defined by #40. |
 | provenance | Required JSON object containing structured source-group, authority, and evidence references. The dedicated #45 contract is defined in §10. The general Schema.V1 decoder checks only that this value is a JSON object; it does not enforce the nested #45 reference shape. This area must not duplicate or infer mutable provenance/publication status from docs/04. |
 | distribution.library, distribution.generator, distribution.ejection | Independent capability declarations with evidence references for any capability marked supported. |
-| release.version | Proposed or current CatalogueItem SemVer, governed by docs/24. |
+| release | Optional JSON object with the exact G1 #46 shape `{"version":"1.2.3"}`. Its only key is `version`, whose stable SemVer rules are governed by docs/24. |
 | Optional package linkage | Observational fields such as introduced_in_package or last_changed_in_package. These do not define CatalogueItem version. |
 | lifecycle.last_transition | The most recent action, state change, and required evidence references. |
 | deprecation | Whole-item deprecation rationale and related metadata when applicable. |
@@ -177,6 +177,16 @@ state. The schema layer must not invent nested keys or infer
 provenance/publication status.
 
 The manifest stores current state, the last transition, and the evidence references required for that state. It does not contain a large append-only event history. Git history is the durable transition history.
+
+The general `Schema.V1` decoder checks only that `release`, when present, is a
+JSON object. It does not enforce the nested #46 release shape, the `version`
+value type, or SemVer syntax. Dedicated versioning validation owns those
+checks. The compatibility record and class are caller-supplied guard input;
+the manifest has no compatibility field, and the record is never stored in
+`release`. On success, the versioning guard returns its supplied evidence refs
+through the existing Lifecycle guard result. See
+[docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md)
+for the versioning contract.
 
 ## 5. Lifecycle and state intent
 
