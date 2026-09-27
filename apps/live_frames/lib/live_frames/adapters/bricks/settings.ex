@@ -29,8 +29,29 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     "_bottom" => "bottom",
     "_left" => "left",
     "_objectFit" => "object-fit",
-    "_objectPosition" => "object-position"
+    "_objectPosition" => "object-position",
+    "_alignContentGrid" => "align-content",
+    "_alignItemsGrid" => "align-items",
+    "_alignSelf" => "align-self",
+    "_aspectRatio" => "aspect-ratio",
+    "_cssTransition" => "transition",
+    "_cursor" => "cursor",
+    "_flexGrow" => "flex-grow",
+    "_gridTemplateColumns" => "grid-template-columns",
+    "_gridTemplateRows" => "grid-template-rows",
+    "_heightMax" => "max-height",
+    "_heightMin" => "min-height",
+    "_justifyItemsGrid" => "justify-items",
+    "_opacity" => "opacity",
+    "_order" => "order",
+    "_overflow" => "overflow"
   }
+
+  @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
+  @css_integer_pattern ~r/^[+-]?\d+$/
+  @numeric_prefix_pattern ~r/^[+-]?(?:\d|\.)/
+  @css_wide_keywords ["inherit", "initial", "revert", "revert-layer", "unset"]
+  @numeric_expression_prefixes ["var(", "calc(", "clamp(", "min(", "max("]
 
   @semantic_settings ["text", "tag", "style", "outline", "image", "caption", "link", "url", "alt"]
 
@@ -453,6 +474,87 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
        else: :unresolved
   end
 
+  defp safe_style_value(value, "order") when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      Regex.match?(@css_integer_pattern, value) ->
+        {:ok, value}
+
+      numeric_css_value(value) != :other ->
+        :unresolved
+
+      true ->
+        safe_numeric_style_fallback(value)
+    end
+  end
+
+  defp safe_style_value(value, "flex-grow") when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      true ->
+        case numeric_css_value(value) do
+          {:number, number} ->
+            if css_number_non_negative?(number), do: {:ok, value}, else: :unresolved
+
+          :invalid ->
+            :unresolved
+
+          :other ->
+            safe_numeric_style_fallback(value)
+        end
+    end
+  end
+
+  defp safe_style_value(value, "opacity") when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      true ->
+        case numeric_css_value(value) do
+          {:number, number} ->
+            if css_number_at_most_one?(number), do: {:ok, value}, else: :unresolved
+
+          :invalid ->
+            :unresolved
+
+          :other ->
+            safe_numeric_style_fallback(value)
+        end
+    end
+  end
+
+  defp safe_style_value(value, "aspect-ratio") when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      true ->
+        case numeric_css_value(value) do
+          {:number, number} ->
+            if css_number_positive?(number), do: {:ok, value}, else: :unresolved
+
+          :invalid ->
+            if positive_ratio_expression?(value),
+              do: safe_style_value(value, :other),
+              else: :unresolved
+
+          :other ->
+            if String.contains?(value, "/") do
+              if positive_ratio_expression?(value),
+                do: safe_style_value(value, :other),
+                else: :unresolved
+            else
+              safe_style_value(value, :other)
+            end
+        end
+    end
+  end
+
   defp safe_style_value(value, _property) when is_binary(value) do
     if safe_css_value?(value) and (value == "0" or not bare_number?(value)),
       do: {:ok, value},
@@ -460,6 +562,104 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   end
 
   defp safe_style_value(_value, _property), do: :unresolved
+
+  defp numeric_css_value(value) do
+    cond do
+      Regex.match?(@css_number_pattern, value) ->
+        {:number, value}
+
+      Regex.match?(@numeric_prefix_pattern, value) ->
+        :invalid
+
+      true ->
+        :other
+    end
+  end
+
+  defp safe_numeric_style_fallback(value) do
+    if value in @css_wide_keywords or String.starts_with?(value, @numeric_expression_prefixes),
+      do: safe_style_value(value, :other),
+      else: :unresolved
+  end
+
+  defp css_number_non_negative?(value), do: not String.starts_with?(value, "-")
+
+  defp css_number_positive?(value) do
+    details = css_number_details(value)
+    details.sign != "-" and details.significant_digits != ""
+  end
+
+  defp positive_ratio_expression?(value) do
+    value =
+      case Regex.run(~r/^auto\s+/i, String.trim(value)) do
+        [prefix] -> String.replace_prefix(String.trim(value), prefix, "")
+        _result -> String.trim(value)
+      end
+
+    case String.split(value, "/", parts: 2) do
+      [numerator, denominator] ->
+        with {:number, numerator} <- numeric_css_value(String.trim(numerator)),
+             {:number, denominator} <- numeric_css_value(String.trim(denominator)) do
+          css_number_positive?(numerator) and css_number_positive?(denominator)
+        else
+          _result -> false
+        end
+
+      _parts ->
+        false
+    end
+  end
+
+  defp css_number_at_most_one?(value) do
+    details = css_number_details(value)
+
+    cond do
+      details.sign == "-" ->
+        false
+
+      details.significant_digits == "" ->
+        true
+
+      details.decimal_position < 1 ->
+        true
+
+      details.decimal_position > 1 ->
+        false
+
+      true ->
+        String.trim_trailing(details.significant_digits, "0") == "1"
+    end
+  end
+
+  defp css_number_details(value) do
+    {sign, unsigned} =
+      case value do
+        <<sign, rest::binary>> when sign in [?+, ?-] -> {<<sign>>, rest}
+        _value -> {"", value}
+      end
+
+    {mantissa, exponent} =
+      case Regex.split(~r/[eE]/, unsigned, parts: 2) do
+        [mantissa, exponent] -> {mantissa, String.to_integer(exponent)}
+        [mantissa] -> {mantissa, 0}
+      end
+
+    {integer, fraction} =
+      case String.split(mantissa, ".", parts: 2) do
+        [integer] -> {integer, ""}
+        [integer, fraction] -> {integer, fraction}
+      end
+
+    digits = integer <> fraction
+    significant_digits = String.trim_leading(digits, "0")
+    leading_zero_count = byte_size(digits) - byte_size(significant_digits)
+
+    %{
+      sign: sign,
+      significant_digits: significant_digits,
+      decimal_position: byte_size(integer) + exponent - leading_zero_count
+    }
+  end
 
   # Bricks 2.3.1 includes/assets.php spacing/dimensions controls append the
   # defaultUnit `px` when a direction value is numeric and nonzero without a
