@@ -280,7 +280,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         {:error, reason} -> {:unresolved, nil, "unresolved_#{reason}"}
       end
 
-    %{
+    asset = %{
       attachment_id: image_value(image_map, "id"),
       filename: image_value(image_map, "filename"),
       url: url,
@@ -296,6 +296,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       status: status,
       source_id: source_id
     }
+
+    if custom_caption?(element_settings), do: Map.put(asset, :custom_caption?, true), else: asset
   end
 
   defp image_value(image, key),
@@ -356,6 +358,11 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   defp responsive_sources_count(_settings), do: 0
 
+  defp custom_caption?(settings) when is_map(settings),
+    do: Map.get(settings, "caption", Map.get(settings, :caption)) == "custom"
+
+  defp custom_caption?(_settings), do: false
+
   defp asset_diagnostics(asset) do
     unresolved_diagnostic =
       if asset.status == :unresolved, do: [asset_diagnostic(asset)], else: []
@@ -376,7 +383,24 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         []
       end
 
-    unresolved_diagnostic ++ sources_diagnostic
+    caption_diagnostic =
+      if Map.get(asset, :custom_caption?, false) do
+        [
+          Diagnostic.new(
+            code: "bricks.asset.caption_unsupported",
+            severity: :warning,
+            source_id: asset.source_id,
+            source_path: "settings.caption",
+            message:
+              "Bricks image caption structure and content were preserved as evidence but not compiled in C-04B",
+            metadata: %{"caption_mode" => "custom"}
+          )
+        ]
+      else
+        []
+      end
+
+    unresolved_diagnostic ++ sources_diagnostic ++ caption_diagnostic
   end
 
   defp class_records(resolved, source_id) do

@@ -9,16 +9,17 @@ defmodule LiveFrames.FidelityAssetTest do
 
   @image_uri "https://images.example.test/uploads/synthetic-image.webp"
 
-  test "renders a validated inner image while the wrapper retains source classes" do
+  test "renders an untagged image as one void img with its classes" do
     document = image_document(%{"url" => @image_uri}) |> set_asset_alt("A & < \"view\"")
     assert {:ok, bundle} = Fidelity.generate(document)
 
-    assert bundle.heex =~ "<figure class=\"lf-fidelity-node-000001 source-frame\">"
-
     assert bundle.heex =~
-             "<img src=\"#{@image_uri}\" alt=\"A &amp; &lt; &quot;view&quot;\">"
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\" alt=\"A &amp; &lt; &quot;view&quot;\">"
 
-    refute bundle.heex =~ "class=\"lf-fidelity-node-000001 source-frame\"><img class="
+    refute bundle.heex =~ "<figure"
+    refute bundle.heex =~ "<picture"
+    refute bundle.heex =~ "</img>"
+    assert length(:binary.matches(bundle.heex, "<img")) == 1
   end
 
   test "preserves explicit empty alt and omits alt when source evidence is absent" do
@@ -27,19 +28,24 @@ defmodule LiveFrames.FidelityAssetTest do
     no_alt = image_document(%{})
 
     assert {:ok, empty_bundle} = Fidelity.generate(empty_alt)
-    assert empty_bundle.heex =~ "<img src=\"#{@image_uri}\" alt=\"\">"
+
+    assert empty_bundle.heex =~
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\" alt=\"\">"
 
     assert {:ok, explicit_bundle} = Fidelity.generate(explicit_alt)
 
     assert explicit_bundle.heex =~
-             "<img src=\"#{@image_uri}\" alt=\"Synthetic &amp; &lt;caption&gt;\">"
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\" alt=\"Synthetic &amp; &lt;caption&gt;\">"
 
     assert {:ok, no_alt_bundle} = Fidelity.generate(no_alt)
-    assert no_alt_bundle.heex =~ "<img src=\"#{@image_uri}\">"
+
+    assert no_alt_bundle.heex =~
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\">"
+
     refute no_alt_bundle.heex =~ "alt=\""
   end
 
-  test "preserves the picture wrapper around one validated image" do
+  test "preserves an explicit picture wrapper around one validated image" do
     document = image_document(%{"url" => @image_uri}, %{"tag" => "picture"})
 
     assert {:ok, bundle} = Fidelity.generate(document)
@@ -49,6 +55,42 @@ defmodule LiveFrames.FidelityAssetTest do
 
     refute bundle.heex =~ "<source"
     refute bundle.heex =~ "srcset="
+  end
+
+  test "preserves an explicit figure wrapper around one validated image" do
+    document = image_document(%{"url" => @image_uri}, %{"tag" => "figure"})
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    assert bundle.heex =~
+             "<figure class=\"lf-fidelity-node-000001 source-frame\"><img src=\"#{@image_uri}\"></figure>"
+  end
+
+  test "img remains pipeline-owned outside the source-native tag allowlist" do
+    refute LiveFrames.StaticMarkupContract.native_tag?("img")
+  end
+
+  test "defers custom captions with a figure fallback and a diagnostic" do
+    document =
+      image_document(%{"url" => @image_uri}, %{
+        "caption" => "custom",
+        "captionCustom" => "Synthetic caption content"
+      })
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.asset.caption_unsupported"
+           end)
+
+    [node] = document.root_nodes
+    assert node.source_trace.source_settings["captionCustom"] == "Synthetic caption content"
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    assert bundle.heex =~
+             "<figure class=\"lf-fidelity-node-000001 source-frame\"><img src=\"#{@image_uri}\"></figure>"
+
+    refute bundle.heex =~ "<figcaption"
+    refute bundle.heex =~ "Synthetic caption content"
   end
 
   test "unsafe, dynamic, malformed, and query-backed sources stay placeholders" do
@@ -64,8 +106,8 @@ defmodule LiveFrames.FidelityAssetTest do
     for image <- image_values do
       assert {:ok, bundle} = Fidelity.generate(image_document(image))
       assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
-      refute bundle.heex =~ "<img"
-      refute bundle.heex =~ "src=\""
+      assert bundle.heex =~ "<img class=\""
+      refute bundle.heex =~ "<img src=\""
       refute bundle.heex =~ "javascript:"
       refute bundle.heex =~ "srcset="
     end
@@ -82,8 +124,8 @@ defmodule LiveFrames.FidelityAssetTest do
 
     assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
     assert bundle.heex =~ "data-lf-asset-id=\"#{asset_id}\""
-    refute bundle.heex =~ "<img"
-    refute bundle.heex =~ "src=\"javascript:"
+    assert bundle.heex =~ "<img class=\""
+    refute bundle.heex =~ "<img src=\"javascript:"
     assert bundle.manifest["diagnostic_counts"]["warning"] >= 2
   end
 
@@ -95,8 +137,8 @@ defmodule LiveFrames.FidelityAssetTest do
 
     assert {:ok, bundle} = Fidelity.generate(document)
 
-    refute bundle.heex =~ "<img"
-    refute bundle.heex =~ "src=\""
+    assert bundle.heex =~ "<img class=\""
+    refute bundle.heex =~ "<img src=\""
     assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
     assert bundle.heex =~ "data-lf-asset-id=\"#{asset_id}\""
     assert document.assets[asset_id].kind == "video"
@@ -117,13 +159,17 @@ defmodule LiveFrames.FidelityAssetTest do
     assert {:ok, unresolved_bundle} = Fidelity.generate(unresolved)
     assert unresolved_bundle.heex =~ "data-lf-asset-status=\"unresolved\""
     assert unresolved_bundle.heex =~ "data-lf-asset-id=\"asset_000001\""
-    refute unresolved_bundle.heex =~ "src=\""
+    assert unresolved_bundle.heex =~ "<img class=\""
+    refute unresolved_bundle.heex =~ "<img src=\""
 
     assert [%{"status" => "unresolved"}] =
              unresolved_bundle.manifest["asset_substitutions"]
 
     assert {:ok, resolved_bundle} = Fidelity.generate(resolved)
-    assert resolved_bundle.heex =~ "<img src=\"#{@image_uri}\">"
+
+    assert resolved_bundle.heex =~
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\">"
+
     assert resolved_bundle.manifest["asset_substitutions"] == []
   end
 
@@ -143,7 +189,8 @@ defmodule LiveFrames.FidelityAssetTest do
 
     assert {:ok, bundle} = Fidelity.generate(document)
 
-    refute bundle.heex =~ "<img"
+    assert bundle.heex =~ "<img class=\""
+    refute bundle.heex =~ "<img src=\""
     assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
     assert bundle.manifest["diagnostic_counts"]["warning"] >= 2
 
@@ -161,7 +208,9 @@ defmodule LiveFrames.FidelityAssetTest do
 
       assert {:ok, bundle} = Fidelity.generate(document)
       refute bundle.heex =~ "<a "
-      assert bundle.heex =~ "<img src=\"#{@image_uri}\">"
+
+      assert bundle.heex =~
+               "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\">"
     end
   end
 
@@ -179,7 +228,10 @@ defmodule LiveFrames.FidelityAssetTest do
     }
 
     assert {:ok, bundle} = Fidelity.generate(%{document | root_nodes: [image_node]})
-    assert bundle.heex =~ "<img src=\"#{@image_uri}\">"
+
+    assert bundle.heex =~
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\">"
+
     refute bundle.heex =~ "javascript:"
     refute bundle.heex =~ "srcset="
   end
@@ -197,7 +249,8 @@ defmodule LiveFrames.FidelityAssetTest do
 
     assert {:ok, bundle} = Fidelity.generate(document)
 
-    refute bundle.heex =~ "<img"
+    assert bundle.heex =~ "<img class=\"lf-fidelity-node-000001 source-frame\""
+    refute bundle.heex =~ "<img src=\""
     refute bundle.heex =~ placeholder_uri
     assert bundle.heex =~ "data-lf-asset-status=\"unresolved\""
     assert bundle.manifest["asset_substitutions"] |> hd() |> Map.fetch!("status") == "unresolved"
@@ -221,17 +274,17 @@ defmodule LiveFrames.FidelityAssetTest do
     assert map_size(document.assets) == 1
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    assert bundle.heex =~ "<img src=\"#{@image_uri}\">"
+
+    assert bundle.heex =~
+             "<img class=\"lf-fidelity-node-000001 source-frame\" src=\"#{@image_uri}\">"
+
+    refute bundle.heex =~ "<picture"
     refute bundle.heex =~ "<source"
     refute bundle.heex =~ "srcset="
   end
 
   defp image_document(image, extra_settings \\ %{}) do
-    settings =
-      Map.merge(
-        %{"image" => Map.merge(media_image(), image), "tag" => "figure"},
-        extra_settings
-      )
+    settings = Map.merge(%{"image" => Map.merge(media_image(), image)}, extra_settings)
 
     source = %{
       "source" => "bricksCopiedElements",

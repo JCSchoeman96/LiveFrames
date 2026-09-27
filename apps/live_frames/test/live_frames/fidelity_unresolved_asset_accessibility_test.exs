@@ -25,36 +25,36 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
     document = unresolved_image_document(alt: nil)
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    figure_fragment = figure_attrs_fragment(bundle.heex)
+    image_fragment = image_attrs_fragment(bundle.heex)
 
-    assert figure_fragment =~ "data-lf-asset-status=\"unresolved\""
-    assert figure_fragment =~ "data-lf-asset-id=\"asset_000001\""
-    refute figure_fragment =~ @fabricated_label
-    refute figure_fragment =~ "aria-label"
-    refute figure_fragment =~ "aria-hidden"
-    refute figure_fragment =~ "880"
-    refute figure_fragment =~ "cordallman"
+    assert image_fragment =~ "data-lf-asset-status=\"unresolved\""
+    assert image_fragment =~ "data-lf-asset-id=\"asset_000001\""
+    refute image_fragment =~ @fabricated_label
+    refute image_fragment =~ "aria-label"
+    refute image_fragment =~ "aria-hidden"
+    refute image_fragment =~ "880"
+    refute image_fragment =~ "cordallman"
   end
 
   test "minimal unresolved asset with authoritative alt uses that alt as accessible label" do
     document = unresolved_image_document(alt: "Team celebrating launch")
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    figure_fragment = figure_attrs_fragment(bundle.heex)
+    image_fragment = image_attrs_fragment(bundle.heex)
 
-    assert figure_fragment =~ "aria-label=\"Team celebrating launch\""
-    refute figure_fragment =~ @fabricated_label
-    refute figure_fragment =~ "aria-hidden"
+    assert image_fragment =~ "aria-label=\"Team celebrating launch\""
+    refute image_fragment =~ @fabricated_label
+    refute image_fragment =~ "aria-hidden"
   end
 
   test "minimal unresolved asset with blank alt does not invent accessible label" do
     document = unresolved_image_document(alt: "   ")
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    figure_fragment = figure_attrs_fragment(bundle.heex)
+    image_fragment = image_attrs_fragment(bundle.heex)
 
-    refute figure_fragment =~ "aria-label"
-    refute figure_fragment =~ @fabricated_label
+    refute image_fragment =~ "aria-label"
+    refute image_fragment =~ @fabricated_label
   end
 
   test "unresolved asset accessibility generation remains deterministic" do
@@ -79,35 +79,36 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
     document = unresolved_image_document(alt: @adversarial_alt)
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    figure_open = figure_attrs_fragment(bundle.heex)
+    image_open = image_attrs_fragment(bundle.heex)
 
     assert {:ok, _quoted} = compile_heex(bundle.heex)
     rendered = render_heex(bundle.heex)
 
-    assert figure_attribute_names(figure_open) == [
+    assert image_attribute_names(image_open) == [
              "class",
              "data-lf-asset-status",
              "data-lf-asset-id",
              "aria-label"
            ]
 
-    refute String.contains?(figure_open, "<launch>")
-    refute injected_attribute_outside_aria_label?(figure_open, "autofocus")
-    refute injected_attribute_outside_aria_label?(figure_open, "data-injected")
+    refute String.contains?(image_open, "<launch>")
+    refute injected_attribute_outside_aria_label?(image_open, "autofocus")
+    refute injected_attribute_outside_aria_label?(image_open, "data-injected")
 
-    assert decode_html_attr_value(extract_aria_label(figure_open)) == @adversarial_alt
+    assert decode_html_attr_value(extract_aria_label(image_open)) == @adversarial_alt
     assert decode_html_attr_value(extract_aria_label(rendered)) == @adversarial_alt
-    assert count_elements(rendered, "figure") == 1
+    assert count_elements(rendered, "img") == 1
+    assert count_elements(rendered, "figure") == 0
   end
 
   test "simple authoritative alt regression remains preserved after safe serialization" do
     document = unresolved_image_document(alt: "Team celebrating launch")
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    figure_open = figure_attrs_fragment(bundle.heex)
+    image_open = image_attrs_fragment(bundle.heex)
     rendered = render_heex(bundle.heex)
 
-    assert decode_html_attr_value(extract_aria_label(figure_open)) == "Team celebrating launch"
+    assert decode_html_attr_value(extract_aria_label(image_open)) == "Team celebrating launch"
     assert decode_html_attr_value(extract_aria_label(rendered)) == "Team celebrating launch"
     refute bundle.heex =~ @fabricated_label
   end
@@ -162,8 +163,8 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
     }
   end
 
-  defp figure_attrs_fragment(heex) do
-    [fragment | _] = Regex.run(~r/<figure[^>]*>/, heex)
+  defp image_attrs_fragment(heex) do
+    [fragment | _] = Regex.run(~r/<img[^>]*>/, heex)
     fragment
   end
 
@@ -188,7 +189,7 @@ defmodule LiveFrames.FidelityUnresolvedAssetAccessibilityTest do
     end
   end
 
-  defp figure_attribute_names(fragment) do
+  defp image_attribute_names(fragment) do
     outside_aria = String.replace(fragment, ~r/\saria-label="[^"]*"/, "")
 
     outside_aria
