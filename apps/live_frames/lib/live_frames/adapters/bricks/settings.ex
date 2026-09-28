@@ -50,7 +50,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
   @css_integer_pattern ~r/^[+-]?\d+$/
   @numeric_prefix_pattern ~r/^[+-]?(?:\d|\.)/
-  @css_line_height_dimension_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/i
+  @css_line_height_dimension_pattern ~r/^\+?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/i
   @css_wide_keywords ["inherit", "initial", "revert", "revert-layer", "unset"]
   @font_weight_keywords ["normal", "bold", "bolder", "lighter"]
   @numeric_expression_prefixes ["var(", "calc(", "clamp(", "min(", "max("]

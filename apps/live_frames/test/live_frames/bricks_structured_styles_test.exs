@@ -479,6 +479,9 @@ defmodule LiveFrames.BricksStructuredStylesTest do
     ]
 
     accepted_dimensions = [
+      "0px",
+      "0%",
+      "+1px",
       "24px",
       "1em",
       "1.5rem",
@@ -527,6 +530,11 @@ defmodule LiveFrames.BricksStructuredStylesTest do
           "12banana",
           "12pixels",
           "1solid",
+          "-1px",
+          "-2rem",
+          "-20%",
+          "-1vh",
+          "-1e2px",
           "1.",
           "1e",
           "1.4; color: red"
