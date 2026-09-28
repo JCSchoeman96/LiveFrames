@@ -154,13 +154,14 @@ as an explanatory source comment until its threshold is authoritative. Custom
 CSS is not parsed or executed by the adapter.
 
 Variable references are extracted from supported values and custom CSS,
-including nested fallbacks. The only explicit Phase 3 relationship is:
+including nested fallbacks. Stage A and Design IR use the TokenSet's
+`VariableAuthority` index as the only token-variable authority. A variable
+dependency can resolve only through one authority candidate whose token is
+resolved; ambiguous candidates, unresolved tokens, and unproven variables do
+not select a path. Known external classifications apply only when no TokenSet
+authority exists.
 
-```text
---content-gap -> spacing.content_gap -> resolved_token
-```
-
-The TokenSet is read for comparison only and is never mutated. The Hero
+The TokenSet is read and never mutated. The Hero
 expression
 `var(--overlay-bg, var(--neutral-ultra-dark-trans-60))` preserves both
 `--overlay-bg` and `--neutral-ultra-dark-trans-60` as
@@ -271,12 +272,14 @@ as fr-hero-india__content-wrapper do not become LiveFrames-native component
 types.
 
 The normalizer uses the existing StyleValue kinds. Safe values become literal
-or keyword values, calc and clamp expressions become calculations, and the
-proven var(--content-gap) relationship becomes the TokenSet path
-spacing.content_gap. Fallback expressions retain their fallback metadata.
-Nested overlay variables and the unitless source value "400" remain
-unresolved. Gradients and custom CSS use complex_css with their source values
-intact. No style is silently dropped.
+or keyword values, and calc and clamp expressions remain complete calculations.
+Only an exact direct `var(--x)` expression can become a token reference, when
+VariableAuthority returns one resolved candidate. Fallback expressions keep
+their complete source and fallback metadata and remain unresolved. Ambiguous
+authority and unresolved tokens never select a path. Nested overlay variables
+and the unitless source value "400" remain unresolved. Gradients and custom
+CSS use complex_css with their source values intact. No style is silently
+dropped.
 
 Responsive overrides retain mobile_portrait and tablet_portrait as both
 breakpoint_id and source_name. Their min_width and max_width remain nil, and

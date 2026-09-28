@@ -185,7 +185,7 @@ defmodule LiveFrames.P5CBR2SourceCascadeTest do
     assert section.styles["align-items"].metadata["selector"] == ".brxe-section"
   end
 
-  test "content-gap with fallback promotes to spacing.content_gap token_ref" do
+  test "content-gap with fallback remains unresolved in Design IR" do
     document = hero_document()
 
     cta =
@@ -194,13 +194,24 @@ defmodule LiveFrames.P5CBR2SourceCascadeTest do
       |> Enum.find(&(&1.source_trace.source_id == "8ae908"))
 
     assert %StyleValue{
-             kind: :token_ref,
-             value: "spacing.content_gap",
-             source_expression: "var(--content-gap, 30px)"
+             kind: :unresolved,
+             value: "var(--content-gap, 30px)",
+             source_expression: "var(--content-gap, 30px)",
+             metadata: %{
+               "fallback" => "30px",
+               "source_variable" => "--content-gap",
+               "token_path" => "spacing.content_gap",
+               "resolution_reason" => "fallback_semantics_unrepresented"
+             }
            } = cta.styles["column-gap"]
 
-    assert %StyleValue{kind: :token_ref, value: "spacing.content_gap"} = cta.styles["row-gap"]
-    assert cta.styles["column-gap"].metadata["fallback"] == "30px"
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--content-gap, 30px)",
+             metadata: %{"resolution_reason" => "fallback_semantics_unrepresented"}
+           } = cta.styles["row-gap"]
+
+    assert cta.styles["column-gap"].metadata["authority_state"] == "unique_candidate"
   end
 
   defp flatten_nodes(nodes) do
@@ -216,8 +227,8 @@ defmodule LiveFrames.P5CBR2SourceCascadeTest do
     assert bundle.css =~ "oklch(0.8839 0.154 90.78)"
     assert bundle.css =~ "font-size: clamp("
     assert bundle.css =~ "line-height: calc(6px + 2ex)"
-    # CTA gap via token expression (not 30px fallback)
-    assert bundle.css =~ ~r/(?:row-|column-)?gap: clamp\(/
+    # Fidelity omits the CTA fallback gap declarations.
+    refute bundle.css =~ ~r/column-gap: clamp\(/
     refute bundle.css =~ "#32a2c1"
     refute bundle.css =~ "17.67px"
     refute bundle.css =~ "fr-cta-links-alpha"

@@ -8,8 +8,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.StaticAsset
+  alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Tokens.VariableAuthority
 
-  @variable_mappings %{"--content-gap" => "spacing.content_gap"}
   @known_external_variables ["--overlay-bg", "--neutral-ultra-dark-trans-60"]
   @runtime_fragments ["interaction", "dynamic", "query", "script", "hook", "runtime"]
   @image_atom_keys %{
@@ -27,13 +28,13 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   @spec variables(term(), keyword()) :: [map()]
   def variables(values, opts \\ []) do
-    token_set = Keyword.get(opts, :token_set)
+    authority_index = authority_index(opts)
 
     values
     |> strings()
     |> Enum.flat_map(&variable_names/1)
     |> Enum.uniq()
-    |> Enum.map(&variable_record(&1, token_set))
+    |> Enum.map(&variable_record(&1, authority_index))
   end
 
   @spec assets(term()) :: [map()]
@@ -45,11 +46,17 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   def assets(value), do: assets([value])
 
+  @spec known_external_variable?(String.t()) :: boolean()
+  def known_external_variable?(name) when is_binary(name),
+    do: name in @known_external_variables
+
+  def known_external_variable?(_name), do: false
+
   @spec extract(map(), term(), keyword()) :: map()
   def extract(resolved, document, opts \\ [])
 
   def extract(%{tree: tree, elements: elements}, document, opts) do
-    token_set = Keyword.get(opts, :token_set)
+    authority_index = authority_index(opts)
 
     semantic_settings =
       case Keyword.get(opts, :semantic_settings, []) do
@@ -154,12 +161,12 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
     variables =
       variable_values
-      |> variables(token_set: token_set)
+      |> variables(authority_index: authority_index)
       |> add_variable_occurrences(variable_occurrences)
 
     variable_diagnostics =
       variables
-      |> Enum.filter(&(&1.status in [:source_variable, :unresolved_external]))
+      |> Enum.reject(&(&1.status == :resolved_token))
       |> Enum.map(&variable_diagnostic/1)
 
     asset_diagnostics =
@@ -239,29 +246,92 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp variable_record(name, token_set) do
-    case Map.fetch(@variable_mappings, name) do
-      {:ok, token_path} ->
-        status =
-          if token_present?(token_set, token_path),
-            do: :resolved_token,
-            else: :unresolved_external
+  defp variable_record(name, authority_index) do
+    resolution = VariableAuthority.resolve(authority_index, name)
+    candidates = Enum.map(resolution.candidates, &candidate_evidence/1)
+    candidate_paths = Enum.map(candidates, & &1.token_path)
 
-        %{name: name, status: status, token_path: token_path, expressions: []}
+    base = %{
+      name: name,
+      status: nil,
+      token_path: nil,
+      candidate_paths: candidate_paths,
+      authority_state: resolution.state,
+      authority_evidence: candidates,
+      token_status: nil,
+      resolution_reason: nil,
+      expressions: []
+    }
+
+    record =
+      case {resolution.state, resolution.candidates} do
+        {:unique_candidate, [%{resolution_status: :resolved} = candidate]} ->
+          %{
+            base
+            | status: :resolved_token,
+              token_path: candidate.token_path,
+              token_status: :resolved
+          }
+
+        {:unique_candidate, [candidate]} ->
+          %{
+            base
+            | status: :unresolved_token,
+              token_path: candidate.token_path,
+              token_status: candidate.resolution_status,
+              resolution_reason: "token_unresolved"
+          }
+
+        {:ambiguous_candidates, _candidates} ->
+          %{base | status: :ambiguous_token, resolution_reason: "mapping_ambiguous"}
+
+        {:no_authority, []} when name in @known_external_variables ->
+          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
+
+        {:no_authority, []} ->
+          %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
+      end
+
+    if is_nil(record.resolution_reason),
+      do: Map.delete(record, :resolution_reason),
+      else: record
+  end
+
+  defp candidate_evidence(candidate) do
+    %{
+      token_path: candidate.token_path,
+      resolution_status: candidate.resolution_status,
+      authorities: candidate.authorities
+    }
+  end
+
+  defp authority_index(opts) do
+    case Keyword.fetch(opts, :authority_index) do
+      {:ok, %VariableAuthority{} = index} ->
+        index
+
+      {:ok, _invalid_index} ->
+        raise ArgumentError, "Bricks variable authority index is invalid"
 
       :error ->
-        status =
-          if name in @known_external_variables,
-            do: :unresolved_external,
-            else: :source_variable
-
-        %{name: name, status: status, token_path: nil, expressions: []}
+        build_authority_index!(Keyword.get(opts, :token_set))
     end
   end
 
-  defp token_present?(token_set, token_path) do
-    is_map(token_set) and is_map(Map.get(token_set, :tokens)) and
-      Map.has_key?(token_set.tokens, token_path)
+  defp build_authority_index!(nil), do: %VariableAuthority{}
+
+  defp build_authority_index!(%TokenSet{} = token_set) do
+    case VariableAuthority.build(token_set) do
+      {:ok, index} ->
+        index
+
+      {:error, _diagnostics} ->
+        raise ArgumentError, "Bricks TokenSet variable authority index could not be built"
+    end
+  end
+
+  defp build_authority_index!(_invalid_token_set) do
+    raise ArgumentError, "Bricks TokenSet must be a validated TokenSet struct"
   end
 
   defp variable_names(value) when is_binary(value) do
@@ -604,8 +674,20 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         severity: :warning,
         source_path: "variables.#{variable.name}",
         raw_value: variable.name,
-        message: "CSS variable has no proven TokenSet resolution"
+        message: "CSS variable has no proven TokenSet resolution",
+        metadata:
+          %{
+            "resolution_reason" => variable.resolution_reason,
+            "source_variable" => variable.name,
+            "candidate_paths" => variable.candidate_paths,
+            "authority_state" => Atom.to_string(variable.authority_state),
+            "authority_evidence" => variable.authority_evidence
+          }
+          |> maybe_put_metadata("token_path", variable.token_path)
       )
+
+  defp maybe_put_metadata(metadata, _key, nil), do: metadata
+  defp maybe_put_metadata(metadata, key, value), do: Map.put(metadata, key, value)
 
   defp asset_diagnostic(asset),
     do:
