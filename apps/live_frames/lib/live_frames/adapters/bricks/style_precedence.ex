@@ -4,7 +4,7 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Settings
 
-  @structured_roots ["_margin", "_border", "_background", "_gradient"]
+  @structured_roots ["_margin", "_padding", "_typography", "_border", "_background", "_gradient"]
 
   @spec layers([map()], map(), String.t()) :: [map()]
   def layers(class_refs, source_settings, source_id) when is_list(class_refs) do
