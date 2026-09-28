@@ -94,7 +94,26 @@ Each canonical token preserves:
 | resolution_status | resolved or unresolved |
 | references | Canonical token paths used by the token |
 | provenance | Source keys, raw value, adapter/version, and transformation |
-| metadata | Non-authoritative calculation or source details |
+| metadata | Calculation and source details, including optional typed CSS-variable authority records |
+
+`Token.metadata` may include a `variable_authorities` list. Each record has a
+CSS custom-property `variable`, a `kind`, a stable `authority_id`, an optional
+`source_key`, and a nullable `source_version`. The owning token supplies the
+canonical TokenSet path, so records do not repeat it.
+
+The supported kinds describe separate relationships:
+
+| Kind | Relationship |
+| --- | --- |
+| `source_output_alias` | An explicit source setting or calculated-variable contract emits the CSS variable for the owning token path. |
+| `source_reference` | The source adapter explicitly validated a source expression that consumes the CSS variable for the owning token path. |
+| `explicit_project_contract` | LiveFrames has a frozen project-specific variable-to-path contract. |
+
+Consumers can build an inverse index from these records without loading the
+source adapter. Records for the same variable and token path support one
+candidate; records for distinct paths remain ambiguous. A candidate's token
+resolution status remains a separate fact. This optional metadata keeps
+TokenSet at version `1.0.0` and does not add a root field.
 
 Proven semantic references remain references in value, for example:
 

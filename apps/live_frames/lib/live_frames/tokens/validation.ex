@@ -27,6 +27,14 @@ defmodule LiveFrames.Tokens.Validation do
     :serialization
   ]
   @path_pattern ~r/^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$/
+  @custom_property_pattern ~r/^--[A-Za-z0-9_-]+$/
+  @variable_authority_kinds [
+    "source_output_alias",
+    "source_reference",
+    "explicit_project_contract"
+  ]
+  @variable_authority_fields ["variable", "kind", "authority_id", "source_key", "source_version"]
+  @required_variable_authority_fields ["variable", "kind", "authority_id", "source_version"]
 
   @spec validate(term(), keyword()) :: :ok | {:error, [Diagnostic.t()]}
   def validate(%TokenSet{} = token_set, opts) when is_list(opts) do
@@ -311,6 +319,216 @@ defmodule LiveFrames.Tokens.Validation do
       :provenance,
       canonical_key
     )
+    |> validate_variable_authorities(token.metadata, canonical_key)
+  end
+
+  defp validate_variable_authorities(diagnostics, metadata, path)
+       when is_map(metadata) and not is_struct(metadata) do
+    case Map.fetch(metadata, "variable_authorities") do
+      :error ->
+        diagnostics
+
+      {:ok, authorities} ->
+        validate_variable_authority_list(diagnostics, authorities, path)
+    end
+  end
+
+  defp validate_variable_authorities(diagnostics, _metadata, _path), do: diagnostics
+
+  defp validate_variable_authority_list(diagnostics, authorities, path)
+       when is_list(authorities) do
+    Enum.reduce(authorities, diagnostics, fn authority, diagnostics ->
+      validate_variable_authority(diagnostics, authority, path)
+    end)
+  end
+
+  defp validate_variable_authority_list(diagnostics, _authorities, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.variable_authorities.invalid",
+        "variable_authorities must be a list",
+        :provenance,
+        path: path
+      )
+    )
+  end
+
+  defp validate_variable_authority(diagnostics, authority, path)
+       when is_map(authority) and not is_struct(authority) do
+    diagnostics =
+      diagnostics
+      |> validate_json_object(
+        authority,
+        "tokens.variable_authority.invalid",
+        "variable authority must be a JSON object",
+        :provenance,
+        path
+      )
+      |> validate_variable_authority_fields(authority, path)
+      |> validate_variable_authority_variable(Map.get(authority, "variable"), path)
+      |> validate_variable_authority_kind(Map.get(authority, "kind"), path)
+      |> validate_variable_authority_id(Map.get(authority, "authority_id"), path)
+      |> validate_variable_authority_source_key(authority, path)
+      |> validate_variable_authority_source_version(authority, path)
+
+    diagnostics
+  end
+
+  defp validate_variable_authority(diagnostics, _authority, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.variable_authority.invalid",
+        "variable authority entries must be JSON objects",
+        :provenance,
+        path: path
+      )
+    )
+  end
+
+  defp validate_variable_authority_fields(diagnostics, authority, path) do
+    keys = Map.keys(authority)
+
+    missing = Enum.reject(@required_variable_authority_fields, &Map.has_key?(authority, &1))
+    unknown = Enum.reject(keys, &(&1 in @variable_authority_fields))
+
+    diagnostics =
+      if missing == [] do
+        diagnostics
+      else
+        add(
+          diagnostics,
+          error_at(
+            "tokens.variable_authority.fields.invalid",
+            "variable authority is missing required fields",
+            :provenance,
+            path: path,
+            metadata: %{"missing_fields" => Enum.sort(missing)}
+          )
+        )
+      end
+
+    if unknown == [] do
+      diagnostics
+    else
+      add(
+        diagnostics,
+        error_at(
+          "tokens.variable_authority.fields.invalid",
+          "variable authority contains unsupported fields",
+          :provenance,
+          path: path,
+          metadata: %{"unknown_fields" => Enum.sort_by(unknown, &sort_key/1)}
+        )
+      )
+    end
+  end
+
+  defp validate_variable_authority_variable(diagnostics, variable, path)
+       when is_binary(variable) do
+    if Regex.match?(@custom_property_pattern, variable) do
+      diagnostics
+    else
+      add(
+        diagnostics,
+        error_at(
+          "tokens.variable_authority.variable.invalid",
+          "variable authority variable must be a valid CSS custom-property name",
+          :provenance,
+          path: path
+        )
+      )
+    end
+  end
+
+  defp validate_variable_authority_variable(diagnostics, _variable, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.variable_authority.variable.invalid",
+        "variable authority variable must be a valid CSS custom-property name",
+        :provenance,
+        path: path
+      )
+    )
+  end
+
+  defp validate_variable_authority_kind(diagnostics, kind, path) do
+    if kind in @variable_authority_kinds do
+      diagnostics
+    else
+      add(
+        diagnostics,
+        error_at(
+          "tokens.variable_authority.kind.invalid",
+          "variable authority kind is unsupported",
+          :provenance,
+          path: path
+        )
+      )
+    end
+  end
+
+  defp validate_variable_authority_id(diagnostics, authority_id, _path)
+       when is_binary(authority_id) and authority_id != "",
+       do: diagnostics
+
+  defp validate_variable_authority_id(diagnostics, _authority_id, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.variable_authority.authority_id.invalid",
+        "variable authority authority_id must be a non-empty string",
+        :provenance,
+        path: path
+      )
+    )
+  end
+
+  defp validate_variable_authority_source_key(diagnostics, authority, path) do
+    case Map.fetch(authority, "source_key") do
+      :error ->
+        diagnostics
+
+      {:ok, nil} ->
+        diagnostics
+
+      {:ok, source_key} when is_binary(source_key) and source_key != "" ->
+        diagnostics
+
+      _ ->
+        add(
+          diagnostics,
+          error_at(
+            "tokens.variable_authority.source_key.invalid",
+            "variable authority source_key must be a non-empty string or nil",
+            :provenance,
+            path: path
+          )
+        )
+    end
+  end
+
+  defp validate_variable_authority_source_version(diagnostics, authority, path) do
+    case Map.fetch(authority, "source_version") do
+      {:ok, nil} ->
+        diagnostics
+
+      {:ok, source_version} when is_binary(source_version) and source_version != "" ->
+        diagnostics
+
+      _ ->
+        add(
+          diagnostics,
+          error_at(
+            "tokens.variable_authority.source_version.invalid",
+            "variable authority source_version must be a non-empty string or nil",
+            :provenance,
+            path: path
+          )
+        )
+    end
   end
 
   defp validate_path(diagnostics, path, canonical_key) when is_binary(path) do

@@ -10,6 +10,42 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   alias LiveFrames.Tokens.Token
 
   @adapter_version "1.0.0"
+  @source_authority_version "4.0.1"
+  @setting_output_aliases_by_path %{
+    "typography.heading.line_height" => {"base-heading-lh", "--line-height"},
+    "radius.base" => {"base-radius", "--radius"},
+    "typography.body.line_height" => {"base-text-lh", "--line-height"},
+    "color.background.ultra_dark.heading" => {"bg-ultra-dark-heading", "--color"},
+    "button.primary.radius" => {"btn-border-radius", "--btn-radius"},
+    "button.primary.border_style" => {"btn-border-style", "--btn-border-style"},
+    "button.primary.background" => {"btn-primary-bg", "--btn-background"},
+    "button.primary.border" => {"btn-primary-border-color", "--btn-border-color"},
+    "button.primary.focus" => {"btn-primary-focus-color", "--focus-color"},
+    "button.primary.background_hover" => {"btn-primary-hover", "--btn-background-hover"},
+    "button.primary.outline.background" => {"btn-primary-outline-background", "--btn-background"},
+    "button.primary.outline.background_hover" =>
+      {"btn-primary-outline-background-hover", "--btn-background-hover"},
+    "button.primary.outline.border" => {"btn-primary-outline-border-color", "--btn-border-color"},
+    "button.primary.outline.border_hover" =>
+      {"btn-primary-outline-border-hover", "--btn-border-color-hover"},
+    "button.primary.outline.focus" => {"btn-primary-outline-focus-color", "--focus-color"},
+    "button.primary.text" => {"btn-primary-text", "--btn-text-color"},
+    "spacing.container_gap" => {"contextual-container-gap", "--container-gap"},
+    "spacing.content_gap" => {"contextual-content-gap", "--content-gap"},
+    "spacing.grid_gap" => {"contextual-grid-gap", "--grid-gap"},
+    "typography.heading.font_weight" => {"heading-weight", "--font-weight"},
+    "button.primary.outline.text" => {"primary-outline-btn-text", "--btn-text-color"},
+    "button.primary.outline.text_hover" =>
+      {"primary-outline-hover-text", "--btn-text-color-hover"},
+    "layout.viewport.max" => {"vp-max", "--content-width"}
+  }
+  @calculated_output_aliases_by_path %{
+    "spacing.scale.medium" => {"--space-m", "spacing"},
+    "spacing.scale.xl" => {"--space-xl", "spacing"},
+    "spacing.section" => {"--section-space-m", "section-spacing"},
+    "typography.body.scale.medium" => {"--text-m", "text"},
+    "typography.heading.scale.h1" => {"--h1", "headings"}
+  }
 
   @spec mapping() :: [map()]
   def mapping do
@@ -598,6 +634,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         Map.drop(result.metadata, ["effective_raw_value", "source_keys", "representation"])
       )
       |> put_css_expression(result.resolved_value)
+      |> put_variable_authorities(variable_authorities(entry, result))
 
     %Token{
       path: entry.path,
@@ -617,6 +654,125 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       css when is_binary(css) -> Map.put(metadata, "css_expression", css)
       _ -> metadata
     end
+  end
+
+  defp put_variable_authorities(metadata, []), do: metadata
+
+  defp put_variable_authorities(metadata, authorities) do
+    authorities =
+      authorities
+      |> Enum.uniq()
+      |> Enum.sort_by(fn authority ->
+        {authority["variable"], authority["kind"], authority["authority_id"],
+         authority["source_key"] || ""}
+      end)
+
+    Map.put(metadata, "variable_authorities", authorities)
+  end
+
+  defp variable_authorities(entry, result) do
+    source_output_aliases(entry) ++
+      source_reference_authorities(result) ++ project_contract_authorities(entry.path)
+  end
+
+  defp source_output_aliases(entry) do
+    setting_aliases =
+      case Map.fetch(@setting_output_aliases_by_path, entry.path) do
+        {:ok, {source_key, variable}} ->
+          if source_key in entry.source_keys do
+            [
+              authority_record(
+                variable,
+                "source_output_alias",
+                "automatic-css-#{@source_authority_version}:setting:#{source_key}:css-variable-reference",
+                source_key,
+                @source_authority_version
+              )
+            ]
+          else
+            []
+          end
+
+        _ ->
+          []
+      end
+
+    calculated_aliases =
+      case Map.fetch(@calculated_output_aliases_by_path, entry.path) do
+        {:ok, {variable, group}} ->
+          [
+            authority_record(
+              variable,
+              "source_output_alias",
+              "automatic-css-#{@source_authority_version}:calculated-variable-group:#{group}:#{String.trim_leading(variable, "--")}",
+              nil,
+              @source_authority_version
+            )
+          ]
+
+        :error ->
+          []
+      end
+
+    setting_aliases ++ calculated_aliases
+  end
+
+  defp source_reference_authorities(%{
+         transformation: "semantic_reference",
+         metadata: %{"source_variable" => variable, "source_key" => source_key}
+       })
+       when is_binary(variable) and is_binary(source_key) do
+    [
+      authority_record(
+        variable,
+        "source_reference",
+        "automatic-css-#{@source_authority_version}:validated-reference:#{source_key}:#{variable}",
+        source_key,
+        @source_authority_version
+      )
+    ]
+  end
+
+  defp source_reference_authorities(%{
+         transformation: "acss_generated_foundation",
+         metadata: %{"source_variable" => variable, "source_contract_version" => version}
+       })
+       when is_binary(variable) and is_binary(version) do
+    [
+      authority_record(
+        variable,
+        "source_reference",
+        "automatic-css-#{version}:foundation-contract:#{variable}",
+        nil,
+        version
+      )
+    ]
+  end
+
+  defp source_reference_authorities(_result), do: []
+
+  defp project_contract_authorities("spacing.content_gap") do
+    [
+      authority_record(
+        "--content-gap",
+        "explicit_project_contract",
+        "liveframes:project:content-gap:v1",
+        nil,
+        nil
+      )
+    ]
+  end
+
+  defp project_contract_authorities(_path), do: []
+
+  defp authority_record(variable, kind, authority_id, source_key, source_version) do
+    %{
+      "variable" => variable,
+      "kind" => kind,
+      "authority_id" => authority_id,
+      "source_key" => source_key,
+      "source_version" => source_version
+    }
   end
 
   defp maybe_put_representation(provenance, metadata) do
