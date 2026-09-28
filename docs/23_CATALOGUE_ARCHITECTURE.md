@@ -325,6 +325,13 @@ Validation requirements become stricter as an item advances. Release-only fields
 
 Agents may validate evidence presence, references, and shape. They must not invent or infer legal, provenance, publication, or redistribution clearance.
 
+The table defines checks for a requested lifecycle transition. It does not
+require Registry compilation to rerun those transition guards. Builder checks
+facts it can prove from the canonical files, their paths, and the decoded
+manifest set. Dedicated validators retain authority over evidence that needs
+Storybook, human review, owner approval, provenance clearance, or historical
+compatibility context. See §11.
+
 ## 8. Contract fingerprint
 
 The fingerprint protects the documented, consumer-facing component contract. It
@@ -1316,13 +1323,187 @@ supported claim blocks validation or release.
 
 ## 11. Registry and public discovery
 
-Canonical JSON manifests are the source authority. When implementation is separately authorized, the Elixir Registry is a deterministic compile-time representation derived directly from those manifests.
+Canonical JSON manifests remain the source authority. #47 defines two
+separate components:
 
-G1 does not commit a generated index.json. Runtime directory scanning and per-request manifest parsing are prohibited. Invalid manifests must fail deterministic validation and CI.
+| Component | Responsibility |
+| --- | --- |
+| `LiveFrames.Catalogue.Registry.Builder` | Internal build and compile-time tooling. It discovers canonical files, decodes manifests, validates snapshot-local facts, and produces deterministic embedded Registry data. It is derived tooling, not source authority. |
+| `LiveFrames.Catalogue.Registry` | Compiled, read-only data and the internal `all/0` and `fetch/1` functions. It reads embedded module data at runtime. |
 
-The internal Registry may represent every lifecycle state. Public Catalogue discovery exposes RELEASED by default. DEPRECATED requires explicit opt-in or direct compatibility lookup. DRAFT, VALIDATED, REVIEWED, APPROVED, WITHDRAWN, and RETIRED do not appear in normal public discovery.
+### Canonical root and discovery
 
-Registry presence, public discoverability, and distributability are separate facts. Presence in an internal Registry does not make an item public or distributable.
+The only source root is:
+
+~~~text
+apps/live_frames/priv/catalogue/
+~~~
+
+If the root is missing, Builder produces an empty manifest set and Registry
+represents an empty Catalogue. If the root exists as a directory but has no
+manifests in its valid kind directories, the result is also empty. Empty
+recognized kind directories are valid. Unexpected entries still fail; Builder
+does not ignore them to produce an empty Registry. A root that is not a real
+directory, including a symlink, fails validation. No placeholder manifest or
+`.gitkeep` file is required.
+
+The only recognized first-level directories and their manifest kinds are:
+
+| Directory | `kind` |
+| --- | --- |
+| `primitives/` | `primitive` |
+| `components/` | `component` |
+| `patterns/` | `pattern` |
+| `sections/` | `section` |
+| `pages/` | `page` |
+| `templates/` | `template` |
+
+Any of the six directories may be absent. An absent directory means that kind
+has no manifests. A manifest must be a direct child with this exact shape:
+
+~~~text
+<kind_directory>/<slug>.json
+~~~
+
+Discovery is not recursive. Once the root exists, Builder rejects an unknown
+first-level directory, a file directly under the root, a nested directory, a
+hidden entry, a non-`.json` file, a symlink, or any unexpected filesystem entry
+type. Builder does not follow symlinks or silently skip entries.
+
+Builder represents discovered paths as canonical repository-relative paths
+using `/` on every platform. For example:
+
+~~~text
+apps/live_frames/priv/catalogue/sections/hero.json
+~~~
+
+It uses these paths for identity checks only. Host-specific absolute paths and
+host path separators do not enter embedded Registry data.
+
+Filesystem enumeration order is not authoritative. Builder orders observed
+entries for layout diagnostics by exact UTF-8 bytes of their canonical
+repository-relative paths. Once layout validation succeeds, it sorts candidate
+manifest paths by the same byte order before reading or decoding their
+contents. The first failure while validating a manifest follows this sorted
+order, not `File.ls/1`, operating system order, inode order, or file creation
+time.
+
+### Decoding and snapshot validation
+
+For each candidate, Builder reads its exact JSON bytes and passes those bytes
+to `Manifest.decode/1`. JSON is the only input format. Builder does not load
+`.exs` or YAML, evaluate code, create atoms from JSON strings, resolve
+Storybook module strings to atoms, or load preview story modules.
+
+Builder checks every decoded manifest against its discovered canonical path
+with the existing `LiveFrames.Catalogue.Identity` authority. These values must
+agree exactly, without normalization or repair:
+
+- `manifest.id`;
+- `manifest.kind`;
+- the slug derived from the ID;
+- the matching kind directory;
+- the filename; and
+- the canonical repository-relative path.
+
+For example, `live_frames.section.hero`, kind `section`, and
+`apps/live_frames/priv/catalogue/sections/hero.json` must agree. Builder uses
+`Identity.validate/2` for each manifest and `Identity.validate_collection/1`
+for collection identity and path invariants. Duplicate IDs and duplicate
+canonical paths fail. Builder never keeps the first or last duplicate,
+overwrites an entry, renames an ID, or merges duplicates.
+
+Builder rejects facts that it can establish from the canonical snapshot and
+its paths, including invalid JSON or schema, invalid identity or kind, path
+mismatch, duplicate collection identities or paths, invalid lifecycle
+snapshot coherence, and invalid filesystem layout. The table in §7 does not
+make Builder a transition orchestrator. Builder does not call
+`Lifecycle.transition/3`, construct a successful guard result, or replay a
+historical transition.
+
+Each canonical manifest is an admitted CatalogueItem snapshot. Its
+`lifecycle.last_transition` must have the record shape defined in §6, and its
+action, `from`, and `to` values must form a valid G1 transition that ends at the
+manifest's current `state`. The read-only snapshot check must account for the
+admission record as defined in §6. It may check the shape of opaque
+`evidence_refs`, but it does not fetch them or decide whether external evidence
+was sufficient. #47 may add a read-only Lifecycle snapshot-validation
+operation. That operation must reuse the transition matrix owned by
+`LiveFrames.Catalogue.Lifecycle`; its exact function name is not fixed here.
+There must be one transition table and one authority.
+
+Registry compilation does not recreate context that belongs to another
+validator or workflow:
+
+- Storybook rendering belongs to the verification workflow in
+  `:live_frames_preview`. `:live_frames` must not depend on
+  `:live_frames_preview`. The verification and transition workflow owns the
+  successful evidence that produced the canonical state. Builder does not
+  resolve or load stories, mount preview routes, or render variations.
+- Provenance clearance remains with the dedicated #45 validator. Builder does
+  not parse `docs/04`, create resolved provenance records, infer clearance, or
+  infer redistribution rights.
+- The #46 versioning validator remains transition-time authority. Builder
+  does not call `validate_publish_new_version/3` or invent a previous release
+  version, compatibility review, compatibility class, or compatibility
+  evidence from Git history, package versions, or fingerprints.
+- A fingerprint change does not classify a release as PATCH, MINOR, or MAJOR.
+  Builder is not a compatibility classifier or contract-diff engine.
+
+Later #51 CI/build integration composes cross-app and external validators at
+the boundaries that have their required context. Registry compilation does
+not claim that those validators have run again.
+
+### Embedded data and runtime API
+
+Registry entries are the decoded `%LiveFrames.Catalogue.Manifest{}` snapshots.
+Registry does not define `Registry.Entry`, `RegistryItem`, generated JSON maps,
+or parallel attribute and slot records. Canonical JSON remains the source;
+the compiled module is its runtime derivative. Registry is read-only and has
+no mutation API. It never writes manifests, changes state or release versions,
+updates lifecycle data, or persists derived metadata.
+
+The internal G1 runtime API consists of exactly `all/0` and `fetch/1`.
+
+`all/0` returns every embedded manifest, with no lifecycle-state filter, sorted
+by exact UTF-8 byte order of `manifest.id`. `fetch/1` accepts an exact string
+ID and returns `{:ok, manifest}` when present or `:error` when absent. A
+non-string input also returns `:error`. It does not trim, case-fold, normalize,
+atomize, or parse aliases.
+
+The internal Registry may contain `DRAFT`, `VALIDATED`, `REVIEWED`, `APPROVED`,
+`RELEASED`, `DEPRECATED`, `RETIRED`, and `WITHDRAWN` manifests. Registry
+presence does not mean public discovery, release, redistribution, package
+publication, or recommendation. #48 owns the public discovery API and its
+state filtering, including normal visibility and compatibility lookup. This
+section does not define that public API.
+
+At runtime, Registry reads only immutable embedded module data. Runtime
+Registry operations make zero filesystem scans, JSON parses, network calls,
+database calls, or Redis, ETS, Cachex, GenServer, Oban, or PubSub calls. They
+do not depend on `priv/catalogue/*.json` remaining readable after compilation.
+The absence of source JSON at runtime does not change its authority in the
+repository.
+
+Builder uses a normal Mix/Elixir compile dependency mechanism, such as external
+resources or an equivalent deterministic mechanism. It tracks manifest
+content changes and manifest additions or removals. The implementation does
+not add a watcher, daemon, polling process, runtime rebuild, or runtime cache.
+Future #47 implementation tests must prove that a recompiled build sees both
+content changes and file-set changes. Those tests may create synthetic JSON
+under temporary Catalogue roots. They must not add a repository manifest or
+admit Hero.
+
+Equivalent canonical manifest sets produce identical `all/0` and `fetch/1`
+results regardless of filesystem enumeration order, absolute checkout path,
+operating system separator, file creation time, process ID, or randomness. No
+timestamp or absolute path enters embedded data. G1 does not generate
+`index.json`, `registry.json`, or another index file.
+
+This Registry contract does not decide package contents or publication
+behavior. #51 owns package integration. The compiled module must work without
+source JSON at runtime, but this does not claim that canonical JSON ships in a
+package.
 
 ## 12. Schema evolution
 
