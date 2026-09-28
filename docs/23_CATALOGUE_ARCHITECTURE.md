@@ -188,6 +188,138 @@ through the existing Lifecycle guard result. See
 [docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md)
 for the versioning contract.
 
+### Schema dispatch and migration contract
+
+G1 supports exactly schema version `1`; the supported-version set is `[1]`.
+G1 defines no schema version `0`, `2`, or other placeholder. Keep the three
+version authorities separate. This section freezes the contract only; it does
+not authorize #49 implementation.
+
+| Version | Meaning |
+| --- | --- |
+| Manifest `schema_version` | Selects the JSON manifest structure. |
+| CatalogueItem `release.version` | Tracks the item's SemVer under [docs/24](24_CATALOGUE_VERSIONING_POLICY.md). |
+| Mix, Hex, or other package version | Tracks the separately managed package release. |
+
+Schema migration alone does not change an item's identity or kind, canonical
+path identity, lifecycle state or transition data, `release.version`, or any
+package version. A future contract that needs any such change requires separate
+explicit authority.
+
+`LiveFrames.Catalogue.Schema` is the schema-version dispatcher. Its operation
+is:
+
+~~~elixir
+Schema.validate(decoded_map)
+~~~
+
+It accepts an already-decoded JSON object map and returns either
+`{:ok, keyword()}` or `{:error, [Manifest.diagnostic()]}`. It checks only that
+`schema_version` is present, is an integer, and names a supported version. It
+then delegates field validation to that version's validator. In G1, version 1
+uses `LiveFrames.Catalogue.Schema.V1`; the dispatcher does not replace or
+duplicate V1 field validation.
+
+The schema-version diagnostics keep the `catalogue.manifest.*` namespace and
+these exact meanings:
+
+| Condition | Diagnostic | Path |
+| --- | --- | --- |
+| Missing `schema_version` | `catalogue.manifest.schema_version_missing` | `schema_version` |
+| `schema_version` is not an integer | `catalogue.manifest.schema_version_invalid` | `schema_version` |
+| Integer version is unsupported | `catalogue.manifest.schema_version_unsupported` | `schema_version` |
+
+Unknown and future versions fail closed. They are never interpreted as v1.
+`Manifest.decode/1` owns JSON text parsing with Jason and the requirement that
+the JSON root is an object. It passes the decoded map to `Schema.validate/1`.
+Neither `Schema` nor `Migration` parses JSON, and `Manifest.decode/1` never
+migrates an unsupported manifest.
+
+`LiveFrames.Catalogue.Migration` is a pure, explicit map-to-map transformation
+utility. Its operation is:
+
+~~~elixir
+Migration.migrate(decoded_map, target_version)
+~~~
+
+It returns `{:ok, migrated_map}` or `{:error, [Manifest.diagnostic()]}`. Normal
+unsupported-version and unsupported-route cases return diagnostics rather than
+raising. The source version comes only from `decoded_map["schema_version"]`;
+there is no separate source-version argument. Migration applies the same
+missing, invalid, and unsupported source-version diagnostics and semantics as
+schema dispatch, reusing the `catalogue.manifest.*` version diagnostics.
+
+The caller must provide an integer `target_version`. It must be one of the
+supported schema versions. Migration reports a non-integer target as
+`catalogue.migration.target_version_invalid` and an unsupported integer target
+as `catalogue.migration.target_version_unsupported`, both at path
+`target_version`. Thus string `"1"` is invalid and integer `2` is unsupported.
+It does not accept `:latest`, `nil`, `"current"`, or `"next"`, and it has no
+inferred target. G1 defines neither `Migration.latest_version/0` nor
+`Migration.migrate_to_latest/1`.
+
+Migration reports a non-map source as
+`catalogue.migration.source_invalid` at path `$`. It selects the first error
+using this fixed order: source map type, source-version presence, source-version
+type, source-version support, target type, target support, then exact route.
+Schema dispatch checks version presence, type, and support in that order.
+
+The whole G1 migration graph is `1 → 1`. This route is identity migration:
+`Migration.migrate(v1_map, 1)` returns `{:ok, v1_map}` with an equal map. It
+does not validate or rewrite the map, rebuild structs, add defaults, drop keys,
+sort keys, normalize strings, remove nulls, or re-encode JSON. It preserves the
+complete decoded map, including nested maps and lists, unknown data tolerated
+by V1, identity fields, `release.version`, and lifecycle data. It does not
+change `id`, `kind`, or canonical path identity. It does not change state, add
+transition history, call `Lifecycle.transition/3`, or rewrite
+`lifecycle.last_transition`. Migration does not run `Schema.validate/1` on the
+result; a caller must request that validation separately. An unregistered
+route uses the future-facing `catalogue.migration.route_unsupported`
+diagnostic. G1 adds no fake route to exercise that case.
+
+Migration and schema dispatch are deterministic. They do not call
+`String.to_atom/1`, `String.to_existing_atom/1`, `Module.concat/1`, or
+`:erlang.binary_to_atom/2`; trim or case-fold strings; normalize Unicode;
+rewrite IDs; slugify keys; or normalize version strings. They do not depend on
+map iteration order, time, filesystem paths, OS, environment variables,
+randomness, process IDs, or node names, and do not mutate the environment. They
+do not use `File`, `Path`, or other filesystem operations, write JSON, access
+Registry, database, network, Redis, ETS, Cachex, GenServer, Agent, Oban, PubSub,
+or the process dictionary. Migration does not consult `Mix.Project`,
+`Application.spec`, Hex metadata, or Git tags to choose behavior. G1 adds no
+migration registry, graph engine, behavior, protocol, macro DSL, dynamic module
+discovery, or callback registry. Future versions may add explicit clauses when
+a separately approved schema exists; G1 defines no v2 module or migration.
+
+Registry Builder continues to decode canonical files with `Manifest.decode/1`
+and rejects unsupported schema versions. Canonical manifests must already use
+a supported version; Builder does not migrate them. Public discovery reads
+only compiled `%Manifest{}` values and never invokes Migration. Lifecycle
+validation does not invoke Migration. Migration does not call lifecycle
+validators or mutate transition history.
+
+A future, explicitly authorized repository or tooling action may decode raw
+JSON to a map, call `Migration.migrate/2` with an explicit target, call
+`Schema.validate/1`, and present the result for human and repository review.
+Migration does not write canonical files. A successful in-memory result becomes
+canonical only through a separately authorized repository change to the JSON
+manifest. This contract does not add that workflow or a Mix task. Catalogue
+schema, item SemVer, and package versioning remain separate authorities.
+
+Future #49 implementation tests must cover:
+
+- `Schema.validate/1` succeeds for v1 and reports missing, non-integer, and
+  unsupported schema versions.
+- `Migration.migrate/2` reports non-map input, missing, invalid, and unsupported
+  source versions, and invalid and unsupported target versions.
+- `Migration.migrate(v1_map, 1)` returns an equal map and preserves ID, kind,
+  `release.version`, lifecycle data, and nested map/list data.
+- `Manifest.decode/1` still rejects schema version 2, and Registry does not
+  auto-migrate canonical manifests.
+
+Use only synthetic decoded maps and JSON strings. Do not add a real Catalogue
+manifest.
+
 ## 5. Lifecycle and state intent
 
 The normal lifecycle is:
