@@ -21,11 +21,14 @@ defmodule LiveFrames.Tokens.CSSValueTest do
     cases = [
       {token(resolved_value: "red", metadata: %{"css_expression" => "var(--brand)"}),
        "var(--brand)"},
+      {token(resolved_value: "red", metadata: %{css_expression: "var(--brand)"}), "var(--brand)"},
       {token(resolved_value: "red"), "red"},
       {token(resolved_value: 0), "0"},
       {token(resolved_value: 1.5), "1.5"},
       {token(resolved_value: 7, metadata: %{"css_expression" => ""}), "7"},
       {token(resolved_value: %{"type" => "derived"}, source_expression: "--legacy-value"),
+       "var(--legacy-value)"},
+      {token(resolved_value: %{type: "derived"}, source_expression: "--legacy-value"),
        "var(--legacy-value)"}
     ]
 
@@ -54,7 +57,8 @@ defmodule LiveFrames.Tokens.CSSValueTest do
         token(resolved_value: %{"type" => "responsive", "min" => "16px", "max" => "18px"}),
         {:error, :non_serializable}
       },
-      {token(resolved_value: %{"unknown" => "structured value"}), {:error, :non_serializable}}
+      {token(resolved_value: %{"unknown" => "structured value"}), {:error, :non_serializable}},
+      {token(resolved_value: ""), {:error, :non_serializable}}
     ]
 
     for {value, expected} <- rejected do

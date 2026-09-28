@@ -38,7 +38,7 @@ defmodule LiveFrames.Tokens.CSSValue do
       css_expression = css_expression(metadata) ->
         {:ok, css_expression}
 
-      is_binary(resolved_value) ->
+      is_binary(resolved_value) and byte_size(resolved_value) > 0 ->
         {:ok, resolved_value}
 
       is_integer(resolved_value) ->
@@ -55,13 +55,18 @@ defmodule LiveFrames.Tokens.CSSValue do
     end
   end
 
-  defp css_expression(%{"css_expression" => expression})
-       when is_binary(expression) and byte_size(expression) > 0,
-       do: expression
+  defp css_expression(metadata) when is_map(metadata) do
+    case Map.get(metadata, "css_expression", Map.get(metadata, :css_expression)) do
+      expression when is_binary(expression) and byte_size(expression) > 0 -> expression
+      _ -> nil
+    end
+  end
 
   defp css_expression(_metadata), do: nil
 
-  defp derived_value?(%{"type" => "derived"}), do: true
+  defp derived_value?(value) when is_map(value),
+    do: Map.get(value, "type", Map.get(value, :type)) == "derived"
+
   defp derived_value?(_value), do: false
 
   defp derived_css_value(expression) do
