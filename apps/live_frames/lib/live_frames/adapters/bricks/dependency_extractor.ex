@@ -6,7 +6,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
-  alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.StaticAsset
 
   @variable_mappings %{"--content-gap" => "spacing.content_gap"}
@@ -58,29 +58,38 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       end
 
     {class_dependencies, source_classes, acss_classes, settings_consumed, unsupported_settings,
-     responsive, custom_css, variable_values, variable_occurrences, assets, runtime, diagnostics} =
+     responsive, custom_css, variable_values, variable_occurrences, assets, runtime, diagnostics,
+     style_results} =
       Enum.reduce(
         tree.ordered_elements,
-        {[], [], [], [], [], [], %{base: [], responsive: []}, [], [], [], [], []},
+        {[], [], [], [], [], [], %{base: [], responsive: []}, [], [], [], [], [], %{}},
         fn element,
            {class_dependencies_acc, source_classes_acc, acss_classes_acc, settings_consumed_acc,
             unsupported_settings_acc, responsive_acc, custom_css_acc, variable_values_acc,
-            variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc} ->
+            variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc, style_results_acc} ->
           resolved = Map.fetch!(elements, element.id)
 
+          layers =
+            StylePrecedence.layers(resolved.class_refs, resolved.source_settings, element.id)
+
           element_semantic_settings =
-            Enum.filter(semantic_settings, &Map.has_key?(element.settings, &1))
+            Enum.filter(semantic_settings, &Map.has_key?(resolved.source_settings, &1))
 
           class_semantic_settings =
             Enum.filter(semantic_settings, fn name ->
-              Map.has_key?(resolved.settings, name) and not Map.has_key?(element.settings, name)
+              Enum.any?(resolved.class_refs, fn class_ref ->
+                class_ref.resolution_status in [:local_resolved, :external_resolved] and
+                  Map.has_key?(class_ref.settings, name)
+              end) and not Map.has_key?(resolved.source_settings, name)
             end)
 
-          settings_result =
-            Settings.extract(resolved.settings,
+          extraction_opts =
+            [
               semantic_settings: element_semantic_settings,
               rejected_semantic_settings: class_semantic_settings
-            )
+            ]
+
+          style_result = StylePrecedence.resolve(layers, extraction_opts)
 
           class_records = class_records(resolved, element.id)
           class_names = resolved.class_names
@@ -100,12 +109,30 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
           runtime_records = runtime_records(element.settings, element.id)
           runtime_diagnostics = Enum.map(runtime_records, &runtime_diagnostic/1)
-          settings_consumed = add_source(settings_result.consumed, element.id)
-          unsupported_settings = add_source(settings_result.unsupported, element.id)
-          responsive = add_source(settings_result.responsive, element.id)
-          custom_css = merge_custom_css(custom_css_acc, settings_result.custom_css, element.id)
-          values = strings(resolved.settings)
-          occurrences = variable_occurrences(resolved.settings, element.id, "settings", [])
+          settings_consumed = add_source(style_result.consumed, element.id)
+
+          unsupported_settings = add_source(style_result.unsupported, element.id)
+
+          responsive =
+            responsive_evidence(style_result)
+            |> add_source(element.id)
+
+          custom_css =
+            merge_custom_css(
+              custom_css_acc,
+              style_result.custom_css,
+              element.id
+            )
+
+          values = Enum.flat_map(layers, &strings(&1.settings))
+
+          occurrences =
+            layer_variable_occurrences(layers, element.id)
+
+          style_results_acc = Map.put(style_results_acc, element.id, style_result)
+
+          diagnostics =
+            report_style_diagnostics(style_result)
 
           {
             class_dependencies_acc ++ class_records,
@@ -119,8 +146,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             variable_occurrences_acc ++ occurrences,
             assets_acc ++ add_source(element_assets, element.id),
             runtime_acc ++ runtime_records,
-            diagnostics_acc ++
-              add_source(settings_result.diagnostics, element.id) ++ runtime_diagnostics
+            diagnostics_acc ++ diagnostics ++ runtime_diagnostics,
+            style_results_acc
           }
         end
       )
@@ -151,6 +178,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       assets: assets,
       runtime_dependencies: runtime,
       diagnostics: diagnostics ++ variable_diagnostics ++ asset_diagnostics,
+      style_results: style_results,
       document: document
     }
   end
@@ -167,8 +195,49 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       variables: [],
       assets: [],
       runtime_dependencies: [],
-      diagnostics: []
+      diagnostics: [],
+      style_results: %{}
     }
+
+  defp layer_variable_occurrences(layers, source_id) do
+    Enum.flat_map(layers, fn layer ->
+      path =
+        case layer.origin do
+          :global_class ->
+            "settings.class_refs[#{layer.class_reference_index}].settings"
+
+          :element_local ->
+            "settings"
+        end
+
+      variable_occurrences(layer.settings, source_id, path, [])
+    end)
+  end
+
+  defp responsive_evidence(style_result) do
+    style_responsive =
+      Enum.reject(style_result.responsive_evidence, &(Map.get(&1, :kind) == :custom_css))
+
+    custom_css_responsive =
+      Enum.map(style_result.custom_css.responsive, &Map.put(&1, :kind, :custom_css))
+
+    style_responsive ++ custom_css_responsive
+  end
+
+  defp report_style_diagnostics(style_result) do
+    precedence_conflict_paths =
+      style_result.resolutions
+      |> Enum.filter(&(&1.state == :unresolved_precedence))
+      |> Enum.flat_map(
+        &Enum.map(&1.contributors, fn contributor -> contributor["source_path"] end)
+      )
+      |> MapSet.new()
+
+    Enum.reject(style_result.diagnostics, fn diagnostic ->
+      diagnostic.code == "bricks.setting.value_unresolved" and
+        MapSet.member?(precedence_conflict_paths, diagnostic.source_path)
+    end)
+  end
 
   defp variable_record(name, token_set) do
     case Map.fetch(@variable_mappings, name) do

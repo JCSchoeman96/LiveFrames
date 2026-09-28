@@ -92,6 +92,8 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
       gradients: [],
       responsive: [],
       custom_css: %{base: [], responsive: []},
+      declarations: [],
+      unresolved_declarations: [],
       consumed: [],
       unsupported: [],
       unresolved_values: %{},
@@ -157,12 +159,21 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
           add_responsive(result, key, base_key, property, css_value, value, breakpoint)
         else
           result
+          |> add_declaration(base_key, key, property, css_value, value, nil)
           |> put_style(property, css_value)
           |> add_consumed(key, property, value, nil)
         end
 
       :unresolved ->
-        add_unresolved(result, key, value, "Style value is not unambiguous CSS")
+        add_unresolved_style(
+          result,
+          base_key,
+          key,
+          property,
+          value,
+          breakpoint,
+          "Style value is not unambiguous CSS"
+        )
     end
   end
 
@@ -188,15 +199,26 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
                 )
               else
                 result
+                |> add_declaration(
+                  "_margin",
+                  "#{key}.#{side}",
+                  property,
+                  css_value,
+                  side_value,
+                  nil
+                )
                 |> put_style(property, css_value)
                 |> add_consumed("#{key}.#{side}", property, side_value, nil)
               end
 
             :unresolved ->
-              add_unresolved(
+              add_unresolved_style(
                 result,
+                "_margin",
                 "#{key}.#{side}",
+                property,
                 side_value,
+                breakpoint,
                 "Box value has no proven CSS unit"
               )
           end
@@ -252,15 +274,26 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
                 )
               else
                 result
+                |> add_declaration(
+                  "_border",
+                  "#{key}.radius.#{side}",
+                  property,
+                  css_value,
+                  side_value,
+                  nil
+                )
                 |> put_style(property, css_value)
                 |> add_consumed("#{key}.radius.#{side}", property, side_value, nil)
               end
 
             :unresolved ->
-              add_unresolved(
+              add_unresolved_style(
                 result,
+                "_border",
                 "#{key}.radius.#{side}",
+                property,
                 side_value,
+                breakpoint,
                 "Border radius has no proven CSS unit"
               )
           end
@@ -277,15 +310,39 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
         case safe_style_value(raw, "background") do
           {:ok, css_value} ->
             if breakpoint do
-              add_responsive(result, key, "_background", "background", css_value, raw, breakpoint)
+              add_responsive(
+                result,
+                key,
+                "#{key}.color.raw",
+                "background",
+                css_value,
+                raw,
+                breakpoint
+              )
             else
               result
+              |> add_declaration(
+                "_background",
+                "#{key}.color.raw",
+                "background",
+                css_value,
+                raw,
+                nil
+              )
               |> put_style("background", css_value)
               |> add_consumed(key, "background", value, nil)
             end
 
           :unresolved ->
-            add_unresolved(result, "#{key}.color.raw", raw, "Background color is not safe CSS")
+            add_unresolved_style(
+              result,
+              "_background",
+              "#{key}.color.raw",
+              "background",
+              raw,
+              breakpoint,
+              "Background color is not safe CSS"
+            )
         end
 
       nil ->
@@ -319,6 +376,16 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     if breakpoint do
       result
       |> Map.update!(:responsive, &(&1 ++ [Map.put(record, :kind, :gradient)]))
+      |> add_declaration(
+        "_gradient",
+        key,
+        "background-image",
+        value,
+        value,
+        breakpoint,
+        :gradient,
+        key
+      )
       |> add_consumed(key, "background-image", value, breakpoint)
       |> add_diagnostic(
         Diagnostic.new(
@@ -332,6 +399,16 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     else
       result
       |> Map.update!(:gradients, &(&1 ++ [record]))
+      |> add_declaration(
+        "_gradient",
+        key,
+        "background-image",
+        value,
+        value,
+        nil,
+        :gradient,
+        key
+      )
       |> add_consumed(key, "background-image", value, nil)
     end
   end
@@ -408,6 +485,14 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
 
     result
     |> Map.update!(:responsive, &(&1 ++ [record]))
+    |> add_declaration(
+      elem(split_key(key), 0),
+      if(base_key == elem(split_key(key), 0), do: key, else: base_key),
+      property,
+      css_value,
+      raw_value,
+      breakpoint
+    )
     |> add_consumed(key, property, raw_value, breakpoint)
     |> add_diagnostic(
       Diagnostic.new(
@@ -421,6 +506,75 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   end
 
   defp put_style(result, property, value), do: put_in(result, [:base_styles, property], value)
+
+  defp add_declaration(
+         result,
+         source_root_key,
+         source_path,
+         property,
+         value,
+         raw_value,
+         breakpoint
+       ) do
+    add_declaration(
+      result,
+      source_root_key,
+      source_path,
+      property,
+      value,
+      raw_value,
+      breakpoint,
+      :style
+    )
+  end
+
+  defp add_declaration(
+         result,
+         source_root_key,
+         source_path,
+         property,
+         value,
+         raw_value,
+         breakpoint,
+         kind
+       ) do
+    add_declaration(
+      result,
+      source_root_key,
+      source_path,
+      property,
+      value,
+      raw_value,
+      breakpoint,
+      kind,
+      source_root_key
+    )
+  end
+
+  defp add_declaration(
+         result,
+         source_root_key,
+         source_path,
+         property,
+         value,
+         raw_value,
+         breakpoint,
+         kind,
+         source_key
+       ) do
+    declaration = %{
+      kind: kind,
+      property: property,
+      value: value,
+      raw_value: raw_value,
+      breakpoint: breakpoint,
+      source_key: source_key,
+      source_root_key: source_root_key,
+      source_path: source_path
+    }
+
+    Map.update!(result, :declarations, &(&1 ++ [declaration]))
+  end
 
   defp add_consumed(result, key, property, value, breakpoint) do
     record = %{source_key: key, property: property, raw_value: value, breakpoint: breakpoint}
@@ -455,6 +609,33 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
         message: message
       )
     )
+  end
+
+  defp add_unresolved_style(
+         result,
+         source_root_key,
+         source_path,
+         property,
+         raw_value,
+         breakpoint,
+         message
+       ) do
+    record = %{
+      kind: :style,
+      property: property,
+      value: raw_value,
+      raw_value: raw_value,
+      breakpoint: breakpoint,
+      source_key: source_root_key,
+      source_root_key: source_root_key,
+      source_path: source_path,
+      normalization_state: :unresolved,
+      reason: message
+    }
+
+    result
+    |> add_unresolved(source_path, raw_value, message)
+    |> Map.update!(:unresolved_declarations, &(&1 ++ [record]))
   end
 
   defp add_diagnostic(result, diagnostic),

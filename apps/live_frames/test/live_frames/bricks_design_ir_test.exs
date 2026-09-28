@@ -704,6 +704,7 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert %StyleValue{kind: :complex_css, value: responsive_gradient} =
              overlay.responsive["tablet_portrait"].styles["background-image"]
 
+    assert responsive_gradient["source_key"] == "_gradient:tablet_portrait"
     assert responsive_gradient["value"]["angle"] == "180"
 
     assert responsive_gradient["value"]["colors"] == [
