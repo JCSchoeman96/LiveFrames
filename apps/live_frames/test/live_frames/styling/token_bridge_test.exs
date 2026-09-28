@@ -73,6 +73,40 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              TokenBridge.generate(token_set, TokenBridge.load_mapping!(@mapping))
   end
 
+  test "serializes numeric token values as deterministic unitless CSS values" do
+    token_set = %TokenSet{
+      tokens: %{
+        "numeric.integer" =>
+          Token.new(path: "numeric.integer", resolution_status: :resolved, resolved_value: 1),
+        "numeric.float" =>
+          Token.new(path: "numeric.float", resolution_status: :resolved, resolved_value: 1.5),
+        "numeric.empty_expression" =>
+          Token.new(
+            path: "numeric.empty_expression",
+            resolution_status: :resolved,
+            resolved_value: 2,
+            metadata: %{"css_expression" => ""}
+          )
+      }
+    }
+
+    mapping =
+      TokenBridge.load_mapping!(@mapping)
+      |> Map.put("entries", [
+        %{"token_set_path" => "numeric.integer", "css_variable" => "--lf-token-integer"},
+        %{"token_set_path" => "numeric.float", "css_variable" => "--lf-token-float"},
+        %{
+          "token_set_path" => "numeric.empty_expression",
+          "css_variable" => "--lf-token-empty-expression"
+        }
+      ])
+
+    assert {:ok, css} = TokenBridge.generate(token_set, mapping)
+    assert css =~ "--lf-token-integer: 1;"
+    assert css =~ "--lf-token-float: 1.5;"
+    assert css =~ "--lf-token-empty-expression: 2;"
+  end
+
   test "rejects unsupported mapping schema version" do
     mapping = TokenBridge.load_mapping!(@mapping) |> Map.put("schema_version", "9.9.9")
 

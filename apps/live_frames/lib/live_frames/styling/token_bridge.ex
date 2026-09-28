@@ -1,6 +1,7 @@
 defmodule LiveFrames.Styling.TokenBridge do
   @moduledoc false
 
+  alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
@@ -188,9 +189,9 @@ defmodule LiveFrames.Styling.TokenBridge do
         {:error, {:missing_token, path}}
 
       {:ok, %Token{resolution_status: :resolved} = token} ->
-        case css_value(token) do
+        case CSSValue.candidate(token) do
           {:ok, value} -> {:ok, name, value}
-          {:error, reason} -> {:error, {reason, path}}
+          {:error, _reason} -> {:error, {:non_serializable_resolved_value, path}}
         end
 
       {:ok, %Token{resolution_status: status}} ->
@@ -211,22 +212,6 @@ defmodule LiveFrames.Styling.TokenBridge do
       _ -> {:error, {:invalid_fluid_px_pair, name}}
     end
   end
-
-  defp css_value(%Token{metadata: %{"css_expression" => css}}) when is_binary(css),
-    do: {:ok, css}
-
-  defp css_value(%Token{resolved_value: value}) when is_binary(value), do: {:ok, value}
-
-  defp css_value(%Token{resolved_value: value}) when is_integer(value),
-    do: {:ok, Integer.to_string(value)}
-
-  defp css_value(%Token{resolved_value: value}) when is_float(value),
-    do: {:ok, format_float(value)}
-
-  defp css_value(%Token{resolved_value: %{"type" => "responsive"}}),
-    do: {:error, :non_serializable_resolved_value}
-
-  defp css_value(_token), do: {:error, :non_serializable_resolved_value}
 
   defp token_px(token_set, path) do
     case Map.fetch(token_set.tokens, path) do
