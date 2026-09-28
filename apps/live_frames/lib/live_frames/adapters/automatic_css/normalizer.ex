@@ -42,6 +42,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   @calculated_output_aliases_by_path %{
     "spacing.scale.medium" => {"--space-m", "spacing"},
     "spacing.scale.xl" => {"--space-xl", "spacing"},
+    "spacing.section" => {"--section-space-m", "section-spacing"},
     "typography.body.scale.medium" => {"--text-m", "text"},
     "typography.heading.scale.h1" => {"--h1", "headings"}
   }
@@ -704,7 +705,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
               variable,
               "source_output_alias",
               "automatic-css-#{@source_authority_version}:calculated-variable-group:#{group}:#{String.trim_leading(variable, "--")}",
-              "calculatedVariableGroup:#{group}",
+              nil,
               @source_authority_version
             )
           ]

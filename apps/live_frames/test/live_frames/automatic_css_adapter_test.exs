@@ -50,6 +50,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       "contextual-content-gap" => "var(--space-m)",
       "contextual-grid-gap" => "var(--space-m)",
       "contextual-container-gap" => "var(--space-xl)",
+      "section-padding-block" => "var(--section-space-m)",
       "gutter-min" => 16,
       "gutter-max" => 80,
       "base-text-desk" => 18,
@@ -172,10 +173,11 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       {"button.primary.outline.text", "--btn-text-color", "primary-outline-btn-text"},
       {"button.primary.outline.text_hover", "--btn-text-color-hover",
        "primary-outline-hover-text"},
-      {"spacing.scale.medium", "--space-m", "calculatedVariableGroup:spacing"},
-      {"spacing.scale.xl", "--space-xl", "calculatedVariableGroup:spacing"},
-      {"typography.body.scale.medium", "--text-m", "calculatedVariableGroup:text"},
-      {"typography.heading.scale.h1", "--h1", "calculatedVariableGroup:headings"}
+      {"spacing.scale.medium", "--space-m", nil},
+      {"spacing.scale.xl", "--space-xl", nil},
+      {"spacing.section", "--section-space-m", nil},
+      {"typography.body.scale.medium", "--text-m", nil},
+      {"typography.heading.scale.h1", "--h1", nil}
     ]
 
     for {path, variable, source_key} <- cases do
@@ -187,7 +189,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       message = inspect({path, variable, record})
       assert record["source_key"] == source_key, message
       assert record["source_version"] == "4.0.1", message
-      assert is_binary(record["authority_id"]), message
+      assert is_binary(record["authority_id"]) and record["authority_id"] != "", message
     end
 
     actual_aliases =
@@ -199,6 +201,38 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       end)
 
     assert Enum.sort(actual_aliases) == Enum.sort(cases)
+
+    calculated_aliases =
+      Enum.flat_map(token_set.tokens, fn {path, token} ->
+        token.metadata
+        |> Map.get("variable_authorities", [])
+        |> Enum.filter(&(&1["authority_id"] =~ ":calculated-variable-group:"))
+        |> Enum.map(&{path, &1["variable"], &1["source_key"]})
+      end)
+
+    assert Enum.sort(calculated_aliases) ==
+             Enum.sort([
+               {"spacing.scale.medium", "--space-m", nil},
+               {"spacing.scale.xl", "--space-xl", nil},
+               {"spacing.section", "--section-space-m", nil},
+               {"typography.body.scale.medium", "--text-m", nil},
+               {"typography.heading.scale.h1", "--h1", nil}
+             ])
+
+    calculated_ids = [
+      {"spacing.scale.medium", "--space-m", "spacing"},
+      {"spacing.scale.xl", "--space-xl", "spacing"},
+      {"spacing.section", "--section-space-m", "section-spacing"},
+      {"typography.body.scale.medium", "--text-m", "text"},
+      {"typography.heading.scale.h1", "--h1", "headings"}
+    ]
+
+    for {path, variable, group} <- calculated_ids do
+      record = authority(token_set.tokens[path], variable, "source_output_alias")
+
+      assert record["authority_id"] ==
+               "automatic-css-4.0.1:calculated-variable-group:#{group}:#{String.trim_leading(variable, "--")}"
+    end
 
     assert Enum.map(actual_aliases, &elem(&1, 1))
            |> Enum.count(&(&1 == "--content-width")) == 1
@@ -295,6 +329,37 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              "button.primary.font_size",
              "typography.body.scale.medium"
            ]
+
+    section_space = VariableAuthority.resolve(index, "--section-space-m")
+    assert section_space.state == :ambiguous_candidates
+
+    assert Enum.map(section_space.candidates, & &1.token_path) == [
+             "spacing.section",
+             "spacing.section.padding_block"
+           ]
+
+    section_alias =
+      authority(
+        token_set.tokens["spacing.section"],
+        "--section-space-m",
+        "source_output_alias"
+      )
+
+    section_reference =
+      authority(
+        token_set.tokens["spacing.section.padding_block"],
+        "--section-space-m",
+        "source_reference"
+      )
+
+    assert section_alias["authority_id"] ==
+             "automatic-css-4.0.1:calculated-variable-group:section-spacing:section-space-m"
+
+    assert section_reference["source_key"] == "section-padding-block"
+
+    candidates_by_path = Map.new(section_space.candidates, &{&1.token_path, &1.authorities})
+    assert section_alias in candidates_by_path["spacing.section"]
+    assert section_reference in candidates_by_path["spacing.section.padding_block"]
 
     content_width = VariableAuthority.resolve(index, "--content-width")
     assert content_width.state == :unique_candidate
