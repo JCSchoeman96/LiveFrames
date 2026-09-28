@@ -2,6 +2,7 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
   use ExUnit.Case, async: true
 
   alias LiveFrames.Adapters.Bricks
+  alias LiveFrames.Adapters.Bricks.StageA
   alias LiveFrames.Fidelity
   alias LiveFrames.IR
   alias LiveFrames.IR.StyleValue
@@ -12,6 +13,9 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
   end
 
   defp document(class_refs, class_definitions, element_settings \\ %{}, opts \\ []) do
+    element_name = Keyword.get(opts, :element_name, "div")
+    converter_opts = Keyword.delete(opts, :element_name)
+
     source = %{
       "source" => "bricksCopiedElements",
       "sourceUrl" => "https://example.test/source.json",
@@ -23,7 +27,7 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
           "elements" => [
             %{
               "id" => "root",
-              "name" => "div",
+              "name" => element_name,
               "parent" => 0,
               "settings" => Map.put(element_settings, "_cssGlobalClasses", class_refs)
             }
@@ -36,7 +40,10 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert {:ok, document} =
              Bricks.to_ir(
                source,
-               Keyword.merge([component_id: "component-a", token_set: TokenSet.new()], opts)
+               Keyword.merge(
+                 [component_id: "component-a", token_set: TokenSet.new()],
+                 converter_opts
+               )
              )
 
     document
@@ -46,6 +53,37 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
 
   defp precedence_diagnostics(document) do
     Enum.filter(document.diagnostics, &(&1.code == "bricks.style.precedence_conflict"))
+  end
+
+  defp stage_a_result(
+         class_refs,
+         class_definitions,
+         element_settings \\ %{},
+         element_name \\ "div"
+       ) do
+    source = %{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/source.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "label" => "Synthetic"}],
+      "components" => [
+        %{
+          "id" => "component-a",
+          "elements" => [
+            %{
+              "id" => "root",
+              "name" => element_name,
+              "parent" => 0,
+              "settings" => Map.put(element_settings, "_cssGlobalClasses", class_refs)
+            }
+          ]
+        }
+      ],
+      "globalClasses" => class_definitions
+    }
+
+    assert {:ok, result} = StageA.generate(source, component_id: "component-a")
+    result
   end
 
   test "preserves non-overlapping margin leaves from separate class layers" do
@@ -61,6 +99,246 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert %StyleValue{value: "1rem"} = root(document).styles["margin-top"]
     assert %StyleValue{value: "2rem"} = root(document).styles["margin-bottom"]
     assert precedence_diagnostics(document) == []
+  end
+
+  test "container width conflict blocks intrinsic and Theme Styles fallback" do
+    conflicting_classes = [
+      class("class-a", %{"_width" => "100px"}),
+      class("class-b", %{"_width" => "200px"})
+    ]
+
+    document =
+      document(
+        ["class-a", "class-b"],
+        conflicting_classes,
+        %{},
+        element_name: "container",
+        theme_styles: %{
+          "source" => "bricks_theme_styles",
+          "active_style_id" => "active",
+          "styles" => %{"active" => %{"settings" => %{"container" => %{"width" => "1400px"}}}}
+        }
+      )
+
+    refute Map.has_key?(root(document).styles, "width")
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "width"
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute Regex.match?(~r/^\\s*width:/m, bundle.css)
+    refute bundle.css =~ "1100px"
+    refute bundle.css =~ "1400px"
+
+    configured_width_document =
+      document(
+        ["class-a", "class-b"],
+        conflicting_classes,
+        %{},
+        element_name: "container",
+        container_width: "1300px"
+      )
+
+    refute Map.has_key?(root(configured_width_document).styles, "width")
+    assert {:ok, configured_bundle} = Fidelity.generate(configured_width_document)
+    refute configured_bundle.css =~ "1300px"
+  end
+
+  test "container display conflict blocks the intrinsic flex fallback" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [class("class-a", %{"_display" => "block"}), class("class-b", %{"_display" => "grid"})],
+        %{},
+        element_name: "container"
+      )
+
+    refute Map.has_key?(root(document).styles, "display")
+    assert Enum.any?(precedence_diagnostics(document), &(&1.metadata["property"] == "display"))
+    assert root(document).styles["flex-direction"].value == "column"
+  end
+
+  test "container flex-direction conflict blocks the intrinsic column fallback" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_direction" => "row"}),
+          class("class-b", %{"_direction" => "column-reverse"})
+        ],
+        %{},
+        element_name: "container"
+      )
+
+    refute Map.has_key?(root(document).styles, "flex-direction")
+
+    assert Enum.any?(
+             precedence_diagnostics(document),
+             &(&1.metadata["property"] == "flex-direction")
+           )
+
+    assert root(document).styles["display"].value == "flex"
+  end
+
+  test "section align-items conflict blocks its intrinsic center fallback" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_alignItems" => "start"}),
+          class("class-b", %{"_alignItems" => "end"})
+        ],
+        %{},
+        element_name: "section"
+      )
+
+    refute Map.has_key?(root(document).styles, "align-items")
+
+    assert Enum.any?(
+             precedence_diagnostics(document),
+             &(&1.metadata["property"] == "align-items")
+           )
+  end
+
+  test "intrinsic defaults unrelated to a conflict remain available" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [class("class-a", %{"_width" => "100px"}), class("class-b", %{"_width" => "200px"})],
+        %{},
+        element_name: "container"
+      )
+
+    refute Map.has_key?(root(document).styles, "width")
+    assert root(document).styles["display"].value == "flex"
+    assert root(document).styles["flex-direction"].value == "column"
+    assert root(document).styles["max-width"].value == "100%"
+    assert root(document).styles["margin-left"].value == "auto"
+    assert root(document).styles["margin-right"].value == "auto"
+  end
+
+  test "container max-width and margin conflicts suppress only matching intrinsics" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_widthMax" => "80%", "_margin" => %{"left" => "1rem"}}),
+          class("class-b", %{"_widthMax" => "90%", "_margin" => %{"left" => "2rem"}})
+        ],
+        %{},
+        element_name: "container"
+      )
+
+    refute Map.has_key?(root(document).styles, "max-width")
+    refute Map.has_key?(root(document).styles, "margin-left")
+    assert root(document).styles["display"].value == "flex"
+    assert root(document).styles["margin-right"].value == "auto"
+
+    assert Enum.map(precedence_diagnostics(document), & &1.metadata["property"]) == [
+             "margin-left",
+             "max-width"
+           ]
+  end
+
+  test "Stage A consumed evidence retains disjoint margin leaves from both class layers" do
+    result =
+      stage_a_result(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_margin" => %{"top" => "1rem"}}),
+          class("class-b", %{"_margin" => %{"bottom" => "2rem"}})
+        ]
+      )
+
+    consumed = result.report["settings"]["consumed"]
+    margin_records = Enum.filter(consumed, &(&1["property"] in ["margin-top", "margin-bottom"]))
+
+    assert Enum.map(margin_records, & &1["property"]) == ["margin-top", "margin-bottom"]
+    assert Enum.map(margin_records, & &1["class_id"]) == ["class-a", "class-b"]
+    assert Enum.map(margin_records, & &1["class_reference_index"]) == [0, 1]
+    assert Enum.map(margin_records, & &1["origin"]) == ["global_class", "global_class"]
+    assert Enum.map(margin_records, & &1["source_id"]) == ["root", "root"]
+
+    assert Enum.map(margin_records, & &1["source_key"]) == [
+             "_margin.top",
+             "_margin.bottom"
+           ]
+
+    assert result.artifacts["styles.css"] =~ "margin-top: 1rem;"
+    assert result.artifacts["styles.css"] =~ "margin-bottom: 2rem;"
+  end
+
+  test "Stage A reports an earlier unsupported border layer after a later radius layer" do
+    result =
+      stage_a_result(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_border" => %{"style" => "solid"}}),
+          class("class-b", %{"_border" => %{"radius" => %{"top" => "4px"}}})
+        ]
+      )
+
+    [unsupported] =
+      Enum.filter(result.report["settings"]["unsupported"], &(&1["class_id"] == "class-a"))
+
+    assert unsupported["source_key"] == "_border"
+    assert unsupported["origin"] == "global_class"
+    assert unsupported["class_reference_index"] == 0
+    assert unsupported["source_id"] == "root"
+
+    [diagnostic] =
+      Enum.filter(result.report["diagnostics"]["items"], fn diagnostic ->
+        diagnostic["code"] == "bricks.setting.unsupported" and
+          diagnostic["metadata"]["class_id"] == "class-a"
+      end)
+
+    assert diagnostic["source_path"] == "_border"
+
+    assert result.dependencies.style_results["root"].base_styles["border-top-left-radius"].value ==
+             "4px"
+  end
+
+  test "Stage A responsive evidence retains non-overlapping declarations from both class layers" do
+    result =
+      stage_a_result(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_margin:mobile_landscape" => %{"top" => "1rem"}}),
+          class("class-b", %{"_margin:mobile_landscape" => %{"bottom" => "2rem"}})
+        ]
+      )
+
+    responsive = result.report["responsive"]["entries"]
+    margin_records = Enum.filter(responsive, &(&1["property"] in ["margin-top", "margin-bottom"]))
+
+    assert Enum.map(margin_records, & &1["property"]) == ["margin-top", "margin-bottom"]
+    assert Enum.map(margin_records, & &1["class_id"]) == ["class-a", "class-b"]
+    assert Enum.map(margin_records, & &1["class_reference_index"]) == [0, 1]
+    assert Enum.all?(margin_records, &(&1["breakpoint"] == "mobile_landscape"))
+  end
+
+  test "Stage A responsive conflict preserves both observations and omits a resolved winner" do
+    result =
+      stage_a_result(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_rowGap:mobile_landscape" => "1rem"}),
+          class("class-b", %{"_rowGap:mobile_landscape" => "2rem"})
+        ]
+      )
+
+    responsive = result.report["responsive"]["entries"]
+    row_gap_records = Enum.filter(responsive, &(&1["property"] == "row-gap"))
+
+    [diagnostic] =
+      Enum.filter(
+        result.report["diagnostics"]["items"],
+        &(&1["code"] == "bricks.style.precedence_conflict")
+      )
+
+    assert Enum.map(row_gap_records, & &1["class_id"]) == ["class-a", "class-b"]
+    assert Enum.map(row_gap_records, & &1["class_reference_index"]) == [0, 1]
+    assert diagnostic["metadata"]["property"] == "row-gap"
+    assert result.dependencies.style_results["root"].responsive == []
   end
 
   test "tags malformed recognized layers on their existing Settings diagnostic" do

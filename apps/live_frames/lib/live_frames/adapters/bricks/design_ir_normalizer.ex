@@ -580,7 +580,20 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
       end)
 
-    merge_intrinsic_styles(styles, element, trace, context)
+    merge_intrinsic_styles(
+      styles,
+      element,
+      trace,
+      context,
+      unresolved_precedence_properties(style_result)
+    )
+  end
+
+  defp unresolved_precedence_properties(style_result) do
+    style_result.resolutions
+    |> Enum.filter(&(&1.breakpoint == nil and &1.state == :unresolved_precedence))
+    |> Enum.map(& &1.property)
+    |> MapSet.new()
   end
 
   defp style_declaration_trace(trace, declaration) do
@@ -642,34 +655,40 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   #     > Bricks 2.3.1 intrinsic default 1100px
   # Explicit :unavailable / invalid configured values omit width (no silent
   # fallback). max-width/margins remain Bricks frontend intrinsics.
-  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace, context) do
+  defp merge_intrinsic_styles(styles, %Element{name: "container"}, trace, context, blocked) do
     styles
-    |> put_intrinsic_style(trace, "container", "display", "flex")
-    |> put_intrinsic_style(trace, "container", "flex-direction", "column")
-    |> put_container_width(trace, context)
-    |> put_intrinsic_literal(trace, "container", "max-width", "100%", selector: "[class*=brxe-]")
-    |> put_intrinsic_style(trace, "container", "margin-left", "auto")
-    |> put_intrinsic_style(trace, "container", "margin-right", "auto")
+    |> put_intrinsic_style(trace, "container", "display", "flex", blocked)
+    |> put_intrinsic_style(trace, "container", "flex-direction", "column", blocked)
+    |> put_container_width(trace, context, blocked)
+    |> put_intrinsic_literal(trace, "container", "max-width", "100%", blocked,
+      selector: "[class*=brxe-]"
+    )
+    |> put_intrinsic_style(trace, "container", "margin-left", "auto", blocked)
+    |> put_intrinsic_style(trace, "container", "margin-right", "auto", blocked)
   end
 
-  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace, _context) do
-    put_intrinsic_style(styles, trace, "section", "align-items", "center")
+  defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace, _context, blocked) do
+    put_intrinsic_style(styles, trace, "section", "align-items", "center", blocked)
   end
 
-  defp merge_intrinsic_styles(styles, _element, _trace, _context), do: styles
+  defp merge_intrinsic_styles(styles, _element, _trace, _context, _blocked), do: styles
 
-  defp put_container_width(styles, _trace, %{container_width: :unavailable}), do: styles
+  defp put_container_width(styles, _trace, %{container_width: :unavailable}, _blocked), do: styles
 
-  defp put_container_width(styles, trace, context) do
-    case resolve_container_width_authority(context) do
-      :omit ->
-        styles
+  defp put_container_width(styles, trace, context, blocked) do
+    if MapSet.member?(blocked, "width") do
+      styles
+    else
+      case resolve_container_width_authority(context) do
+        :omit ->
+          styles
 
-      {:intrinsic, value} ->
-        put_intrinsic_literal(styles, trace, "container", "width", value)
+        {:intrinsic, value} ->
+          put_intrinsic_literal(styles, trace, "container", "width", value, blocked)
 
-      {:theme_styles, value} ->
-        put_theme_styles_width(styles, trace, context.token_set, value)
+        {:theme_styles, value} ->
+          put_theme_styles_width(styles, trace, context.token_set, value)
+      end
     end
   end
 
@@ -799,15 +818,23 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       ])
   end
 
-  defp put_intrinsic_style(styles, trace, element_name, property, value) do
-    put_intrinsic_value(styles, trace, element_name, property, value, :keyword, [])
+  defp put_intrinsic_style(styles, trace, element_name, property, value, blocked) do
+    put_intrinsic_value(styles, trace, element_name, property, value, :keyword, blocked, [])
   end
 
-  defp put_intrinsic_literal(styles, trace, element_name, property, value, opts \\ []) do
-    put_intrinsic_value(styles, trace, element_name, property, value, :literal, opts)
+  defp put_intrinsic_literal(styles, trace, element_name, property, value, blocked, opts \\ []) do
+    put_intrinsic_value(styles, trace, element_name, property, value, :literal, blocked, opts)
   end
 
-  defp put_intrinsic_value(styles, trace, element_name, property, value, kind, opts) do
+  defp put_intrinsic_value(styles, trace, element_name, property, value, kind, blocked, opts) do
+    if MapSet.member?(blocked, property) do
+      styles
+    else
+      put_intrinsic_value_unblocked(styles, trace, element_name, property, value, kind, opts)
+    end
+  end
+
+  defp put_intrinsic_value_unblocked(styles, trace, element_name, property, value, kind, opts) do
     selector = Keyword.get(opts, :selector, ".brxe-#{element_name}")
 
     style_value =

@@ -82,6 +82,7 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
         (emitted_responsive(resolutions) ++ custom_css_responsive)
         |> Enum.sort_by(&{&1.breakpoint || "", &1.property || "", &1.source_key}),
       custom_css: custom_css,
+      responsive_evidence: extraction_records(extractions, :responsive),
       unresolved_styles: unresolved_styles(resolutions),
       resolutions: resolutions,
       consumed: extraction_records(extractions, :consumed),

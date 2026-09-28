@@ -173,7 +173,7 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
              title: Keyword.get(opts, :title, "Bricks Stage A"),
              stylesheet: Keyword.get(opts, :stylesheet, "styles.css")
            ),
-         css <- CSSRenderer.render(resolved),
+         css <- CSSRenderer.render(resolved, dependencies.style_results),
          result <-
            %{result | artifacts: %{"index.html" => html, "styles.css" => css}}
            |> Result.advance(:rendered),

@@ -6,7 +6,6 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
-  alias LiveFrames.Adapters.Bricks.Settings
   alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.StaticAsset
 
@@ -92,11 +91,6 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
           style_result = StylePrecedence.resolve(layers, extraction_opts)
 
-          # Keep the flattened extraction for legacy dependency/report fields only.
-          # Design IR styles below consume the layer-resolved result.
-          compatibility_settings_result =
-            Settings.extract(resolved.settings, extraction_opts)
-
           class_records = class_records(resolved, element.id)
           class_names = resolved.class_names
 
@@ -115,17 +109,18 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
           runtime_records = runtime_records(element.settings, element.id)
           runtime_diagnostics = Enum.map(runtime_records, &runtime_diagnostic/1)
-          settings_consumed = add_source(compatibility_settings_result.consumed, element.id)
+          settings_consumed = add_source(style_result.consumed, element.id)
 
-          unsupported_settings =
-            add_source(compatibility_settings_result.unsupported, element.id)
+          unsupported_settings = add_source(style_result.unsupported, element.id)
 
-          responsive = add_source(compatibility_settings_result.responsive, element.id)
+          responsive =
+            responsive_evidence(style_result)
+            |> add_source(element.id)
 
           custom_css =
             merge_custom_css(
               custom_css_acc,
-              compatibility_settings_result.custom_css,
+              style_result.custom_css,
               element.id
             )
 
@@ -137,11 +132,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           style_results_acc = Map.put(style_results_acc, element.id, style_result)
 
           diagnostics =
-            layer_diagnostics_for_reporting(style_result.diagnostics) ++
-              compatibility_diagnostics(
-                add_source(compatibility_settings_result.diagnostics, element.id),
-                style_result
-              )
+            report_style_diagnostics(style_result)
 
           {
             class_dependencies_acc ++ class_records,
@@ -223,20 +214,17 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp layer_diagnostics_for_reporting(diagnostics) do
-    Enum.filter(diagnostics, fn diagnostic ->
-      diagnostic.code == "bricks.style.precedence_conflict" or
-        diagnostic.metadata["style_layer_state"] == "malformed_layer"
-    end)
+  defp responsive_evidence(style_result) do
+    style_responsive =
+      Enum.reject(style_result.responsive_evidence, &(Map.get(&1, :kind) == :custom_css))
+
+    custom_css_responsive =
+      Enum.map(style_result.custom_css.responsive, &Map.put(&1, :kind, :custom_css))
+
+    style_responsive ++ custom_css_responsive
   end
 
-  defp compatibility_diagnostics(diagnostics, style_result) do
-    malformed_paths =
-      style_result.diagnostics
-      |> Enum.filter(&(&1.metadata["style_layer_state"] == "malformed_layer"))
-      |> Enum.map(& &1.source_path)
-      |> MapSet.new()
-
+  defp report_style_diagnostics(style_result) do
     precedence_conflict_paths =
       style_result.resolutions
       |> Enum.filter(&(&1.state == :unresolved_precedence))
@@ -245,11 +233,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       )
       |> MapSet.new()
 
-    Enum.reject(diagnostics, fn diagnostic ->
-      (diagnostic.code == "bricks.setting.unsupported" and
-         MapSet.member?(malformed_paths, diagnostic.source_path)) or
-        (diagnostic.code == "bricks.setting.value_unresolved" and
-           MapSet.member?(precedence_conflict_paths, diagnostic.source_path))
+    Enum.reject(style_result.diagnostics, fn diagnostic ->
+      diagnostic.code == "bricks.setting.value_unresolved" and
+        MapSet.member?(precedence_conflict_paths, diagnostic.source_path)
     end)
   end
 

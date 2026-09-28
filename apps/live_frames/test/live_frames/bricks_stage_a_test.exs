@@ -249,7 +249,8 @@ defmodule LiveFrames.BricksStageATest do
     {:ok, tree, _} = Bricks.build_tree(component)
     {:ok, resolved, _} = ClassResolver.resolve(tree, source)
 
-    css = CSSRenderer.render(resolved)
+    dependencies = DependencyExtractor.extract(resolved, source)
+    css = CSSRenderer.render(resolved, dependencies.style_results)
 
     assert css =~ "position: relative;"
     assert css =~ "row-gap: var(--content-gap);"
