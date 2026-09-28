@@ -31,6 +31,8 @@ defmodule LiveFrames.Catalogue.Lifecycle do
     WITHDRAWN
   )
 
+  @last_transition_keys ~w(action from to evidence_refs)
+
   @transitions %{
     "validate" => %{"DRAFT" => "VALIDATED"},
     "review" => %{"VALIDATED" => "REVIEWED"},
@@ -68,6 +70,20 @@ defmodule LiveFrames.Catalogue.Lifecycle do
     {:error, action_invalid(inspect(action))}
   end
 
+  @spec validate_snapshot(term()) :: :ok | {:error, [diagnostic()]}
+  def validate_snapshot(%Manifest{} = manifest) do
+    with :ok <- validate_snapshot_state(manifest.state),
+         :ok <- validate_snapshot_lifecycle(manifest.lifecycle, manifest.state) do
+      :ok
+    else
+      {:error, diagnostic} -> {:error, [diagnostic]}
+    end
+  end
+
+  def validate_snapshot(_manifest) do
+    {:error, [snapshot_invalid("$", "Expected a Catalogue Manifest struct.")]}
+  end
+
   defp transition_admission(%Manifest{state: "DRAFT"} = manifest, guard_result) do
     cond do
       last_transition?(manifest) ->
@@ -97,7 +113,7 @@ defmodule LiveFrames.Catalogue.Lifecycle do
         {:error, state_invalid(from_state)}
 
       true ->
-        case Map.get(@transitions, action, %{}) |> Map.fetch(from_state) do
+        case transition_target(action, from_state) do
           :error ->
             {:error, transition_invalid(action, from_state)}
 
@@ -112,6 +128,127 @@ defmodule LiveFrames.Catalogue.Lifecycle do
         end
     end
   end
+
+  defp validate_snapshot_state(state) when state in @valid_states, do: :ok
+
+  defp validate_snapshot_state(state), do: {:error, state_invalid(state)}
+
+  defp validate_snapshot_lifecycle(lifecycle, state) when is_map(lifecycle) do
+    case Map.fetch(lifecycle, "last_transition") do
+      {:ok, last_transition} when is_map(last_transition) ->
+        validate_last_transition(last_transition, state)
+
+      _ ->
+        {:error, last_transition_invalid()}
+    end
+  end
+
+  defp validate_snapshot_lifecycle(_lifecycle, _state) do
+    {:error, snapshot_invalid("lifecycle", "Lifecycle data must be a map.")}
+  end
+
+  defp validate_last_transition(last_transition, state) do
+    with :ok <- validate_last_transition_shape(last_transition),
+         :ok <- validate_last_transition_fields(last_transition),
+         :ok <- validate_evidence_refs(Map.fetch!(last_transition, "evidence_refs")),
+         :ok <- validate_snapshot_transition(last_transition, state) do
+      :ok
+    end
+  end
+
+  defp validate_last_transition_shape(last_transition) do
+    has_exact_keys? =
+      map_size(last_transition) == length(@last_transition_keys) and
+        Enum.all?(@last_transition_keys, &Map.has_key?(last_transition, &1))
+
+    if has_exact_keys? do
+      :ok
+    else
+      {:error, last_transition_invalid()}
+    end
+  end
+
+  defp validate_last_transition_fields(last_transition) do
+    action = Map.fetch!(last_transition, "action")
+    from = Map.fetch!(last_transition, "from")
+    to = Map.fetch!(last_transition, "to")
+
+    cond do
+      not valid_utf8_binary?(action) ->
+        {:error, snapshot_transition_invalid("lifecycle.last_transition.action")}
+
+      not (from == nil and action == "admit_to_catalogue") and not valid_utf8_binary?(from) ->
+        {:error, snapshot_transition_invalid("lifecycle.last_transition.from")}
+
+      not valid_utf8_binary?(to) ->
+        {:error, snapshot_transition_invalid("lifecycle.last_transition.to")}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_snapshot_transition(last_transition, state) do
+    action = Map.fetch!(last_transition, "action")
+    from = Map.fetch!(last_transition, "from")
+    to = Map.fetch!(last_transition, "to")
+
+    cond do
+      action not in @approved_actions ->
+        {:error, action_invalid(action)}
+
+      action == "admit_to_catalogue" ->
+        validate_admission_snapshot(from, to, state)
+
+      true ->
+        validate_normal_snapshot(action, from, to, state)
+    end
+  end
+
+  defp validate_admission_snapshot(from, to, state) do
+    cond do
+      from != nil or to != "DRAFT" ->
+        {:error, snapshot_transition_invalid()}
+
+      state != to ->
+        {:error, snapshot_state_mismatch(state, to)}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_normal_snapshot(action, from, to, state) do
+    cond do
+      from not in @valid_states ->
+        {:error, snapshot_transition_invalid()}
+
+      to not in @valid_states ->
+        {:error, snapshot_transition_invalid("lifecycle.last_transition.to")}
+
+      true ->
+        case transition_target(action, from) do
+          {:ok, expected_to} when to == expected_to ->
+            if state == expected_to do
+              :ok
+            else
+              {:error, snapshot_state_mismatch(state, expected_to)}
+            end
+
+          {:ok, _expected_to} ->
+            {:error, snapshot_transition_invalid("lifecycle.last_transition.to")}
+
+          :error ->
+            {:error, snapshot_transition_invalid()}
+        end
+    end
+  end
+
+  defp transition_target(action, from_state) do
+    Map.get(@transitions, action, %{}) |> Map.fetch(from_state)
+  end
+
+  defp valid_utf8_binary?(value), do: is_binary(value) and String.valid?(value)
 
   defp apply_transition(manifest, action, from_state, to_state, evidence_refs) do
     last_transition = %{
@@ -152,29 +289,62 @@ defmodule LiveFrames.Catalogue.Lifecycle do
   defp consume_guard(_guard_result), do: {:error, guard_result_invalid()}
 
   defp validate_evidence_refs(evidence_refs) when is_list(evidence_refs) do
-    evidence_refs
-    |> Enum.with_index()
-    |> Enum.reduce_while(:ok, fn
-      {ref, index}, :ok ->
-        if is_binary(ref) and ref != "" and String.valid?(ref) do
-          {:cont, :ok}
-        else
-          {:halt,
-           {:error,
-            evidence_refs_invalid(
-              index,
-              "Each evidence reference must be a non-empty string (got #{inspect(ref)})."
-            )}}
-        end
-    end)
-    |> case do
-      :ok -> :ok
-      other -> other
-    end
+    validate_evidence_refs(evidence_refs, 0)
   end
 
   defp validate_evidence_refs(_),
     do: {:error, evidence_refs_invalid(nil, "Evidence references must be a list.")}
+
+  defp validate_evidence_refs([], _index), do: :ok
+
+  defp validate_evidence_refs([ref | rest], index) do
+    if is_binary(ref) and ref != "" and String.valid?(ref) do
+      validate_evidence_refs(rest, index + 1)
+    else
+      {:error,
+       evidence_refs_invalid(
+         index,
+         "Each evidence reference must be a non-empty string (got #{inspect(ref)})."
+       )}
+    end
+  end
+
+  defp validate_evidence_refs(_improper_tail, _index),
+    do: {:error, evidence_refs_invalid(nil, "Evidence references must be a list.")}
+
+  defp snapshot_invalid(path, message) do
+    %{
+      code: "catalogue.lifecycle.snapshot_invalid",
+      path: path,
+      message: message
+    }
+  end
+
+  defp last_transition_invalid do
+    %{
+      code: "catalogue.lifecycle.last_transition_invalid",
+      path: "lifecycle.last_transition",
+      message:
+        "Lifecycle last_transition must contain exactly action, from, to, and evidence_refs."
+    }
+  end
+
+  defp snapshot_transition_invalid(path \\ "lifecycle.last_transition") do
+    %{
+      code: "catalogue.lifecycle.snapshot_transition_invalid",
+      path: path,
+      message: "Stored lifecycle transition is not valid for the approved transition matrix."
+    }
+  end
+
+  defp snapshot_state_mismatch(state, expected_state) do
+    %{
+      code: "catalogue.lifecycle.snapshot_state_mismatch",
+      path: "state",
+      message:
+        "CatalogueItem state #{inspect(state)} does not match last_transition target #{inspect(expected_state)}."
+    }
+  end
 
   defp action_invalid(action),
     do: %{
