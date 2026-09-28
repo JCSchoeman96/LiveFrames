@@ -38,10 +38,108 @@ defmodule LiveFrames.TokensTest do
     }
   end
 
+  defp authority_record(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "variable" => "--content-gap",
+        "kind" => "source_output_alias",
+        "authority_id" => "automatic_css-4.0.1:setting:contextual-content-gap",
+        "source_key" => "contextual-content-gap",
+        "source_version" => "4.0.1"
+      },
+      overrides
+    )
+  end
+
+  defp with_authorities(token_set, authorities) do
+    token = token_set.tokens["color.primary"]
+    metadata = Map.put(token.metadata, "variable_authorities", authorities)
+    %{token_set | tokens: Map.put(token_set.tokens, token.path, %{token | metadata: metadata})}
+  end
+
   test "owns an independent versioned TokenSet contract" do
     assert Tokens.current_token_set_version() == "1.0.0"
     assert TokenSet.new().token_set_version == "1.0.0"
     assert Tokens.validate(valid_token_set()) == :ok
+  end
+
+  test "TokenSets without variable authority metadata remain valid" do
+    refute Map.has_key?(
+             valid_token_set().tokens["color.primary"].metadata,
+             "variable_authorities"
+           )
+
+    assert Tokens.validate(valid_token_set()) == :ok
+  end
+
+  test "valid variable authority metadata validates and serializes" do
+    record = authority_record()
+    token_set = with_authorities(valid_token_set(), [record])
+
+    assert Tokens.validate(token_set) == :ok
+    serialized = token_set |> Tokens.encode!() |> Jason.decode!()
+
+    assert serialized["tokens"]["color.primary"]["metadata"]["variable_authorities"] == [
+             record
+           ]
+
+    assert serialized["token_set_version"] == "1.0.0"
+  end
+
+  test "variable authority serialization is deterministic for object key order" do
+    record_a =
+      Map.new([
+        {"source_version", "4.0.1"},
+        {"variable", "--content-gap"},
+        {"kind", "source_output_alias"},
+        {"authority_id", "automatic_css-4.0.1:setting:contextual-content-gap"},
+        {"source_key", "contextual-content-gap"}
+      ])
+
+    record_b =
+      Map.new([
+        {"source_key", "contextual-content-gap"},
+        {"authority_id", "automatic_css-4.0.1:setting:contextual-content-gap"},
+        {"kind", "source_output_alias"},
+        {"variable", "--content-gap"},
+        {"source_version", "4.0.1"}
+      ])
+
+    first = with_authorities(valid_token_set(), [record_a])
+    second = with_authorities(valid_token_set(), [record_b])
+
+    assert Tokens.encode!(first) == Tokens.encode!(second)
+  end
+
+  test "rejects malformed variable authority metadata deterministically" do
+    cases = [
+      {"variable_authorities must be a list", "not-a-list",
+       "tokens.variable_authorities.invalid"},
+      {"authority entries must be objects", ["not-an-object"],
+       "tokens.variable_authority.invalid"},
+      {"variable syntax", [authority_record(%{"variable" => "--bad name"})],
+       "tokens.variable_authority.variable.invalid"},
+      {"authority kind", [authority_record(%{"kind" => "name_similarity"})],
+       "tokens.variable_authority.kind.invalid"},
+      {"missing authority ID", [Map.delete(authority_record(), "authority_id")],
+       "tokens.variable_authority.authority_id.invalid"},
+      {"empty authority ID", [authority_record(%{"authority_id" => ""})],
+       "tokens.variable_authority.authority_id.invalid"},
+      {"empty source key", [authority_record(%{"source_key" => ""})],
+       "tokens.variable_authority.source_key.invalid"},
+      {"empty source version", [authority_record(%{"source_version" => ""})],
+       "tokens.variable_authority.source_version.invalid"}
+    ]
+
+    for {label, authorities, expected_code} <- cases do
+      token_set = with_authorities(valid_token_set(), authorities)
+      assert {:error, diagnostics} = Tokens.validate(token_set), label
+
+      assert Enum.any?(diagnostics, &(&1.code == expected_code)), label
+      assert {:error, repeated_diagnostics} = Tokens.validate(token_set), label
+
+      assert diagnostics == repeated_diagnostics, label
+    end
   end
 
   test "rejects unsupported TokenSet versions" do

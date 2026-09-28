@@ -4,6 +4,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
   alias LiveFrames.Tokens
+  alias LiveFrames.Tokens.VariableAuthority
 
   defp fixture_path do
     Path.expand("../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
@@ -11,6 +12,12 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
   defp fixture_settings do
     Jason.decode!(File.read!(fixture_path()))
+  end
+
+  defp authority(token, variable, kind) do
+    token.metadata
+    |> Map.get("variable_authorities", [])
+    |> Enum.find(&(&1["variable"] == variable and &1["kind"] == kind))
   end
 
   defp minimal_settings do
@@ -41,6 +48,8 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       "mob-space-scale" => 1.333,
       "space-scale" => 1.5,
       "contextual-content-gap" => "var(--space-m)",
+      "contextual-grid-gap" => "var(--space-m)",
+      "contextual-container-gap" => "var(--space-xl)",
       "gutter-min" => 16,
       "gutter-max" => 80,
       "base-text-desk" => 18,
@@ -131,6 +140,165 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
            ]
 
     assert token_set.tokens["layout.viewport.min"].resolved_value == "360px"
+  end
+
+  test "materializes source-map and calculated-group output aliases" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
+
+    cases = [
+      {"typography.heading.line_height", "--line-height", "base-heading-lh"},
+      {"radius.base", "--radius", "base-radius"},
+      {"layout.viewport.max", "--content-width", "vp-max"},
+      {"typography.body.line_height", "--line-height", "base-text-lh"},
+      {"color.background.ultra_dark.heading", "--color", "bg-ultra-dark-heading"},
+      {"button.primary.radius", "--btn-radius", "btn-border-radius"},
+      {"button.primary.border_style", "--btn-border-style", "btn-border-style"},
+      {"button.primary.border", "--btn-border-color", "btn-primary-border-color"},
+      {"button.primary.focus", "--focus-color", "btn-primary-focus-color"},
+      {"button.primary.background_hover", "--btn-background-hover", "btn-primary-hover"},
+      {"button.primary.outline.background_hover", "--btn-background-hover",
+       "btn-primary-outline-background-hover"},
+      {"button.primary.outline.border", "--btn-border-color", "btn-primary-outline-border-color"},
+      {"button.primary.outline.border_hover", "--btn-border-color-hover",
+       "btn-primary-outline-border-hover"},
+      {"button.primary.outline.focus", "--focus-color", "btn-primary-outline-focus-color"},
+      {"button.primary.text", "--btn-text-color", "btn-primary-text"},
+      {"spacing.content_gap", "--content-gap", "contextual-content-gap"},
+      {"spacing.container_gap", "--container-gap", "contextual-container-gap"},
+      {"spacing.grid_gap", "--grid-gap", "contextual-grid-gap"},
+      {"button.primary.background", "--btn-background", "btn-primary-bg"},
+      {"button.primary.outline.background", "--btn-background", "btn-primary-outline-background"},
+      {"typography.heading.font_weight", "--font-weight", "heading-weight"},
+      {"button.primary.outline.text", "--btn-text-color", "primary-outline-btn-text"},
+      {"button.primary.outline.text_hover", "--btn-text-color-hover",
+       "primary-outline-hover-text"},
+      {"spacing.scale.medium", "--space-m", "calculatedVariableGroup:spacing"},
+      {"spacing.scale.xl", "--space-xl", "calculatedVariableGroup:spacing"},
+      {"typography.body.scale.medium", "--text-m", "calculatedVariableGroup:text"},
+      {"typography.heading.scale.h1", "--h1", "calculatedVariableGroup:headings"}
+    ]
+
+    for {path, variable, source_key} <- cases do
+      token = token_set.tokens[path]
+      record = authority(token, variable, "source_output_alias")
+
+      assert record, "missing output authority for #{path} / #{variable}"
+
+      message = inspect({path, variable, record})
+      assert record["source_key"] == source_key, message
+      assert record["source_version"] == "4.0.1", message
+      assert is_binary(record["authority_id"]), message
+    end
+
+    actual_aliases =
+      Enum.flat_map(token_set.tokens, fn {path, token} ->
+        token.metadata
+        |> Map.get("variable_authorities", [])
+        |> Enum.filter(&(&1["kind"] == "source_output_alias"))
+        |> Enum.map(&{path, &1["variable"], &1["source_key"]})
+      end)
+
+    assert Enum.sort(actual_aliases) == Enum.sort(cases)
+
+    assert Enum.map(actual_aliases, &elem(&1, 1))
+           |> Enum.count(&(&1 == "--content-width")) == 1
+
+    for {_path, token} <- token_set.tokens do
+      authorities = Map.get(token.metadata, "variable_authorities", [])
+
+      assert authorities == Enum.uniq(authorities)
+
+      assert authorities ==
+               Enum.sort_by(authorities, fn record ->
+                 {record["variable"], record["kind"], record["authority_id"],
+                  record["source_key"] || ""}
+               end)
+    end
+
+    width_authority =
+      authority(token_set.tokens["layout.viewport.max"], "--content-width", "source_output_alias")
+
+    assert %{"authority_id" => "automatic-css-4.0.1:setting:vp-max:css-variable-reference"} =
+             width_authority
+  end
+
+  test "content gap retains output-alias and explicit project authority" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
+    token = token_set.tokens["spacing.content_gap"]
+
+    assert %{"source_key" => "contextual-content-gap"} =
+             authority(token, "--content-gap", "source_output_alias")
+
+    assert authority(token, "--content-gap", "explicit_project_contract") == %{
+             "variable" => "--content-gap",
+             "kind" => "explicit_project_contract",
+             "authority_id" => "liveframes:project:content-gap:v1",
+             "source_key" => nil,
+             "source_version" => nil
+           }
+  end
+
+  test "source references come from successful resolver and foundation contracts" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
+
+    assert %{
+             "source_key" => "contextual-content-gap",
+             "source_version" => "4.0.1"
+           } =
+             authority(token_set.tokens["spacing.content_gap"], "--space-m", "source_reference")
+
+    assert %{
+             "authority_id" => "automatic-css-4.0.1:foundation-contract:--black",
+             "source_key" => nil,
+             "source_version" => "4.0.1"
+           } = authority(token_set.tokens["color.black"], "--black", "source_reference")
+  end
+
+  test "ambiguous variables retain every independently proven owning path" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
+    assert {:ok, index} = VariableAuthority.build(token_set)
+
+    primary = VariableAuthority.resolve(index, "--primary")
+    assert primary.state == :ambiguous_candidates
+
+    assert Enum.map(primary.candidates, & &1.token_path) == [
+             "button.primary.background",
+             "button.primary.outline.border",
+             "button.primary.outline.text"
+           ]
+
+    space_m = VariableAuthority.resolve(index, "--space-m")
+    assert space_m.state == :ambiguous_candidates
+
+    assert Enum.map(space_m.candidates, & &1.token_path) == [
+             "spacing.content_gap",
+             "spacing.grid_gap",
+             "spacing.scale.medium"
+           ]
+
+    assert Enum.map(VariableAuthority.resolve(index, "--radius").candidates, & &1.token_path) == [
+             "button.primary.radius",
+             "radius.base"
+           ]
+
+    assert Enum.map(
+             VariableAuthority.resolve(index, "--line-height").candidates,
+             & &1.token_path
+           ) == ["typography.body.line_height", "typography.heading.line_height"]
+
+    assert Enum.map(VariableAuthority.resolve(index, "--white").candidates, & &1.token_path) == [
+             "color.text.light",
+             "color.white"
+           ]
+
+    assert Enum.map(VariableAuthority.resolve(index, "--text-m").candidates, & &1.token_path) == [
+             "button.primary.font_size",
+             "typography.body.scale.medium"
+           ]
+
+    content_width = VariableAuthority.resolve(index, "--content-width")
+    assert content_width.state == :unique_candidate
+    assert hd(content_width.candidates).token_path == "layout.viewport.max"
   end
 
   test "resolves the proven BW foundation and ultra-dark contextual relationships" do
@@ -309,6 +477,14 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     token = token_set.tokens["button.primary.background"]
     assert token.resolution_status == :unresolved
     assert token.resolved_value == nil
+
+    assert %{"source_key" => "btn-primary-bg"} =
+             authority(token, "--btn-background", "source_output_alias")
+
+    refute Enum.any?(token.metadata["variable_authorities"], fn record ->
+             record["kind"] == "source_reference" and record["variable"] == "--unrelated"
+           end)
+
     assert Enum.any?(diagnostics, &(&1.path == "button.primary.background"))
 
     assert {:error, strict_diagnostics} =
