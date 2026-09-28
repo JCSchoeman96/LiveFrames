@@ -412,46 +412,130 @@ defmodule LiveFrames.BricksStructuredStylesTest do
     end
   end
 
-  test "allows only property-specific unitless font weight and line height numbers" do
-    for number <- [100, 400, 1000, "500", "500.5"] do
-      result = Settings.extract(%{"_typography" => %{"font-weight" => number}})
-      assert map_size(result.base_styles) == 1
-      assert Map.has_key?(result.base_styles, "font-weight")
-    end
+  test "accepts only the bounded font-weight grammar" do
+    accepted_numbers = [
+      {1, "1"},
+      {100, "100"},
+      {400, "400"},
+      {"500.5", "500.5"},
+      {1000, "1000"}
+    ]
 
-    for number <- [0, -1, 1001, "400px", "1.", "1e"] do
-      result = Settings.extract(%{"_typography" => %{"font-weight" => number}})
-      assert result.base_styles == %{}
-      assert result.unresolved_values["_typography.font-weight"] == number
-    end
+    accepted_keywords = [
+      "normal",
+      "bold",
+      "bolder",
+      "lighter",
+      "inherit",
+      "initial",
+      "revert",
+      "revert-layer",
+      "unset"
+    ]
 
-    for value <- ["bold", "inherit", "var(--font-weight)", "calc(600)"] do
-      result = Settings.extract(%{"_typography" => %{"font-weight" => value}})
-      assert result.base_styles == %{"font-weight" => value}
-    end
+    accepted_expressions = [
+      "var(--font-weight)",
+      "calc(300 + 100)",
+      "clamp(100, 400, 900)",
+      "min(400, 700)",
+      "max(400, 700)"
+    ]
 
+    for {source_value, css_value} <-
+          accepted_numbers ++
+            Enum.map(accepted_keywords ++ accepted_expressions, &{&1, &1}) do
+      result = Settings.extract(%{"_typography" => %{"font-weight" => source_value}})
+      assert result.base_styles == %{"font-weight" => css_value}
+      assert_fidelity_css_value("font-weight", css_value)
+    end
+  end
+
+  test "keeps rejected font-weight values unresolved and out of Fidelity CSS" do
     for value <- [
-          1.25,
-          "1.5",
-          "0",
-          "24px",
-          "120%",
-          "normal",
-          "inherit",
-          "var(--line-height)",
-          "calc(1 + 0.4)",
-          "clamp(1.2, 2vw, 1.8)"
+          0,
+          -1,
+          1000.1,
+          1001,
+          "400px",
+          "400foo",
+          "banana",
+          "medium",
+          "1.",
+          "1e",
+          "400; color: red"
         ] do
-      result = Settings.extract(%{"_typography" => %{"line-height" => value}})
-      assert Map.has_key?(result.base_styles, "line-height")
+      assert_unresolved_fidelity_style("font-weight", value)
     end
+  end
 
-    for value <- [-1, "-1", "1.", "1e"] do
-      result = Settings.extract(%{"_typography" => %{"line-height" => value}})
-      assert result.base_styles == %{}
-      assert Map.has_key?(result.unresolved_values, "_typography.line-height")
+  test "accepts only the bounded line-height grammar" do
+    accepted_numbers = [
+      {0, "0"},
+      {1, "1"},
+      {"1.4", "1.4"},
+      {".8", ".8"},
+      {"1e2", "1e2"},
+      {"1e-2", "1e-2"}
+    ]
+
+    accepted_dimensions = [
+      "24px",
+      "1em",
+      "1.5rem",
+      "120%",
+      "2vh",
+      "2vw",
+      "2vmin",
+      "2vmax",
+      "2ch",
+      "2ex",
+      "2cm",
+      "2mm",
+      "2in",
+      "2pt",
+      "2pc"
+    ]
+
+    accepted_keywords = ["normal", "inherit", "initial", "revert", "revert-layer", "unset"]
+
+    accepted_expressions = [
+      "var(--line-height)",
+      "calc(1 + 0.4)",
+      "clamp(1.2, 2vw, 1.8)",
+      "min(1.2, 1.8)",
+      "max(1.2, 1.8)"
+    ]
+
+    accepted_values =
+      accepted_numbers ++
+        Enum.map(accepted_dimensions ++ accepted_keywords ++ accepted_expressions, &{&1, &1})
+
+    for {source_value, css_value} <- accepted_values do
+      result = Settings.extract(%{"_typography" => %{"line-height" => source_value}})
+      assert result.base_styles == %{"line-height" => css_value}
+      assert_fidelity_css_value("line-height", css_value)
     end
+  end
 
+  test "keeps rejected line-height values unresolved and out of Fidelity CSS" do
+    for value <- [
+          -1,
+          "-1",
+          "banana",
+          "compact",
+          "tight",
+          "12banana",
+          "12pixels",
+          "1solid",
+          "1.",
+          "1e",
+          "1.4; color: red"
+        ] do
+      assert_unresolved_fidelity_style("line-height", value)
+    end
+  end
+
+  test "does not extend bare-number support to unrelated dimensional properties" do
     for value <- ["12", 12] do
       result = Settings.extract(%{"_width" => value})
       assert result.base_styles == %{}
@@ -462,6 +546,44 @@ defmodule LiveFrames.BricksStructuredStylesTest do
       result = Settings.extract(%{"_typography" => %{source_leaf => value}})
       assert result.base_styles == %{}
       assert Map.has_key?(result.unresolved_values, "_typography.#{source_leaf}")
+    end
+  end
+
+  defp assert_unresolved_fidelity_style(property, value) do
+    result = Settings.extract(%{"_typography" => %{property => value}})
+    source_path = "_typography.#{property}"
+
+    assert result.base_styles == %{}
+    assert result.unresolved_values[source_path] == value
+
+    assert {:ok, document} =
+             Bricks.to_ir(source(%{"_typography" => %{property => value}}),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.css =~ "#{property}:"
+  end
+
+  defp assert_fidelity_css_value(property, value) do
+    assert {:ok, document} =
+             Bricks.to_ir(source(%{"_typography" => %{property => value}}),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    if String.starts_with?(value, "var(") do
+      [node] = document.root_nodes
+      assert %StyleValue{kind: :unresolved, value: ^value} = node.styles[property]
+
+      assert [%{"name" => variable_name, "token_path" => nil}] =
+               document.provenance["dependency_summary"]["variables"]
+
+      assert String.starts_with?(variable_name, "--")
+    else
+      assert {:ok, bundle} = Fidelity.generate(document)
+      assert bundle.css =~ "#{property}: #{value};"
     end
   end
 

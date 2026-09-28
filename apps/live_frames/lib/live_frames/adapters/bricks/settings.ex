@@ -50,8 +50,9 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
   @css_integer_pattern ~r/^[+-]?\d+$/
   @numeric_prefix_pattern ~r/^[+-]?(?:\d|\.)/
-  @css_dimension_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?(?:[a-zA-Z]{2,}|%)$/
+  @css_line_height_dimension_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|cm|mm|in|pt|pc)$/i
   @css_wide_keywords ["inherit", "initial", "revert", "revert-layer", "unset"]
+  @font_weight_keywords ["normal", "bold", "bolder", "lighter"]
   @numeric_expression_prefixes ["var(", "calc(", "clamp(", "min(", "max("]
 
   @semantic_settings ["text", "tag", "style", "outline", "image", "caption", "link", "url", "alt"]
@@ -1006,50 +1007,76 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
 
   defp safe_style_value(_value, _property), do: :unresolved
 
-  defp safe_font_weight_value(value, property),
-    do: safe_unitless_css_value(value, property, &valid_font_weight_number?/1, false)
-
-  defp safe_line_height_value(value, property),
-    do: safe_unitless_css_value(value, property, &valid_line_height_number?/1, true)
-
-  defp safe_unitless_css_value(value, _property, valid_number?, _allow_dimensions)
-       when is_integer(value) do
-    number = Integer.to_string(value)
-    if valid_number?.(number), do: {:ok, number}, else: :unresolved
-  end
-
-  defp safe_unitless_css_value(value, _property, valid_number?, _allow_dimensions)
-       when is_float(value) do
-    number = :erlang.float_to_binary(value, [:compact])
-    if valid_number?.(number), do: {:ok, number}, else: :unresolved
-  end
-
-  defp safe_unitless_css_value(value, property, valid_number?, allow_dimensions)
-       when is_binary(value) do
+  defp safe_font_weight_value(value, property) when is_binary(value) do
     cond do
       not safe_css_value?(value) ->
         :unresolved
 
+      value in @font_weight_keywords or value in @css_wide_keywords ->
+        {:ok, value}
+
+      String.starts_with?(value, @numeric_expression_prefixes) ->
+        safe_style_value(value, property)
+
+      true ->
+        safe_unitless_css_number(value, &valid_font_weight_number?/1)
+    end
+  end
+
+  defp safe_font_weight_value(value, _property),
+    do: safe_unitless_css_number(value, &valid_font_weight_number?/1)
+
+  defp safe_line_height_value(value, property) when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      value == "normal" or value in @css_wide_keywords ->
+        {:ok, value}
+
+      String.starts_with?(value, @numeric_expression_prefixes) ->
+        safe_style_value(value, property)
+
       true ->
         case numeric_css_value(value) do
           {:number, number} ->
-            if valid_number?.(number), do: {:ok, value}, else: :unresolved
+            if valid_line_height_number?(number), do: {:ok, value}, else: :unresolved
 
-          :invalid when allow_dimensions ->
-            if Regex.match?(@css_dimension_pattern, value),
+          :invalid ->
+            if Regex.match?(@css_line_height_dimension_pattern, value),
               do: safe_style_value(value, property),
               else: :unresolved
 
-          :invalid ->
-            :unresolved
-
           :other ->
-            safe_style_value(value, property)
+            :unresolved
         end
     end
   end
 
-  defp safe_unitless_css_value(_value, _property, _valid_number?, _allow_dimensions),
+  defp safe_line_height_value(value, _property),
+    do: safe_unitless_css_number(value, &valid_line_height_number?/1)
+
+  defp safe_unitless_css_number(value, valid_number?) when is_integer(value) do
+    number = Integer.to_string(value)
+    if valid_number?.(number), do: {:ok, number}, else: :unresolved
+  end
+
+  defp safe_unitless_css_number(value, valid_number?) when is_float(value) do
+    number = :erlang.float_to_binary(value, [:compact])
+    if valid_number?.(number), do: {:ok, number}, else: :unresolved
+  end
+
+  defp safe_unitless_css_number(value, valid_number?) when is_binary(value) do
+    case numeric_css_value(value) do
+      {:number, number} ->
+        if valid_number?.(number), do: {:ok, value}, else: :unresolved
+
+      _classification ->
+        :unresolved
+    end
+  end
+
+  defp safe_unitless_css_number(_value, _valid_number?),
     do: :unresolved
 
   defp valid_font_weight_number?(value) do
