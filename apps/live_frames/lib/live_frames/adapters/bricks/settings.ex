@@ -50,6 +50,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   @css_number_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/
   @css_integer_pattern ~r/^[+-]?\d+$/
   @numeric_prefix_pattern ~r/^[+-]?(?:\d|\.)/
+  @css_dimension_pattern ~r/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?(?:[a-zA-Z]{2,}|%)$/
   @css_wide_keywords ["inherit", "initial", "revert", "revert-layer", "unset"]
   @numeric_expression_prefixes ["var(", "calc(", "clamp(", "min(", "max("]
 
@@ -126,7 +127,13 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
         consume_simple_style(result, key, base_key, value, breakpoint)
 
       base_key == "_margin" ->
-        consume_box(result, key, value, breakpoint, "margin")
+        consume_box(result, key, value, breakpoint, "_margin", "margin")
+
+      base_key == "_padding" ->
+        consume_box(result, key, value, breakpoint, "_padding", "padding")
+
+      base_key == "_typography" ->
+        consume_typography(result, key, value, breakpoint)
 
       base_key == "_border" ->
         consume_border(result, key, value, breakpoint)
@@ -177,76 +184,336 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     end
   end
 
-  defp consume_box(result, key, value, breakpoint, property_prefix) when is_map(value) do
+  defp consume_box(result, key, value, breakpoint, source_root_key, property_prefix)
+       when is_map(value) do
     sides = ["top", "right", "bottom", "left"]
 
-    Enum.reduce(sides, result, fn side, result ->
-      case Map.fetch(value, side) do
-        {:ok, side_value} ->
-          property = "#{property_prefix}-#{side}"
+    result =
+      Enum.reduce(sides, result, fn side, result ->
+        case Map.fetch(value, side) do
+          {:ok, side_value} ->
+            property = box_property(property_prefix, side)
+            source_path = "#{key}.#{side}"
 
-          case safe_box_value(side_value) do
-            {:ok, css_value} ->
-              if breakpoint do
-                add_responsive(
+            case safe_box_value(side_value) do
+              {:ok, css_value} ->
+                if breakpoint do
+                  add_responsive(
+                    result,
+                    key,
+                    source_path,
+                    property,
+                    css_value,
+                    side_value,
+                    breakpoint
+                  )
+                else
+                  result
+                  |> add_declaration(
+                    source_root_key,
+                    source_path,
+                    property,
+                    css_value,
+                    side_value,
+                    nil
+                  )
+                  |> put_style(property, css_value)
+                  |> add_consumed(source_path, property, side_value, nil)
+                end
+
+              :unresolved ->
+                add_unresolved_style(
                   result,
-                  key,
-                  "#{key}.#{side}",
+                  source_root_key,
+                  source_path,
                   property,
-                  css_value,
                   side_value,
-                  breakpoint
+                  breakpoint,
+                  "Box value has no proven CSS unit"
                 )
-              else
-                result
-                |> add_declaration(
-                  "_margin",
-                  "#{key}.#{side}",
-                  property,
-                  css_value,
-                  side_value,
-                  nil
-                )
-                |> put_style(property, css_value)
-                |> add_consumed("#{key}.#{side}", property, side_value, nil)
-              end
+            end
 
-            :unresolved ->
-              add_unresolved_style(
-                result,
-                "_margin",
-                "#{key}.#{side}",
-                property,
-                side_value,
-                breakpoint,
-                "Box value has no proven CSS unit"
-              )
-          end
+          :error ->
+            result
+        end
+      end)
+
+    if source_root_key == "_margin",
+      do: result,
+      else: consume_unknown_fields(result, key, value, sides, "Bricks box setting")
+  end
+
+  defp consume_box(result, key, value, _breakpoint, _source_root_key, _property_prefix),
+    do: add_unsupported(result, key, value, "Bricks box setting must be an object")
+
+  defp box_property("border-width", side), do: "border-#{side}-width"
+  defp box_property(property_prefix, side), do: "#{property_prefix}-#{side}"
+
+  defp consume_border(result, key, value, breakpoint) when is_map(value) do
+    source_root_key = elem(split_key(key), 0)
+
+    result =
+      case Map.fetch(value, "radius") do
+        {:ok, radius} when is_map(radius) ->
+          consume_radius(result, key, radius, breakpoint)
+
+        {:ok, radius} ->
+          add_unsupported(
+            result,
+            "#{key}.radius",
+            radius,
+            "Bricks border radius must be an object"
+          )
 
         :error ->
           result
       end
-    end)
-  end
 
-  defp consume_box(result, key, value, _breakpoint, _property_prefix),
-    do: add_unsupported(result, key, value, "Bricks box setting must be an object")
+    result =
+      case Map.fetch(value, "style") do
+        {:ok, style} when is_binary(style) ->
+          consume_mapped_style(
+            result,
+            key,
+            source_root_key,
+            "#{key}.style",
+            "border-style",
+            style,
+            breakpoint,
+            &safe_style_value/2,
+            "Border style is not safe CSS"
+          )
 
-  defp consume_border(result, key, value, breakpoint) when is_map(value) do
-    case Map.get(value, "radius") do
-      radius when is_map(radius) ->
-        consume_radius(result, key, radius, breakpoint)
+        {:ok, style} ->
+          add_unsupported(result, "#{key}.style", style, "Bricks border style must be a string")
 
-      nil ->
-        add_unsupported(result, key, value, "Only Bricks border radius is supported in Stage A")
+        :error ->
+          result
+      end
 
-      other ->
-        add_unsupported(result, "#{key}.radius", other, "Bricks border radius must be an object")
-    end
+    result =
+      case Map.fetch(value, "color") do
+        {:ok, color} ->
+          consume_color_control(result, key, source_root_key, "border", color, breakpoint)
+
+        :error ->
+          result
+      end
+
+    result =
+      case Map.fetch(value, "width") do
+        {:ok, width} ->
+          consume_box(result, "#{key}.width", width, breakpoint, source_root_key, "border-width")
+
+        :error ->
+          result
+      end
+
+    consume_unknown_fields(
+      result,
+      key,
+      value,
+      ["radius", "style", "color", "width"],
+      "Bricks border setting"
+    )
   end
 
   defp consume_border(result, key, value, _breakpoint),
     do: add_unsupported(result, key, value, "Bricks border setting must be an object")
+
+  defp consume_typography(result, key, value, breakpoint) when is_map(value) do
+    source_root_key = elem(split_key(key), 0)
+
+    result =
+      consume_color_control(
+        result,
+        key,
+        source_root_key,
+        "typography",
+        Map.get(value, "color", :missing),
+        breakpoint
+      )
+
+    result =
+      Enum.reduce(
+        [
+          {"font-size", "font-size", &safe_style_value/2, "Typography font size is not safe CSS"},
+          {"font-weight", "font-weight", &safe_font_weight_value/2,
+           "Typography font weight is invalid"},
+          {"letter-spacing", "letter-spacing", &safe_style_value/2,
+           "Typography letter spacing is not safe CSS"},
+          {"line-height", "line-height", &safe_line_height_value/2,
+           "Typography line height is invalid"},
+          {"text-align", "text-align", &safe_style_value/2,
+           "Typography text alignment is not safe CSS"},
+          {"text-transform", "text-transform", &safe_style_value/2,
+           "Typography text transform is not safe CSS"},
+          {"text-wrap", "text-wrap", &safe_style_value/2, "Typography text wrap is not safe CSS"}
+        ],
+        result,
+        fn {source_leaf, property, normalize, reason}, result ->
+          case Map.fetch(value, source_leaf) do
+            {:ok, raw_value} ->
+              consume_mapped_style(
+                result,
+                key,
+                source_root_key,
+                "#{key}.#{source_leaf}",
+                property,
+                raw_value,
+                breakpoint,
+                normalize,
+                reason
+              )
+
+            :error ->
+              result
+          end
+        end
+      )
+
+    consume_unknown_fields(
+      result,
+      key,
+      value,
+      [
+        "color",
+        "font-size",
+        "font-weight",
+        "letter-spacing",
+        "line-height",
+        "text-align",
+        "text-transform",
+        "text-wrap"
+      ],
+      "Bricks typography setting"
+    )
+  end
+
+  defp consume_typography(result, key, value, _breakpoint),
+    do: add_unsupported(result, key, value, "Bricks typography setting must be an object")
+
+  defp consume_color_control(result, _key, _source_root_key, _context, :missing, _breakpoint),
+    do: result
+
+  defp consume_color_control(result, key, source_root_key, context, color, breakpoint)
+       when is_map(color) do
+    color_path = "#{key}.color"
+
+    result =
+      case Map.fetch(color, "raw") do
+        {:ok, raw} when is_binary(raw) ->
+          consume_mapped_style(
+            result,
+            key,
+            source_root_key,
+            "#{color_path}.raw",
+            if(context == "border", do: "border-color", else: "color"),
+            raw,
+            breakpoint,
+            &safe_style_value/2,
+            "Bricks #{context} color is not safe CSS"
+          )
+
+        {:ok, raw} ->
+          add_unsupported(
+            result,
+            "#{color_path}.raw",
+            raw,
+            "Bricks #{context} color raw value must be a string"
+          )
+
+        :error ->
+          add_unsupported(
+            result,
+            "#{color_path}.raw",
+            color,
+            "Bricks #{context} color raw value is required and must be a string"
+          )
+      end
+
+    consume_unknown_fields(result, color_path, color, ["raw"], "Bricks #{context} color")
+  end
+
+  defp consume_color_control(result, key, _source_root_key, context, color, _breakpoint),
+    do:
+      add_unsupported(
+        result,
+        "#{key}.color",
+        color,
+        "Bricks #{context} color must be an object"
+      )
+
+  defp consume_mapped_style(
+         result,
+         key,
+         source_root_key,
+         source_path,
+         property,
+         raw_value,
+         breakpoint,
+         normalize,
+         reason
+       ) do
+    case normalize.(raw_value, property) do
+      {:ok, css_value} ->
+        if breakpoint do
+          add_responsive(
+            result,
+            key,
+            source_path,
+            property,
+            css_value,
+            raw_value,
+            breakpoint
+          )
+        else
+          result
+          |> add_declaration(
+            source_root_key,
+            source_path,
+            property,
+            css_value,
+            raw_value,
+            nil
+          )
+          |> put_style(property, css_value)
+          |> add_consumed(source_path, property, raw_value, nil)
+        end
+
+      :unresolved ->
+        add_unresolved_style(
+          result,
+          source_root_key,
+          source_path,
+          property,
+          raw_value,
+          breakpoint,
+          reason
+        )
+    end
+  end
+
+  defp consume_unknown_fields(result, key, value, known_fields, context) do
+    unknown_fields =
+      value
+      |> Map.keys()
+      |> Enum.reject(&(&1 in known_fields))
+      |> Enum.sort_by(&inspect/1)
+
+    case unknown_fields do
+      [] ->
+        result
+
+      fields ->
+        add_unsupported(
+          result,
+          key,
+          Enum.take(fields, 8),
+          "#{context} contains unsupported fields"
+        )
+    end
+  end
 
   defp consume_radius(result, key, radius, breakpoint) do
     Enum.reduce(["top", "right", "bottom", "left"], result, fn side, result ->
@@ -302,6 +569,12 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
           result
       end
     end)
+    |> consume_unknown_fields(
+      "#{key}.radius",
+      radius,
+      ["top", "right", "bottom", "left"],
+      "Bricks border radius"
+    )
   end
 
   defp consume_background(result, key, value, breakpoint) when is_map(value) do
@@ -732,6 +1005,91 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
   end
 
   defp safe_style_value(_value, _property), do: :unresolved
+
+  defp safe_font_weight_value(value, property),
+    do: safe_unitless_css_value(value, property, &valid_font_weight_number?/1, false)
+
+  defp safe_line_height_value(value, property),
+    do: safe_unitless_css_value(value, property, &valid_line_height_number?/1, true)
+
+  defp safe_unitless_css_value(value, _property, valid_number?, _allow_dimensions)
+       when is_integer(value) do
+    number = Integer.to_string(value)
+    if valid_number?.(number), do: {:ok, number}, else: :unresolved
+  end
+
+  defp safe_unitless_css_value(value, _property, valid_number?, _allow_dimensions)
+       when is_float(value) do
+    number = :erlang.float_to_binary(value, [:compact])
+    if valid_number?.(number), do: {:ok, number}, else: :unresolved
+  end
+
+  defp safe_unitless_css_value(value, property, valid_number?, allow_dimensions)
+       when is_binary(value) do
+    cond do
+      not safe_css_value?(value) ->
+        :unresolved
+
+      true ->
+        case numeric_css_value(value) do
+          {:number, number} ->
+            if valid_number?.(number), do: {:ok, value}, else: :unresolved
+
+          :invalid when allow_dimensions ->
+            if Regex.match?(@css_dimension_pattern, value),
+              do: safe_style_value(value, property),
+              else: :unresolved
+
+          :invalid ->
+            :unresolved
+
+          :other ->
+            safe_style_value(value, property)
+        end
+    end
+  end
+
+  defp safe_unitless_css_value(_value, _property, _valid_number?, _allow_dimensions),
+    do: :unresolved
+
+  defp valid_font_weight_number?(value) do
+    details = css_number_details(value)
+
+    (details.sign != "-" or details.significant_digits == "") and
+      details.significant_digits != "" and details.decimal_position >= 1 and
+      css_number_at_most_one_thousand?(details)
+  end
+
+  defp valid_line_height_number?(value) do
+    details = css_number_details(value)
+    details.sign != "-" or details.significant_digits == ""
+  end
+
+  defp css_number_at_most_one_thousand?(details) do
+    cond do
+      details.decimal_position < 4 ->
+        true
+
+      details.decimal_position > 4 ->
+        false
+
+      true ->
+        integer_digits =
+          details.significant_digits
+          |> String.slice(0, 4)
+          |> String.pad_trailing(4, "0")
+
+        fractional_digits =
+          String.slice(
+            details.significant_digits,
+            4,
+            max(byte_size(details.significant_digits) - 4, 0)
+          )
+
+        integer_digits < "1000" or
+          (integer_digits == "1000" and String.trim_trailing(fractional_digits, "0") == "")
+    end
+  end
 
   defp numeric_css_value(value) do
     cond do

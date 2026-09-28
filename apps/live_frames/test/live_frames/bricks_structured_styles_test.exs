@@ -265,16 +265,394 @@ defmodule LiveFrames.BricksStructuredStylesTest do
     refute bundle.css =~ "grid-template-columns:"
   end
 
-  test "leaves compound and stopped properties unsupported" do
+  test "maps padding sides with the existing box-value rules and exact paths" do
+    result =
+      Settings.extract(%{
+        "_padding" => %{
+          "top" => 12,
+          "right" => 0,
+          "bottom" => "1.5rem",
+          "left" => "var(--padding-left)"
+        }
+      })
+
+    assert result.base_styles == %{
+             "padding-top" => "12px",
+             "padding-right" => "0",
+             "padding-bottom" => "1.5rem",
+             "padding-left" => "var(--padding-left)"
+           }
+
+    assert Enum.map(result.declarations, &{&1.source_root_key, &1.source_path}) == [
+             {"_padding", "_padding.top"},
+             {"_padding", "_padding.right"},
+             {"_padding", "_padding.bottom"},
+             {"_padding", "_padding.left"}
+           ]
+
+    partial = Settings.extract(%{"_padding" => %{"left" => "clamp(1rem, 2vw, 3rem)"}})
+
+    assert partial.base_styles == %{
+             "padding-left" => "clamp(1rem, 2vw, 3rem)"
+           }
+  end
+
+  test "keeps unsafe padding unresolved and diagnoses a malformed root once" do
+    unsafe =
+      Settings.extract(%{
+        "_padding" => %{
+          "top" => "2rem; color: red",
+          "left" => ["1rem"]
+        }
+      })
+
+    assert unsafe.base_styles == %{}
+    assert unsafe.unresolved_values["_padding.top"] == "2rem; color: red"
+    assert unsafe.unresolved_values["_padding.left"] == ["1rem"]
+
+    malformed = Settings.extract(%{"_padding" => []})
+    assert malformed.declarations == []
+    assert [%{source_key: "_padding"}] = malformed.unsupported
+    assert [diagnostic] = malformed.diagnostics
+    assert diagnostic.source_path == "_padding"
+  end
+
+  test "maps the eight approved typography leaves independently" do
+    result =
+      Settings.extract(%{
+        "_typography" => %{
+          "color" => %{"raw" => "#34495e"},
+          "font-size" => "1.25rem",
+          "font-weight" => "650",
+          "letter-spacing" => "0.03em",
+          "line-height" => "1.4",
+          "text-align" => "center",
+          "text-transform" => "uppercase",
+          "text-wrap" => "balance"
+        }
+      })
+
+    assert result.base_styles == %{
+             "color" => "#34495e",
+             "font-size" => "1.25rem",
+             "font-weight" => "650",
+             "letter-spacing" => "0.03em",
+             "line-height" => "1.4",
+             "text-align" => "center",
+             "text-transform" => "uppercase",
+             "text-wrap" => "balance"
+           }
+
+    assert Enum.map(result.declarations, &{&1.property, &1.source_root_key, &1.source_path}) == [
+             {"color", "_typography", "_typography.color.raw"},
+             {"font-size", "_typography", "_typography.font-size"},
+             {"font-weight", "_typography", "_typography.font-weight"},
+             {"letter-spacing", "_typography", "_typography.letter-spacing"},
+             {"line-height", "_typography", "_typography.line-height"},
+             {"text-align", "_typography", "_typography.text-align"},
+             {"text-transform", "_typography", "_typography.text-transform"},
+             {"text-wrap", "_typography", "_typography.text-wrap"}
+           ]
+  end
+
+  test "propagates compound declarations through Design IR and Fidelity" do
+    expected = %{
+      "padding-top" => "1rem",
+      "padding-left" => "0",
+      "color" => "#34495e",
+      "font-size" => "1.25rem",
+      "font-weight" => "600",
+      "letter-spacing" => "0.03em",
+      "line-height" => "1.4",
+      "text-align" => "center",
+      "text-transform" => "uppercase",
+      "text-wrap" => "balance",
+      "border-style" => "solid",
+      "border-color" => "#123456",
+      "border-top-width" => "1px",
+      "border-top-left-radius" => "2px"
+    }
+
     settings = %{
-      "_gridGap" => "1rem",
-      "_padding" => %{"top" => "1rem", "right" => "2rem"},
-      "_typography" => %{"fontSize" => "1rem"},
+      "_padding" => %{"top" => "1rem", "left" => "0"},
+      "_typography" => %{
+        "color" => %{"raw" => "#34495e"},
+        "font-size" => "1.25rem",
+        "font-weight" => "600",
+        "letter-spacing" => "0.03em",
+        "line-height" => "1.4",
+        "text-align" => "center",
+        "text-transform" => "uppercase",
+        "text-wrap" => "balance"
+      },
       "_border" => %{
         "style" => "solid",
-        "color" => "#000",
-        "width" => %{"top" => "1px"}
+        "color" => %{"raw" => "#123456"},
+        "width" => %{"top" => "1px"},
+        "radius" => %{"top" => "2px"}
+      }
+    }
+
+    assert {:ok, document} =
+             Bricks.to_ir(source(settings),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    [node] = document.root_nodes
+
+    for {property, value} <- expected do
+      assert %StyleValue{value: ^value} = node.styles[property]
+    end
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    for {property, value} <- expected do
+      assert bundle.css =~ "#{property}: #{value};"
+    end
+  end
+
+  test "allows only property-specific unitless font weight and line height numbers" do
+    for number <- [100, 400, 1000, "500", "500.5"] do
+      result = Settings.extract(%{"_typography" => %{"font-weight" => number}})
+      assert map_size(result.base_styles) == 1
+      assert Map.has_key?(result.base_styles, "font-weight")
+    end
+
+    for number <- [0, -1, 1001, "400px", "1.", "1e"] do
+      result = Settings.extract(%{"_typography" => %{"font-weight" => number}})
+      assert result.base_styles == %{}
+      assert result.unresolved_values["_typography.font-weight"] == number
+    end
+
+    for value <- ["bold", "inherit", "var(--font-weight)", "calc(600)"] do
+      result = Settings.extract(%{"_typography" => %{"font-weight" => value}})
+      assert result.base_styles == %{"font-weight" => value}
+    end
+
+    for value <- [
+          1.25,
+          "1.5",
+          "0",
+          "24px",
+          "120%",
+          "normal",
+          "inherit",
+          "var(--line-height)",
+          "calc(1 + 0.4)",
+          "clamp(1.2, 2vw, 1.8)"
+        ] do
+      result = Settings.extract(%{"_typography" => %{"line-height" => value}})
+      assert Map.has_key?(result.base_styles, "line-height")
+    end
+
+    for value <- [-1, "-1", "1.", "1e"] do
+      result = Settings.extract(%{"_typography" => %{"line-height" => value}})
+      assert result.base_styles == %{}
+      assert Map.has_key?(result.unresolved_values, "_typography.line-height")
+    end
+
+    for value <- ["12", 12] do
+      result = Settings.extract(%{"_width" => value})
+      assert result.base_styles == %{}
+      assert Map.has_key?(result.unresolved_values, "_width")
+    end
+
+    for {source_leaf, value} <- [{"font-size", 24}, {"letter-spacing", "2"}] do
+      result = Settings.extract(%{"_typography" => %{source_leaf => value}})
+      assert result.base_styles == %{}
+      assert Map.has_key?(result.unresolved_values, "_typography.#{source_leaf}")
+    end
+  end
+
+  test "keeps typography variables and unsafe values on the established paths" do
+    expression = "var(--content-color)"
+
+    assert {:ok, document} =
+             Bricks.to_ir(
+               source(%{"_typography" => %{"color" => %{"raw" => expression}}}),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    [node] = document.root_nodes
+
+    assert %StyleValue{kind: :unresolved, value: ^expression} = node.styles["color"]
+
+    assert [%{"name" => "--content-color", "token_path" => nil}] =
+             document.provenance["dependency_summary"]["variables"]
+
+    unsafe_settings = %{
+      "_padding" => %{"top" => "2rem; color: red"},
+      "_border" => %{
+        "style" => "solid; color: red",
+        "color" => %{"raw" => "red; color: blue"},
+        "width" => %{"left" => "1px; color: red"}
       },
+      "_typography" => %{
+        "font-size" => "2rem; color: red",
+        "line-height" => "1.4"
+      }
+    }
+
+    result = Settings.extract(unsafe_settings)
+    assert result.base_styles == %{"line-height" => "1.4"}
+    assert result.unresolved_values["_padding.top"] == "2rem; color: red"
+    assert result.unresolved_values["_border.style"] == "solid; color: red"
+    assert result.unresolved_values["_border.color.raw"] == "red; color: blue"
+    assert result.unresolved_values["_border.width.left"] == "1px; color: red"
+
+    assert {:ok, unsafe_document} =
+             Bricks.to_ir(source(unsafe_settings),
+               component_id: "component-a",
+               token_set: TokenSet.new()
+             )
+
+    assert {:ok, bundle} = Fidelity.generate(unsafe_document)
+    refute bundle.css =~ "padding-top:"
+    refute bundle.css =~ "border-style:"
+    refute bundle.css =~ "border-color:"
+    refute bundle.css =~ "border-left-width:"
+    refute bundle.css =~ "font-size:"
+    assert bundle.css =~ "line-height: 1.4;"
+  end
+
+  test "diagnoses unknown typography children without mapping them" do
+    result =
+      Settings.extract(%{
+        "_typography" => %{
+          "font-size" => "1rem",
+          "fontSize" => "2rem",
+          "font-family" => %{"raw" => "Inter"}
+        }
+      })
+
+    assert result.base_styles == %{"font-size" => "1rem"}
+    assert [%{source_key: "_typography"}] = result.unsupported
+    refute Map.has_key?(result.base_styles, "font-family")
+    refute Map.has_key?(result.base_styles, "font-size-legacy")
+  end
+
+  test "diagnoses an empty-list typography root once" do
+    result = Settings.extract(%{"_typography" => []})
+
+    assert result.declarations == []
+    assert [%{source_key: "_typography"}] = result.unsupported
+    assert [diagnostic] = result.diagnostics
+    assert diagnostic.source_path == "_typography"
+  end
+
+  test "requires typography color raw values to be present as strings" do
+    result = Settings.extract(%{"_typography" => %{"color" => %{}}})
+
+    assert result.declarations == []
+    assert [%{source_key: "_typography.color.raw"}] = result.unsupported
+    assert [diagnostic] = result.diagnostics
+    assert diagnostic.message =~ "must be a string"
+  end
+
+  test "maps border style, color, widths, and radius independently" do
+    result =
+      Settings.extract(%{
+        "_border" => %{
+          "style" => "solid",
+          "color" => %{"raw" => "var(--border-color)"},
+          "width" => %{
+            "top" => 2,
+            "right" => 0,
+            "bottom" => "0.25rem",
+            "left" => "var(--border-left-width)"
+          },
+          "radius" => %{"top" => "4px"}
+        }
+      })
+
+    assert result.base_styles == %{
+             "border-style" => "solid",
+             "border-color" => "var(--border-color)",
+             "border-top-width" => "2px",
+             "border-right-width" => "0",
+             "border-bottom-width" => "0.25rem",
+             "border-left-width" => "var(--border-left-width)",
+             "border-top-left-radius" => "4px"
+           }
+
+    assert Enum.map(result.declarations, &{&1.source_root_key, &1.source_path}) == [
+             {"_border", "_border.radius.top"},
+             {"_border", "_border.style"},
+             {"_border", "_border.color.raw"},
+             {"_border", "_border.width.top"},
+             {"_border", "_border.width.right"},
+             {"_border", "_border.width.bottom"},
+             {"_border", "_border.width.left"}
+           ]
+
+    partial = Settings.extract(%{"_border" => %{"width" => %{"left" => 3}}})
+    assert partial.base_styles == %{"border-left-width" => "3px"}
+
+    malformed_width =
+      Settings.extract(%{
+        "_border" => %{"style" => "dashed", "width" => "2px"}
+      })
+
+    assert malformed_width.base_styles == %{"border-style" => "dashed"}
+    assert [%{source_key: "_border.width"}] = malformed_width.unsupported
+
+    unknown =
+      Settings.extract(%{
+        "_border" => %{"style" => "solid", "shadow" => %{"color" => "red"}}
+      })
+
+    assert unknown.base_styles == %{"border-style" => "solid"}
+    assert [%{source_key: "_border"}] = unknown.unsupported
+  end
+
+  test "keeps unsafe border leaves unresolved and rejects malformed color shapes" do
+    result =
+      Settings.extract(%{
+        "_border" => %{
+          "style" => "solid; color: red",
+          "color" => %{"raw" => 42},
+          "width" => %{"top" => "1px; color: red"}
+        }
+      })
+
+    assert result.base_styles == %{}
+    assert result.unresolved_values["_border.style"] == "solid; color: red"
+    assert result.unresolved_values["_border.width.top"] == "1px; color: red"
+    assert [%{source_key: "_border.color.raw"}] = result.unsupported
+
+    malformed = Settings.extract(%{"_border" => []})
+    assert malformed.declarations == []
+    assert [%{source_key: "_border"}] = malformed.unsupported
+  end
+
+  test "keeps exact responsive source labels, paths, and unresolved thresholds" do
+    result =
+      Settings.extract(%{
+        "_padding:mobile_landscape" => %{"top" => "2"},
+        "_typography:mobile_landscape" => %{"line-height" => "1.5"}
+      })
+
+    assert Enum.map(result.declarations, &{&1.source_root_key, &1.source_path, &1.breakpoint}) ==
+             [
+               {"_padding", "_padding:mobile_landscape.top", "mobile_landscape"},
+               {
+                 "_typography",
+                 "_typography:mobile_landscape.line-height",
+                 "mobile_landscape"
+               }
+             ]
+
+    assert Enum.all?(result.responsive, fn record ->
+             record.threshold_status == :unresolved and is_nil(record.min_width) and
+               is_nil(record.max_width)
+           end)
+  end
+
+  test "keeps unapproved and stopped properties unsupported" do
+    settings = %{
+      "_gridGap" => "1rem",
       "_boxShadow" => "0 1px 2px black",
       "_hidden" => true,
       "_cssCustomSass" => "$color: red;"
@@ -287,9 +665,6 @@ defmodule LiveFrames.BricksStructuredStylesTest do
     assert MapSet.new(Enum.map(result.unsupported, & &1.source_key)) ==
              MapSet.new([
                "_gridGap",
-               "_padding",
-               "_typography",
-               "_border",
                "_boxShadow",
                "_hidden",
                "_cssCustomSass"

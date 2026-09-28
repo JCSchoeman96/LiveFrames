@@ -101,6 +101,172 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert precedence_diagnostics(document) == []
   end
 
+  test "preserves disjoint padding leaves from separate class layers" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_padding" => %{"top" => "1rem"}}),
+          class("class-b", %{"_padding" => %{"bottom" => "2rem"}})
+        ]
+      )
+
+    style = root(document).styles["padding-top"]
+    assert %StyleValue{value: "1rem"} = style
+    assert %StyleValue{value: "2rem"} = root(document).styles["padding-bottom"]
+
+    assert [contributor] = style.metadata["contributors"]
+    assert contributor["origin"] == "global_class"
+    assert contributor["class_id"] == "class-a"
+    assert Map.has_key?(contributor, "resolution_source")
+    assert is_list(contributor["authority_ids"])
+    assert contributor["class_reference_index"] == 0
+    assert contributor["source_id"] == "root"
+    assert contributor["source_root_key"] == "_padding"
+    assert contributor["source_path"] == "_padding.top"
+    assert precedence_diagnostics(document) == []
+  end
+
+  test "omits a conflicting padding side and retains unrelated sides" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_padding" => %{"top" => "1rem", "right" => "2rem"}}),
+          class("class-b", %{"_padding" => %{"top" => "3rem", "bottom" => "4rem"}})
+        ]
+      )
+
+    refute Map.has_key?(root(document).styles, "padding-top")
+    assert %StyleValue{value: "2rem"} = root(document).styles["padding-right"]
+    assert %StyleValue{value: "4rem"} = root(document).styles["padding-bottom"]
+
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "padding-top"
+    assert diagnostic.metadata["resolution"] == "unresolved_precedence"
+
+    assert Enum.map(diagnostic.metadata["contributors"], & &1["source_path"]) == [
+             "_padding.top",
+             "_padding.top"
+           ]
+  end
+
+  test "preserves disjoint typography leaves from separate class layers" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_typography" => %{"font-size" => "1.25rem"}}),
+          class("class-b", %{"_typography" => %{"line-height" => "1.4"}})
+        ]
+      )
+
+    assert %StyleValue{value: "1.25rem"} = root(document).styles["font-size"]
+    assert %StyleValue{value: "1.4"} = root(document).styles["line-height"]
+    assert precedence_diagnostics(document) == []
+  end
+
+  test "omits a conflicting typography property with one precedence diagnostic" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_typography" => %{"font-weight" => "400", "line-height" => "1.4"}}),
+          class("class-b", %{"_typography" => %{"font-weight" => "700", "text-align" => "center"}})
+        ]
+      )
+
+    refute Map.has_key?(root(document).styles, "font-weight")
+    assert %StyleValue{value: "1.4"} = root(document).styles["line-height"]
+    assert %StyleValue{value: "center"} = root(document).styles["text-align"]
+
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "font-weight"
+
+    assert Enum.map(diagnostic.metadata["contributors"], & &1["source_path"]) == [
+             "_typography.font-weight",
+             "_typography.font-weight"
+           ]
+  end
+
+  test "does not apply the scalar local override to compound padding" do
+    document =
+      document(
+        ["class-a"],
+        [class("class-a", %{"_padding" => %{"top" => "1rem"}})],
+        %{"_padding" => %{"top" => "2rem"}}
+      )
+
+    refute Map.has_key?(root(document).styles, "padding-top")
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "padding-top"
+    assert diagnostic.metadata["conflict"] == "unresolved_precedence"
+    assert diagnostic.metadata["resolution"] == "unresolved_precedence"
+
+    assert Enum.map(diagnostic.metadata["contributors"], & &1["origin"]) == [
+             "global_class",
+             "element_local"
+           ]
+  end
+
+  test "collapses equivalent compound declarations and retains both contributors" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_padding" => %{"left" => "1.5rem"}}),
+          class("class-b", %{"_padding" => %{"left" => "1.5rem"}})
+        ]
+      )
+
+    style = root(document).styles["padding-left"]
+    assert %StyleValue{value: "1.5rem"} = style
+    assert style.metadata["precedence"] == "equivalent_duplicate"
+    assert Enum.map(style.metadata["contributors"], & &1["class_id"]) == ["class-a", "class-b"]
+
+    assert Enum.map(style.metadata["contributors"], & &1["source_path"]) == [
+             "_padding.left",
+             "_padding.left"
+           ]
+
+    assert precedence_diagnostics(document) == []
+  end
+
+  test "routes responsive padding and typography through exact-label precedence" do
+    document =
+      document(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{
+            "_padding:mobile_landscape" => %{"top" => "1rem"},
+            "_typography:mobile_landscape" => %{"font-size" => "1.2rem"}
+          }),
+          class("class-b", %{
+            "_padding:mobile_landscape" => %{"top" => "2rem"},
+            "_padding:tablet_portrait" => %{"bottom" => "3rem"},
+            "_typography:mobile_landscape" => %{"line-height" => "1.5"}
+          })
+        ]
+      )
+
+    mobile = root(document).responsive["mobile_landscape"]
+    tablet = root(document).responsive["tablet_portrait"]
+
+    refute Map.has_key?(mobile.styles, "padding-top")
+    assert %StyleValue{value: "1.2rem"} = mobile.styles["font-size"]
+    assert %StyleValue{value: "1.5"} = mobile.styles["line-height"]
+    assert %StyleValue{value: "3rem"} = tablet.styles["padding-bottom"]
+
+    assert [diagnostic] = precedence_diagnostics(document)
+    assert diagnostic.metadata["property"] == "padding-top"
+    assert diagnostic.metadata["breakpoint"] == "mobile_landscape"
+
+    assert Enum.all?([mobile, tablet], fn override ->
+             override.resolution_status == :unresolved and is_nil(override.min_width) and
+               is_nil(override.max_width)
+           end)
+  end
+
   test "container width conflict blocks intrinsic and Theme Styles fallback" do
     conflicting_classes = [
       class("class-a", %{"_width" => "100px"}),
@@ -267,7 +433,7 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert result.artifacts["styles.css"] =~ "margin-bottom: 2rem;"
   end
 
-  test "Stage A reports an earlier unsupported border layer after a later radius layer" do
+  test "Stage A retains border style and radius from separate class layers" do
     result =
       stage_a_result(
         ["class-a", "class-b"],
@@ -277,24 +443,14 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
         ]
       )
 
-    [unsupported] =
-      Enum.filter(result.report["settings"]["unsupported"], &(&1["class_id"] == "class-a"))
+    assert result.report["settings"]["unsupported"] == []
 
-    assert unsupported["source_key"] == "_border"
-    assert unsupported["origin"] == "global_class"
-    assert unsupported["class_reference_index"] == 0
-    assert unsupported["source_id"] == "root"
+    border_styles = result.dependencies.style_results["root"].base_styles
+    assert border_styles["border-style"].value == "solid"
+    assert border_styles["border-top-left-radius"].value == "4px"
 
-    [diagnostic] =
-      Enum.filter(result.report["diagnostics"]["items"], fn diagnostic ->
-        diagnostic["code"] == "bricks.setting.unsupported" and
-          diagnostic["metadata"]["class_id"] == "class-a"
-      end)
-
-    assert diagnostic["source_path"] == "_border"
-
-    assert result.dependencies.style_results["root"].base_styles["border-top-left-radius"].value ==
-             "4px"
+    assert result.artifacts["styles.css"] =~ "border-style: solid;"
+    assert result.artifacts["styles.css"] =~ "border-top-left-radius: 4px;"
   end
 
   test "Stage A responsive evidence retains non-overlapping declarations from both class layers" do
@@ -314,6 +470,64 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert Enum.map(margin_records, & &1["class_id"]) == ["class-a", "class-b"]
     assert Enum.map(margin_records, & &1["class_reference_index"]) == [0, 1]
     assert Enum.all?(margin_records, &(&1["breakpoint"] == "mobile_landscape"))
+  end
+
+  test "Stage A retains responsive padding and typography evidence with layer provenance" do
+    result =
+      stage_a_result(
+        ["class-a", "class-b"],
+        [
+          class("class-a", %{"_padding:mobile_landscape" => %{"top" => "1rem"}}),
+          class("class-b", %{"_typography:mobile_landscape" => %{"line-height" => "1.4"}})
+        ]
+      )
+
+    records =
+      result.report["responsive"]["entries"]
+      |> Enum.filter(&(&1["property"] in ["padding-top", "line-height"]))
+      |> Map.new(&{&1["property"], &1})
+
+    assert Map.keys(records) |> Enum.sort() == ["line-height", "padding-top"]
+
+    assert Map.take(records["padding-top"], [
+             "breakpoint",
+             "threshold_status",
+             "min_width",
+             "max_width",
+             "source_id",
+             "class_id",
+             "class_reference_index",
+             "base_key"
+           ]) == %{
+             "breakpoint" => "mobile_landscape",
+             "threshold_status" => "unresolved",
+             "min_width" => nil,
+             "max_width" => nil,
+             "source_id" => "root",
+             "class_id" => "class-a",
+             "class_reference_index" => 0,
+             "base_key" => "_padding:mobile_landscape.top"
+           }
+
+    assert Map.take(records["line-height"], [
+             "breakpoint",
+             "threshold_status",
+             "min_width",
+             "max_width",
+             "source_id",
+             "class_id",
+             "class_reference_index",
+             "base_key"
+           ]) == %{
+             "breakpoint" => "mobile_landscape",
+             "threshold_status" => "unresolved",
+             "min_width" => nil,
+             "max_width" => nil,
+             "source_id" => "root",
+             "class_id" => "class-b",
+             "class_reference_index" => 1,
+             "base_key" => "_typography:mobile_landscape.line-height"
+           }
   end
 
   test "Stage A responsive conflict preserves both observations and omits a resolved winner" do
@@ -356,6 +570,38 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert diagnostic.metadata["class_id"] == "class-a"
     assert diagnostic.metadata["source_path"] == "_margin"
     assert root(document).styles["row-gap"].value == "2rem"
+  end
+
+  test "tags one malformed typography root diagnostic with its layer provenance" do
+    document =
+      document(
+        ["class-a"],
+        [class("class-a", %{"_typography" => []})]
+      )
+
+    [diagnostic] = Enum.filter(document.diagnostics, &(&1.code == "bricks.setting.unsupported"))
+    assert diagnostic.metadata["style_layer_state"] == "malformed_layer"
+    assert diagnostic.metadata["class_id"] == "class-a"
+    assert diagnostic.metadata["source_path"] == "_typography"
+
+    assert length(Enum.filter(document.diagnostics, &(&1.code == "bricks.setting.unsupported"))) ==
+             1
+
+    refute Map.has_key?(root(document).styles, "font-size")
+  end
+
+  test "tags a malformed typography color leaf on the existing Settings diagnostic" do
+    document =
+      document(
+        ["class-a"],
+        [class("class-a", %{"_typography" => %{"color" => %{}}})]
+      )
+
+    [diagnostic] = Enum.filter(document.diagnostics, &(&1.code == "bricks.setting.unsupported"))
+    assert diagnostic.metadata["style_layer_state"] == "malformed_layer"
+    assert diagnostic.metadata["class_id"] == "class-a"
+    assert diagnostic.metadata["source_path"] == "_typography.color.raw"
+    assert diagnostic.message =~ "must be a string"
   end
 
   test "tags malformed structured leaves on their existing Settings diagnostic" do
