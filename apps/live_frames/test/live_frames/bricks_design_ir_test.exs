@@ -7,6 +7,8 @@ defmodule LiveFrames.BricksDesignIRTest do
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StyleValue
+  alias LiveFrames.Tokens.Token
+  alias LiveFrames.Tokens.TokenSet
 
   @fixture_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
   @token_fixture_path Path.expand(
@@ -86,6 +88,42 @@ defmodule LiveFrames.BricksDesignIRTest do
       "children" => children,
       "settings" => settings
     }
+  end
+
+  defp authority_token_set(path, variable, status) do
+    authority = %{
+      "variable" => variable,
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:#{variable}",
+      "source_key" => String.trim_leading(variable, "--"),
+      "source_version" => "4.0.1"
+    }
+
+    resolved_value = if status == :resolved, do: "16px", else: nil
+    source_expression = if status == :resolved, do: "16px", else: "var(#{variable})"
+
+    token = %Token{
+      path: path,
+      category: :spacing,
+      value: resolved_value,
+      resolved_value: resolved_value,
+      source_expression: source_expression,
+      resolution_status: status,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    TokenSet.new(tokens: %{path => token})
+  end
+
+  defp style_document(setting, value, tokens \\ nil) do
+    assert {:ok, document} =
+             Bricks.to_ir(
+               synthetic_source([source_element("root", "block", 0, %{setting => value})]),
+               component_id: "component-a",
+               token_set: tokens || token_set()
+             )
+
+    document
   end
 
   defp document do
@@ -652,10 +690,16 @@ defmodule LiveFrames.BricksDesignIRTest do
              node_by_source_id(document, "3f6ee6").styles["max-width"]
 
     assert %StyleValue{
-             kind: :token_ref,
-             value: "spacing.content_gap",
+             kind: :unresolved,
+             value: "var(--content-gap, 30px)",
              source_expression: "var(--content-gap, 30px)",
-             metadata: %{"fallback" => "30px", "source_variable" => "--content-gap"}
+             metadata: %{
+               "fallback" => "30px",
+               "source_variable" => "--content-gap",
+               "token_path" => "spacing.content_gap",
+               "resolution_reason" => "fallback_semantics_unrepresented",
+               "authority_state" => "unique_candidate"
+             }
            } = node_by_source_id(document, "8ae908").styles["column-gap"]
 
     assert %StyleValue{kind: :literal, value: "400px", source_expression: "400px"} =
@@ -670,7 +714,12 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert %StyleValue{
              kind: :unresolved,
              value: "var(--overlay-bg, var(--neutral-ultra-dark-trans-60))",
-             source_expression: "var(--overlay-bg, var(--neutral-ultra-dark-trans-60))"
+             source_expression: "var(--overlay-bg, var(--neutral-ultra-dark-trans-60))",
+             metadata: %{
+               "source_variable" => "--overlay-bg",
+               "fallback" => "var(--neutral-ultra-dark-trans-60)",
+               "resolution_reason" => "fallback_semantics_unrepresented"
+             }
            } = node_by_source_id(document, "be2b65").styles["background"]
 
     assert %StyleValue{kind: :complex_css, value: %{"type" => "custom_css"}} =
@@ -680,14 +729,150 @@ defmodule LiveFrames.BricksDesignIRTest do
       File.read!(@fixture_path)
       |> Jason.decode!()
       |> put_in(["globalClasses", Access.filter(&(&1["id"] == "6lGpfjmaoto")), "settings"], %{
-        "_width" => "calc(100% - 1rem)"
+        "_width" => "calc(100% - var(--content-gap))"
       })
 
     assert {:ok, calculation_document} =
              Bricks.to_ir(calculation_source, token_set: token_set(), component_id: "sqhmmc")
 
-    assert %StyleValue{kind: :calculation, value: "calc(100% - 1rem)"} =
+    assert %StyleValue{
+             kind: :calculation,
+             value: "calc(100% - var(--content-gap))",
+             source_expression: "calc(100% - var(--content-gap))"
+           } =
              node_by_source_id(calculation_document, "2ef2fa").styles["width"]
+  end
+
+  test "promotes an exact direct Tier-1 alias through VariableAuthority" do
+    document = style_document("_width", "var(--container-gap)")
+
+    assert %StyleValue{
+             kind: :token_ref,
+             value: "spacing.container_gap",
+             source_expression: "var(--container-gap)",
+             metadata: %{
+               "source_variable" => "--container-gap",
+               "token_path" => "spacing.container_gap",
+               "authority_state" => "unique_candidate",
+               "candidate_paths" => ["spacing.container_gap"],
+               "authority_evidence" => [
+                 %{
+                   "token_path" => "spacing.container_gap",
+                   "resolution_status" => "resolved",
+                   "authorities" => [%{"variable" => "--container-gap"}]
+                 }
+               ]
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "keeps a uniquely authorized unresolved token as an unresolved style" do
+    document =
+      style_document(
+        "_width",
+        "var(--gap)",
+        authority_token_set("spacing.gap", "--gap", :unresolved)
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--gap)",
+             source_expression: "var(--gap)",
+             metadata: %{
+               "source_variable" => "--gap",
+               "token_path" => "spacing.gap",
+               "resolution_reason" => "token_unresolved",
+               "authority_state" => "unique_candidate"
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["resolution_reason"] == "token_unresolved" and
+               diagnostic.metadata["token_path"] == "spacing.gap"
+           end)
+  end
+
+  test "keeps the B1 section-space-m graph ambiguous without choosing a CSS property winner" do
+    document = style_document("_width", "var(--section-space-m)")
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--section-space-m)",
+             metadata: %{
+               "source_variable" => "--section-space-m",
+               "resolution_reason" => "mapping_ambiguous",
+               "authority_state" => "ambiguous_candidates",
+               "candidate_paths" => ["spacing.section", "spacing.section.padding_block"]
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["candidate_paths"] == [
+                 "spacing.section",
+                 "spacing.section.padding_block"
+               ]
+           end)
+  end
+
+  test "keeps every currently ambiguous B1 variable unresolved in Design IR" do
+    for variable <- ["--space-m", "--radius", "--primary", "--white"] do
+      document = style_document("_width", "var(#{variable})")
+
+      assert %StyleValue{
+               kind: :unresolved,
+               value: expression,
+               metadata: %{"resolution_reason" => "mapping_ambiguous"}
+             } = node_by_source_id(document, "root").styles["width"]
+
+      assert expression == "var(#{variable})"
+    end
+  end
+
+  test "keeps an unproven exact direct variable unresolved" do
+    document = style_document("_width", "var(--unknown)")
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--unknown)",
+             source_expression: "var(--unknown)",
+             metadata: %{
+               "source_variable" => "--unknown",
+               "resolution_reason" => "mapping_unproven",
+               "authority_state" => "no_authority",
+               "candidate_paths" => []
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "keeps exact known external variables unresolved without creating token refs" do
+    document = style_document("_width", "var(--overlay-bg)")
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--overlay-bg)",
+             metadata: %{
+               "source_variable" => "--overlay-bg",
+               "resolution_reason" => "external_unresolved",
+               "authority_state" => "no_authority"
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "retains an empty fallback as an unresolved complete variable expression" do
+    document = style_document("_width", "var(--content-gap,)")
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--content-gap,)",
+             source_expression: "var(--content-gap,)",
+             metadata: %{
+               "source_variable" => "--content-gap",
+               "fallback" => "",
+               "resolution_reason" => "fallback_semantics_unrepresented"
+             }
+           } = node_by_source_id(document, "root").styles["width"]
   end
 
   test "preserves base and responsive gradients as complex CSS" do

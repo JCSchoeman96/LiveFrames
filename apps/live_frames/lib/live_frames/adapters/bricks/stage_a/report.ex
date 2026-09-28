@@ -44,7 +44,12 @@ defmodule LiveFrames.Adapters.Bricks.StageA.Report do
     unresolved_variables =
       Enum.filter(
         dependencies.variables,
-        &(&1.status in [:source_variable, :unresolved_external])
+        &(&1.status in [
+            :source_variable,
+            :unresolved_external,
+            :unresolved_token,
+            :ambiguous_token
+          ])
       )
 
     token_variables = Enum.filter(dependencies.variables, &(&1.status == :resolved_token))

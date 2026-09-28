@@ -30,9 +30,12 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Tokens.VariableAuthority
 
   @bricks_container_width_default "1100px"
   @valid_width_length ~r/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ch|vw|vh|vmin|vmax|ex|cm|mm|in|pt|pc)$/i
+  @direct_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*\)\s*$/
+  @fallback_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*,\s*(.*)\)\s*$/s
   @valid_width_keywords ~w(0 auto inherit initial unset fit-content max-content min-content)
 
   @default_component_id "sqhmmc"
@@ -105,6 +108,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   def normalize(source, opts) when is_list(opts) do
     with {:ok, token_set} <- validate_token_set(Keyword.get(opts, :token_set)),
+         {:ok, authority_index} <- build_authority_index(token_set),
          {:ok, document, load_diagnostics} <- load_source(source, opts),
          :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
@@ -121,7 +125,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
       dependencies =
         DependencyExtractor.extract(resolved, document,
-          token_set: token_set,
+          authority_index: authority_index,
           semantic_settings: semantic_settings
         )
 
@@ -151,6 +155,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           resolved: resolved,
           dependencies: dependencies,
           token_set: token_set,
+          authority_index: authority_index,
           component_index: component_index(document, component),
           source_diagnostics: diagnostics ++ theme_diagnostics,
           static_semantics: static_semantics,
@@ -207,6 +212,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
          message: "Bricks Design IR normalization requires a validated TokenSet"
        )
      ]}
+  end
+
+  defp build_authority_index(token_set) do
+    VariableAuthority.build(token_set)
   end
 
   defp load_source(%Document{} = document, _opts), do: {:ok, document, []}
@@ -467,7 +476,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       label: element.label,
       content: content_for(element),
       attributes: attributes,
-      styles: styles_for(style_result, trace, context.token_set, element, context),
+      styles: styles_for(style_result, trace, context.authority_index, element, context),
       responsive: responsive_for(style_result, trace, resolved.class_names, element, context),
       interaction_refs: [],
       asset_refs: Map.get(context.asset_ids_by_source, source_id, []),
@@ -525,7 +534,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp content_for(_element), do: nil
 
-  defp styles_for(style_result, trace, token_set, element, context) do
+  defp styles_for(style_result, trace, authority_index, element, context) do
     styles =
       Enum.reduce(style_result.base_styles, %{}, fn {property, declaration}, styles ->
         declaration_trace = style_declaration_trace(trace, declaration)
@@ -539,7 +548,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
               |> merge_style_metadata(metadata)
 
             _kind ->
-              normalize_style(declaration.value, property, declaration_trace, token_set,
+              normalize_style(declaration.value, property, declaration_trace, authority_index,
                 metadata: metadata
               )
           end
@@ -687,7 +696,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           put_intrinsic_literal(styles, trace, "container", "width", value, blocked)
 
         {:theme_styles, value} ->
-          put_theme_styles_width(styles, trace, context.token_set, value)
+          put_theme_styles_width(styles, trace, context.authority_index, value)
       end
     end
   end
@@ -724,7 +733,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     {:intrinsic, @bricks_container_width_default}
   end
 
-  defp put_theme_styles_width(styles, trace, token_set, value) do
+  defp put_theme_styles_width(styles, trace, authority_index, value) do
     theme_trace = %{
       trace
       | source_type: "bricks_theme_styles",
@@ -734,7 +743,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
 
     style =
-      normalize_style(value, "width", theme_trace, token_set,
+      normalize_style(value, "width", theme_trace, authority_index,
         metadata: %{
           "authority" => "bricks_theme_styles",
           "selector" => ".brxe-container"
@@ -742,7 +751,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       )
 
     case style do
-      %StyleValue{kind: :unresolved} -> styles
       %StyleValue{} = style_value -> Map.put_new(styles, "width", style_value)
     end
   end
@@ -795,7 +803,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp valid_width_authority?(value) when is_binary(value) do
     safe_css_fragment?(value) and
-      (String.starts_with?(value, "var(") or String.starts_with?(value, "calc(") or
+      (String.starts_with?(String.trim_leading(value), "var(") or
+         String.starts_with?(value, "calc(") or
          Regex.match?(@valid_width_length, value) or value in @valid_width_keywords)
   end
 
@@ -883,47 +892,50 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
   end
 
-  defp normalize_style(value, _property, trace, token_set, opts) when is_binary(value) do
+  defp normalize_style(value, _property, trace, authority_index, opts)
+       when is_binary(value) do
     metadata = Keyword.get(opts, :metadata, %{})
 
+    case parse_direct_variable_expression(value) do
+      {:ok, variable} ->
+        resolve_direct_variable(value, variable, authority_index, trace, metadata)
+
+      :error ->
+        case parse_fallback_variable_expression(value) do
+          {:ok, variable, fallback} ->
+            unresolved_fallback_style(
+              value,
+              variable,
+              fallback,
+              authority_index,
+              trace,
+              metadata
+            )
+
+          :error ->
+            normalize_non_direct_style(value, trace, metadata)
+        end
+    end
+  end
+
+  defp normalize_style(value, _property, trace, _authority_index, opts) do
+    StyleValue.literal(json_safe(value),
+      source_trace: trace,
+      metadata: Keyword.get(opts, :metadata, %{})
+    )
+  end
+
+  defp normalize_non_direct_style(value, trace, metadata) do
     cond do
-      value == "var(--content-gap)" and token_present?(token_set, "spacing.content_gap") ->
-        StyleValue.token_ref("spacing.content_gap",
-          source_expression: value,
-          source_trace: trace,
-          metadata: Map.merge(metadata, %{"source_variable" => "--content-gap"})
-        )
-
-      match?([_, _fallback], Regex.run(~r/^var\(--content-gap,\s*(.+)\)$/, value)) and
-          token_present?(token_set, "spacing.content_gap") ->
-        [_, fallback] = Regex.run(~r/^var\(--content-gap,\s*(.+)\)$/, value)
-
-        StyleValue.token_ref("spacing.content_gap",
-          source_expression: value,
-          source_trace: trace,
-          metadata:
-            Map.merge(metadata, %{
-              "source_variable" => "--content-gap",
-              "fallback" => fallback
-            })
-        )
-
-      value == "var(--content-width)" and token_present?(token_set, "layout.viewport.max") ->
-        StyleValue.token_ref("layout.viewport.max",
-          source_expression: value,
-          source_trace: trace,
-          metadata: Map.merge(metadata, %{"source_variable" => "--content-width"})
-        )
-
-      String.starts_with?(value, "var(") ->
-        unresolved_variable_style(value, trace, metadata)
-
       calculation?(value) ->
         StyleValue.calculation(value,
           source_expression: value,
           source_trace: trace,
           metadata: metadata
         )
+
+      variable_expression?(value) ->
+        unresolved_variable_style(value, trace, metadata)
 
       value in @keyword_values ->
         StyleValue.keyword(value,
@@ -941,25 +953,135 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
-  defp normalize_style(value, _property, trace, _token_set, opts) do
-    StyleValue.literal(json_safe(value),
+  defp parse_direct_variable_expression(value) do
+    case Regex.run(@direct_variable_expression, value) do
+      [_, variable] -> {:ok, variable}
+      _other -> :error
+    end
+  end
+
+  defp parse_fallback_variable_expression(value) do
+    case Regex.run(@fallback_variable_expression, value) do
+      [_, variable, fallback] -> {:ok, variable, String.trim(fallback)}
+      _other -> :error
+    end
+  end
+
+  defp resolve_direct_variable(value, variable, authority_index, trace, metadata) do
+    resolution = VariableAuthority.resolve(authority_index, variable)
+    authority_metadata = authority_resolution_metadata(resolution)
+
+    case {resolution.state, resolution.candidates} do
+      {:unique_candidate, [%{token_path: token_path, resolution_status: :resolved}]} ->
+        StyleValue.token_ref(token_path,
+          source_expression: value,
+          source_trace: trace,
+          metadata: Map.merge(metadata, authority_metadata)
+        )
+
+      {:unique_candidate, [_candidate]} ->
+        unresolved_authority_style(
+          value,
+          trace,
+          metadata,
+          authority_metadata,
+          "token_unresolved"
+        )
+
+      {:ambiguous_candidates, _candidates} ->
+        unresolved_authority_style(
+          value,
+          trace,
+          metadata,
+          authority_metadata,
+          "mapping_ambiguous"
+        )
+
+      {:no_authority, []} ->
+        reason =
+          if DependencyExtractor.known_external_variable?(variable),
+            do: "external_unresolved",
+            else: "mapping_unproven"
+
+        unresolved_authority_style(value, trace, metadata, authority_metadata, reason)
+    end
+  end
+
+  defp unresolved_fallback_style(
+         value,
+         variable,
+         fallback,
+         authority_index,
+         trace,
+         metadata
+       ) do
+    resolution = VariableAuthority.resolve(authority_index, variable)
+
+    metadata =
+      metadata
+      |> Map.merge(authority_resolution_metadata(resolution))
+      |> Map.put("fallback", fallback)
+      |> Map.put("resolution_reason", "fallback_semantics_unrepresented")
+
+    StyleValue.unresolved(value,
+      source_expression: value,
       source_trace: trace,
-      metadata: Keyword.get(opts, :metadata, %{})
+      metadata: metadata
     )
   end
 
-  defp unresolved_variable_style(value, trace, metadata) do
+  defp unresolved_authority_style(
+         value,
+         trace,
+         metadata,
+         authority_metadata,
+         reason
+       ) do
     metadata =
-      case Regex.run(~r/^var\(--content-gap,\s*(.+)\)$/, value) do
-        [_, fallback] ->
-          Map.merge(metadata, %{"fallback" => fallback, "token_path" => "spacing.content_gap"})
+      metadata
+      |> Map.merge(authority_metadata)
+      |> Map.put("resolution_reason", reason)
 
-        _other ->
-          variable_names =
-            Regex.scan(~r/--[A-Za-z0-9_-]+/, value) |> List.flatten() |> Enum.uniq()
+    StyleValue.unresolved(value,
+      source_expression: value,
+      source_trace: trace,
+      metadata: metadata
+    )
+  end
 
-          Map.put(metadata, "variable_names", variable_names)
-      end
+  defp authority_resolution_metadata(resolution) do
+    evidence =
+      Enum.map(resolution.candidates, fn candidate ->
+        %{
+          "token_path" => candidate.token_path,
+          "resolution_status" =>
+            if(candidate.resolution_status, do: Atom.to_string(candidate.resolution_status)),
+          "authorities" => candidate.authorities
+        }
+      end)
+
+    %{
+      "source_variable" => resolution.variable,
+      "authority_state" => Atom.to_string(resolution.state),
+      "candidate_paths" => Enum.map(resolution.candidates, & &1.token_path),
+      "authority_evidence" => evidence
+    }
+    |> case do
+      %{"candidate_paths" => [token_path]} = metadata ->
+        Map.put(metadata, "token_path", token_path)
+
+      metadata ->
+        metadata
+    end
+  end
+
+  defp unresolved_variable_style(value, trace, metadata) do
+    variable_names = Regex.scan(~r/--[A-Za-z0-9_-]+/, value) |> List.flatten() |> Enum.uniq()
+
+    metadata =
+      metadata
+      |> Map.put("variable_names", variable_names)
+      |> Map.put("resolution_reason", "compound_expression_unrepresented")
 
     StyleValue.unresolved(value,
       source_expression: value,
@@ -971,8 +1093,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp calculation?(value),
     do: String.starts_with?(value, ["calc(", "clamp(", "min(", "max("])
 
-  defp token_present?(%TokenSet{tokens: tokens}, path), do: Map.has_key?(tokens, path)
-  defp token_present?(_token_set, _path), do: false
+  defp variable_expression?(value), do: Regex.match?(~r/var\s*\(/, value)
 
   defp gradient_style(gradient, trace) do
     StyleValue.complex_css(
@@ -1026,7 +1147,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
                 unresolved_style_value(record, record_trace)
 
               _kind ->
-                normalize_style(record.value, property, record_trace, context.token_set,
+                normalize_style(record.value, property, record_trace, context.authority_index,
                   metadata:
                     record
                     |> declaration_metadata()

@@ -37,6 +37,22 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
     token_set
   end
 
+  defp token_set_without_variable_authority(variable) do
+    token_set = token_set()
+
+    token_set =
+      Map.new(token_set.tokens, fn {path, token} ->
+        authorities =
+          token.metadata
+          |> Map.get("variable_authorities", [])
+          |> Enum.reject(&(&1["variable"] == variable))
+
+        {path, %{token | metadata: Map.put(token.metadata, "variable_authorities", authorities)}}
+      end)
+
+    %{token_set() | tokens: token_set}
+  end
+
   defp theme_styles(overrides \\ %{}) do
     @theme_styles_fixture
     |> File.read!()
@@ -111,6 +127,26 @@ defmodule LiveFrames.P5CBR3BricksContainerWidthTest do
 
     assert container.styles["width"].metadata["authority"] == "bricks_theme_styles"
     assert container.styles["width"].metadata["source_variable"] == "--content-width"
+    refute container.styles["width"].value == "1100px"
+  end
+
+  test "unproven Theme Styles variable width remains unresolved without the intrinsic default" do
+    container =
+      hero_container(
+        theme_styles: theme_styles(),
+        token_set: token_set_without_variable_authority("--content-width")
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--content-width)",
+             metadata: %{
+               "authority" => "bricks_theme_styles",
+               "resolution_reason" => "mapping_unproven",
+               "source_variable" => "--content-width"
+             }
+           } = container.styles["width"]
+
     refute container.styles["width"].value == "1100px"
   end
 

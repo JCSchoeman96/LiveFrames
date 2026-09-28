@@ -96,6 +96,16 @@ defmodule LiveFrames.BricksStageATest do
     assert Jason.decode!(result.artifacts["report.json"]) == result.report
   end
 
+  test "rejects a structurally invalid supplied TokenSet deterministically" do
+    invalid_token_set = %TokenSet{tokens: :invalid}
+
+    assert {:error, diagnostics} =
+             StageA.generate(copied_elements_source(), token_set: invalid_token_set)
+
+    assert {:error, ^diagnostics} =
+             StageA.generate(copied_elements_source(), token_set: invalid_token_set)
+  end
+
   test "resolves applied global classes and ACSS names" do
     {:ok, source, _} = Bricks.from_file(fixture_path())
     {:ok, _proxy, component, _} = Bricks.resolve(source, component_id: "sqhmmc")
@@ -188,18 +198,158 @@ defmodule LiveFrames.BricksStageATest do
     assert Enum.any?(dependencies.diagnostics, &(&1.code == "bricks.runtime.unsupported"))
   end
 
-  test "resolves content-gap against the frozen TokenSet" do
-    token_set = %TokenSet{tokens: %{"spacing.content_gap" => %Token{path: "spacing.content_gap"}}}
-    result = DependencyExtractor.variables(["var(--content-gap)"], token_set: token_set)
+  test "uses VariableAuthority for resolved aliases and ambiguous source references" do
+    result =
+      DependencyExtractor.variables(
+        [
+          "var(--content-gap)",
+          "var(--content-width)",
+          "var(--container-gap)",
+          "var(--space-m)",
+          "var(--section-space-m)",
+          "var(--radius)",
+          "var(--primary)",
+          "var(--white)",
+          "var(--unknown)"
+        ],
+        token_set: token_set()
+      )
 
-    assert [%{name: "--content-gap", status: :resolved_token, token_path: "spacing.content_gap"}] =
-             result
+    assert %{status: :resolved_token, token_path: "spacing.content_gap"} =
+             Enum.find(result, &(&1.name == "--content-gap"))
+
+    assert %{status: :resolved_token, token_path: "layout.viewport.max"} =
+             Enum.find(result, &(&1.name == "--content-width"))
+
+    assert %{status: :resolved_token, token_path: "spacing.container_gap"} =
+             Enum.find(result, &(&1.name == "--container-gap"))
+
+    assert %{
+             status: :ambiguous_token,
+             candidate_paths: ["spacing.content_gap", "spacing.grid_gap", "spacing.scale.medium"]
+           } =
+             Enum.find(result, &(&1.name == "--space-m"))
+
+    assert %{
+             status: :ambiguous_token,
+             candidate_paths: ["spacing.section", "spacing.section.padding_block"]
+           } =
+             Enum.find(result, &(&1.name == "--section-space-m"))
+
+    assert %{status: :ambiguous_token} = Enum.find(result, &(&1.name == "--radius"))
+    assert %{status: :ambiguous_token} = Enum.find(result, &(&1.name == "--primary"))
+    assert %{status: :ambiguous_token} = Enum.find(result, &(&1.name == "--white"))
+
+    assert %{
+             status: :source_variable,
+             token_path: nil,
+             resolution_reason: "mapping_unproven"
+           } = Enum.find(result, &(&1.name == "--unknown"))
+
+    assert Enum.find(result, &(&1.name == "--section-space-m")).authority_evidence == [
+             %{
+               token_path: "spacing.section",
+               resolution_status: :resolved,
+               authorities: [
+                 %{
+                   "authority_id" =>
+                     "automatic-css-4.0.1:calculated-variable-group:section-spacing:section-space-m",
+                   "kind" => "source_output_alias",
+                   "source_key" => nil,
+                   "source_version" => "4.0.1",
+                   "variable" => "--section-space-m"
+                 }
+               ]
+             },
+             %{
+               token_path: "spacing.section.padding_block",
+               resolution_status: :resolved,
+               authorities: [
+                 %{
+                   "authority_id" =>
+                     "automatic-css-4.0.1:validated-reference:section-padding-block:--section-space-m",
+                   "kind" => "source_reference",
+                   "source_key" => "section-padding-block",
+                   "source_version" => "4.0.1",
+                   "variable" => "--section-space-m"
+                 }
+               ]
+             }
+           ]
+  end
+
+  test "an authority candidate only resolves when its owning token is resolved" do
+    authority = %{
+      "variable" => "--gap",
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:gap",
+      "source_key" => "gap",
+      "source_version" => "4.0.1"
+    }
+
+    token = %Token{
+      path: "spacing.gap",
+      category: :spacing,
+      source_expression: "var(--gap)",
+      resolution_status: :unresolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    token_set = TokenSet.new(tokens: %{"spacing.gap" => token})
+
+    assert [
+             %{
+               name: "--gap",
+               status: :unresolved_token,
+               token_path: "spacing.gap",
+               token_status: :unresolved,
+               resolution_reason: "token_unresolved",
+               authority_state: :unique_candidate
+             }
+           ] = DependencyExtractor.variables(["var(--gap)"], token_set: token_set)
+  end
+
+  test "known external variables remain non-token authorities unless B1 authorizes one" do
+    external =
+      DependencyExtractor.variables(["var(--overlay-bg)"], token_set: token_set())
+      |> hd()
+
+    assert external.status == :unresolved_external
+    assert external.token_path == nil
+    assert external.resolution_reason == "external_unresolved"
+
+    authority = %{
+      "variable" => "--overlay-bg",
+      "kind" => "source_output_alias",
+      "authority_id" => "synthetic:overlay-bg",
+      "source_key" => "overlay-bg",
+      "source_version" => "4.0.1"
+    }
+
+    token = %Token{
+      path: "color.overlay",
+      category: :color,
+      value: "#000000",
+      resolved_value: "#000000",
+      source_expression: "#000000",
+      resolution_status: :resolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    authorized_external =
+      DependencyExtractor.variables(
+        ["var(--overlay-bg)"],
+        token_set: TokenSet.new(tokens: %{"color.overlay" => token})
+      )
+      |> hd()
+
+    assert authorized_external.status == :resolved_token
+    assert authorized_external.token_path == "color.overlay"
   end
 
   test "preserves unresolved nested variables" do
-    token_set = %TokenSet{}
     values = ["var(--overlay-bg, var(--neutral-ultra-dark-trans-60))"]
-    result = DependencyExtractor.variables(values, token_set: token_set)
+    result = DependencyExtractor.variables(values)
 
     assert Enum.any?(result, &(&1.name == "--overlay-bg" and &1.status == :unresolved_external))
 
@@ -207,6 +357,41 @@ defmodule LiveFrames.BricksStageATest do
              result,
              &(&1.name == "--neutral-ultra-dark-trans-60" and &1.status == :unresolved_external)
            )
+  end
+
+  test "keeps one variable diagnostic while retaining repeated source occurrences" do
+    source =
+      copied_elements_source()
+      |> put_in(
+        [
+          "components",
+          Access.filter(&(&1["id"] == "component-a")),
+          "elements",
+          Access.at(0),
+          "settings"
+        ],
+        %{"_width" => "var(--unknown)", "_widthMax" => "var(--unknown)"}
+      )
+
+    assert {:ok, result} =
+             StageA.generate(source,
+               component_id: "component-a",
+               external_class_authorities: [external_class_authority()]
+             )
+
+    assert [dependency] = result.report["variables"]["dependencies"]
+    assert dependency["name"] == "--unknown"
+    assert dependency["status"] == "source_variable"
+    assert dependency["token_path"] == nil
+    assert length(dependency["occurrences"]) == 2
+    assert dependency["expressions"] == ["var(--unknown)"]
+
+    assert [diagnostic] =
+             Enum.filter(result.report["diagnostics"]["items"], fn diagnostic ->
+               diagnostic["code"] == "bricks.variable.unresolved"
+             end)
+
+    assert diagnostic["metadata"]["resolution_reason"] == "mapping_unproven"
   end
 
   test "reports unresolved attachment data" do
@@ -328,6 +513,16 @@ defmodule LiveFrames.BricksStageATest do
     assert report["responsive"]["source_breakpoints"] == ["mobile_portrait", "tablet_portrait"]
     assert report["variables"]["token_resolved_count"] == 1
     assert "--neutral-ultra-dark-trans-60" in report["variables"]["unresolved_names"]
+
+    [content_gap] =
+      Enum.filter(report["variables"]["dependencies"], &(&1["name"] == "--content-gap"))
+
+    assert content_gap["status"] == "resolved_token"
+    assert content_gap["token_path"] == "spacing.content_gap"
+    assert "var(--content-gap, 30px)" in content_gap["expressions"]
+    assert content_gap["authority_evidence"] != []
+    assert result.artifacts["styles.css"] =~ "var(--content-gap, 30px)"
+
     assert report["assets"]["count"] == 1
     assert report["assets"]["unresolved_count"] == 1
     assert length(report["source_trace"]["elements"]) == 10

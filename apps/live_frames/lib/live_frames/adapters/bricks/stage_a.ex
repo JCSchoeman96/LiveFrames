@@ -17,6 +17,8 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
   alias LiveFrames.Adapters.Bricks.StageA.CSSRenderer
   alias LiveFrames.Adapters.Bricks.StageA.HTMLRenderer
   alias LiveFrames.Adapters.Bricks.StageA.Report
+  alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Tokens.VariableAuthority
 
   @adapter_version "1.0.0"
   @stage_a_schema_version "1.0.0"
@@ -137,7 +139,8 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
       |> Result.advance(:recognized)
       |> Result.advance(:validated)
 
-    with :ok <- validate_source_shape(document),
+    with {:ok, authority_index} <- build_authority_index(Keyword.get(opts, :token_set)),
+         :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
            Bricks.resolve(document,
              component_id: Keyword.get(opts, :component_id, @default_component_id)
@@ -158,9 +161,7 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
            ),
          :ok <- validate_class_resolution(class_diagnostics),
          dependencies <-
-           DependencyExtractor.extract(resolved, document,
-             token_set: Keyword.get(opts, :token_set)
-           ),
+           DependencyExtractor.extract(resolved, document, authority_index: authority_index),
          unsupported_diagnostics <- unsupported_element_diagnostics(tree),
          result <-
            %{result | dependencies: Map.put(dependencies, :resolved, resolved)}
@@ -213,6 +214,22 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
            metadata: %{"reason" => Exception.message(exception)}
          )
        ]}
+  end
+
+  defp build_authority_index(nil), do: {:ok, %VariableAuthority{}}
+
+  defp build_authority_index(%TokenSet{} = token_set),
+    do: VariableAuthority.build(token_set)
+
+  defp build_authority_index(_invalid_token_set) do
+    {:error,
+     [
+       Diagnostic.new(
+         code: "bricks.token_set.invalid",
+         severity: :error,
+         message: "Stage A requires a structurally valid TokenSet when one is supplied"
+       )
+     ]}
   end
 
   defp expected_root_count(tree, opts) do
