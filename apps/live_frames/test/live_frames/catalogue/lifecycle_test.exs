@@ -300,6 +300,343 @@ defmodule LiveFrames.Catalogue.LifecycleTest do
     end
   end
 
+  describe "snapshot validation" do
+    test "accepts an admitted DRAFT snapshot" do
+      manifest =
+        snapshot_manifest(
+          "DRAFT",
+          snapshot_transition("admit_to_catalogue", nil, "DRAFT", [])
+        )
+
+      assert :ok = validate_snapshot(manifest)
+    end
+
+    for {action, from, to} <- @approved_transitions do
+      test "accepts #{from} + #{action} snapshot ending at #{to}" do
+        manifest =
+          snapshot_manifest(
+            unquote(to),
+            snapshot_transition(unquote(action), unquote(from), unquote(to))
+          )
+
+        assert :ok = validate_snapshot(manifest)
+      end
+    end
+
+    test "rejects non-Manifest input with one root diagnostic" do
+      for input <- [nil, %{}, "manifest", 42] do
+        assert_snapshot_error(
+          input,
+          "catalogue.lifecycle.snapshot_invalid",
+          "$"
+        )
+      end
+    end
+
+    test "rejects invalid current states" do
+      for state <- ["GENERATED", "UNKNOWN", "", nil, :released] do
+        manifest = snapshot_manifest(state, snapshot_transition("validate", "DRAFT", "VALIDATED"))
+
+        assert_snapshot_error(manifest, "catalogue.lifecycle.state_invalid", "state")
+      end
+    end
+
+    test "requires lifecycle to be a map" do
+      for lifecycle <- [nil, [], "lifecycle", 42] do
+        manifest = Map.put(synthetic_manifest("DRAFT"), :lifecycle, lifecycle)
+
+        assert_snapshot_error(
+          manifest,
+          "catalogue.lifecycle.snapshot_invalid",
+          "lifecycle"
+        )
+      end
+    end
+
+    test "requires a non-null map last_transition" do
+      for lifecycle <- [
+            %{},
+            %{"last_transition" => nil},
+            %{"last_transition" => "record"},
+            %{"last_transition" => []},
+            %{"last_transition" => 42}
+          ] do
+        manifest = Map.put(synthetic_manifest("DRAFT"), :lifecycle, lifecycle)
+
+        assert_snapshot_error(
+          manifest,
+          "catalogue.lifecycle.last_transition_invalid",
+          "lifecycle.last_transition"
+        )
+      end
+    end
+
+    test "requires exactly four string-keyed last_transition fields" do
+      valid = snapshot_transition("review", "VALIDATED", "REVIEWED")
+
+      invalid_records = [
+        Map.delete(valid, "evidence_refs"),
+        Map.put(valid, "timestamp", "2026-09-28T00:00:00Z"),
+        %{
+          :action => "review",
+          :from => "VALIDATED",
+          :to => "REVIEWED",
+          :evidence_refs => @evidence
+        },
+        %{
+          "action" => "review",
+          :from => "VALIDATED",
+          "to" => "REVIEWED",
+          "evidence_refs" => @evidence
+        }
+      ]
+
+      for last_transition <- invalid_records do
+        manifest = snapshot_manifest("REVIEWED", last_transition)
+
+        assert_snapshot_error(
+          manifest,
+          "catalogue.lifecycle.last_transition_invalid",
+          "lifecycle.last_transition"
+        )
+      end
+    end
+
+    test "accepts unrelated outer lifecycle keys" do
+      manifest =
+        snapshot_manifest(
+          "REVIEWED",
+          snapshot_transition("review", "VALIDATED", "REVIEWED"),
+          %{"note" => "reserved"}
+        )
+
+      assert :ok = validate_snapshot(manifest)
+    end
+
+    test "requires valid UTF-8 action, from, and to strings" do
+      invalid_utf8 = <<0xFF>>
+
+      invalid_fields = [
+        {"action", invalid_utf8},
+        {"action", 42},
+        {"from", invalid_utf8},
+        {"from", 42},
+        {"from", nil},
+        {"to", invalid_utf8},
+        {"to", 42}
+      ]
+
+      for {field, value} <- invalid_fields do
+        last_transition =
+          snapshot_transition("review", "VALIDATED", "REVIEWED")
+          |> Map.put(field, value)
+
+        manifest = snapshot_manifest("REVIEWED", last_transition)
+
+        assert_snapshot_error(
+          manifest,
+          "catalogue.lifecycle.snapshot_transition_invalid",
+          "lifecycle.last_transition.#{field}"
+        )
+      end
+    end
+
+    test "rejects unapproved actions" do
+      for action <- ["force_release", "reopen", "revive", "publish"] do
+        manifest =
+          snapshot_manifest("RELEASED", snapshot_transition(action, "APPROVED", "RELEASED"))
+
+        assert_snapshot_error(manifest, "catalogue.lifecycle.action_invalid", "action")
+      end
+    end
+
+    test "rejects unknown source and target states" do
+      unknown_source = snapshot_transition("review", "GENERATED", "REVIEWED")
+      unknown_target = snapshot_transition("validate", "DRAFT", "GENERATED")
+
+      assert_snapshot_error(
+        snapshot_manifest("REVIEWED", unknown_source),
+        "catalogue.lifecycle.snapshot_transition_invalid",
+        "lifecycle.last_transition"
+      )
+
+      assert_snapshot_error(
+        snapshot_manifest("VALIDATED", unknown_target),
+        "catalogue.lifecycle.snapshot_transition_invalid",
+        "lifecycle.last_transition.to"
+      )
+    end
+
+    test "rejects normal transitions with nil from" do
+      manifest = snapshot_manifest("VALIDATED", snapshot_transition("validate", nil, "VALIDATED"))
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_transition_invalid",
+        "lifecycle.last_transition.from"
+      )
+    end
+
+    test "rejects impossible action and source pairs" do
+      manifest =
+        snapshot_manifest("RELEASED", snapshot_transition("release", "REVIEWED", "RELEASED"))
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_transition_invalid",
+        "lifecycle.last_transition"
+      )
+    end
+
+    test "rejects a stored target that differs from the matrix target" do
+      manifest =
+        snapshot_manifest("REVIEWED", snapshot_transition("validate", "DRAFT", "REVIEWED"))
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_transition_invalid",
+        "lifecycle.last_transition.to"
+      )
+    end
+
+    test "rejects a valid transition that does not end at the current state" do
+      manifest =
+        snapshot_manifest("APPROVED", snapshot_transition("review", "VALIDATED", "REVIEWED"))
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_state_mismatch",
+        "state"
+      )
+    end
+
+    test "rejects a DRAFT state with a validate transition ending at VALIDATED" do
+      manifest = snapshot_manifest("DRAFT", snapshot_transition("validate", "DRAFT", "VALIDATED"))
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_state_mismatch",
+        "state"
+      )
+    end
+
+    test "requires admission to be exactly not admitted to DRAFT" do
+      invalid_records = [
+        {
+          "DRAFT",
+          snapshot_transition("admit_to_catalogue", "DRAFT", "DRAFT"),
+          "catalogue.lifecycle.snapshot_transition_invalid",
+          "lifecycle.last_transition"
+        },
+        {
+          "VALIDATED",
+          snapshot_transition("admit_to_catalogue", nil, "DRAFT"),
+          "catalogue.lifecycle.snapshot_state_mismatch",
+          "state"
+        }
+      ]
+
+      for {state, last_transition, code, path} <- invalid_records do
+        manifest = snapshot_manifest(state, last_transition)
+
+        assert_snapshot_error(
+          manifest,
+          code,
+          path
+        )
+      end
+    end
+
+    test "accepts empty and duplicate evidence references without changing order" do
+      for evidence_refs <- [[], ["evidence:a", "evidence:a"], ["z", "a", "z"]] do
+        last_transition = snapshot_transition("validate", "DRAFT", "VALIDATED", evidence_refs)
+        manifest = snapshot_manifest("VALIDATED", last_transition)
+
+        assert :ok = validate_snapshot(manifest)
+        assert manifest.lifecycle["last_transition"]["evidence_refs"] == evidence_refs
+      end
+    end
+
+    test "rejects invalid evidence containers and members" do
+      invalid_evidence_refs = [
+        {nil, "lifecycle.last_transition.evidence_refs"},
+        {"evidence", "lifecycle.last_transition.evidence_refs"},
+        {42, "lifecycle.last_transition.evidence_refs"},
+        {["valid", 42], "lifecycle.last_transition.evidence_refs[1]"},
+        {["valid", ""], "lifecycle.last_transition.evidence_refs[1]"},
+        {["valid" | :improper_tail], "lifecycle.last_transition.evidence_refs"}
+      ]
+
+      for {evidence_refs, path} <- invalid_evidence_refs do
+        last_transition = snapshot_transition("validate", "DRAFT", "VALIDATED", evidence_refs)
+        manifest = snapshot_manifest("VALIDATED", last_transition)
+
+        assert_snapshot_error(
+          manifest,
+          "catalogue.lifecycle.evidence_refs_invalid",
+          path
+        )
+      end
+    end
+
+    test "rejects invalid UTF-8 evidence members without raising" do
+      invalid_ref = <<0xFF>>
+
+      manifest =
+        snapshot_manifest(
+          "VALIDATED",
+          snapshot_transition("validate", "DRAFT", "VALIDATED", [invalid_ref])
+        )
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.evidence_refs_invalid",
+        "lifecycle.last_transition.evidence_refs[0]"
+      )
+    end
+
+    test "accepts a decoded manifest without lifecycle at the schema boundary, then rejects its snapshot" do
+      assert {:ok, manifest} = Manifest.decode(Jason.encode!(minimal_manifest_json()))
+      assert manifest.lifecycle == nil
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.snapshot_invalid",
+        "lifecycle"
+      )
+    end
+
+    test "accepts a decoded empty lifecycle at the schema boundary, then rejects its snapshot" do
+      json = minimal_manifest_json() |> Map.put("lifecycle", %{}) |> Jason.encode!()
+
+      assert {:ok, manifest} = Manifest.decode(json)
+      assert manifest.lifecycle == %{}
+
+      assert_snapshot_error(
+        manifest,
+        "catalogue.lifecycle.last_transition_invalid",
+        "lifecycle.last_transition"
+      )
+    end
+
+    test "does not change the manifest on success or failure" do
+      valid =
+        snapshot_manifest("RELEASED", snapshot_transition("release", "APPROVED", "RELEASED"))
+
+      invalid =
+        snapshot_manifest("RELEASED", snapshot_transition("release", "REVIEWED", "RELEASED"))
+
+      original_valid = valid
+      original_invalid = invalid
+
+      assert :ok = validate_snapshot(valid)
+      assert valid == original_valid
+
+      assert {:error, [_diagnostic]} = validate_snapshot(invalid)
+      assert invalid == original_invalid
+    end
+  end
+
   defp draft_candidate_without_transition do
     synthetic_manifest("DRAFT")
     |> Map.put(:lifecycle, nil)
@@ -324,6 +661,45 @@ defmodule LiveFrames.Catalogue.LifecycleTest do
       deprecation: %{"reason" => "none"},
       superseded_by: nil,
       lifecycle: %{"prior" => "unchanged"}
+    }
+  end
+
+  defp validate_snapshot(manifest), do: Lifecycle.validate_snapshot(manifest)
+
+  defp snapshot_manifest(state, last_transition, lifecycle_extra \\ %{}) do
+    lifecycle = Map.put(lifecycle_extra, "last_transition", last_transition)
+    Map.put(synthetic_manifest(state), :lifecycle, lifecycle)
+  end
+
+  defp snapshot_transition(action, from, to, evidence_refs \\ @evidence) do
+    %{
+      "action" => action,
+      "from" => from,
+      "to" => to,
+      "evidence_refs" => evidence_refs
+    }
+  end
+
+  defp assert_snapshot_error(manifest, code, path) do
+    assert {:error, [diagnostic]} = validate_snapshot(manifest)
+    assert diagnostic.code == code
+    assert diagnostic.path == path
+  end
+
+  defp minimal_manifest_json do
+    %{
+      "schema_version" => 1,
+      "id" => @id,
+      "kind" => @kind,
+      "display_name" => "Synthetic component",
+      "state" => "DRAFT",
+      "component" => %{
+        "module" => "LiveFrames.Components.Synthetic",
+        "function" => "synthetic"
+      },
+      "storybook" => %{"module" => "LiveFrames.Stories.Synthetic"},
+      "docs" => %{},
+      "provenance" => %{}
     }
   end
 
