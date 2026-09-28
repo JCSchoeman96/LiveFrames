@@ -1505,6 +1505,104 @@ behavior. #51 owns package integration. The compiled module must work without
 source JSON at runtime, but this does not claim that canonical JSON ships in a
 package.
 
+### Consumer-facing Catalogue API (#48)
+
+The G1 consumer-facing facade is exactly `LiveFrames.Catalogue`. It is distinct
+from `LiveFrames.Catalogue.Registry`, which remains the internal compiled store
+for every lifecycle state. The facade reads only from Registry and returns the
+existing `%LiveFrames.Catalogue.Manifest{}` snapshots. G1 defines exactly these
+public functions:
+
+| Function | Contract |
+| --- | --- |
+| `LiveFrames.Catalogue.list/0` | Returns only manifests whose `state` is `"RELEASED"`. Returns `[]` when none are visible. |
+| `LiveFrames.Catalogue.list/1` | Accepts only `:released` or `:released_and_deprecated`, with the visibility defined below. |
+| `LiveFrames.Catalogue.fetch/1` | Performs exact, compatibility-aware lookup by CatalogueItem ID. |
+
+G1 adds no other discovery API. It does not define search, query, pagination,
+reload, refresh, mutation, slug or fuzzy lookup, HTTP, GraphQL, LiveView, or
+marketplace interfaces.
+
+`list/0` is equivalent to `list(:released)`. The only valid `list/1` modes are:
+
+| Mode | Visible states |
+| --- | --- |
+| `:released` | `RELEASED` only; identical to `list/0`. |
+| `:released_and_deprecated` | `RELEASED` and `DEPRECATED`. |
+
+Any other `list/1` value, including `:deprecated`, `:all`, strings, `nil`,
+lists, and maps, raises `ArgumentError`. The facade does not fall back to a
+default mode or return a diagnostic tuple. Keyword options and arbitrary maps
+are not modes.
+
+The public visibility rules are:
+
+| Registry state | `list/0` and `list(:released)` | `list(:released_and_deprecated)` | `fetch/1` |
+| --- | --- | --- | --- |
+| `RELEASED` | Included | Included | `{:ok, manifest}` |
+| `DEPRECATED` | Excluded | Included | `{:ok, manifest}` |
+| `DRAFT`, `VALIDATED`, `REVIEWED`, `APPROVED` | Excluded | Excluded | `:error` |
+| `WITHDRAWN`, `RETIRED` | Excluded | Excluded | `:error` |
+
+DEPRECATED appears in normal discovery only when the caller explicitly uses
+`list(:released_and_deprecated)`. Exact direct fetch of a DEPRECATED item is
+the G1 compatibility lookup for consumers that already know its ID. This does
+not make the item a default browse result or a new-adoption recommendation.
+RETIRED has no compatibility-lookup exception in G1. WITHDRAWN is hidden from
+every public list mode and direct fetch.
+
+`fetch(id)` accepts only a binary containing the exact CatalogueItem ID. It
+does not trim, case-fold, normalize Unicode, convert atoms, parse slugs, or
+accept aliases. A non-string input or a missing ID returns `:error`. For an
+exact ID, the facade conceptually calls `Registry.fetch(id)`, checks the
+manifest's canonical `state`, and returns the visible result or `:error`. It
+does not scan a list, read files, or parse JSON. Unknown IDs and IDs present in
+Registry only in `DRAFT`, `VALIDATED`, `REVIEWED`, `APPROVED`, `WITHDRAWN`, or
+`RETIRED` all produce the same `:error`. Public discovery does not distinguish
+"unknown" from "known internally but non-public". This is intentional and
+prevents the consumer facade from exposing internal existence or state.
+
+Both list functions preserve the order returned by `Registry.all()`, which is
+exact manifest-ID byte order. Filtering is stable and does not sort again.
+Discovery reads only the canonical `manifest.state` embedded in Registry. It
+does not replay lifecycle history, call `Lifecycle.transition/3` or
+`Lifecycle.validate_snapshot/1`, or rerun Storybook, Fingerprint, Contract,
+ProvenanceReference, or Versioning checks. Registry compilation already
+validates the snapshots. Given the same Registry data, list and fetch results
+are deterministic. Discovery adds no timestamps, environment-dependent values,
+physical paths, or randomness.
+
+The facade uses no filesystem, JSON, database, network, Redis, ETS, Cachex,
+GenServer, Oban, or PubSub access. Listing is a stable in-memory pass over
+`Registry.all()`; fetching uses one `Registry.fetch(id)` call and a state check.
+The facade does not call Registry.Builder, read source manifests directly, or
+add caching or a mutable visible Registry. A `RELEASED` state means Catalogue
+discovery only. It does not imply Hex or other package publication, package
+inclusion, generator or ejection support, or marketplace availability.
+
+The production Registry is empty at this pre-#48 baseline. Once the facade is
+implemented, its empty-Registry results are:
+
+~~~elixir
+LiveFrames.Catalogue.list()                             # => []
+LiveFrames.Catalogue.list(:released)                    # => []
+LiveFrames.Catalogue.list(:released_and_deprecated)     # => []
+LiveFrames.Catalogue.fetch("live_frames.section.hero")  # => :error
+~~~
+
+This contract does not authorize adding a real manifest to make tests
+interesting.
+
+Implementation may use an internal `LiveFrames.Catalogue.Discovery` module
+with `@moduledoc false` for pure filtering support. Such a helper is not the
+consumer API, metadata authority, or owner of lifecycle state. It may accept
+already-decoded manifest lists and Registry-style fetch results so tests can
+exercise synthetic state combinations while the production Registry is empty.
+The public facade always uses the compiled Registry. G1 does not add runtime
+Registry replacement through application environment, module configuration,
+Mox, process dictionary, provider selection, or a test-only setter. The
+internal helper's names and functions are not frozen as public API.
+
 ## 12. Schema evolution
 
 schema_version is an explicit integer and is independent of CatalogueItem SemVer. Validation is explicit for each supported schema version. Unknown future schema versions fail deterministically.
