@@ -6,7 +6,7 @@ defmodule LiveFrames.Catalogue.Manifest do
   stored as strings, maps, and lists.
   """
 
-  alias LiveFrames.Catalogue.Schema.V1
+  alias LiveFrames.Catalogue.Schema
 
   defstruct [
     :schema_version,
@@ -49,33 +49,9 @@ defmodule LiveFrames.Catalogue.Manifest do
     do: error("catalogue.manifest.invalid_json", "$", "Manifest input must be JSON text.")
 
   defp from_map(manifest) when is_map(manifest) do
-    case Map.fetch(manifest, "schema_version") do
-      :error ->
-        error(
-          "catalogue.manifest.schema_version_missing",
-          "schema_version",
-          "Required field is missing."
-        )
-
-      {:ok, version} when not is_integer(version) ->
-        error(
-          "catalogue.manifest.schema_version_invalid",
-          "schema_version",
-          "Expected an integer."
-        )
-
-      {:ok, 1} ->
-        case V1.validate(manifest) do
-          {:ok, attributes} -> {:ok, struct(__MODULE__, attributes)}
-          {:error, diagnostics} -> {:error, diagnostics}
-        end
-
-      {:ok, _version} ->
-        error(
-          "catalogue.manifest.schema_version_unsupported",
-          "schema_version",
-          "No validator is available for this schema version."
-        )
+    case Schema.validate(manifest) do
+      {:ok, attributes} -> {:ok, struct(__MODULE__, attributes)}
+      {:error, diagnostics} -> {:error, diagnostics}
     end
   end
 
