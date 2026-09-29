@@ -1063,7 +1063,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
     case resolution.state do
       :unique_candidate ->
-        [candidate | _] = resolution.candidates
+        [candidate] = resolution.candidates
 
         if valid_structural_literal?(property, candidate.resolved_value) do
           StyleValue.literal(candidate.resolved_value,

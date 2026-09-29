@@ -7,12 +7,15 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.StylePrecedence
+  alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.StaticAsset
   alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Styles.StructuralVariableAuthority
   alias LiveFrames.Tokens.VariableAuthority
 
+  @direct_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*\)\s*$/
+  @structural_properties ~w(grid-template-columns grid-template-rows)
   @known_external_variables ["--overlay-bg", "--neutral-ultra-dark-trans-60"]
   @runtime_fragments ["interaction", "dynamic", "query", "script", "hook", "runtime"]
   @image_atom_keys %{
@@ -37,8 +40,10 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     |> strings()
     |> Enum.flat_map(&variable_names/1)
     |> Enum.uniq()
-    |> Enum.map(&variable_record(&1, authority_index, structural_authority_index))
+    |> Enum.map(&variable_record_standalone(&1, authority_index, structural_authority_index))
   end
+
+  # variables/2 never receives declaration context; structural unique resolution is extract-only.
 
   @spec assets(term()) :: [map()]
   def assets(values) when is_list(values) do
@@ -164,12 +169,19 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       )
 
     variables =
-      variable_values
-      |> variables(
-        authority_index: authority_index,
-        structural_authority_index: structural_authority_index
-      )
-      |> add_variable_occurrences(variable_occurrences)
+      if structural_authority_active?(structural_authority_index) do
+        build_extract_variables(
+          style_results,
+          variable_values,
+          variable_occurrences,
+          authority_index,
+          structural_authority_index
+        )
+      else
+        variable_values
+        |> variables(authority_index: authority_index)
+        |> add_variable_occurrences(variable_occurrences)
+      end
 
     variable_diagnostics =
       variables
@@ -253,7 +265,298 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp variable_record(name, authority_index, structural_authority_index) do
+  defp structural_authority_active?(%StructuralVariableAuthority{by_variable: by_variable}) do
+    map_size(by_variable) > 0
+  end
+
+  defp add_variable_occurrences(variables, occurrences) do
+    Enum.map(variables, fn variable ->
+      matches = Enum.filter(occurrences, &(&1.name == variable.name))
+
+      variable
+      |> Map.put(:expressions, Enum.uniq(Enum.map(matches, & &1.expression)))
+      |> Map.put(:occurrences, matches)
+    end)
+  end
+
+  defp build_extract_variables(
+         style_results,
+         variable_values,
+         layer_occurrences,
+         authority_index,
+         structural_authority_index
+       ) do
+    declaration_occurrences = declaration_variable_occurrences(style_results)
+
+    names_from_strings =
+      variable_values
+      |> strings()
+      |> Enum.flat_map(&variable_names/1)
+      |> Enum.uniq()
+
+    variable_names =
+      Enum.uniq(Enum.map(declaration_occurrences, & &1.name) ++ names_from_strings)
+
+    Enum.map(variable_names, fn name ->
+      declaration_matches =
+        declaration_occurrences
+        |> Enum.filter(&(&1.name == name))
+        |> Enum.map(fn occurrence ->
+          Map.put(
+            occurrence,
+            :status,
+            resolve_declaration_occurrence(
+              occurrence.name,
+              occurrence.property,
+              authority_index,
+              structural_authority_index
+            )
+          )
+        end)
+
+      record =
+        if declaration_matches == [] do
+          variable_record_standalone(name, authority_index, structural_authority_index)
+        else
+          aggregate_declaration_variable(
+            name,
+            declaration_matches,
+            authority_index,
+            structural_authority_index
+          )
+        end
+
+      layer_matches = Enum.filter(layer_occurrences, &(&1.name == name))
+
+      declaration_occurrence_records =
+        Enum.map(declaration_matches, fn occurrence ->
+          %{
+            name: occurrence.name,
+            source_id: occurrence.source_id,
+            source_path: occurrence.source_path,
+            expression: occurrence.expression,
+            property: occurrence.property,
+            breakpoint: occurrence.breakpoint,
+            resolution_status: Atom.to_string(occurrence.status)
+          }
+        end)
+
+      occurrences =
+        if declaration_occurrence_records == [] do
+          layer_matches
+        else
+          declaration_occurrence_records
+        end
+
+      expressions =
+        Enum.uniq(Enum.map(occurrences ++ layer_matches, & &1.expression))
+
+      record
+      |> Map.put(:occurrences, occurrences)
+      |> Map.put(:expressions, expressions)
+    end)
+  end
+
+  defp declaration_variable_occurrences(style_results) when is_map(style_results) do
+    Enum.flat_map(style_results, fn {_element_id, style_result} ->
+      Enum.flat_map(style_result.resolutions, fn resolution ->
+        declarations =
+          case resolution do
+            %{emitted: emitted} when not is_nil(emitted) -> [emitted]
+            %{unresolved: unresolved} when not is_nil(unresolved) -> [unresolved]
+            _ -> []
+          end
+
+        Enum.flat_map(declarations, fn declaration ->
+          case parse_direct_variable(declaration.value) do
+            {:ok, variable} ->
+              [
+                %{
+                  name: variable,
+                  property: resolution.property,
+                  breakpoint: resolution.breakpoint,
+                  expression: declaration.value,
+                  source_id: Map.get(declaration, :element_source_id),
+                  source_path: declaration.source_path
+                }
+              ]
+
+            :error ->
+              []
+          end
+        end)
+      end)
+    end)
+  end
+
+  defp parse_direct_variable(value) when is_binary(value) do
+    case Regex.run(@direct_variable_expression, value) do
+      [_, variable] -> {:ok, variable}
+      _other -> :error
+    end
+  end
+
+  defp parse_direct_variable(_value), do: :error
+
+  defp resolve_declaration_occurrence(
+         name,
+         property,
+         authority_index,
+         structural_authority_index
+       ) do
+    resolution = VariableAuthority.resolve(authority_index, name)
+
+    case {resolution.state, resolution.candidates} do
+      {:unique_candidate, [%{resolution_status: :resolved}]} ->
+        :resolved_token
+
+      {:unique_candidate, [_candidate]} ->
+        :unresolved_token
+
+      {:ambiguous_candidates, _candidates} ->
+        :ambiguous_token
+
+      {:no_authority, []} ->
+        resolve_structural_declaration_occurrence(
+          name,
+          property,
+          structural_authority_index
+        )
+    end
+  end
+
+  defp resolve_structural_declaration_occurrence(name, property, structural_authority_index) do
+    resolution = StructuralVariableAuthority.resolve(structural_authority_index, name)
+
+    case resolution.state do
+      :unique_candidate ->
+        [candidate] = resolution.candidates
+
+        if valid_structural_declaration?(property, candidate.resolved_value) do
+          :resolved_structural
+        else
+          :structural_value_invalid
+        end
+
+      :ambiguous_candidates ->
+        :ambiguous_structural
+
+      :no_authority ->
+        if name in @known_external_variables, do: :unresolved_external, else: :source_variable
+    end
+  end
+
+  defp valid_structural_declaration?(property, value)
+       when is_binary(property) and is_binary(value) do
+    property in @structural_properties and
+      match?(
+        {:ok, _declaration},
+        CSSDeclaration.normalize(%{property: property, value: value}, :ir)
+      )
+  end
+
+  defp valid_structural_declaration?(_property, _value), do: false
+
+  defp aggregate_declaration_variable(
+         name,
+         occurrences,
+         authority_index,
+         structural_authority_index
+       ) do
+    token_resolution = VariableAuthority.resolve(authority_index, name)
+    candidates = Enum.map(token_resolution.candidates, &candidate_evidence/1)
+    candidate_paths = Enum.map(candidates, & &1.token_path)
+
+    base = %{
+      name: name,
+      status: nil,
+      token_path: nil,
+      candidate_paths: candidate_paths,
+      authority_state: token_resolution.state,
+      authority_evidence: candidates,
+      token_status: nil,
+      resolution_reason: nil,
+      expressions: []
+    }
+
+    statuses = Enum.map(occurrences, & &1.status)
+
+    record =
+      cond do
+        Enum.any?(statuses, &(&1 == :ambiguous_token)) ->
+          %{base | status: :ambiguous_token, resolution_reason: "mapping_ambiguous"}
+
+        Enum.any?(statuses, &(&1 == :ambiguous_structural)) ->
+          structural_resolution =
+            StructuralVariableAuthority.resolve(structural_authority_index, name)
+
+          Map.merge(base, %{
+            status: :ambiguous_structural,
+            authority_state: :no_authority,
+            resolution_reason: "structural_ambiguous",
+            structural_authority_state: :ambiguous_candidates,
+            structural_authority_candidates:
+              Enum.map(structural_resolution.candidates, fn candidate ->
+                %{
+                  authority_id: candidate.authority_id,
+                  resolved_value: candidate.resolved_value
+                }
+              end)
+          })
+
+        Enum.all?(statuses, &(&1 == :resolved_token)) ->
+          [candidate] = token_resolution.candidates
+
+          %{
+            base
+            | status: :resolved_token,
+              token_path: candidate.token_path,
+              token_status: :resolved
+          }
+
+        Enum.all?(statuses, &(&1 == :unresolved_token)) ->
+          [candidate] = token_resolution.candidates
+
+          %{
+            base
+            | status: :unresolved_token,
+              token_path: candidate.token_path,
+              token_status: candidate.resolution_status,
+              resolution_reason: "token_unresolved"
+          }
+
+        Enum.all?(statuses, &(&1 == :resolved_structural)) ->
+          [candidate] =
+            StructuralVariableAuthority.resolve(structural_authority_index, name).candidates
+
+          Map.merge(base, %{
+            status: :resolved_structural,
+            authority_state: :no_authority,
+            structural_authority_state: :unique_candidate,
+            structural_authority_id: candidate.authority_id,
+            structural_resolved_value: candidate.resolved_value,
+            structural_source_system: candidate.source_system,
+            structural_source_version: candidate.source_version,
+            structural_authority_type: candidate.authority_type
+          })
+
+        Enum.any?(statuses, &(&1 == :resolved_structural)) ->
+          %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
+
+        Enum.all?(statuses, &(&1 == :structural_value_invalid)) ->
+          %{base | status: :source_variable, resolution_reason: "structural_value_invalid"}
+
+        Enum.any?(statuses, &(&1 == :unresolved_external)) ->
+          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
+
+        true ->
+          %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
+      end
+
+    finalize_variable_record(record)
+  end
+
+  defp variable_record_standalone(name, authority_index, structural_authority_index) do
     resolution = VariableAuthority.resolve(authority_index, name)
     candidates = Enum.map(resolution.candidates, &candidate_evidence/1)
     candidate_paths = Enum.map(candidates, & &1.token_path)
@@ -293,33 +596,16 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           %{base | status: :ambiguous_token, resolution_reason: "mapping_ambiguous"}
 
         {:no_authority, []} ->
-          structural_variable_record(base, name, structural_authority_index)
+          structural_variable_record_standalone(base, name, structural_authority_index)
       end
 
-    if is_nil(record.resolution_reason),
-      do: Map.delete(record, :resolution_reason),
-      else: record
+    finalize_variable_record(record)
   end
 
-  defp structural_variable_record(base, name, structural_authority_index) do
+  defp structural_variable_record_standalone(base, name, structural_authority_index) do
     resolution = StructuralVariableAuthority.resolve(structural_authority_index, name)
 
     case resolution.state do
-      :unique_candidate ->
-        [candidate] = resolution.candidates
-
-        Map.merge(base, %{
-          status: :resolved_structural,
-          authority_state: :no_authority,
-          resolution_reason: nil,
-          structural_authority_state: :unique_candidate,
-          structural_authority_id: candidate.authority_id,
-          structural_resolved_value: candidate.resolved_value,
-          structural_source_system: candidate.source_system,
-          structural_source_version: candidate.source_version,
-          structural_authority_type: candidate.authority_type
-        })
-
       :ambiguous_candidates ->
         Map.merge(base, %{
           status: :ambiguous_structural,
@@ -335,13 +621,19 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             end)
         })
 
-      :no_authority ->
+      _other ->
         if name in @known_external_variables do
           %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
         else
           %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
         end
     end
+  end
+
+  defp finalize_variable_record(record) do
+    if is_nil(record.resolution_reason),
+      do: Map.delete(record, :resolution_reason),
+      else: record
   end
 
   defp candidate_evidence(candidate) do
@@ -440,16 +732,6 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   end
 
   defp variable_occurrences(_value, _source_id, _path, occurrences), do: occurrences
-
-  defp add_variable_occurrences(variables, occurrences) do
-    Enum.map(variables, fn variable ->
-      matches = Enum.filter(occurrences, &(&1.name == variable.name))
-
-      variable
-      |> Map.put(:expressions, Enum.uniq(Enum.map(matches, & &1.expression)))
-      |> Map.put(:occurrences, matches)
-    end)
-  end
 
   defp image_sources(%Element{name: "image", settings: settings, id: source_id}),
     do: [asset_source(Map.get(settings, "image", :missing), source_id, settings)]

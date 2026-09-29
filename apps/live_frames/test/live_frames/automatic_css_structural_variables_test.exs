@@ -33,6 +33,12 @@ defmodule LiveFrames.AutomaticCSSStructuralVariablesTest do
     assert StructuralVariableAuthority.resolve(index, "--grid-1").state == :no_authority
   end
 
+  test "4.0.1 with malformed non-map settings returns no authority" do
+    assert {:ok, index} = StructuralVariables.authority("4.0.1", settings: "not-a-map")
+
+    assert StructuralVariableAuthority.resolve(index, "--grid-1").state == :no_authority
+  end
+
   test "4.0.1 with settings missing option-grid-variables returns no authority" do
     assert {:ok, index} =
              StructuralVariables.authority("4.0.1", settings: %{"option-grid" => "on"})
