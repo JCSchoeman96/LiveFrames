@@ -20,8 +20,6 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
       :error ->
         nil
     end
-  rescue
-    ArithmeticError -> nil
   end
 
   def css_expression(_value), do: nil
@@ -110,22 +108,27 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
     end
   end
 
-  defp clamp_from_px(min_px, max_px, viewport_min_px, viewport_max_px) do
+  defp clamp_from_px(mobile_px, desktop_px, viewport_min_px, viewport_max_px) do
     with {:ok, viewport_min_px} <- number(viewport_min_px),
          {:ok, viewport_max_px} <- number(viewport_max_px),
          true <- viewport_max_px > viewport_min_px do
-      min_rem = min_px / @root_px
-      max_rem = max_px / @root_px
+      mobile_rem = mobile_px / @root_px
+      desktop_rem = desktop_px / @root_px
       vp_min = viewport_min_px / @root_px
       vp_max = viewport_max_px / @root_px
-      slope = (max_rem - min_rem) / (vp_max - vp_min)
+      slope = (desktop_rem - mobile_rem) / (vp_max - vp_min)
       slope_vw = slope * 100
-      intercept = min_rem - slope * vp_min
+      intercept = mobile_rem - slope * vp_min
+      lower_bound = min(mobile_rem, desktop_rem)
+      upper_bound = max(mobile_rem, desktop_rem)
 
-      "clamp(#{format(min_rem)}rem, calc(#{format(slope_vw)}vw + #{format(intercept)}rem), #{format(max_rem)}rem)"
+      "clamp(#{format(lower_bound)}rem, calc(#{format(slope_vw)}vw + #{format(intercept)}rem), #{format(upper_bound)}rem)"
     else
       _ -> nil
     end
+  rescue
+    ArithmeticError -> nil
+    ArgumentError -> nil
   end
 
   defp pow(_number, 0), do: 1

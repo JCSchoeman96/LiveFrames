@@ -283,6 +283,44 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     end
   end
 
+  test "orders clamp bounds while preserving descending viewport endpoints" do
+    assert FluidClamp.from_px_pair(24, 16, 400, 800) ==
+             "clamp(1rem, calc(-2vw + 2rem), 1.5rem)"
+  end
+
+  test "serializes the approved fixture space-xs with ordered descending bounds" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_file(fixture_path())
+
+    assert token_set.tokens["spacing.scale.xs"].metadata["css_expression"] ==
+             "clamp(0.8333333333rem, calc(-0.0172384889vw + 0.8480506933rem), 0.8441720333rem)"
+  end
+
+  test "css_expression fails closed on arithmetic and formatting overflow" do
+    for {desktop_base, viewport_max} <- [{-1.0e308, 400.0000000001}, {1.0e308, 800}] do
+      inputs = %{
+        "mobile_base" => 1.0e308,
+        "desktop_base" => desktop_base,
+        "mobile_scale" => 1,
+        "desktop_scale" => 1,
+        "viewport_min" => 400,
+        "viewport_max" => viewport_max
+      }
+
+      assert is_nil(
+               FluidClamp.css_expression(%{
+                 "recipe" => "acss.clamp",
+                 "variable" => "space-m",
+                 "inputs" => inputs
+               })
+             )
+    end
+  end
+
+  test "from_px_pair fails closed on arithmetic and formatting overflow" do
+    assert is_nil(FluidClamp.from_px_pair(1.0e308, -1.0e308, 400, 400.0000000001))
+    assert is_nil(FluidClamp.from_px_pair(1.0e308, 1.0e308, 400, 800))
+  end
+
   test "fails all standard spacing tokens closed for invalid derived inputs" do
     settings = minimal_settings()
 
