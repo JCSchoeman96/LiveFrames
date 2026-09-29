@@ -298,63 +298,157 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       Enum.uniq(Enum.map(declaration_occurrences, & &1.name) ++ names_from_strings)
 
     Enum.map(variable_names, fn name ->
-      declaration_matches =
-        declaration_occurrences
-        |> Enum.filter(&(&1.name == name))
-        |> Enum.map(fn occurrence ->
-          Map.put(
-            occurrence,
-            :status,
-            resolve_declaration_occurrence(
-              occurrence.name,
-              occurrence.property,
-              authority_index,
-              structural_authority_index
-            )
-          )
-        end)
+      declaration_matches = Enum.filter(declaration_occurrences, &(&1.name == name))
+      layer_matches = Enum.filter(layer_occurrences, &(&1.name == name))
+
+      reconciled_occurrences =
+        reconcile_layer_and_declaration_occurrences(
+          layer_matches,
+          declaration_matches,
+          authority_index,
+          structural_authority_index
+        )
 
       record =
-        if declaration_matches == [] do
+        if reconciled_occurrences == [] do
           variable_record_standalone(name, authority_index, structural_authority_index)
         else
           aggregate_declaration_variable(
             name,
-            declaration_matches,
+            reconciled_occurrences,
             authority_index,
             structural_authority_index
           )
         end
 
-      layer_matches = Enum.filter(layer_occurrences, &(&1.name == name))
+      occurrences = Enum.map(reconciled_occurrences, &occurrence_record/1)
 
-      declaration_occurrence_records =
-        Enum.map(declaration_matches, fn occurrence ->
-          %{
-            name: occurrence.name,
-            source_id: occurrence.source_id,
-            source_path: occurrence.source_path,
-            expression: occurrence.expression,
-            property: occurrence.property,
-            breakpoint: occurrence.breakpoint,
-            resolution_status: Atom.to_string(occurrence.status)
-          }
-        end)
-
-      occurrences =
-        if declaration_occurrence_records == [] do
-          layer_matches
-        else
-          declaration_occurrence_records
-        end
-
-      expressions =
-        Enum.uniq(Enum.map(occurrences ++ layer_matches, & &1.expression))
+      expressions = Enum.uniq(Enum.map(occurrences, & &1["expression"]))
 
       record
       |> Map.put(:occurrences, occurrences)
       |> Map.put(:expressions, expressions)
     end)
+  end
+
+  defp reconcile_layer_and_declaration_occurrences(
+         layer_matches,
+         declaration_matches,
+         authority_index,
+         structural_authority_index
+       ) do
+    declaration_matches =
+      Enum.map(declaration_matches, fn occurrence ->
+        Map.put(
+          occurrence,
+          :status,
+          resolve_declaration_occurrence(
+            occurrence.name,
+            occurrence.property,
+            authority_index,
+            structural_authority_index
+          )
+        )
+      end)
+
+    parsed_index =
+      Map.new(declaration_matches, fn parsed ->
+        {occurrence_identity(parsed.source_id, parsed.canonical_source_path, parsed.expression),
+         parsed}
+      end)
+
+    matched_keys =
+      layer_matches
+      |> Enum.map(fn raw ->
+        occurrence_identity(raw.source_id, raw.source_path, raw.expression)
+      end)
+      |> MapSet.new()
+
+    from_raw =
+      Enum.map(layer_matches, fn raw ->
+        key = occurrence_identity(raw.source_id, raw.source_path, raw.expression)
+
+        case Map.get(parsed_index, key) do
+          nil ->
+            %{
+              name: raw.name,
+              source_id: raw.source_id,
+              source_path: raw.source_path,
+              expression: raw.expression,
+              property: nil,
+              breakpoint: nil,
+              status: resolve_unverified_occurrence(raw.name, authority_index)
+            }
+
+          parsed ->
+            %{
+              name: parsed.name,
+              source_id: parsed.source_id,
+              source_path: parsed.source_path,
+              expression: parsed.expression,
+              property: parsed.property,
+              breakpoint: parsed.breakpoint,
+              status: parsed.status
+            }
+        end
+      end)
+
+    orphan_parsed =
+      Enum.reject(declaration_matches, fn parsed ->
+        MapSet.member?(
+          matched_keys,
+          occurrence_identity(parsed.source_id, parsed.canonical_source_path, parsed.expression)
+        )
+      end)
+
+    from_raw ++ orphan_parsed
+  end
+
+  defp occurrence_identity(source_id, source_path, expression) do
+    {source_id, source_path, expression}
+  end
+
+  defp occurrence_record(occurrence) do
+    %{
+      name: occurrence.name,
+      source_id: occurrence.source_id,
+      source_path: occurrence.source_path,
+      expression: occurrence.expression,
+      property: occurrence.property,
+      breakpoint: occurrence.breakpoint,
+      resolution_status: Atom.to_string(occurrence.status)
+    }
+  end
+
+  defp canonical_layer_source_path(declaration) do
+    case Map.get(declaration, :origin) do
+      :global_class ->
+        "settings.class_refs[#{Map.get(declaration, :class_reference_index)}].settings.#{declaration.source_path}"
+
+      :element_local ->
+        "settings.#{declaration.source_path}"
+
+      _other ->
+        nil
+    end
+  end
+
+  defp resolve_unverified_occurrence(name, authority_index) do
+    resolution = VariableAuthority.resolve(authority_index, name)
+
+    case {resolution.state, resolution.candidates} do
+      {:unique_candidate, [%{resolution_status: :resolved}]} ->
+        :resolved_token
+
+      {:unique_candidate, [_candidate]} ->
+        :unresolved_token
+
+      {:ambiguous_candidates, _candidates} ->
+        :ambiguous_token
+
+      {:no_authority, []} ->
+        :unverified_occurrence
+    end
   end
 
   defp declaration_variable_occurrences(style_results) when is_map(style_results) do
@@ -377,7 +471,10 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
                   breakpoint: resolution.breakpoint,
                   expression: declaration.value,
                   source_id: Map.get(declaration, :element_source_id),
-                  source_path: declaration.source_path
+                  source_path: declaration.source_path,
+                  canonical_source_path: canonical_layer_source_path(declaration),
+                  origin: Map.get(declaration, :origin),
+                  class_reference_index: Map.get(declaration, :class_reference_index)
                 }
               ]
 
@@ -541,6 +638,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           })
 
         Enum.any?(statuses, &(&1 == :resolved_structural)) ->
+          %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
+
+        Enum.any?(statuses, &(&1 == :unverified_occurrence)) ->
           %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
 
         Enum.all?(statuses, &(&1 == :structural_value_invalid)) ->

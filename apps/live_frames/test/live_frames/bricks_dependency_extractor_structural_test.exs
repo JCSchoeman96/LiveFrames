@@ -307,6 +307,54 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert "structural_value_invalid" in statuses
   end
 
+  test "parsed declaration reconciles with raw layer occurrence without duplication" do
+    document =
+      to_ir!(%{"_gridTemplateColumns" => "var(--grid-1)"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--grid-1")
+    assert length(variable["occurrences"]) == 1
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["property"] == "grid-template-columns"
+    assert occurrence["resolution_status"] == "resolved_structural"
+    assert occurrence["source_path"] == "_gridTemplateColumns"
+  end
+
+  test "parsed valid plus unparsed custom CSS occurrence does not aggregate as resolved" do
+    document =
+      to_ir!(
+        %{
+          "_gridTemplateColumns" => "var(--grid-1)",
+          "_cssCustom" => ".x { width: var(--grid-1); }"
+        },
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--grid-1")
+    assert variable["status"] == "source_variable"
+    assert variable["resolution_reason"] == "structural_partial_application"
+    assert length(variable["occurrences"]) == 2
+
+    statuses = Enum.map(variable["occurrences"], & &1["resolution_status"])
+    assert "resolved_structural" in statuses
+    assert "unverified_occurrence" in statuses
+
+    custom_occurrence =
+      Enum.find(variable["occurrences"], fn occurrence ->
+        String.contains?(occurrence["source_path"], "_cssCustom")
+      end)
+
+    assert custom_occurrence["property"] == nil
+    assert custom_occurrence["resolution_status"] == "unverified_occurrence"
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["source_variable"] == "--grid-1"
+           end)
+  end
+
   test "valid structural dependency does not emit false unresolved diagnostic" do
     document =
       to_ir!(%{"_gridTemplateColumns" => "var(--grid-1)"},

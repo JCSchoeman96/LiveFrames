@@ -1081,6 +1081,53 @@ defmodule LiveFrames.BricksDesignIRTest do
            } = node_by_source_id(document, "root").styles["grid-template-columns"]
   end
 
+  test "does not let structural authority override a unique unresolved TokenSet candidate for --grid-1" do
+    authority = %{
+      "variable" => "--grid-1",
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:grid-1",
+      "source_key" => "grid-1",
+      "source_version" => "4.0.1"
+    }
+
+    unresolved_token = %Token{
+      path: "layout.grid.one",
+      category: :layout,
+      value: nil,
+      resolved_value: nil,
+      source_expression: "var(--grid-1)",
+      resolution_status: :unresolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        TokenSet.new(tokens: %{"layout.grid.one" => unresolved_token}),
+        structural_variable_authority: structural_authority()
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--grid-1)",
+             metadata: %{
+               "resolution_reason" => "token_unresolved",
+               "token_path" => "layout.grid.one"
+             }
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+
+    grid_var =
+      Enum.find(
+        document.provenance["dependency_summary"]["variables"],
+        &(&1["name"] == "--grid-1")
+      )
+
+    assert grid_var["status"] == "unresolved_token"
+    assert grid_var["token_path"] == "layout.grid.one"
+    assert grid_var["resolution_reason"] == "token_unresolved"
+  end
+
   test "does not emit bricks.variable.unresolved for resolved structural --grid-1" do
     document =
       style_document(
