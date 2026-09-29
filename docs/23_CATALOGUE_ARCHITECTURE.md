@@ -1661,26 +1661,46 @@ generator/ejection support exists. Package versioning remains separate under
 [docs/24](24_CATALOGUE_VERSIONING_POLICY.md). [docs/16](16_PACKAGE_AND_GENERATOR_MODEL.md)
 records the consumer-facing package paths.
 
-Verify the actual package boundary with `mix hex.build --unpack` from
-`apps/live_frames/`, before CI tasks that may load or start the application.
-Hex documents `--unpack` as building the tarball and unpacking its contents
+Verify the actual package boundary from `apps/live_frames/` with
+`mix hex.build --unpack --output <temporary-directory>`, before CI tasks that
+may load or start the application. Hex documents `--unpack` as building the
+tarball and unpacking its contents, and `--output` sets the unpack directory
 ([`mix hex.build` documentation](https://hex.hexdocs.pm/Mix.Tasks.Hex.Build.html)).
-At this pre-#51 baseline, `apps/live_frames/priv/catalogue/` does not exist.
-When that root is absent, the package check must create the untracked probe
-`apps/live_frames/priv/catalogue/sections/package_probe.json` before
-`mix hex.build --unpack`. The probe is temporary and not committed. It is not a
-CatalogueItem, has no lifecycle state, is not decoded by Registry Builder, and
-does not admit Hero.
+Set the output to a temporary directory outside the `apps/live_frames/` source
+tree and remove that dedicated directory recursively after the assertions.
+Do not leave `apps/live_frames/live_frames-<version>/` or another unpacked
+package tree in the repository workspace.
 
-The check must remove only `package_probe.json`; it may remove probe directories
-only with `rmdir` when they are empty. It must never recursively remove
-`priv/catalogue/`, so real manifests remain safe, and it must fail if the probe
-remains. Remove the probe before compile or test tasks so Registry Builder
-cannot read it. Inspect the unpacked package for the probe, `lib/`, `assets/css/`,
-`priv/static/live_frames/`, and `priv/token_maps/`, and confirm preview-app
-files are absent. Do not snapshot every package member. This build check never
-runs `mix hex.publish`, uses no credentials, and creates no tag, release, or
-version bump.
+The package-content check uses one of two cases:
+
+1. If no canonical JSON manifest files exist under
+   `apps/live_frames/priv/catalogue/`, create the mandatory untracked probe
+   `apps/live_frames/priv/catalogue/sections/package_probe.json` solely to
+   verify package inclusion. At this pre-#51 baseline, the Catalogue root does
+   not exist. The probe is not a CatalogueItem, has no lifecycle state, is not
+   decoded by Registry Builder, and does not admit Hero. Require the unpacked
+   package to contain `priv/catalogue/sections/package_probe.json`. Remove the
+   probe before compile or test tasks so Registry Builder cannot read it.
+   Probe cleanup removes only `package_probe.json`; it may remove
+   probe-created directories only with `rmdir` when they are empty. Never
+   recursively remove `apps/live_frames/priv/catalogue/`, so real manifests
+   remain safe. Fail if the probe remains after cleanup.
+2. If canonical JSON manifest files exist, do not require the synthetic probe.
+   Enumerate every canonical JSON manifest file under
+   `apps/live_frames/priv/catalogue/`.
+   For each source file, derive its exact path relative to `apps/live_frames/`,
+   require that path in the unpacked package, and require byte-for-byte equality
+   with the repository source. Fail when a packaged path is missing or its bytes
+   differ. This loop checks package copying only; it does not decode manifests
+   or validate schema, lifecycle, or semantics. Normal Catalogue compilation
+   and tests own those checks. Do not generate a package-only manifest list or
+   index.
+
+In either case, also require `lib/`, `assets/css/`,
+`priv/static/live_frames/`, and `priv/token_maps/` in the unpacked package, and
+confirm preview-app files are absent. Do not snapshot every package member.
+This build check never runs `mix hex.publish`, uses no credentials, and creates
+no tag, release, or version bump.
 
 Run the package boundary check after checkout, Elixir setup, and `mix deps.get`,
 then continue with format, compile, assets, styling-drift, tests, unused-dependency,
@@ -1718,10 +1738,22 @@ discovery policy.
 For each eligible manifest, preview verification must resolve the exact module
 string, call `StorybookReference.validate/2` with the trusted module, ensure the
 story module loads and exposes `function/0` and `variations/0`, and verify the
-production target. Compare the trusted target's module and function atoms,
-converted to strings, with `component.module` and `component.function`; require
-arity `1`. Require unique trusted variation atom IDs, convert those trusted
-atoms to strings, and require exact `default` plus every explicitly referenced
+production target. For the trusted target module atom, use the same canonical
+module-name representation as `LiveFrames.Catalogue.StorybookReference`:
+
+~~~elixir
+trusted_module
+|> Atom.to_string()
+|> String.replace_prefix("Elixir.", "")
+~~~
+
+Compare that exact binary with `manifest.component["module"]`. Convert the
+trusted function-name atom with `Atom.to_string(trusted_function)` and compare
+that exact string with `manifest.component["function"]`. Require target arity
+exactly `1`. These conversions apply only to trusted atoms. Manifest strings
+remain inert: never atomize, normalize, trim, case-fold, or otherwise transform
+them. Require unique trusted variation atom IDs, convert those trusted atoms to
+strings, and require exact `default` plus every explicitly referenced
 `storybook.variation_ids` value without normalization. Finally, render the
 trusted default route through the preview app. Route information stays in
 preview test configuration, not in Catalogue manifests.
