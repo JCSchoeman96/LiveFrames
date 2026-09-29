@@ -116,15 +116,28 @@ defmodule LiveFrames.BricksDesignIRTest do
     TokenSet.new(tokens: %{path => token})
   end
 
-  defp style_document(setting, value, tokens \\ nil) do
+  defp style_document(setting, value, tokens \\ nil, opts \\ []) do
+    ir_opts =
+      [
+        component_id: "component-a",
+        token_set: tokens || token_set()
+      ]
+      |> Keyword.merge(opts)
+
     assert {:ok, document} =
              Bricks.to_ir(
                synthetic_source([source_element("root", "block", 0, %{setting => value})]),
-               component_id: "component-a",
-               token_set: tokens || token_set()
+               ir_opts
              )
 
     document
+  end
+
+  defp structural_authority do
+    assert {:ok, index} =
+             AutomaticCSS.structural_variable_authority("4.0.1", grid_variables_enabled: true)
+
+    index
   end
 
   defp document do
@@ -974,6 +987,114 @@ defmodule LiveFrames.BricksDesignIRTest do
            } = node_by_source_id(document, "root").styles["width"]
   end
 
+  test "resolves responsive grid-template-columns var(--grid-1) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateColumns:tablet_portrait",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    override = node_by_source_id(document, "root").responsive["tablet_portrait"]
+
+    assert override.breakpoint_id == "tablet_portrait"
+    assert override.source_name == "tablet_portrait"
+    assert override.min_width == nil
+    assert override.max_width == nil
+    assert override.resolution_status == :unresolved
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "repeat(1, minmax(0, 1fr))",
+             source_expression: "var(--grid-1)",
+             metadata: %{
+               "source_variable" => "--grid-1",
+               "authority_state" => "no_authority",
+               "structural_authority_state" => "unique_candidate",
+               "structural_authority_id" => "automatic-css-4.0.1:structural-grid:grid-1",
+               "structural_resolved_value" => "repeat(1, minmax(0, 1fr))"
+             }
+           } = override.styles["grid-template-columns"]
+  end
+
+  test "resolves responsive grid-template-rows var(--grid-1) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateRows:mobile_landscape",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    override = node_by_source_id(document, "root").responsive["mobile_landscape"]
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "repeat(1, minmax(0, 1fr))",
+             source_expression: "var(--grid-1)"
+           } = override.styles["grid-template-rows"]
+  end
+
+  test "does not let structural authority override TokenSet ambiguity" do
+    authority = %{
+      "variable" => "--grid-1",
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:grid-1",
+      "source_key" => "grid-1",
+      "source_version" => "4.0.1"
+    }
+
+    shared_token = %Token{
+      path: "layout.grid.alpha",
+      category: :layout,
+      value: "repeat(1, minmax(0, 1fr))",
+      resolved_value: "repeat(1, minmax(0, 1fr))",
+      source_expression: "repeat(1, minmax(0, 1fr))",
+      resolution_status: :resolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    ambiguous_tokens =
+      TokenSet.new(
+        tokens: %{
+          "layout.grid.alpha" => shared_token,
+          "layout.grid.zulu" => %{shared_token | path: "layout.grid.zulu"}
+        }
+      )
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        ambiguous_tokens,
+        structural_variable_authority: structural_authority()
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--grid-1)",
+             metadata: %{
+               "resolution_reason" => "mapping_ambiguous",
+               "authority_state" => "ambiguous_candidates"
+             }
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+  end
+
+  test "emits standalone grid-template-columns CSS for structural literals" do
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.css =~ "grid-template-columns: repeat(1, minmax(0, 1fr));"
+    refute bundle.css =~ "var(--grid-1)"
+  end
+
   test "keeps an unproven exact direct variable unresolved" do
     document = style_document("_width", "var(--unknown)")
 
@@ -1152,5 +1273,109 @@ defmodule LiveFrames.BricksDesignIRTest do
 
     assert IR.encode!(first) == IR.encode!(second)
     assert first.root_nodes == second.root_nodes
+  end
+
+  @private_staging_dir Path.expand(
+                         "../../../../private_reference/frames/staging-2026-09",
+                         __DIR__
+                       )
+  @private_token_fixture Path.join(@private_staging_dir, "environment/acss-settings.json")
+
+  test "private nine-bundle probe resolves responsive --grid-1 through structural authority" do
+    if File.regular?(@private_token_fixture) do
+      {:ok, private_token_set, _} =
+        AutomaticCSS.from_file(@private_token_fixture,
+          source_version: "4.0.1",
+          source_version_status: "project_source_environment",
+          strict: false
+        )
+
+      {:ok, structural_index} =
+        AutomaticCSS.structural_variable_authority("4.0.1",
+          settings: %{"option-grid-variables" => "on"}
+        )
+
+      bundle_paths =
+        @private_staging_dir
+        |> Path.join("*/*.json")
+        |> Path.wildcard()
+        |> Enum.reject(&String.contains?(&1, "/environment/"))
+        |> Enum.sort()
+
+      assert length(bundle_paths) == 9
+
+      grid_hits =
+        Enum.flat_map(bundle_paths, fn path ->
+          source = File.read!(path) |> Jason.decode!()
+          component_id = source["content"] |> List.first() |> Map.get("cid")
+
+          assert {:ok, document} =
+                   Bricks.to_ir(source,
+                     component_id: component_id,
+                     token_set: private_token_set,
+                     structural_variable_authority: structural_index
+                   )
+
+          flatten(document.root_nodes)
+          |> Enum.flat_map(fn node ->
+            node.responsive
+            |> Enum.flat_map(fn {_breakpoint, override} ->
+              override.styles
+              |> Enum.filter(fn {_property, style} ->
+                style.source_expression == "var(--grid-1)"
+              end)
+              |> Enum.map(fn {property, style} ->
+                {Path.basename(Path.dirname(path)), property, override.breakpoint_id, style}
+              end)
+            end)
+          end)
+        end)
+
+      assert length(grid_hits) == 5
+
+      for {_bundle, property, breakpoint, style} <- grid_hits do
+        assert property in ["grid-template-columns", "grid-template-rows"]
+        assert breakpoint != nil
+
+        assert %StyleValue{
+                 kind: :literal,
+                 value: "repeat(1, minmax(0, 1fr))",
+                 source_expression: "var(--grid-1)",
+                 metadata: %{
+                   "structural_authority_id" => "automatic-css-4.0.1:structural-grid:grid-1"
+                 }
+               } = style
+      end
+
+      responsive_unresolved_count =
+        bundle_paths
+        |> Enum.map(fn path ->
+          source = File.read!(path) |> Jason.decode!()
+          component_id = source["content"] |> List.first() |> Map.get("cid")
+
+          {:ok, document} =
+            Bricks.to_ir(source,
+              component_id: component_id,
+              token_set: private_token_set,
+              structural_variable_authority: structural_index
+            )
+
+          flatten(document.root_nodes)
+          |> Enum.flat_map(fn node ->
+            node.responsive
+            |> Enum.flat_map(fn {_breakpoint, override} ->
+              override.styles
+              |> Enum.filter(fn {_property, style} -> style.kind == :unresolved end)
+              |> Enum.map(fn _ -> 1 end)
+            end)
+          end)
+          |> length()
+        end)
+        |> Enum.sum()
+
+      assert responsive_unresolved_count == 0
+    else
+      assert true
+    end
   end
 end

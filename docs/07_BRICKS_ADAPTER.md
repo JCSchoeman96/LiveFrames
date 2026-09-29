@@ -162,11 +162,32 @@ CSS is not parsed or executed by the adapter.
 
 Variable references are extracted from supported values and custom CSS,
 including nested fallbacks. Stage A and Design IR use the TokenSet's
-`VariableAuthority` index as the only token-variable authority. A variable
-dependency can resolve only through one authority candidate whose token is
+`VariableAuthority` index as the token-variable authority. Design IR may also
+accept an optional `structural_variable_authority` index
+(`LiveFrames.Styles.StructuralVariableAuthority`) that is independent from
+TokenSet.
+
+For an exact direct expression `var(--x)`, resolution order is:
+
+1. `VariableAuthority` lookup.
+2. A unique resolved token candidate becomes `token_ref`.
+3. Unique unresolved or ambiguous token authority retains the existing
+   unresolved behavior and does **not** consult structural authority.
+4. When token authority is `no_authority`, structural authority may resolve a
+   proven structural literal (for example ACSS 4.0.1 `--grid-1` →
+   `repeat(1, minmax(0, 1fr))` on `grid-template-columns` /
+   `grid-template-rows`).
+5. Missing, ambiguous, or invalid structural authority keeps the existing
+   fail-closed unresolved behavior.
+
+Fallback expressions such as `var(--grid-1, fallback)` remain
+`fallback_semantics_unrepresented`. Compound expressions remain unresolved.
+Known external classifications apply only when no TokenSet authority exists
+and structural authority does not resolve the variable.
+
+A variable dependency can resolve only through one authority candidate whose token is
 resolved; ambiguous candidates, unresolved tokens, and unproven variables do
-not select a path. Known external classifications apply only when no TokenSet
-authority exists.
+not select a path.
 
 For example, `var(--space-xs)` resolves to `spacing.scale.xs` when the
 AutomaticCSS TokenSet contains the standard spacing scale. A responsive

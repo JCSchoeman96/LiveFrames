@@ -31,6 +31,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Styles.StructuralVariableAuthority
   alias LiveFrames.Tokens.VariableAuthority
 
   @bricks_container_width_default "1100px"
@@ -110,6 +111,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   def normalize(source, opts) when is_list(opts) do
     with {:ok, token_set, authority_index} <-
            authorize_token_set(Keyword.get(opts, :token_set)),
+         {:ok, structural_authority_index} <-
+           authorize_structural_variable_authority(
+             Keyword.get(opts, :structural_variable_authority)
+           ),
          {:ok, document, load_diagnostics} <- load_source(source, opts),
          {:ok, proxy, component, resolve_diagnostics} <-
            Resolver.resolve(document,
@@ -156,6 +161,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           dependencies: dependencies,
           token_set: token_set,
           authority_index: authority_index,
+          structural_authority_index: structural_authority_index,
           component_index: component_index(document, component),
           source_diagnostics: diagnostics ++ theme_diagnostics,
           static_semantics: static_semantics,
@@ -197,6 +203,27 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
          severity: :error,
          category: :schema,
          message: "Bricks Design IR normalization requires a validated TokenSet"
+       )
+     ]}
+  end
+
+  defp authorize_structural_variable_authority(nil) do
+    {:ok, %StructuralVariableAuthority{}}
+  end
+
+  defp authorize_structural_variable_authority(%StructuralVariableAuthority{} = index) do
+    {:ok, index}
+  end
+
+  defp authorize_structural_variable_authority(_other) do
+    {:error,
+     [
+       Diagnostic.new(
+         code: "bricks.ir.structural_variable_authority.invalid",
+         severity: :error,
+         category: :schema,
+         message:
+           "Bricks Design IR structural_variable_authority must be a StructuralVariableAuthority index"
        )
      ]}
   end
@@ -527,8 +554,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
               |> merge_style_metadata(metadata)
 
             _kind ->
-              normalize_style(declaration.value, property, declaration_trace, authority_index,
-                metadata: metadata
+              normalize_style(
+                declaration.value,
+                property,
+                declaration_trace,
+                authority_index,
+                metadata: metadata,
+                structural_authority_index: context.structural_authority_index
               )
           end
 
@@ -675,7 +707,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           put_intrinsic_literal(styles, trace, "container", "width", value, blocked)
 
         {:theme_styles, value} ->
-          put_theme_styles_width(styles, trace, context.authority_index, value)
+          put_theme_styles_width(
+            styles,
+            trace,
+            context.authority_index,
+            context.structural_authority_index,
+            value
+          )
       end
     end
   end
@@ -712,7 +750,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     {:intrinsic, @bricks_container_width_default}
   end
 
-  defp put_theme_styles_width(styles, trace, authority_index, value) do
+  defp put_theme_styles_width(styles, trace, authority_index, structural_authority_index, value) do
     theme_trace = %{
       trace
       | source_type: "bricks_theme_styles",
@@ -726,7 +764,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         metadata: %{
           "authority" => "bricks_theme_styles",
           "selector" => ".brxe-container"
-        }
+        },
+        structural_authority_index: structural_authority_index
       )
 
     case style do
@@ -871,13 +910,24 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
   end
 
-  defp normalize_style(value, _property, trace, authority_index, opts)
+  defp normalize_style(value, property, trace, authority_index, opts)
        when is_binary(value) do
     metadata = Keyword.get(opts, :metadata, %{})
 
+    structural_authority_index =
+      Keyword.get(opts, :structural_authority_index, %StructuralVariableAuthority{})
+
     case parse_direct_variable_expression(value) do
       {:ok, variable} ->
-        resolve_direct_variable(value, variable, authority_index, trace, metadata)
+        resolve_direct_variable(
+          value,
+          variable,
+          property,
+          authority_index,
+          structural_authority_index,
+          trace,
+          metadata
+        )
 
       :error ->
         case parse_fallback_variable_expression(value) do
@@ -946,7 +996,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
-  defp resolve_direct_variable(value, variable, authority_index, trace, metadata) do
+  defp resolve_direct_variable(
+         value,
+         variable,
+         property,
+         authority_index,
+         structural_authority_index,
+         trace,
+         metadata
+       ) do
     resolution = VariableAuthority.resolve(authority_index, variable)
     authority_metadata = authority_resolution_metadata(resolution)
 
@@ -977,12 +1035,105 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         )
 
       {:no_authority, []} ->
+        resolve_structural_direct_variable(
+          value,
+          variable,
+          property,
+          structural_authority_index,
+          trace,
+          metadata,
+          authority_metadata
+        )
+    end
+  end
+
+  defp resolve_structural_direct_variable(
+         value,
+         variable,
+         property,
+         structural_authority_index,
+         trace,
+         metadata,
+         authority_metadata
+       ) do
+    resolution = StructuralVariableAuthority.resolve(structural_authority_index, variable)
+    structural_metadata = structural_resolution_metadata(resolution)
+
+    case resolution.state do
+      :unique_candidate ->
+        [candidate | _] = resolution.candidates
+
+        if valid_structural_literal?(property, candidate.resolved_value) do
+          StyleValue.literal(candidate.resolved_value,
+            source_expression: value,
+            source_trace: trace,
+            metadata:
+              metadata
+              |> Map.merge(authority_metadata)
+              |> Map.merge(structural_metadata)
+          )
+        else
+          unresolved_authority_style(
+            value,
+            trace,
+            metadata,
+            Map.merge(authority_metadata, structural_metadata),
+            "structural_value_invalid"
+          )
+        end
+
+      :ambiguous_candidates ->
+        unresolved_authority_style(
+          value,
+          trace,
+          metadata,
+          Map.merge(authority_metadata, structural_metadata),
+          "structural_ambiguous"
+        )
+
+      :no_authority ->
         reason =
           if DependencyExtractor.known_external_variable?(variable),
             do: "external_unresolved",
             else: "mapping_unproven"
 
         unresolved_authority_style(value, trace, metadata, authority_metadata, reason)
+    end
+  end
+
+  defp valid_structural_literal?(property, value) when is_binary(property) and is_binary(value) do
+    property in ["grid-template-columns", "grid-template-rows"] and safe_css_fragment?(value)
+  end
+
+  defp valid_structural_literal?(_property, _value), do: false
+
+  defp structural_resolution_metadata(resolution) do
+    base = %{
+      "source_variable" => resolution.variable,
+      "structural_authority_state" => Atom.to_string(resolution.state)
+    }
+
+    case resolution.candidates do
+      [candidate] ->
+        Map.merge(base, %{
+          "structural_authority_id" => candidate.authority_id,
+          "structural_source_system" => candidate.source_system,
+          "structural_source_version" => candidate.source_version,
+          "structural_authority_type" => candidate.authority_type,
+          "structural_resolved_value" => candidate.resolved_value
+        })
+
+      _candidates ->
+        Map.put(
+          base,
+          "structural_authority_candidates",
+          Enum.map(resolution.candidates, fn candidate ->
+            %{
+              "authority_id" => candidate.authority_id,
+              "resolved_value" => candidate.resolved_value
+            }
+          end)
+        )
     end
   end
 
@@ -1126,11 +1277,16 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
                 unresolved_style_value(record, record_trace)
 
               _kind ->
-                normalize_style(record.value, property, record_trace, context.authority_index,
+                normalize_style(
+                  record.value,
+                  property,
+                  record_trace,
+                  context.authority_index,
                   metadata:
                     record
                     |> declaration_metadata()
-                    |> Map.put("breakpoint", breakpoint)
+                    |> Map.put("breakpoint", breakpoint),
+                  structural_authority_index: context.structural_authority_index
                 )
             end
 
