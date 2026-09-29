@@ -7,6 +7,7 @@ defmodule LiveFrames.Tokens.Validation do
   """
 
   alias LiveFrames.Tokens.Diagnostic
+  alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Tokens.Json
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
@@ -291,6 +292,11 @@ defmodule LiveFrames.Tokens.Validation do
     |> validate_path(token.path, canonical_key)
     |> validate_category(token.category, canonical_key)
     |> validate_status(token.resolution_status, canonical_key)
+    |> validate_resolution_consistency(
+      token.resolution_status,
+      token.resolved_value,
+      canonical_key
+    )
     |> validate_token_value(token.value, canonical_key, token.references)
     |> validate_json_value(
       token.resolved_value,
@@ -320,6 +326,7 @@ defmodule LiveFrames.Tokens.Validation do
       canonical_key
     )
     |> validate_variable_authorities(token.metadata, canonical_key)
+    |> validate_variable_authority_css_value(token, canonical_key)
   end
 
   defp validate_variable_authorities(diagnostics, metadata, path)
@@ -586,6 +593,66 @@ defmodule LiveFrames.Tokens.Validation do
       )
     )
   end
+
+  defp validate_resolution_consistency(diagnostics, :resolved, nil, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.resolution.resolved_value_missing",
+        "resolved tokens must have a non-nil resolved_value",
+        :value,
+        path: path
+      )
+    )
+  end
+
+  defp validate_resolution_consistency(diagnostics, :unresolved, nil, _path), do: diagnostics
+
+  defp validate_resolution_consistency(diagnostics, :unresolved, _resolved_value, path) do
+    add(
+      diagnostics,
+      error_at(
+        "tokens.resolution.unresolved_value_present",
+        "unresolved tokens must have a nil resolved_value",
+        :value,
+        path: path
+      )
+    )
+  end
+
+  defp validate_resolution_consistency(diagnostics, _status, _resolved_value, _path),
+    do: diagnostics
+
+  defp validate_variable_authority_css_value(
+         diagnostics,
+         %Token{resolution_status: :resolved, metadata: metadata} = token,
+         path
+       )
+       when is_map(metadata) and not is_struct(metadata) do
+    case Map.get(metadata, "variable_authorities") do
+      [_ | _] ->
+        case CSSValue.candidate(token) do
+          {:ok, _css_value} ->
+            diagnostics
+
+          {:error, _reason} ->
+            add(
+              diagnostics,
+              error_at(
+                "tokens.variable_authority.css_value_unavailable",
+                "resolved tokens with variable authority must have a CSS-value representation",
+                :value,
+                path: path
+              )
+            )
+        end
+
+      _ ->
+        diagnostics
+    end
+  end
+
+  defp validate_variable_authority_css_value(diagnostics, _token, _path), do: diagnostics
 
   defp validate_token_value(diagnostics, value, path, references) do
     diagnostics =

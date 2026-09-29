@@ -96,10 +96,22 @@ Each canonical token preserves:
 | provenance | Source keys, raw value, adapter/version, and transformation |
 | metadata | Calculation and source details, including optional typed CSS-variable authority records |
 
+Token resolution follows `source observed -> resolution attempt -> resolved` or
+`unresolved`. A resolved token requires a non-nil `resolved_value`; an
+unresolved token requires `resolved_value: null`. Source `value` and
+`source_expression` evidence may remain on unresolved tokens. Resolution is
+semantic, so a resolved structured value such as a responsive map does not
+have to serialize as one CSS value. Resolved and unresolved are the only
+terminal states.
+
 `Token.metadata` may include a `variable_authorities` list. Each record has a
 CSS custom-property `variable`, a `kind`, a stable `authority_id`, an optional
 `source_key`, and a nullable `source_version`. The owning token supplies the
 canonical TokenSet path, so records do not repeat it.
+
+A resolved token with variable authority must also expose a representation
+that can be written as one CSS value, since it may back a direct token
+reference. CSS safety checks remain the responsibility of each CSS consumer.
 
 The supported kinds describe separate relationships:
 

@@ -97,6 +97,18 @@ defmodule LiveFrames.P5CBR1SourceCascadeTest do
     refute props["font-size"] =~ "44.6875"
   end
 
+  test "ACSS fidelity does not emit a value from an unresolved Token" do
+    tokens = token_map()
+    token_path = "button.primary.background"
+    token = get_in(tokens, ["tokens", token_path])
+    token_set = put_in(tokens, ["tokens", token_path, "resolution_status"], "unresolved")
+
+    result = FidelityResolver.resolve(["btn--primary"], token_set)
+
+    assert %{value: nil} = Enum.find(result.declarations, &(&1.path == token_path))
+    assert token["resolved_value"] != nil
+  end
+
   test "generic Fidelity remains free of Bricks Frames and ACSS hard-coded Hero assumptions" do
     source =
       Path.expand("../../lib/live_frames/fidelity.ex", __DIR__)

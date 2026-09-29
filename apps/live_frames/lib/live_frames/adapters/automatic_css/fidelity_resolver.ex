@@ -4,6 +4,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
   @behaviour LiveFrames.Fidelity.SourceResolver
 
   alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
+  alias LiveFrames.Tokens.CSSValue
 
   @hints ~w(bg--ultra-dark btn--primary btn--outline)
 
@@ -146,18 +147,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
 
   defp token(property, path, tokens) do
     case tokens[path] do
-      %{"metadata" => %{"css_expression" => value}} when is_binary(value) ->
-        %{property: property, path: path, value: if(safe_value?(value), do: value), selector: nil}
-
-      %{"resolved_value" => value} when is_binary(value) ->
-        %{property: property, path: path, value: if(safe_value?(value), do: value), selector: nil}
-
-      %{"resolved_value" => value} when is_integer(value) or is_float(value) ->
-        value = to_string(value)
-        %{property: property, path: path, value: if(safe_value?(value), do: value), selector: nil}
-
-      %{"resolved_value" => %{"type" => "derived"} = derived} = token ->
-        value = derived_token_css(token, derived)
+      %{"resolution_status" => "resolved"} = token ->
+        value = token_css_value(token)
         %{property: property, path: path, value: if(safe_value?(value), do: value), selector: nil}
 
       _ ->
@@ -165,10 +156,18 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
     end
   end
 
+  defp token_css_value(token) do
+    case CSSValue.candidate(token) do
+      {:ok, value} -> value
+      {:error, :non_serializable} -> legacy_derived_css(token)
+      {:error, _reason} -> nil
+    end
+  end
+
   defp state(selector, property, path, tokens),
     do: Map.put(token(property, path, tokens), :selector, selector)
 
-  defp derived_token_css(token, derived) do
+  defp legacy_derived_css(%{"resolved_value" => %{"type" => "derived"} = derived} = token) do
     cond do
       css = FluidClamp.css_expression(derived) ->
         css
@@ -186,6 +185,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
         nil
     end
   end
+
+  defp legacy_derived_css(_token), do: nil
 
   defp derived_css_value(expression) when is_binary(expression),
     do: if(String.starts_with?(expression, "var("), do: expression, else: "var(--#{expression})")

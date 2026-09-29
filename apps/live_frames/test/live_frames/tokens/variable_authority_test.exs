@@ -106,6 +106,24 @@ defmodule LiveFrames.Tokens.VariableAuthorityTest do
            } = VariableAuthority.resolve(index, "--gap")
   end
 
+  test "build rejects a resolved authority token with no CSS-value representation" do
+    invalid =
+      token(
+        "spacing.content_gap",
+        [authority("--gap", "source_reference", "authority-gap", "gap")]
+      )
+      |> then(fn token ->
+        %{token | resolved_value: %{"type" => "responsive", "min" => "16px", "max" => "18px"}}
+      end)
+
+    assert {:error, diagnostics} = VariableAuthority.build(token_set([invalid]))
+
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == "tokens.variable_authority.css_value_unavailable" and
+               diagnostic.path == "spacing.content_gap"
+           end)
+  end
+
   test "does not infer authority from path or variable-name similarity" do
     index = build!(token_set([token("spacing.content_gap", [])]))
 

@@ -57,6 +57,10 @@ defmodule LiveFrames.TokensTest do
     %{token_set | tokens: Map.put(token_set.tokens, token.path, %{token | metadata: metadata})}
   end
 
+  defp with_primary_token(token_set, token) do
+    %{token_set | tokens: Map.put(token_set.tokens, token.path, token)}
+  end
+
   test "owns an independent versioned TokenSet contract" do
     assert Tokens.current_token_set_version() == "1.0.0"
     assert TokenSet.new().token_set_version == "1.0.0"
@@ -109,6 +113,121 @@ defmodule LiveFrames.TokensTest do
     second = with_authorities(valid_token_set(), [record_b])
 
     assert Tokens.encode!(first) == Tokens.encode!(second)
+  end
+
+  test "resolved semantic values remain valid when they are not scalar CSS values" do
+    token = valid_token_set().tokens["color.primary"]
+
+    values = [
+      "#32a2c1",
+      0,
+      1.5,
+      %{"type" => "derived", "recipe" => "acss.clamp", "inputs" => %{}},
+      %{"type" => "responsive", "min" => "16px", "max" => "18px"}
+    ]
+
+    for value <- values do
+      token_set = with_primary_token(valid_token_set(), %{token | resolved_value: value})
+      assert Tokens.validate(token_set) == :ok, inspect(value)
+    end
+  end
+
+  test "unresolved tokens retain source evidence and may retain variable authority" do
+    token = valid_token_set().tokens["color.primary"]
+
+    unresolved = %{
+      token
+      | resolved_value: nil,
+        source_expression: "var(--content-gap)",
+        resolution_status: :unresolved
+    }
+
+    assert Tokens.validate(with_primary_token(valid_token_set(), unresolved)) == :ok
+
+    assert Tokens.validate(
+             with_authorities(
+               with_primary_token(valid_token_set(), unresolved),
+               [authority_record()]
+             )
+           ) == :ok
+  end
+
+  test "rejects contradictory semantic resolution states deterministically" do
+    token = valid_token_set().tokens["color.primary"]
+
+    cases = [
+      {:resolved, nil, "tokens.resolution.resolved_value_missing"},
+      {:unresolved, "16px", "tokens.resolution.unresolved_value_present"},
+      {:unresolved, 0, "tokens.resolution.unresolved_value_present"},
+      {
+        :unresolved,
+        %{"type" => "responsive", "min" => "16px", "max" => "18px"},
+        "tokens.resolution.unresolved_value_present"
+      }
+    ]
+
+    for {status, resolved_value, expected_code} <- cases do
+      invalid = %{token | resolution_status: status, resolved_value: resolved_value}
+      token_set = with_primary_token(valid_token_set(), invalid)
+
+      assert {:error, diagnostics} = Tokens.validate(token_set)
+      assert {:error, repeated_diagnostics} = Tokens.validate(token_set)
+      assert diagnostics == repeated_diagnostics
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == expected_code and diagnostic.category == :value and
+                 diagnostic.path == "color.primary"
+             end)
+    end
+  end
+
+  test "resolved authority tokens require a shared CSS-value representation" do
+    token = valid_token_set().tokens["color.primary"]
+    derived = %{"type" => "derived", "recipe" => "legacy", "inputs" => %{}}
+
+    supported = [
+      %{token | resolved_value: "#32a2c1"},
+      %{token | resolved_value: 0},
+      %{token | resolved_value: 4},
+      %{token | resolved_value: 1.5},
+      %{
+        token
+        | resolved_value: %{"type" => "responsive", "min" => "16px", "max" => "18px"},
+          metadata: %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+      },
+      %{token | resolved_value: derived, source_expression: "--legacy-value"}
+    ]
+
+    for supported_token <- supported do
+      token_set =
+        with_authorities(with_primary_token(valid_token_set(), supported_token), [
+          authority_record()
+        ])
+
+      assert Tokens.validate(token_set) == :ok
+    end
+
+    unsupported = [
+      %{
+        token
+        | resolved_value: %{"type" => "responsive", "min" => "16px", "max" => "18px"}
+      },
+      %{token | resolved_value: %{"unknown" => "semantic object"}}
+    ]
+
+    for unsupported_token <- unsupported do
+      token_set =
+        with_authorities(with_primary_token(valid_token_set(), unsupported_token), [
+          authority_record()
+        ])
+
+      assert {:error, diagnostics} = Tokens.validate(token_set)
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "tokens.variable_authority.css_value_unavailable" and
+                 diagnostic.category == :value and diagnostic.path == "color.primary"
+             end)
+    end
   end
 
   test "rejects malformed variable authority metadata deterministically" do

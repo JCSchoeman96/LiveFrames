@@ -4,6 +4,7 @@ defmodule LiveFrames.Fidelity do
   alias LiveFrames.IR
   alias LiveFrames.IR.{AssetReference, DesignDocument, DesignNode, StyleValue}
   alias LiveFrames.Fidelity.CSSDeclaration
+  alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Responsive.BreakpointAuthority
   alias LiveFrames.Responsive.Resolution
   alias LiveFrames.StaticAsset
@@ -480,25 +481,25 @@ defmodule LiveFrames.Fidelity do
   defp style_value(_property, _style, _document), do: {:skip, "unsupported style value"}
 
   defp token_value(path, %{"tokens" => tokens}) do
-    case tokens[path] do
-      %{"metadata" => %{"css_expression" => value}} when is_binary(value) ->
-        if CSSDeclaration.safe_value?(value),
-          do: {:emit, value, path},
-          else: {:skip, "unsafe token CSS value was not emitted"}
+    case Map.fetch(tokens, path) do
+      {:ok, token} ->
+        case CSSValue.candidate(token) do
+          {:ok, value} ->
+            if CSSDeclaration.safe_value?(value),
+              do: {:emit, value, path},
+              else: {:skip, "unsafe token CSS value was not emitted"}
 
-      %{"resolved_value" => value} when is_binary(value) ->
-        if CSSDeclaration.safe_value?(value),
-          do: {:emit, value, path},
-          else: {:skip, "unsafe token CSS value was not emitted"}
+          {:error, :resolved_value_missing} ->
+            {:skip, "resolved token has no semantic value: #{path}"}
 
-      %{"resolved_value" => %{"type" => "derived"}, "source_expression" => expression} ->
-        value = derived_css_value(expression)
+          {:error, :non_serializable} ->
+            {:skip, "token has no CSS-value representation: #{path}"}
 
-        if is_binary(value) and CSSDeclaration.safe_value?(value),
-          do: {:emit, value, path},
-          else: {:skip, "unsafe token CSS value was not emitted"}
+          {:error, :unresolved} ->
+            {:skip, "unresolved token: #{path}"}
+        end
 
-      _ ->
+      :error ->
         {:skip, "unresolved token: #{path}"}
     end
   end
@@ -1398,11 +1399,6 @@ defmodule LiveFrames.Fidelity do
       Enum.uniq(hints ++ Map.get(result, :consumed_hints, []))
     end)
   end
-
-  defp derived_css_value(expression) when is_binary(expression),
-    do: if(String.starts_with?(expression, "var("), do: expression, else: "var(#{expression})")
-
-  defp derived_css_value(_expression), do: nil
 
   defp diagnostic(code, message, node \\ nil, metadata \\ %{}),
     do: %LiveFrames.IR.Diagnostic{

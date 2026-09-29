@@ -667,6 +667,59 @@ defmodule LiveFrames.FidelityTest do
     refute bundle.css =~ "90;"
   end
 
+  test "token_ref emits binary and numeric token values as deterministic CSS values" do
+    cases = [
+      {"test.binary", "16px", "16px"},
+      {"test.integer", 1, "1"},
+      {"test.float", 1.5, "1.5"}
+    ]
+
+    for {path, value, expected_css} <- cases do
+      assert {:ok, bundle} = Fidelity.generate(token_ref_document(path, value))
+      assert bundle.css =~ "--lf-token-value: #{expected_css};"
+      assert path in bundle.manifest["token_paths_consumed"]
+    end
+  end
+
+  test "token_ref prefers an explicit CSS expression" do
+    path = "test.explicit_expression"
+
+    document =
+      token_ref_document(path, %{"type" => "responsive", "min" => "16px", "max" => "18px"},
+        metadata: %{"css_expression" => "var(--line-height)"}
+      )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.css =~ "--lf-token-value: var(--line-height);"
+  end
+
+  test "token_ref omits non-serializable and unresolved semantic values" do
+    path = "test.responsive_value"
+
+    for document <- [
+          token_ref_document(path, %{"type" => "responsive", "min" => "16px", "max" => "18px"}),
+          token_ref_document("test.unresolved", "16px", status: "unresolved")
+        ] do
+      assert {:ok, bundle} = Fidelity.generate(document)
+      refute bundle.css =~ "--lf-token-value:"
+
+      assert Enum.any?(bundle.manifest["unresolved_declarations"], fn declaration ->
+               declaration["property"] == "--lf-token-value"
+             end)
+    end
+  end
+
+  test "token_ref keeps CSS safety validation in Fidelity" do
+    document = token_ref_document("test.unsafe", "red; } body { color: red")
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.css =~ "red; } body"
+
+    assert Enum.any?(bundle.manifest["unresolved_declarations"], fn declaration ->
+             declaration["property"] == "--lf-token-value"
+           end)
+  end
+
   defp hero_document do
     {:ok, token_set, _} =
       AutomaticCSS.from_file(@acss_path,
@@ -678,6 +731,25 @@ defmodule LiveFrames.FidelityTest do
 
     {:ok, document} = Bricks.to_ir(@bricks_path, component_id: "sqhmmc", token_set: token_set)
     document
+  end
+
+  defp token_ref_document(path, resolved_value, opts \\ []) do
+    document = hero_document()
+    root = hd(document.root_nodes)
+    style = StyleValue.token_ref(path)
+    root = %{root | styles: Map.put(root.styles, "--lf-token-value", style)}
+
+    token = %{
+      "resolution_status" => Keyword.get(opts, :status, "resolved"),
+      "resolved_value" => resolved_value,
+      "source_expression" => Keyword.get(opts, :source_expression),
+      "metadata" => Keyword.get(opts, :metadata, %{})
+    }
+
+    tokens = Map.put(document.token_set["tokens"], path, token)
+    token_set = Map.put(document.token_set, "tokens", tokens)
+
+    %{document | root_nodes: [root | tl(document.root_nodes)], token_set: token_set}
   end
 
   defp map_nodes(nodes, fun) do
