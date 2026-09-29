@@ -382,10 +382,10 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
           parsed ->
             %{
-              name: parsed.name,
-              source_id: parsed.source_id,
-              source_path: parsed.source_path,
-              expression: parsed.expression,
+              name: raw.name,
+              source_id: raw.source_id,
+              source_path: raw.source_path,
+              expression: raw.expression,
               property: parsed.property,
               breakpoint: parsed.breakpoint,
               status: parsed.status
@@ -394,14 +394,35 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       end)
 
     orphan_parsed =
-      Enum.reject(declaration_matches, fn parsed ->
+      declaration_matches
+      |> Enum.reject(fn parsed ->
         MapSet.member?(
           matched_keys,
           occurrence_identity(parsed.source_id, parsed.canonical_source_path, parsed.expression)
         )
       end)
+      |> Enum.map(&orphan_parsed_occurrence/1)
 
     from_raw ++ orphan_parsed
+  end
+
+  defp orphan_parsed_occurrence(parsed) do
+    case Map.get(parsed, :canonical_source_path) do
+      canonical when is_binary(canonical) and canonical != "" ->
+        %{
+          name: parsed.name,
+          source_id: parsed.source_id,
+          source_path: canonical,
+          expression: parsed.expression,
+          property: parsed.property,
+          breakpoint: parsed.breakpoint,
+          status: parsed.status
+        }
+
+      _invalid ->
+        raise ArgumentError,
+              "parsed declaration occurrence is missing canonical layer source path"
+    end
   end
 
   defp occurrence_identity(source_id, source_path, expression) do

@@ -319,7 +319,64 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     [occurrence] = variable["occurrences"]
     assert occurrence["property"] == "grid-template-columns"
     assert occurrence["resolution_status"] == "resolved_structural"
-    assert occurrence["source_path"] == "_gridTemplateColumns"
+    assert occurrence["source_path"] == "settings._gridTemplateColumns"
+  end
+
+  test "global class grid declaration retains canonical source path under structural authority" do
+    source = %{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/export.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "name" => "section"}],
+      "components" => [
+        %{
+          "id" => "component-a",
+          "elements" => [
+            %{
+              "id" => "root",
+              "name" => "block",
+              "parent" => 0,
+              "settings" => %{"_cssGlobalClasses" => ["grid-class"]}
+            }
+          ]
+        }
+      ],
+      "globalClasses" => [
+        %{
+          "id" => "grid-class",
+          "name" => "grid-class",
+          "settings" => %{"_gridTemplateColumns" => "var(--grid-1)"}
+        }
+      ]
+    }
+
+    assert {:ok, document} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set(),
+               structural_variable_authority: structural_index()
+             )
+
+    variable = dependency_variable(document, "--grid-1")
+    assert variable["status"] == "resolved_structural"
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["source_path"] == "settings.class_refs[0].settings._gridTemplateColumns"
+    assert occurrence["property"] == "grid-template-columns"
+    assert occurrence["resolution_status"] == "resolved_structural"
+  end
+
+  test "unrelated variables keep canonical source paths when structural authority is active" do
+    document =
+      to_ir!(
+        %{"_width" => "var(--unknown-width)"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--unknown-width")
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["source_path"] == "settings._width"
   end
 
   test "parsed valid plus unparsed custom CSS occurrence does not aggregate as resolved" do
@@ -341,9 +398,12 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert "resolved_structural" in statuses
     assert "unverified_occurrence" in statuses
 
+    paths = Enum.map(variable["occurrences"], & &1["source_path"]) |> Enum.sort()
+    assert paths == ["settings._cssCustom", "settings._gridTemplateColumns"]
+
     custom_occurrence =
       Enum.find(variable["occurrences"], fn occurrence ->
-        String.contains?(occurrence["source_path"], "_cssCustom")
+        occurrence["source_path"] == "settings._cssCustom"
       end)
 
     assert custom_occurrence["property"] == nil
