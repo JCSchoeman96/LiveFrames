@@ -106,10 +106,14 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FidelityResolver do
 
   defp gutter(property, tokens) do
     value =
-      with %{"resolved_value" => min_raw} <- tokens["spacing.gutter.min"],
-           %{"resolved_value" => max_raw} <- tokens["spacing.gutter.max"],
-           %{"resolved_value" => vp_min_raw} <- tokens["layout.viewport.min"],
-           %{"resolved_value" => vp_max_raw} <- tokens["layout.viewport.max"],
+      with %{"resolution_status" => "resolved", "resolved_value" => min_raw} <-
+             tokens["spacing.gutter.min"],
+           %{"resolution_status" => "resolved", "resolved_value" => max_raw} <-
+             tokens["spacing.gutter.max"],
+           %{"resolution_status" => "resolved", "resolved_value" => vp_min_raw} <-
+             tokens["layout.viewport.min"],
+           %{"resolution_status" => "resolved", "resolved_value" => vp_max_raw} <-
+             tokens["layout.viewport.max"],
            {:ok, min_px} <- px_number(min_raw),
            {:ok, max_px} <- px_number(max_raw),
            {:ok, viewport_min} <- px_number(vp_min_raw),
