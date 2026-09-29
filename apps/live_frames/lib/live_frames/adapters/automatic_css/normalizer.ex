@@ -11,6 +11,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   @adapter_version "1.0.0"
   @source_authority_version "4.0.1"
+  @spacing_scale_variables ["space-xs", "space-s", "space-m", "space-l", "space-xl", "space-xxl"]
   @setting_output_aliases_by_path %{
     "typography.heading.line_height" => {"base-heading-lh", "--line-height"},
     "radius.base" => {"base-radius", "--radius"},
@@ -40,8 +41,12 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     "layout.viewport.max" => {"vp-max", "--content-width"}
   }
   @calculated_output_aliases_by_path %{
+    "spacing.scale.xs" => {"--space-xs", "spacing"},
+    "spacing.scale.s" => {"--space-s", "spacing"},
     "spacing.scale.medium" => {"--space-m", "spacing"},
+    "spacing.scale.l" => {"--space-l", "spacing"},
     "spacing.scale.xl" => {"--space-xl", "spacing"},
+    "spacing.scale.xxl" => {"--space-xxl", "spacing"},
     "spacing.section" => {"--section-space-m", "section-spacing"},
     "typography.body.scale.medium" => {"--text-m", "text"},
     "typography.heading.scale.h1" => {"--h1", "headings"}
@@ -143,6 +148,22 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       px("spacing.base.min", :spacing, "base-space-min"),
       px("spacing.base.max", :spacing, "base-space"),
       derived(
+        "spacing.scale.xs",
+        :spacing,
+        "space-xs",
+        base_spacing_inputs,
+        ["spacing.base.min", "spacing.base.max", "layout.viewport.min", "layout.viewport.max"],
+        "spacing"
+      ),
+      derived(
+        "spacing.scale.s",
+        :spacing,
+        "space-s",
+        base_spacing_inputs,
+        ["spacing.base.min", "spacing.base.max", "layout.viewport.min", "layout.viewport.max"],
+        "spacing"
+      ),
+      derived(
         "spacing.scale.medium",
         :spacing,
         "space-m",
@@ -151,9 +172,25 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         "spacing"
       ),
       derived(
+        "spacing.scale.l",
+        :spacing,
+        "space-l",
+        base_spacing_inputs,
+        ["spacing.base.min", "spacing.base.max", "layout.viewport.min", "layout.viewport.max"],
+        "spacing"
+      ),
+      derived(
         "spacing.scale.xl",
         :spacing,
         "space-xl",
+        base_spacing_inputs,
+        ["spacing.base.min", "spacing.base.max", "layout.viewport.min", "layout.viewport.max"],
+        "spacing"
+      ),
+      derived(
+        "spacing.scale.xxl",
+        :spacing,
+        "space-xxl",
         base_spacing_inputs,
         ["spacing.base.min", "spacing.base.max", "layout.viewport.min", "layout.viewport.max"],
         "spacing"
@@ -592,13 +629,25 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     raw_value = source_value(settings, source_keys)
 
     if Enum.all?(Map.values(input_values), &number?/1) do
-      Resolver.derived(
-        entry.recipe,
-        entry.variable,
-        Map.put(input_values, "calculation_group", entry.calculation_group),
-        entry.references,
-        source_keys
-      )
+      result =
+        Resolver.derived(
+          entry.recipe,
+          entry.variable,
+          Map.put(input_values, "calculation_group", entry.calculation_group),
+          entry.references,
+          source_keys
+        )
+
+      if entry.variable in @spacing_scale_variables and
+           is_nil(FluidClamp.css_expression(result.value)) do
+        Resolver.unresolved(
+          raw_value,
+          List.first(source_keys),
+          "spacing clamp inputs are incomplete or invalid"
+        )
+      else
+        result
+      end
     else
       Resolver.unresolved(
         raw_value,

@@ -941,26 +941,37 @@ defmodule LiveFrames.BricksDesignIRTest do
            } = override.styles["gap"]
   end
 
-  test "keeps responsive _gridGap space-xs unresolved without authority" do
+  test "resolves responsive _gridGap space-xs through the spacing scale authority" do
     document = style_document("_gridGap:mobile_landscape", "var(--space-xs)")
 
     override = node_by_source_id(document, "root").responsive["mobile_landscape"]
 
+    assert override.breakpoint_id == "mobile_landscape"
+    assert override.source_name == "mobile_landscape"
     assert override.min_width == nil
     assert override.max_width == nil
     assert override.resolution_status == :unresolved
 
     assert %StyleValue{
+             kind: :token_ref,
+             value: "spacing.scale.xs",
+             source_expression: "var(--space-xs)"
+           } = override.styles["gap"]
+  end
+
+  test "keeps grid structural variables unresolved without authority" do
+    document = style_document("_width", "var(--grid-1)")
+
+    assert %StyleValue{
              kind: :unresolved,
-             value: "var(--space-xs)",
-             source_expression: "var(--space-xs)",
+             value: "var(--grid-1)",
+             source_expression: "var(--grid-1)",
              metadata: %{
-               "source_variable" => "--space-xs",
-               "resolution_reason" => "mapping_unproven",
+               "source_variable" => "--grid-1",
                "authority_state" => "no_authority",
                "candidate_paths" => []
              }
-           } = override.styles["gap"]
+           } = node_by_source_id(document, "root").styles["width"]
   end
 
   test "keeps an unproven exact direct variable unresolved" do

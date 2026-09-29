@@ -2,6 +2,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   use ExUnit.Case, async: false
 
   alias LiveFrames.Adapters.AutomaticCSS
+  alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.VariableAuthority
@@ -143,6 +144,255 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert token_set.tokens["layout.viewport.min"].resolved_value == "360px"
   end
 
+  test "derives all six spacing sizes from their mobile and desktop scales" do
+    settings =
+      minimal_settings()
+      |> Map.put("base-space-min", 32)
+      |> Map.put("base-space", 96)
+      |> Map.put("mob-space-scale", 2)
+      |> Map.put("space-scale", 3)
+      |> Map.put("vp-min", 400)
+      |> Map.put("vp-max", 800)
+
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(settings)
+
+    cases = [
+      {"space-xs", "spacing.scale.xs", 8.0, 96 / 9},
+      {"space-s", "spacing.scale.s", 16.0, 32.0},
+      {"space-m", "spacing.scale.medium", 32.0, 96.0},
+      {"space-l", "spacing.scale.l", 64.0, 288.0},
+      {"space-xl", "spacing.scale.xl", 128.0, 864.0},
+      {"space-xxl", "spacing.scale.xxl", 256.0, 2592.0}
+    ]
+
+    for {variable, path, mobile_px, desktop_px} <- cases do
+      token = token_set.tokens[path]
+      assert is_map(token), "missing canonical spacing token #{path}"
+      inputs = token.value["inputs"]
+
+      assert token.resolution_status == :resolved
+      assert token.value["type"] == "derived"
+      assert token.value["recipe"] == "acss.clamp"
+      assert token.value["variable"] == variable
+      assert token.resolved_value == token.value
+      assert token.source_expression == inputs
+
+      assert token.references == [
+               "spacing.base.min",
+               "spacing.base.max",
+               "layout.viewport.min",
+               "layout.viewport.max"
+             ]
+
+      assert inputs == %{
+               "mobile_base" => 32.0,
+               "desktop_base" => 96.0,
+               "mobile_scale" => 2.0,
+               "desktop_scale" => 3.0,
+               "viewport_min" => 400.0,
+               "viewport_max" => 800.0,
+               "calculation_group" => "spacing"
+             }
+
+      css_expression = token.metadata["css_expression"]
+
+      assert css_expression == FluidClamp.from_px_pair(mobile_px, desktop_px, 400, 800)
+      assert String.starts_with?(css_expression, "clamp(")
+      assert css_expression =~ "calc("
+      assert css_expression =~ "vw"
+
+      assert authority(token, "--#{variable}", "source_output_alias") == %{
+               "variable" => "--#{variable}",
+               "kind" => "source_output_alias",
+               "authority_id" =>
+                 "automatic-css-4.0.1:calculated-variable-group:spacing:#{variable}",
+               "source_key" => nil,
+               "source_version" => "4.0.1"
+             }
+    end
+  end
+
+  test "preserves the existing space-m and space-xl CSS expressions" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_file(fixture_path())
+
+    settings = fixture_settings()
+
+    inputs = %{
+      "mobile_base" => settings["base-space-min"] * 1.0,
+      "desktop_base" => settings["base-space"] * 1.0,
+      "mobile_scale" => settings["mob-space-scale"] * 1.0,
+      "desktop_scale" => settings["space-scale"] * 1.0,
+      "viewport_min" => settings["vp-min"] * 1.0,
+      "viewport_max" => settings["vp-max"] * 1.0,
+      "calculation_group" => "spacing"
+    }
+
+    for {path, variable, css_expression} <- [
+          {
+            "spacing.scale.medium",
+            "space-m",
+            "clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem)"
+          },
+          {
+            "spacing.scale.xl",
+            "space-xl",
+            "clamp(2.6653335rem, calc(2.4706425447vw + 2.1094389274rem), 4.21875rem)"
+          }
+        ] do
+      token = token_set.tokens[path]
+
+      assert token.value == %{
+               "type" => "derived",
+               "recipe" => "acss.clamp",
+               "variable" => variable,
+               "inputs" => inputs
+             }
+
+      assert token.resolved_value == token.value
+      assert token.source_expression == inputs
+
+      assert token.references == [
+               "spacing.base.min",
+               "spacing.base.max",
+               "layout.viewport.min",
+               "layout.viewport.max"
+             ]
+
+      assert token.provenance["source_keys"] == [
+               "base-space-min",
+               "base-space",
+               "mob-space-scale",
+               "space-scale",
+               "vp-min",
+               "vp-max"
+             ]
+
+      assert token.metadata["calculation_group"] == "spacing"
+      assert token.metadata["css_expression"] == css_expression
+
+      assert token.metadata["variable_authorities"] == [
+               %{
+                 "variable" => "--#{variable}",
+                 "kind" => "source_output_alias",
+                 "authority_id" =>
+                   "automatic-css-4.0.1:calculated-variable-group:spacing:#{variable}",
+                 "source_key" => nil,
+                 "source_version" => "4.0.1"
+               }
+             ]
+    end
+  end
+
+  test "orders clamp bounds while preserving descending viewport endpoints" do
+    assert FluidClamp.from_px_pair(24, 16, 400, 800) ==
+             "clamp(1rem, calc(-2vw + 2rem), 1.5rem)"
+  end
+
+  test "serializes the approved fixture space-xs with ordered descending bounds" do
+    assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_file(fixture_path())
+
+    assert token_set.tokens["spacing.scale.xs"].metadata["css_expression"] ==
+             "clamp(0.8333333333rem, calc(-0.0172384889vw + 0.8480506933rem), 0.8441720333rem)"
+  end
+
+  test "css_expression fails closed on arithmetic and formatting overflow" do
+    for {desktop_base, viewport_max} <- [{-1.0e308, 400.0000000001}, {1.0e308, 800}] do
+      inputs = %{
+        "mobile_base" => 1.0e308,
+        "desktop_base" => desktop_base,
+        "mobile_scale" => 1,
+        "desktop_scale" => 1,
+        "viewport_min" => 400,
+        "viewport_max" => viewport_max
+      }
+
+      assert is_nil(
+               FluidClamp.css_expression(%{
+                 "recipe" => "acss.clamp",
+                 "variable" => "space-m",
+                 "inputs" => inputs
+               })
+             )
+    end
+  end
+
+  test "from_px_pair fails closed on arithmetic and formatting overflow" do
+    assert is_nil(FluidClamp.from_px_pair(1.0e308, -1.0e308, 400, 400.0000000001))
+    assert is_nil(FluidClamp.from_px_pair(1.0e308, 1.0e308, 400, 800))
+  end
+
+  test "fails all standard spacing tokens closed for invalid derived inputs" do
+    settings = minimal_settings()
+
+    invalid_cases = [
+      {"missing mobile base", Map.delete(settings, "base-space-min")},
+      {"missing desktop base", Map.delete(settings, "base-space")},
+      {"missing mobile scale", Map.delete(settings, "mob-space-scale")},
+      {"missing desktop scale", Map.delete(settings, "space-scale")},
+      {"invalid mobile scale", Map.put(settings, "mob-space-scale", "not-a-number")},
+      {"invalid desktop scale", Map.put(settings, "space-scale", "not-a-number")},
+      {"zero mobile scale", Map.put(settings, "mob-space-scale", 0)},
+      {"zero desktop scale", Map.put(settings, "space-scale", 0)},
+      {"negative mobile scale", Map.put(settings, "mob-space-scale", -1)},
+      {"negative desktop scale", Map.put(settings, "space-scale", -1)},
+      {"missing viewport bound", Map.delete(settings, "vp-max")}
+    ]
+
+    paths = [
+      "spacing.scale.xs",
+      "spacing.scale.s",
+      "spacing.scale.medium",
+      "spacing.scale.l",
+      "spacing.scale.xl",
+      "spacing.scale.xxl"
+    ]
+
+    for {case_name, invalid_settings} <- invalid_cases do
+      assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(invalid_settings)
+
+      for path <- paths do
+        assert Map.has_key?(token_set.tokens, path), "missing canonical spacing token #{path}"
+
+        assert token_set.tokens[path].resolution_status == :unresolved,
+               "#{case_name} left #{path} resolved"
+
+        assert token_set.tokens[path].resolved_value == nil,
+               "#{case_name} produced a value for #{path}"
+      end
+    end
+  end
+
+  test "FluidClamp rejects zero, negative, and non-numeric spacing scales" do
+    inputs = %{
+      "mobile_base" => 32,
+      "desktop_base" => 96,
+      "mobile_scale" => 2,
+      "desktop_scale" => 3,
+      "viewport_min" => 400,
+      "viewport_max" => 800
+    }
+
+    for {variable, key, value} <- [
+          {"space-xs", "mobile_scale", 0},
+          {"space-xs", "desktop_scale", 0},
+          {"space-s", "mobile_scale", 0},
+          {"space-s", "desktop_scale", 0},
+          {"space-xl", "mobile_scale", -1},
+          {"space-xl", "mobile_scale", "invalid"},
+          {"space-xl", "desktop_scale", -1},
+          {"space-xl", "desktop_scale", "invalid"},
+          {"space-xxl", "mobile_scale", 1.0e308}
+        ] do
+      assert is_nil(
+               FluidClamp.css_expression(%{
+                 "recipe" => "acss.clamp",
+                 "variable" => variable,
+                 "inputs" => Map.put(inputs, key, value)
+               })
+             )
+    end
+  end
+
   test "materializes source-map and calculated-group output aliases" do
     assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
 
@@ -175,6 +425,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
        "primary-outline-hover-text"},
       {"spacing.scale.medium", "--space-m", nil},
       {"spacing.scale.xl", "--space-xl", nil},
+      {"spacing.scale.xs", "--space-xs", nil},
+      {"spacing.scale.s", "--space-s", nil},
+      {"spacing.scale.l", "--space-l", nil},
+      {"spacing.scale.xxl", "--space-xxl", nil},
       {"spacing.section", "--section-space-m", nil},
       {"typography.body.scale.medium", "--text-m", nil},
       {"typography.heading.scale.h1", "--h1", nil}
@@ -182,6 +436,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
     for {path, variable, source_key} <- cases do
       token = token_set.tokens[path]
+      assert is_map(token), "missing canonical token #{path}"
       record = authority(token, variable, "source_output_alias")
 
       assert record, "missing output authority for #{path} / #{variable}"
@@ -214,6 +469,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              Enum.sort([
                {"spacing.scale.medium", "--space-m", nil},
                {"spacing.scale.xl", "--space-xl", nil},
+               {"spacing.scale.xs", "--space-xs", nil},
+               {"spacing.scale.s", "--space-s", nil},
+               {"spacing.scale.l", "--space-l", nil},
+               {"spacing.scale.xxl", "--space-xxl", nil},
                {"spacing.section", "--section-space-m", nil},
                {"typography.body.scale.medium", "--text-m", nil},
                {"typography.heading.scale.h1", "--h1", nil}
@@ -222,6 +481,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     calculated_ids = [
       {"spacing.scale.medium", "--space-m", "spacing"},
       {"spacing.scale.xl", "--space-xl", "spacing"},
+      {"spacing.scale.xs", "--space-xs", "spacing"},
+      {"spacing.scale.s", "--space-s", "spacing"},
+      {"spacing.scale.l", "--space-l", "spacing"},
+      {"spacing.scale.xxl", "--space-xxl", "spacing"},
       {"spacing.section", "--section-space-m", "section-spacing"},
       {"typography.body.scale.medium", "--text-m", "text"},
       {"typography.heading.scale.h1", "--h1", "headings"}
@@ -310,6 +573,26 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              "spacing.scale.medium"
            ]
 
+    for {variable, path} <- [
+          {"--space-xs", "spacing.scale.xs"},
+          {"--space-s", "spacing.scale.s"},
+          {"--space-l", "spacing.scale.l"},
+          {"--space-xxl", "spacing.scale.xxl"}
+        ] do
+      assert %{
+               state: :unique_candidate,
+               candidates: [%{token_path: ^path, resolution_status: :resolved}]
+             } = VariableAuthority.resolve(index, variable)
+    end
+
+    assert %{
+             state: :ambiguous_candidates,
+             candidates: [
+               %{token_path: "spacing.container_gap", resolution_status: :resolved},
+               %{token_path: "spacing.scale.xl", resolution_status: :resolved}
+             ]
+           } = VariableAuthority.resolve(index, "--space-xl")
+
     assert Enum.map(VariableAuthority.resolve(index, "--radius").candidates, & &1.token_path) == [
              "button.primary.radius",
              "radius.base"
@@ -364,6 +647,45 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     content_width = VariableAuthority.resolve(index, "--content-width")
     assert content_width.state == :unique_candidate
     assert hd(content_width.candidates).token_path == "layout.viewport.max"
+  end
+
+  test "approved fixture resolves each spacing variable through its existing authority state" do
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.from_file(fixture_path(),
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
+
+    assert {:ok, index} = VariableAuthority.build(token_set)
+
+    for {variable, path} <- [
+          {"--space-xs", "spacing.scale.xs"},
+          {"--space-s", "spacing.scale.s"},
+          {"--space-l", "spacing.scale.l"},
+          {"--space-xxl", "spacing.scale.xxl"}
+        ] do
+      assert %{
+               state: :unique_candidate,
+               candidates: [%{token_path: ^path, resolution_status: :resolved}]
+             } = VariableAuthority.resolve(index, variable)
+    end
+
+    assert %{
+             state: :ambiguous_candidates,
+             candidates: [
+               %{token_path: "spacing.content_gap", resolution_status: :resolved},
+               %{token_path: "spacing.grid_gap", resolution_status: :resolved},
+               %{token_path: "spacing.scale.medium", resolution_status: :resolved}
+             ]
+           } = VariableAuthority.resolve(index, "--space-m")
+
+    assert %{
+             state: :ambiguous_candidates,
+             candidates: [
+               %{token_path: "spacing.container_gap", resolution_status: :resolved},
+               %{token_path: "spacing.scale.xl", resolution_status: :resolved}
+             ]
+           } = VariableAuthority.resolve(index, "--space-xl")
   end
 
   test "resolves the proven BW foundation and ultra-dark contextual relationships" do
@@ -617,14 +939,14 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping())
-    assert map_size(token_set.tokens) == 72
+    assert map_size(token_set.tokens) == 76
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
              color: 27,
              layout: 3,
              radius: 1,
-             spacing: 11,
+             spacing: 15,
              typography: 9
            }
 
