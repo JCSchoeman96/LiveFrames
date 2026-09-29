@@ -119,7 +119,7 @@ Stage A maps only this deliberate setting subset:
 | Bricks setting | Stage A CSS |
 | --- | --- |
 | `_position`, `_isolation` | same property |
-| `_rowGap`, `_columnGap` | `row-gap`, `column-gap` |
+| `_rowGap`, `_columnGap`, `_gridGap` | `row-gap`, `column-gap`, `gap` |
 | `_alignItems`, `_justifyContent` | `align-items`, `justify-content` |
 | `_zIndex` | `z-index` |
 | `_width`, `_widthMax`, `_height` | `width`, `max-width`, `height` |

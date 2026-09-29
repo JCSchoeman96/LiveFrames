@@ -15,6 +15,7 @@ defmodule LiveFrames.Adapters.Bricks.Settings do
     "_isolation" => "isolation",
     "_rowGap" => "row-gap",
     "_columnGap" => "column-gap",
+    "_gridGap" => "gap",
     "_alignItems" => "align-items",
     "_justifyContent" => "justify-content",
     "_zIndex" => "z-index",
