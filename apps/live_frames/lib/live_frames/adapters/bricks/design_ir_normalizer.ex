@@ -31,6 +31,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Styles.StructuralVariableAuthority
   alias LiveFrames.Tokens.VariableAuthority
 
@@ -131,6 +132,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       dependencies =
         DependencyExtractor.extract(resolved, document,
           authority_index: authority_index,
+          structural_authority_index: structural_authority_index,
           semantic_settings: semantic_settings
         )
 
@@ -1102,7 +1104,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp valid_structural_literal?(property, value) when is_binary(property) and is_binary(value) do
-    property in ["grid-template-columns", "grid-template-rows"] and safe_css_fragment?(value)
+    property in ["grid-template-columns", "grid-template-rows"] and
+      match?(
+        {:ok, _declaration},
+        CSSDeclaration.normalize(%{property: property, value: value}, :ir)
+      )
   end
 
   defp valid_structural_literal?(_property, _value), do: false

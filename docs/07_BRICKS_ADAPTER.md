@@ -185,6 +185,18 @@ Fallback expressions such as `var(--grid-1, fallback)` remain
 Known external classifications apply only when no TokenSet authority exists
 and structural authority does not resolve the variable.
 
+Design IR dependency extraction accepts the same optional
+`structural_variable_authority` index. When structural authority uniquely
+resolves an exact direct variable, dependency provenance records
+`resolved_structural` with structural authority metadata and does not emit
+`bricks.variable.unresolved` for that variable. Structural literals are validated
+through `LiveFrames.Fidelity.CSSDeclaration` for the actual property/value pair
+(`grid-template-columns` / `grid-template-rows` only in this slice).
+
+Stage A continues to call dependency extraction without structural authority.
+Stage A variable behavior remains TokenSet/source-evidence only and is
+unchanged by this slice.
+
 A variable dependency can resolve only through one authority candidate whose token is
 resolved; ambiguous candidates, unresolved tokens, and unproven variables do
 not select a path.

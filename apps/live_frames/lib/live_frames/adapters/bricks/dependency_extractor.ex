@@ -10,6 +10,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.StaticAsset
   alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Styles.StructuralVariableAuthority
   alias LiveFrames.Tokens.VariableAuthority
 
   @known_external_variables ["--overlay-bg", "--neutral-ultra-dark-trans-60"]
@@ -30,12 +31,13 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   @spec variables(term(), keyword()) :: [map()]
   def variables(values, opts \\ []) do
     authority_index = authority_index(opts)
+    structural_authority_index = structural_authority_index(opts)
 
     values
     |> strings()
     |> Enum.flat_map(&variable_names/1)
     |> Enum.uniq()
-    |> Enum.map(&variable_record(&1, authority_index))
+    |> Enum.map(&variable_record(&1, authority_index, structural_authority_index))
   end
 
   @spec assets(term()) :: [map()]
@@ -58,6 +60,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   def extract(%{tree: tree, elements: elements}, document, opts) do
     authority_index = authority_index(opts)
+    structural_authority_index = structural_authority_index(opts)
 
     semantic_settings =
       case Keyword.get(opts, :semantic_settings, []) do
@@ -162,12 +165,15 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
     variables =
       variable_values
-      |> variables(authority_index: authority_index)
+      |> variables(
+        authority_index: authority_index,
+        structural_authority_index: structural_authority_index
+      )
       |> add_variable_occurrences(variable_occurrences)
 
     variable_diagnostics =
       variables
-      |> Enum.reject(&(&1.status == :resolved_token))
+      |> Enum.reject(&(&1.status in [:resolved_token, :resolved_structural]))
       |> Enum.map(&variable_diagnostic/1)
 
     asset_diagnostics =
@@ -247,7 +253,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end)
   end
 
-  defp variable_record(name, authority_index) do
+  defp variable_record(name, authority_index, structural_authority_index) do
     resolution = VariableAuthority.resolve(authority_index, name)
     candidates = Enum.map(resolution.candidates, &candidate_evidence/1)
     candidate_paths = Enum.map(candidates, & &1.token_path)
@@ -286,16 +292,56 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         {:ambiguous_candidates, _candidates} ->
           %{base | status: :ambiguous_token, resolution_reason: "mapping_ambiguous"}
 
-        {:no_authority, []} when name in @known_external_variables ->
-          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
-
         {:no_authority, []} ->
-          %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
+          structural_variable_record(base, name, structural_authority_index)
       end
 
     if is_nil(record.resolution_reason),
       do: Map.delete(record, :resolution_reason),
       else: record
+  end
+
+  defp structural_variable_record(base, name, structural_authority_index) do
+    resolution = StructuralVariableAuthority.resolve(structural_authority_index, name)
+
+    case resolution.state do
+      :unique_candidate ->
+        [candidate] = resolution.candidates
+
+        Map.merge(base, %{
+          status: :resolved_structural,
+          authority_state: :no_authority,
+          resolution_reason: nil,
+          structural_authority_state: :unique_candidate,
+          structural_authority_id: candidate.authority_id,
+          structural_resolved_value: candidate.resolved_value,
+          structural_source_system: candidate.source_system,
+          structural_source_version: candidate.source_version,
+          structural_authority_type: candidate.authority_type
+        })
+
+      :ambiguous_candidates ->
+        Map.merge(base, %{
+          status: :ambiguous_structural,
+          authority_state: :no_authority,
+          resolution_reason: "structural_ambiguous",
+          structural_authority_state: :ambiguous_candidates,
+          structural_authority_candidates:
+            Enum.map(resolution.candidates, fn candidate ->
+              %{
+                authority_id: candidate.authority_id,
+                resolved_value: candidate.resolved_value
+              }
+            end)
+        })
+
+      :no_authority ->
+        if name in @known_external_variables do
+          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
+        else
+          %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
+        end
+    end
   end
 
   defp candidate_evidence(candidate) do
@@ -304,6 +350,19 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       resolution_status: candidate.resolution_status,
       authorities: candidate.authorities
     }
+  end
+
+  defp structural_authority_index(opts) do
+    case Keyword.get(opts, :structural_authority_index) do
+      %StructuralVariableAuthority{} = index ->
+        index
+
+      nil ->
+        %StructuralVariableAuthority{}
+
+      _invalid_index ->
+        raise ArgumentError, "Bricks structural variable authority index is invalid"
+    end
   end
 
   defp authority_index(opts) do
@@ -685,10 +744,39 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             "authority_evidence" => variable.authority_evidence
           }
           |> maybe_put_metadata("token_path", variable.token_path)
+          |> maybe_put_structural_metadata(variable)
       )
 
   defp maybe_put_metadata(metadata, _key, nil), do: metadata
   defp maybe_put_metadata(metadata, key, value), do: Map.put(metadata, key, value)
+
+  defp maybe_put_structural_metadata(metadata, variable) do
+    metadata
+    |> maybe_put_metadata(
+      "structural_authority_state",
+      structural_field(variable, :structural_authority_state)
+    )
+    |> maybe_put_metadata(
+      "structural_authority_id",
+      Map.get(variable, :structural_authority_id)
+    )
+    |> maybe_put_metadata(
+      "structural_resolved_value",
+      Map.get(variable, :structural_resolved_value)
+    )
+    |> maybe_put_metadata(
+      "structural_authority_candidates",
+      Map.get(variable, :structural_authority_candidates)
+    )
+  end
+
+  defp structural_field(variable, key) do
+    case Map.get(variable, key) do
+      nil -> nil
+      value when is_atom(value) -> Atom.to_string(value)
+      value -> value
+    end
+  end
 
   defp asset_diagnostic(asset),
     do:

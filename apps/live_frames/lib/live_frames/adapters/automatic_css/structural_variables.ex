@@ -38,8 +38,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS.StructuralVariables do
   end
 
   defp settings_grid_variables_enabled?(settings) when is_map(settings) do
-    Map.get(settings, "option-grid-variables") == "on"
+    case Map.get(settings, "option-grid-variables") do
+      "on" -> true
+      _other -> false
+    end
   end
 
-  defp settings_grid_variables_enabled?(_settings), do: true
+  defp settings_grid_variables_enabled?(_settings), do: false
 end
