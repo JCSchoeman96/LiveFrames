@@ -19,6 +19,13 @@ not imply Mix, Hex, GitHub, or other package publication. Package publication
 requires separate evidence, and package version is independent of CatalogueItem
 release_version.
 
+The `:live_frames` source package must include the canonical JSON under
+`priv/catalogue/` when that tree exists. Package compilation uses those files
+as `Registry.Builder` input, while runtime reads only the compiled Registry.
+These manifests are inspectable package source. The public Catalogue API's
+visibility rules do not make them confidential. See the #51 build and CI
+contract in [docs/23](23_CATALOGUE_ARCHITECTURE.md).
+
 Library, generator, and ejection are independent capabilities. Catalogue
 release does not require generator or ejection support. Generator and ejection
 remain unsupported and not authorized. See
@@ -35,9 +42,15 @@ remain unsupported and not authorized. See
 | `assets/css/components/sections/hero.css` | Hero semantic presentation CSS |
 | `priv/static/live_frames/css/live_frames.css` | **Precompiled** CSS (primary runtime path) |
 | `priv/token_maps/` | Token bridge inputs (build/generation; not a runtime API) |
+| `priv/catalogue/` | Canonical Catalogue JSON; source authority and Registry build/compile-time input, not a runtime API. Files may be inspectable in the source package. |
 
-Hex `package/0` files list includes `lib`, `assets/css`, `priv/static/live_frames`,
-and `priv/token_maps` (see `apps/live_frames/mix.exs`).
+The separately authorized #51 implementation must include `priv/catalogue` in
+`apps/live_frames/mix.exs` `package/0 :files`, alongside `lib`, `assets/css`,
+`priv/static/live_frames`, and `priv/token_maps`. This docs-only contract does
+not claim that package configuration changed, a package was built, or a package
+was published. Package inclusion does not filter manifests by lifecycle or
+discovery state and does not imply Hex publication, redistribution clearance,
+generator support, or ejection support.
 
 ## 2. Component import and use
 
