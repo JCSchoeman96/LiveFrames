@@ -1632,10 +1632,104 @@ operating system separator, file creation time, process ID, or randomness. No
 timestamp or absolute path enters embedded data. G1 does not generate
 `index.json`, `registry.json`, or another index file.
 
-This Registry contract does not decide package contents or publication
-behavior. #51 owns package integration. The compiled module must work without
-source JSON at runtime, but this does not claim that canonical JSON ships in a
-package.
+### Build, package, and CI contract (#51)
+
+The separately authorized #51 implementation must make the `:live_frames`
+Hex/source package include the complete canonical JSON source set under
+`priv/catalogue/` whenever it exists. It must add `priv/catalogue` to
+`apps/live_frames/mix.exs` `package/0 :files`. Package compilation follows this
+chain:
+
+~~~text
+Hex/source package
+→ consumer dependency source
+→ :live_frames compilation
+→ Registry.Builder
+→ compiled immutable Registry
+~~~
+
+Without the canonical files, a package consumer may compile with a missing
+Catalogue root and get an empty Registry.
+
+Canonical repository JSON remains the source authority; the compiled Registry
+is derived. Package inclusion does not filter manifests by `RELEASED` state,
+public discovery visibility, or redistribution clearance. Package manifests are
+inspectable source metadata. Public discovery filtering controls the supported
+Catalogue API, not file-level confidentiality. Inclusion does not mean an item
+is `RELEASED`, the package was published, redistribution is cleared, or
+generator/ejection support exists. Package versioning remains separate under
+[docs/24](24_CATALOGUE_VERSIONING_POLICY.md). [docs/16](16_PACKAGE_AND_GENERATOR_MODEL.md)
+records the consumer-facing package paths.
+
+Verify the actual package boundary with `mix hex.build --unpack` from
+`apps/live_frames/`, before CI tasks that may load or start the application.
+Hex documents `--unpack` as building the tarball and unpacking its contents
+([`mix hex.build` documentation](https://hex.hexdocs.pm/Mix.Tasks.Hex.Build.html)).
+At this pre-#51 baseline, `apps/live_frames/priv/catalogue/` does not exist.
+Until canonical manifests do exist, the package check may create the untracked
+probe `apps/live_frames/priv/catalogue/sections/package_probe.json`. The probe
+is temporary and not committed. It is not a CatalogueItem, has no lifecycle
+state, is not decoded by Registry Builder, and does not admit Hero.
+
+The check must remove only `package_probe.json`; it may remove probe directories
+only with `rmdir` when they are empty. It must never recursively remove
+`priv/catalogue/`, so real manifests remain safe, and it must fail if the probe
+remains. Remove the probe before compile or test tasks so Registry Builder
+cannot read it. Inspect the unpacked package for the probe, `lib/`, `assets/css/`,
+`priv/static/live_frames/`, and `priv/token_maps/`, and confirm preview-app
+files are absent. Do not snapshot every package member. This build check never
+runs `mix hex.publish`, uses no credentials, and creates no tag, release, or
+version bump.
+
+Run the package boundary check after checkout, Elixir setup, and `mix deps.get`,
+then continue with format, compile, assets, styling-drift, tests, unused-dependency,
+and whitespace checks. Keep the existing umbrella `mix test` as the full
+regression runner; do not add a second full suite for Catalogue. Registry
+determinism tests remain the drift check. Do not add a committed Registry JSON,
+index, generated Elixir source, or digest.
+
+### Cross-app Storybook verification (#51)
+
+`:live_frames_preview` may depend on `:live_frames`; `:live_frames` must not
+depend on `:live_frames_preview` or `phoenix_storybook`. Cross-app Storybook
+checks live under `apps/live_frames_preview/test/`. The library's
+`LiveFrames.Catalogue.StorybookReference.validate/2` checks inert reference
+agreement only. It does not load stories, inspect preview routes, or render
+variations.
+
+Preview tests use a trusted resolver from the exact manifest
+`storybook.module` string to a trusted story module atom and its default
+preview route/render target. A missing resolver entry for an eligible manifest
+fails CI. Never convert manifest strings with `String.to_atom/1`,
+`String.to_existing_atom/1`, `Module.concat/1`, or
+`:erlang.binary_to_atom/2`. The existing
+`LiveFramesPreviewWeb.Storybook.Components.Hero` entry and its route are
+verification configuration only; they do not create a Hero manifest or admit
+Hero to the Catalogue.
+
+The Registry-backed render gate applies to manifests in `VALIDATED`,
+`REVIEWED`, `APPROVED`, `RELEASED`, or `DEPRECATED`. It skips `DRAFT` because
+that state has not passed validation, `WITHDRAWN` because an item may be
+withdrawn directly from DRAFT, and `RETIRED` because a historical item need
+not render as current content. This gate defines CI evidence, not public
+discovery policy.
+
+For each eligible manifest, preview verification must resolve the exact module
+string, call `StorybookReference.validate/2` with the trusted module, ensure the
+story module loads and exposes `function/0` and `variations/0`, and verify the
+production target. Compare the trusted target's module and function atoms,
+converted to strings, with `component.module` and `component.function`; require
+arity `1`. Require unique trusted variation atom IDs, convert those trusted
+atoms to strings, and require exact `default` plus every explicitly referenced
+`storybook.variation_ids` value without normalization. Finally, render the
+trusted default route through the preview app. Route information stays in
+preview test configuration, not in Catalogue manifests.
+
+The integration test iterates `LiveFrames.Catalogue.Registry.all()`. Before
+#50, the real Registry is empty, which is acceptable for this pass; existing
+synthetic preview tests remain the non-vacuous checks of verification behavior.
+After a separately authorized Hero manifest exists, this same Registry-backed
+gate checks it automatically.
 
 ### Consumer-facing Catalogue API (#48)
 
