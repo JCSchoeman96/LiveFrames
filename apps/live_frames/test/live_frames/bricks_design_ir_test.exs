@@ -7,6 +7,7 @@ defmodule LiveFrames.BricksDesignIRTest do
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StyleValue
+  alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
@@ -142,6 +143,98 @@ defmodule LiveFrames.BricksDesignIRTest do
     Enum.find(flatten(document.root_nodes), fn node ->
       node.source_trace.source_id == source_id
     end)
+  end
+
+  defp token_diagnostic(severity) do
+    TokenDiagnostic.new(
+      code: "test.processing.#{severity}",
+      severity: severity,
+      category: :source,
+      message: "Synthetic processing diagnostic",
+      path: "spacing.gap",
+      source_key: "gap",
+      metadata: %{"source" => "fixture"}
+    )
+  end
+
+  defp normalize_with_token_diagnostics(diagnostics) do
+    Bricks.to_ir(
+      synthetic_source([source_element("root", "div", 0, %{})]),
+      component_id: "component-a",
+      token_set: TokenSet.new(diagnostics: diagnostics)
+    )
+  end
+
+  defp assert_token_diagnostic_translation(translated, source_diagnostic) do
+    assert translated.code == source_diagnostic.code
+    assert translated.severity == source_diagnostic.severity
+    assert translated.category == :unresolved_token
+    assert translated.message == source_diagnostic.message
+    assert translated.metadata["source"] == "fixture"
+    assert translated.metadata["path"] == source_diagnostic.path
+    assert translated.metadata["source_key"] == source_diagnostic.source_key
+  end
+
+  test "Design IR accepts informational and warning TokenSet diagnostics" do
+    for severity <- [:info, :warning] do
+      source_diagnostic = token_diagnostic(severity)
+
+      assert {:ok, document} = normalize_with_token_diagnostics([source_diagnostic])
+
+      assert [
+               %{
+                 "code" => code,
+                 "severity" => diagnostic_severity,
+                 "message" => message
+               }
+             ] = document.token_set["diagnostics"]
+
+      assert code == source_diagnostic.code
+      assert diagnostic_severity == Atom.to_string(source_diagnostic.severity)
+      assert message == source_diagnostic.message
+    end
+  end
+
+  test "Design IR rejects error TokenSet diagnostics with their translated context" do
+    source_diagnostic = token_diagnostic(:error)
+
+    assert {:error, [translated]} =
+             normalize_with_token_diagnostics([source_diagnostic])
+
+    assert_token_diagnostic_translation(translated, source_diagnostic)
+  end
+
+  test "Design IR rejects fatal TokenSet diagnostics with their translated context" do
+    source_diagnostic = token_diagnostic(:fatal)
+
+    assert {:error, [translated]} =
+             normalize_with_token_diagnostics([source_diagnostic])
+
+    assert_token_diagnostic_translation(translated, source_diagnostic)
+  end
+
+  test "Design IR retains non-blocking context with a blocking TokenSet diagnostic" do
+    source_diagnostics = Enum.map([:info, :warning, :error], &token_diagnostic/1)
+
+    assert {:error, translated_diagnostics} =
+             normalize_with_token_diagnostics(source_diagnostics)
+
+    assert length(translated_diagnostics) == length(source_diagnostics)
+
+    Enum.each(source_diagnostics, fn source_diagnostic ->
+      translated = Enum.find(translated_diagnostics, &(&1.code == source_diagnostic.code))
+      assert_token_diagnostic_translation(translated, source_diagnostic)
+    end)
+  end
+
+  test "Design IR still requires a TokenSet" do
+    assert {:error, [diagnostic]} =
+             Bricks.to_ir(
+               synthetic_source([source_element("root", "div", 0, %{})]),
+               component_id: "component-a"
+             )
+
+    assert diagnostic.code == "bricks.ir.token_set_missing"
   end
 
   test "normalizes a valid DesignDocument with the complete ordered Hero tree" do

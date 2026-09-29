@@ -161,6 +161,13 @@ resolved; ambiguous candidates, unresolved tokens, and unproven variables do
 not select a path. Known external classifications apply only when no TokenSet
 authority exists.
 
+Stage A and Design IR use `AuthorityGate.authorize/1` before consuming
+variable authority. `info` and `warning` TokenSet diagnostics allow
+consumption; `error` and `fatal` diagnostics stop it. Stage A still permits
+omitting a TokenSet and then extracts dependencies with an empty authority
+index. Direct DependencyExtractor calls that receive a TokenSet use the same
+gate, while orchestrators pass their prebuilt index to avoid rebuilding it.
+
 The TokenSet is read and never mutated. The Hero
 expression
 `var(--overlay-bg, var(--neutral-ultra-dark-trans-60))` preserves both
