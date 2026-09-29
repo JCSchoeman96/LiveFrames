@@ -377,7 +377,12 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
               expression: raw.expression,
               property: nil,
               breakpoint: nil,
-              status: resolve_unverified_occurrence(raw.name, authority_index)
+              status:
+                resolve_unverified_occurrence(
+                  raw.name,
+                  authority_index,
+                  structural_authority_index
+                )
             }
 
           parsed ->
@@ -454,7 +459,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end
   end
 
-  defp resolve_unverified_occurrence(name, authority_index) do
+  defp resolve_unverified_occurrence(name, authority_index, structural_authority_index) do
     resolution = VariableAuthority.resolve(authority_index, name)
 
     case {resolution.state, resolution.candidates} do
@@ -468,7 +473,25 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         :ambiguous_token
 
       {:no_authority, []} ->
+        resolve_unverified_structural_occurrence(name, structural_authority_index)
+    end
+  end
+
+  defp resolve_unverified_structural_occurrence(name, structural_authority_index) do
+    resolution = StructuralVariableAuthority.resolve(structural_authority_index, name)
+
+    case resolution.state do
+      :ambiguous_candidates ->
+        :ambiguous_structural
+
+      :unique_candidate ->
         :unverified_occurrence
+
+      :no_authority ->
+        cond do
+          name in @known_external_variables -> :unresolved_external
+          true -> :mapping_unproven_occurrence
+        end
     end
   end
 
@@ -661,11 +684,17 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         Enum.any?(statuses, &(&1 == :resolved_structural)) ->
           %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
 
-        Enum.any?(statuses, &(&1 == :unverified_occurrence)) ->
-          %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
-
         Enum.all?(statuses, &(&1 == :structural_value_invalid)) ->
           %{base | status: :source_variable, resolution_reason: "structural_value_invalid"}
+
+        Enum.all?(statuses, &(&1 == :unresolved_external)) ->
+          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
+
+        Enum.all?(statuses, &(&1 == :unverified_occurrence)) ->
+          %{base | status: :source_variable, resolution_reason: "structural_context_unverified"}
+
+        Enum.all?(statuses, &(&1 == :mapping_unproven_occurrence)) ->
+          %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
 
         Enum.any?(statuses, &(&1 == :unresolved_external)) ->
           %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}

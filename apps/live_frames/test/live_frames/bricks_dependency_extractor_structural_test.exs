@@ -379,6 +379,60 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert occurrence["source_path"] == "settings._width"
   end
 
+  test "custom-only unrelated variable remains mapping_unproven with structural authority active" do
+    document =
+      to_ir!(%{"_cssCustom" => ".x { width: var(--unknown-width); }"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--unknown-width")
+    assert variable["status"] == "source_variable"
+    assert variable["resolution_reason"] == "mapping_unproven"
+    refute Map.has_key?(variable, "structural_authority_id")
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["source_path"] == "settings._cssCustom"
+    assert occurrence["property"] == nil
+    assert occurrence["resolution_status"] == "mapping_unproven_occurrence"
+  end
+
+  test "custom-only known external remains unresolved_external with structural authority active" do
+    document =
+      to_ir!(%{"_cssCustom" => ".x { color: var(--overlay-bg); }"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--overlay-bg")
+    assert variable["status"] == "unresolved_external"
+    assert variable["resolution_reason"] == "external_unresolved"
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["source_path"] == "settings._cssCustom"
+    assert occurrence["resolution_status"] == "unresolved_external"
+  end
+
+  test "custom-only --grid-1 without declaration context is structural_context_unverified" do
+    document =
+      to_ir!(%{"_cssCustom" => ".x { grid-template-columns: var(--grid-1); }"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--grid-1")
+    assert variable["status"] == "source_variable"
+    assert variable["resolution_reason"] == "structural_context_unverified"
+    refute variable["resolution_reason"] == "structural_partial_application"
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["source_path"] == "settings._cssCustom"
+    assert occurrence["property"] == nil
+    assert occurrence["resolution_status"] == "unverified_occurrence"
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["source_variable"] == "--grid-1"
+           end)
+  end
+
   test "parsed valid plus unparsed custom CSS occurrence does not aggregate as resolved" do
     document =
       to_ir!(
