@@ -168,6 +168,11 @@ resolved; ambiguous candidates, unresolved tokens, and unproven variables do
 not select a path. Known external classifications apply only when no TokenSet
 authority exists.
 
+For example, `var(--space-xs)` resolves to `spacing.scale.xs` when the
+AutomaticCSS TokenSet contains the standard spacing scale. A responsive
+setting still preserves its Bricks breakpoint name without adding a numeric
+width to Design IR.
+
 Stage A and Design IR use `AuthorityGate.authorize/1` before consuming
 variable authority. `info` and `warning` TokenSet diagnostics allow
 consumption; `error` and `fatal` diagnostics stop it. Stage A still permits

@@ -185,7 +185,7 @@ therefore does not create a transparency token for it, include it in
 
 ## Canonical token coverage
 
-The initial mapping emits 72 tokens. It is one explicit mapping table; raw
+The mapping emits 76 tokens. It is one explicit mapping table; raw
 Automatic.css setting names are not the canonical API.
 
 ### Colors (27)
@@ -223,13 +223,17 @@ color.background.ultra_dark.heading
 Direct hex colors remain direct. Proven HSL channel triples are rendered as a
 bounded-precision hsl(H S% L%) value while preserving the raw channel map.
 
-### Spacing and radius (12)
+### Spacing and radius (16)
 
 ~~~text
 spacing.base.min
 spacing.base.max
+spacing.scale.xs
+spacing.scale.s
 spacing.scale.medium
+spacing.scale.l
 spacing.scale.xl
+spacing.scale.xxl
 spacing.content_gap
 spacing.grid_gap
 spacing.container_gap
@@ -240,9 +244,40 @@ spacing.gutter.max
 radius.base
 ~~~
 
-The spacing scale and section values preserve the ACSS clamp relationship and
-its base, scale, adjustment, and viewport inputs. Contextual gaps retain
-semantic references to those derived tokens.
+The standard ACSS spacing scale is derived from one F01 input bundle:
+
+| Derived input | ACSS setting |
+| --- | --- |
+| `mobile_base` | `base-space-min` |
+| `desktop_base` | `base-space` |
+| `mobile_scale` | `mob-space-scale` |
+| `desktop_scale` | `space-scale` |
+| `viewport_min` | `vp-min` |
+| `viewport_max` | `vp-max` |
+
+Automatic.css uses M as the base. It multiplies M by the corresponding scale
+for sizes above M and divides M by that scale for sizes below M. LiveFrames
+applies the mobile scale to the mobile base and the desktop scale to the
+desktop base, then uses the existing `FluidClamp` viewport interpolation.
+The scale outputs are:
+
+| ACSS variable | Canonical TokenSet path | Endpoint formula |
+| --- | --- | --- |
+| `--space-xs` | `spacing.scale.xs` | `M / scale²` |
+| `--space-s` | `spacing.scale.s` | `M / scale` |
+| `--space-m` | `spacing.scale.medium` | `M` |
+| `--space-l` | `spacing.scale.l` | `M × scale` |
+| `--space-xl` | `spacing.scale.xl` | `M × scale²` |
+| `--space-xxl` | `spacing.scale.xxl` | `M × scale³` |
+
+`spacing.scale.medium` and `spacing.scale.xl` retain their existing public
+paths. The four added paths use the ACSS suffixes `xs`, `s`, `l`, and `xxl`.
+Each token keeps the `acss.clamp` recipe, all six inputs, its references, the
+resolved relationship, a deterministic CSS expression, and a calculated
+output alias. The alias authority IDs follow
+`automatic-css-4.0.1:calculated-variable-group:spacing:<suffix>` for all six
+variables. Contextual gaps retain semantic references to the scale tokens.
+The spacing and section values preserve their respective ACSS clamp inputs.
 
 ### Typography (9)
 
