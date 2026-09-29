@@ -1666,10 +1666,11 @@ Verify the actual package boundary with `mix hex.build --unpack` from
 Hex documents `--unpack` as building the tarball and unpacking its contents
 ([`mix hex.build` documentation](https://hex.hexdocs.pm/Mix.Tasks.Hex.Build.html)).
 At this pre-#51 baseline, `apps/live_frames/priv/catalogue/` does not exist.
-Until canonical manifests do exist, the package check may create the untracked
-probe `apps/live_frames/priv/catalogue/sections/package_probe.json`. The probe
-is temporary and not committed. It is not a CatalogueItem, has no lifecycle
-state, is not decoded by Registry Builder, and does not admit Hero.
+When that root is absent, the package check must create the untracked probe
+`apps/live_frames/priv/catalogue/sections/package_probe.json` before
+`mix hex.build --unpack`. The probe is temporary and not committed. It is not a
+CatalogueItem, has no lifecycle state, is not decoded by Registry Builder, and
+does not admit Hero.
 
 The check must remove only `package_probe.json`; it may remove probe directories
 only with `rmdir` when they are empty. It must never recursively remove
