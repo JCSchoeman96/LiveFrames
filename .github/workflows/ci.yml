@@ -25,6 +25,96 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
+      - name: Verify LiveFrames Hex package contents
+        run: |
+          set -euo pipefail
+
+          app_root="apps/live_frames"
+          catalogue_root="${app_root}/priv/catalogue"
+          unpack_root="$(mktemp -d)"
+          probe_path=""
+          package_dir=""
+
+          cleanup() {
+            if [ -n "${probe_path}" ] && [ -f "${probe_path}" ]; then
+              rm -f "${probe_path}"
+              rmdir "${app_root}/priv/catalogue/sections" 2>/dev/null || true
+              rmdir "${app_root}/priv/catalogue" 2>/dev/null || true
+            fi
+            if [ -n "${unpack_root}" ] && [ -d "${unpack_root}" ]; then
+              rm -rf "${unpack_root}"
+            fi
+          }
+          trap cleanup EXIT
+
+          mapfile -t canonical_json < <(
+            if [ -d "${catalogue_root}" ]; then
+              find "${catalogue_root}" -type f -name '*.json' ! -type l | sort
+            fi
+          )
+
+          if [ "${#canonical_json[@]}" -eq 0 ]; then
+            probe_path="${catalogue_root}/sections/package_probe.json"
+            mkdir -p "$(dirname "${probe_path}")"
+            printf '%s\n' '{"package_probe":true}' > "${probe_path}"
+          fi
+
+          (
+            cd "${app_root}"
+            mix hex.build --unpack --output "${unpack_root}"
+          )
+
+          package_dir="${unpack_root}"
+          if [ ! -f "${package_dir}/mix.exs" ]; then
+            echo "expected unpacked package at ${package_dir}" >&2
+            exit 1
+          fi
+
+          for required_root in lib assets/css priv/static/live_frames priv/token_maps; do
+            if [ ! -e "${package_dir}/${required_root}" ]; then
+              echo "missing required package root: ${required_root}" >&2
+              exit 1
+            fi
+          done
+
+          if find "${package_dir}" \( -type f -o -type d \) -path '*live_frames_preview*' -print -quit | grep -q .; then
+            echo "preview application must not appear in live_frames package" >&2
+            exit 1
+          fi
+
+          if [ "${#canonical_json[@]}" -eq 0 ]; then
+            probe_in_package="${package_dir}/priv/catalogue/sections/package_probe.json"
+            if [ ! -f "${probe_in_package}" ]; then
+              echo "missing packaged probe: priv/catalogue/sections/package_probe.json" >&2
+              exit 1
+            fi
+          else
+            for source_path in "${canonical_json[@]}"; do
+              rel="${source_path#${app_root}/}"
+              packaged="${package_dir}/${rel}"
+              if [ ! -f "${packaged}" ]; then
+                echo "missing packaged catalogue file: ${rel}" >&2
+                exit 1
+              fi
+              if ! cmp -s "${source_path}" "${packaged}"; then
+                echo "packaged bytes differ for: ${rel}" >&2
+                exit 1
+              fi
+            done
+          fi
+
+          cleanup
+          trap - EXIT
+
+          if [ -f "${catalogue_root}/sections/package_probe.json" ]; then
+            echo "package probe must not remain in repository" >&2
+            exit 1
+          fi
+          if [ -d "${unpack_root}" ]; then
+            echo "unpack output must be removed" >&2
+            exit 1
+          fi
+
       - name: Check formatting
         run: mix format --check-formatted
 
