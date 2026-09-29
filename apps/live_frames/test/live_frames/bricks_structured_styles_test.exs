@@ -44,7 +44,7 @@ defmodule LiveFrames.BricksStructuredStylesTest do
   }
 
   test "registers exactly the approved explicit mappings" do
-    assert map_size(Settings.style_properties()) == 34
+    assert map_size(Settings.style_properties()) == 35
 
     assert Map.take(Settings.style_properties(), Enum.map(@mappings, &elem(&1, 0))) ==
              Map.new(@mappings)
@@ -782,7 +782,6 @@ defmodule LiveFrames.BricksStructuredStylesTest do
 
   test "keeps unapproved and stopped properties unsupported" do
     settings = %{
-      "_gridGap" => "1rem",
       "_boxShadow" => "0 1px 2px black",
       "_hidden" => true,
       "_cssCustomSass" => "$color: red;"
@@ -794,11 +793,42 @@ defmodule LiveFrames.BricksStructuredStylesTest do
 
     assert MapSet.new(Enum.map(result.unsupported, & &1.source_key)) ==
              MapSet.new([
-               "_gridGap",
                "_boxShadow",
                "_hidden",
                "_cssCustomSass"
              ])
+  end
+
+  test "maps _gridGap to gap for base literals, responsive literals, and preserved variables" do
+    base_result = Settings.extract(%{"_gridGap" => "20px"})
+
+    assert base_result.base_styles == %{"gap" => "20px"}
+    refute Enum.any?(base_result.unsupported, &(&1.source_key == "_gridGap"))
+
+    responsive_result =
+      Settings.extract(%{"_gridGap:mobile_landscape" => "1rem"})
+
+    assert responsive_result.base_styles == %{}
+
+    [mobile_landscape] = responsive_result.responsive
+
+    assert mobile_landscape.breakpoint == "mobile_landscape"
+    assert mobile_landscape.property == "gap"
+    assert mobile_landscape.value == "1rem"
+    assert mobile_landscape.source_key == "_gridGap:mobile_landscape"
+    assert mobile_landscape.base_key == "_gridGap"
+
+    variable_result =
+      Settings.extract(%{"_gridGap:tablet_portrait" => "var(--content-gap)"})
+
+    assert variable_result.base_styles == %{}
+
+    [tablet_portrait] = variable_result.responsive
+
+    assert tablet_portrait.breakpoint == "tablet_portrait"
+    assert tablet_portrait.property == "gap"
+    assert tablet_portrait.value == "var(--content-gap)"
+    assert tablet_portrait.source_key == "_gridGap:tablet_portrait"
   end
 
   defp source(settings) do
