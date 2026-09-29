@@ -123,14 +123,26 @@ defmodule LiveFrames.BricksAdapterTest do
     assert document.global_classes == %{}
   end
 
-  test "keeps component fragments outside Design IR normalization" do
-    assert {:error, diagnostics} =
-             Bricks.to_ir(component_fragment(),
-               token_set: %TokenSet{},
-               component_id: "component-a"
-             )
+  test "admits a single validated component fragment into Design IR" do
+    source =
+      component_fragment()
+      |> Map.update!("components", fn [component] ->
+        [
+          Map.put(component, "elements", [
+            %{
+              "id" => "fragment-root",
+              "name" => "div",
+              "parent" => 0,
+              "children" => [],
+              "settings" => %{}
+            }
+          ])
+        ]
+      end)
 
-    assert Enum.any?(diagnostics, &(&1.code == "bricks.source.fragment_conversion_unsupported"))
+    assert {:ok, document} = Bricks.to_ir(source, token_set: %TokenSet{})
+    assert document.source_metadata["source_shape"] == "component_fragment"
+    assert document.source_metadata["component_id"] == "component-a"
   end
 
   test "rejects a component fragment without components" do
