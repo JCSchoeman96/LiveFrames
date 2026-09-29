@@ -35,6 +35,12 @@ defmodule LiveFrames.P5CBR1SourceCascadeTest do
 
   defp token_map, do: hero_document().token_set
 
+  defp gutter_declaration(result) do
+    Enum.find(result.declarations, fn decl ->
+      decl.property == "padding-inline" and decl.path == "spacing.gutter"
+    end)
+  end
+
   test "Bricks spacing authority resolves unitless nonzero box values to px" do
     result = Settings.extract(%{"_margin" => %{"top" => "400"}})
 
@@ -95,6 +101,41 @@ defmodule LiveFrames.P5CBR1SourceCascadeTest do
     assert props["font-weight"] == "700"
     assert props["line-height"] == "calc(4px + 2ex)"
     refute props["font-size"] =~ "44.6875"
+  end
+
+  @gutter_input_paths [
+    "spacing.gutter.min",
+    "spacing.gutter.max",
+    "layout.viewport.min",
+    "layout.viewport.max"
+  ]
+
+  test "ACSS fidelity composes gutter padding-inline from resolved gutter and viewport tokens" do
+    tokens = token_map()
+
+    result =
+      FidelityResolver.resolve([], tokens, %{semantic_type: "section", tag: "section"})
+
+    gutter_decl = gutter_declaration(result)
+
+    assert is_binary(gutter_decl.value)
+    assert gutter_decl.value =~ "clamp("
+  end
+
+  test "ACSS fidelity skips composed gutter when any gutter input is unresolved despite stale resolved_value" do
+    base_tokens = token_map()
+
+    for path <- @gutter_input_paths do
+      tokens = put_in(base_tokens, ["tokens", path, "resolution_status"], "unresolved")
+      stale_value = get_in(tokens, ["tokens", path, "resolved_value"])
+
+      assert stale_value != nil
+
+      result =
+        FidelityResolver.resolve([], tokens, %{semantic_type: "section", tag: "section"})
+
+      assert gutter_declaration(result).value == nil
+    end
   end
 
   test "ACSS fidelity does not emit a value from an unresolved Token" do
