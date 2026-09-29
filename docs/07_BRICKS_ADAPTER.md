@@ -1,6 +1,6 @@
 # Bricks Stage A source adapter
 
-Phase 4 is the source-extraction boundary for Bricks copied-elements data. It
+Phase 4 is the source-extraction boundary for structured Bricks source data. It
 recognizes and preserves Bricks source truth for later normalization; it does
 not define LiveFrames component semantics.
 
@@ -25,6 +25,13 @@ experimental path keeps a warning in the result.
 
 The loader records a logical source label and SHA-256 of the input bytes. It
 never places an absolute input path in report data.
+
+The loader also recognizes a bounded component fragment with exactly two
+top-level fields: `components` and `globalClasses`. Both must be lists, and the
+component list must contain at least one component. Fragment input does not
+carry copied-envelope metadata. The loader records its source shape, source
+label, and input hash without creating a source URL, payload version, or
+content proxy.
 
 Versions remain independent:
 
@@ -262,6 +269,26 @@ TreeBuilder, ClassResolver, Settings, and DependencyExtractor stages, then
 assembles and validates a DesignDocument with IR version 1.0.0. It does not
 parse index.html, styles.css, or report.json.
 
+The source-shape lifecycle is:
+
+    source_received -> shape_recognized
+        -> copied_elements_envelope | component_fragment
+        -> shape_validated -> component_selected -> normalization
+        -> design_ir_serialized
+
+Validated component fragments pass through Design IR normalization. A
+single-component fragment is selected when the caller omits `component_id`.
+A fragment with multiple components requires an explicit ID; the normalizer
+does not select the first component. A requested ID that is absent returns the
+existing component-missing diagnostic.
+
+Fragment provenance records `source_shape = "component_fragment"`, the actual
+source label and hash, selected component metadata, and nil values for
+copied-envelope proxy fields. `source`, `source_url`, and `payload_version`
+remain nil. A component's `_version` is recorded as `component_version`; it is
+not treated as a Bricks runtime or payload version. Copied-envelope
+normalization keeps its existing provenance fields.
+
 The approved Hero mapping is deliberately small:
 
 | Bricks source element | Design IR semantic type |
@@ -288,10 +315,12 @@ and the unitless source value "400" remain unresolved. Gradients and custom
 CSS use complex_css with their source values intact. No style is silently
 dropped.
 
-Responsive overrides retain mobile_portrait and tablet_portrait as both
-breakpoint_id and source_name. Their min_width and max_width remain nil, and
-their resolution status is unresolved. The normalizer does not invent
-framework breakpoint values.
+Responsive overrides retain the exact source name as both breakpoint_id and
+source_name. Their min_width and max_width remain nil, and their resolution
+status is unresolved. For example, `_width:mobile_landscape = "100%"` remains
+an unresolved-width override with a literal `100%` style. The normalizer does
+not add numeric breakpoint values to Design IR; Fidelity receives those from
+external breakpoint authority.
 
 The document embeds the JSON object produced by the existing Phase 3 TokenSet
 serializer. It creates one unresolved image asset registry entry for

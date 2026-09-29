@@ -240,7 +240,7 @@ defmodule LiveFrames.BricksClassResolverTest do
     assert diagnostics_a == diagnostics_b
   end
 
-  test "fragment class resolution accepts an external authority while IR conversion stays blocked" do
+  test "fragment class resolution accepts an external authority in Design IR" do
     external = class("class-a", "alpha")
     fragment = source(["class-a"])
     {:ok, document, []} = Bricks.recognize(fragment)
@@ -254,10 +254,14 @@ defmodule LiveFrames.BricksClassResolverTest do
 
     assert resolved.elements["root"].class_names == ["alpha"]
 
-    assert {:error, diagnostics} =
-             Bricks.to_ir(fragment, component_id: "component-a", token_set: %TokenSet{})
+    assert {:ok, design_document} =
+             Bricks.to_ir(fragment,
+               component_id: "component-a",
+               token_set: %TokenSet{},
+               external_class_authorities: [authority("site-classes", [external])]
+             )
 
-    assert Enum.any?(diagnostics, &(&1.code == "bricks.source.fragment_conversion_unsupported"))
+    assert hd(design_document.root_nodes).source_trace.source_classes == ["alpha"]
   end
 
   test "class reference order is retained and same-key local settings win in the compatibility map" do

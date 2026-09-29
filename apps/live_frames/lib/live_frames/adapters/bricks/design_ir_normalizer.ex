@@ -111,10 +111,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     with {:ok, token_set, authority_index} <-
            authorize_token_set(Keyword.get(opts, :token_set)),
          {:ok, document, load_diagnostics} <- load_source(source, opts),
-         :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
            Resolver.resolve(document,
-             component_id: Keyword.get(opts, :component_id, @default_component_id)
+             component_id: component_selection(document, opts)
            ),
          {:ok, tree, tree_diagnostics} <- TreeBuilder.build(component),
          :ok <- expected_root_count(tree, opts),
@@ -223,19 +222,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
      ]}
   end
 
-  defp validate_source_shape(%Document{source_shape: :component_fragment}) do
-    {:error,
-     [
-       BricksDiagnostic.new(
-         code: "bricks.source.fragment_conversion_unsupported",
-         severity: :error,
-         source_path: "components",
-         message: "Bricks component fragments are not supported for Design IR normalization"
-       )
-     ]}
+  defp component_selection(%Document{source_shape: :component_fragment}, opts) do
+    case Keyword.fetch(opts, :component_id) do
+      {:ok, component_id} -> component_id
+      :error -> nil
+    end
   end
 
-  defp validate_source_shape(_document), do: :ok
+  defp component_selection(_document, opts),
+    do: Keyword.get(opts, :component_id, @default_component_id)
 
   defp expected_root_count(tree, opts) do
     expected = Keyword.get(opts, :expected_root_count, 1)
@@ -1300,7 +1295,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     component = context.component
     proxy = context.proxy
 
-    json_safe(%{
+    %{
       "source_system" => "bricks",
       "source" => document.source,
       "source_url" => document.source_url,
@@ -1312,17 +1307,19 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       "component_name" => component.name,
       "component_category" => component.category,
       "component_version" => component.version,
-      "component_proxy_id" => proxy.id,
-      "component_proxy_name" => proxy.name,
-      "component_proxy_label" => proxy.label,
+      "component_proxy_id" => if(proxy, do: proxy.id),
+      "component_proxy_name" => if(proxy, do: proxy.name),
+      "component_proxy_label" => if(proxy, do: proxy.label),
       "source_element_count" => length(component.elements),
       "root_count" => length(context.tree.root_ids),
       "source_order" => context.tree.source_order
-    })
+    }
+    |> maybe_put_fragment_source_shape(document.source_shape)
+    |> json_safe()
   end
 
   defp provenance(context) do
-    json_safe(%{
+    %{
       "adapter" => "bricks",
       "adapter_version" => context.document.adapter_version,
       "source_hash" => context.document.source_hash,
@@ -1348,8 +1345,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       "normalization_lifecycle" => @lifecycle,
       "normalization_status" => "serialized",
       "stage_a_artifacts_are_evidence_only" => true
-    })
+    }
+    |> maybe_put_fragment_source_shape(context.document.source_shape)
+    |> json_safe()
   end
+
+  defp maybe_put_fragment_source_shape(metadata, :component_fragment),
+    do: Map.put(metadata, "source_shape", "component_fragment")
+
+  defp maybe_put_fragment_source_shape(metadata, _source_shape), do: metadata
 
   defp unsupported_element_diagnostics(tree) do
     tree.ordered_elements
