@@ -8,6 +8,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.StaticAsset
+  alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.VariableAuthority
 
@@ -321,12 +322,12 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   defp build_authority_index!(nil), do: %VariableAuthority{}
 
   defp build_authority_index!(%TokenSet{} = token_set) do
-    case VariableAuthority.build(token_set) do
+    case AuthorityGate.authorize(token_set) do
       {:ok, index} ->
         index
 
       {:error, _diagnostics} ->
-        raise ArgumentError, "Bricks TokenSet variable authority index could not be built"
+        raise ArgumentError, "Bricks TokenSet variable authority could not be authorized"
     end
   end
 

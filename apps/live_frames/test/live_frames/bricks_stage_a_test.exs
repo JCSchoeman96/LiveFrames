@@ -9,6 +9,8 @@ defmodule LiveFrames.BricksStageATest do
   alias LiveFrames.Adapters.Bricks.StageA.HTMLRenderer
   alias LiveFrames.Adapters.Bricks.StageA
   alias LiveFrames.Adapters.AutomaticCSS
+  alias LiveFrames.Tokens.AuthorityGate
+  alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
@@ -27,6 +29,23 @@ defmodule LiveFrames.BricksStageATest do
       )
 
     token_set
+  end
+
+  defp token_diagnostic(severity) do
+    TokenDiagnostic.new(
+      code: "test.processing.#{severity}",
+      severity: severity,
+      category: :source,
+      message: "Synthetic processing diagnostic",
+      path: "spacing.content_gap",
+      source_key: "content-gap",
+      metadata: %{"source" => "fixture"}
+    )
+  end
+
+  defp token_set_with_diagnostic(severity) do
+    token_set = token_set()
+    %{token_set | diagnostics: [token_diagnostic(severity)]}
   end
 
   defp fragment_source do
@@ -65,6 +84,60 @@ defmodule LiveFrames.BricksStageATest do
         %{"id" => "opaque-class-id", "name" => "synthetic-class", "settings" => %{}}
       ]
     }
+  end
+
+  test "Stage A accepts informational and warning TokenSet diagnostics" do
+    for severity <- [:info, :warning] do
+      assert {:ok, result} =
+               StageA.generate(copied_elements_source(),
+                 component_id: "component-a",
+                 token_set: token_set_with_diagnostic(severity)
+               )
+
+      assert result.status == :completed
+    end
+  end
+
+  test "Stage A rejects error TokenSet diagnostics before writing artifacts" do
+    diagnostic = token_diagnostic(:error)
+
+    output_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "stage-a-authority-error-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn -> File.rm_rf(output_dir) end)
+
+    assert {:error, [^diagnostic]} =
+             StageA.generate(copied_elements_source(),
+               component_id: "component-a",
+               token_set: token_set_with_diagnostic(:error),
+               output_dir: output_dir
+             )
+
+    refute File.exists?(output_dir)
+  end
+
+  test "Stage A rejects fatal TokenSet diagnostics before writing artifacts" do
+    diagnostic = token_diagnostic(:fatal)
+
+    output_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "stage-a-authority-fatal-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn -> File.rm_rf(output_dir) end)
+
+    assert {:error, [^diagnostic]} =
+             StageA.generate(copied_elements_source(),
+               component_id: "component-a",
+               token_set: token_set_with_diagnostic(:fatal),
+               output_dir: output_dir
+             )
+
+    refute File.exists?(output_dir)
   end
 
   test "rejects component fragments at the Stage A source boundary" do
@@ -276,6 +349,37 @@ defmodule LiveFrames.BricksStageATest do
                ]
              }
            ]
+  end
+
+  test "direct variable extraction gates processing diagnostics by severity" do
+    for severity <- [:info, :warning] do
+      assert [%{status: :resolved_token, token_path: "spacing.content_gap"}] =
+               DependencyExtractor.variables(["var(--content-gap)"],
+                 token_set: token_set_with_diagnostic(severity)
+               )
+    end
+
+    for severity <- [:error, :fatal] do
+      assert_raise ArgumentError,
+                   "Bricks TokenSet variable authority could not be authorized",
+                   fn ->
+                     DependencyExtractor.variables(["var(--content-gap)"],
+                       token_set: token_set_with_diagnostic(severity)
+                     )
+                   end
+    end
+  end
+
+  test "direct variable extraction trusts a supplied authority index without rescanning TokenSet" do
+    trusted_token_set = token_set()
+    assert {:ok, trusted_index} = AuthorityGate.authorize(trusted_token_set)
+    blocked_token_set = %{trusted_token_set | diagnostics: [token_diagnostic(:error)]}
+
+    assert [%{status: :resolved_token, token_path: "spacing.content_gap"}] =
+             DependencyExtractor.variables(["var(--content-gap)"],
+               authority_index: trusted_index,
+               token_set: blocked_token_set
+             )
   end
 
   test "an authority candidate only resolves when its owning token is resolved" do

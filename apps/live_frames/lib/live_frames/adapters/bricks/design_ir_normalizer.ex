@@ -28,6 +28,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.IR.StyleValue
   alias LiveFrames.StaticAsset
   alias LiveFrames.Tokens
+  alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.VariableAuthority
@@ -107,8 +108,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   def normalize(source, opts \\ [])
 
   def normalize(source, opts) when is_list(opts) do
-    with {:ok, token_set} <- validate_token_set(Keyword.get(opts, :token_set)),
-         {:ok, authority_index} <- build_authority_index(token_set),
+    with {:ok, token_set, authority_index} <-
+           authorize_token_set(Keyword.get(opts, :token_set)),
          {:ok, document, load_diagnostics} <- load_source(source, opts),
          :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
@@ -183,26 +184,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
      ]}
   end
 
-  defp validate_token_set(%TokenSet{} = token_set) do
-    validation_diagnostics =
-      case Tokens.validate(token_set, []) do
-        :ok -> []
-        {:error, diagnostics} -> diagnostics
-      end
-
-    source_diagnostics =
-      if Enum.any?(token_set.diagnostics, &(&1.severity in [:error, :fatal])),
-        do: token_set.diagnostics,
-        else: []
-
-    if validation_diagnostics == [] and source_diagnostics == [] do
-      {:ok, token_set}
-    else
-      {:error, validation_diagnostics ++ source_diagnostics}
+  defp authorize_token_set(%TokenSet{} = token_set) do
+    with {:ok, authority_index} <- AuthorityGate.authorize(token_set) do
+      {:ok, token_set, authority_index}
     end
   end
 
-  defp validate_token_set(_token_set) do
+  defp authorize_token_set(_token_set) do
     {:error,
      [
        Diagnostic.new(
@@ -212,10 +200,6 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
          message: "Bricks Design IR normalization requires a validated TokenSet"
        )
      ]}
-  end
-
-  defp build_authority_index(token_set) do
-    VariableAuthority.build(token_set)
   end
 
   defp load_source(%Document{} = document, _opts), do: {:ok, document, []}

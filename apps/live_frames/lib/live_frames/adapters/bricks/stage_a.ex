@@ -17,6 +17,7 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
   alias LiveFrames.Adapters.Bricks.StageA.CSSRenderer
   alias LiveFrames.Adapters.Bricks.StageA.HTMLRenderer
   alias LiveFrames.Adapters.Bricks.StageA.Report
+  alias LiveFrames.Tokens.AuthorityGate
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.VariableAuthority
 
@@ -219,7 +220,7 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
   defp build_authority_index(nil), do: {:ok, %VariableAuthority{}}
 
   defp build_authority_index(%TokenSet{} = token_set),
-    do: VariableAuthority.build(token_set)
+    do: AuthorityGate.authorize(token_set)
 
   defp build_authority_index(_invalid_token_set) do
     {:error,
