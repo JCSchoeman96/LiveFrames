@@ -21,6 +21,21 @@
     "custom_breakpoints_status": "confirmed_default_via_source_fallback"
   },
   "breakpoints": {
+    "mobile_landscape": {
+      "source_name": "mobile_landscape",
+      "source_width": 767,
+      "unit": "px",
+      "min_width": null,
+      "max_width": 767,
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 767px)",
+      "enabled": true,
+      "cascade_order": 3,
+      "authority_level": 3,
+      "authority_type": "version_matched_default_confirmed_by_source_environment",
+      "default_status": "confirmed_default",
+      "status": "accepted"
+    },
     "mobile_portrait": {
       "source_name": "mobile_portrait",
       "source_width": 478,
@@ -100,7 +115,7 @@
     {
       "reference": "LocalWP DanBricks app/public/wp-content/themes/bricks/includes/breakpoints.php",
       "sha256": "7e7ad8050bb40731c5efe4030daf5fce4e596cffea081e6f4b0dc2ecddac148b",
-      "proves": "default breakpoint names and source widths 991 and 478"
+      "proves": "default breakpoint names and source widths 991, 767, and 478"
     },
     {
       "reference": "LocalWP DanBricks app/public/wp-content/themes/bricks/includes/assets.php",
