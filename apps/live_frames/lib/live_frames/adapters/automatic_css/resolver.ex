@@ -136,6 +136,9 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Resolver do
     end
   end
 
+  @spec css_reference_variable(term()) :: {:ok, String.t()} | :error
+  def css_reference_variable(value), do: reference_variable(value)
+
   @spec reference(term(), String.t() | nil, String.t()) :: map()
   def reference(raw_value, target_path, source_key) when is_binary(source_key) do
     reference(raw_value, target_path, source_key, nil)

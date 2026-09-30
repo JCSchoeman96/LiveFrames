@@ -420,6 +420,53 @@ With strict: true, every required path must exist and have
 resolution_status: resolved. Missing or unresolved unrelated tokens do not
 fail this profile. No fallback values are inserted.
 
+## Icon authority (Automatic.css 4.0.1)
+
+Icon semantic tokens are emitted only when the exported setting `option-icons`
+is exactly `"on"`. When the gate is `"off"`, missing, or any other value, no
+`icon.*` paths are normalized. Gated icon settings are still recognized so they
+do not inflate `acss.setting.unknown` diagnostics.
+
+Canonical paths use the `icon.*` namespace and the `:icon` token category.
+Each mapped path is backed by a proven chain from the DanBricks fixture
+settings to ACSS 4.0.1 icon SCSS (`modules/icons`) and the effective
+`automatic-variables.css` `--icon-*` custom properties. Null SCSS map entries
+are not invented: omitted variables such as `--icon-shadow` and list offsets
+stay absent when the configured project does not emit them.
+
+| LiveFrames path | ACSS setting | Generated CSS (when emitted) |
+| --- | --- | --- |
+| `icon.scheme` | `icon-default-scheme` | `--icon-scheme` |
+| `icon.size.default` | `icon-size` or SCSS fallback `icon-size-m` | `--icon-size` |
+| `icon.padding.default` | `icon-padding` | `--icon-padding` |
+| `icon.radius` | `icon-radius` | `--icon-radius` |
+| `icon.background` | `icon-background` | `--icon-background` |
+| `icon.background_hover` | `icon-background-hover` | `--icon-background-hover` |
+| `icon.border.color` | `icon-border-color` | `--icon-border-color` |
+| `icon.border.color_hover` | `icon-border-color-hover` | `--icon-border-color-hover` |
+| `icon.border.width` | `icon-border-width` | `--icon-border-width` |
+| `icon.border.style` | `icon-border-style` | `--icon-border-style` |
+| `icon.color` | `icon-color` | `--icon-color` |
+| `icon.color_hover` | `icon-color-hover` | `--icon-color-hover` |
+| `icon.list.icon_size` | `icon-list-icon-size` | `--icon-list-icon-size` |
+| `icon.list.gap` | `icon-list-gap` | `--icon-list-gap` |
+| `icon.size.{xs,s,m,l,xl}` | `icon-size-*` | `--icon-size-*` |
+| `icon.padding.{xs,s,m,l,xl}` | `icon-padding-*` | `--icon-padding-*` |
+
+Proven semantic references (for example `icon.radius` → `radius.base`,
+`icon.padding.{xs..xl}` → `icon.padding.default`, `icon.color_hover` →
+`color.primary`) preserve TokenSet reference relationships instead of
+duplicating literals. Other effective project values remain literal CSS
+expressions when no canonical target is mapped.
+
+**2XL evidence gap:** the fixture still exports `icon-size-2xl` and
+`icon-padding-2xl`, and frontend CSS references `.icon--2xl`, but the audited
+DanBricks `automatic-variables.css` snapshot does not emit
+`--icon-size-2xl` or `--icon-padding-2xl`. C-08A therefore omits
+`icon.size.2xl` and `icon.padding.2xl` rather than fabricating values.
+
+`:hero_foundation` does not require any `icon.*` paths.
+
 ## Unknown settings and diagnostics
 
 Unknown Automatic.css settings are expected. The adapter ignores them for

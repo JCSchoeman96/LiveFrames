@@ -938,12 +938,13 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                source_version_status: "fixture_reference"
              )
 
-    assert map_size(token_set.tokens) == length(Normalizer.mapping())
-    assert map_size(token_set.tokens) == 76
+    assert map_size(token_set.tokens) == length(Normalizer.mapping(fixture_settings()))
+    assert map_size(token_set.tokens) == 100
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
              color: 27,
+             icon: 24,
              layout: 3,
              radius: 1,
              spacing: 15,
