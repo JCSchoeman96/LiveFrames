@@ -13,7 +13,7 @@ defmodule LiveFrames.Tokens.Validation do
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.ValidationError
 
-  @categories [:color, :spacing, :typography, :button, :layout, :radius, :overlay]
+  @categories [:color, :spacing, :typography, :button, :layout, :radius, :overlay, :icon]
   @statuses [:resolved, :unresolved]
   @diagnostic_severities [:info, :warning, :error, :fatal]
   @diagnostic_categories [

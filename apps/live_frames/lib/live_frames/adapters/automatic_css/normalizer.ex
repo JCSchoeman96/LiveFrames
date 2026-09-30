@@ -4,6 +4,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   source-independent LiveFrames semantic token paths.
   """
 
+  alias LiveFrames.Adapters.AutomaticCSS.IconTokens
   alias LiveFrames.Adapters.AutomaticCSS.Resolver
   alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
   alias LiveFrames.Tokens.Diagnostic
@@ -52,8 +53,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     "typography.heading.scale.h1" => {"--h1", "headings"}
   }
 
-  @spec mapping() :: [map()]
-  def mapping do
+  @spec mapping(map()) :: [map()]
+  def mapping(settings \\ %{}) do
     primary_colors =
       [
         # ACSS 4.0 palette SCSS emits `--primary` as oklch($primary-*-oklch …).
@@ -420,6 +421,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     ]
 
     (color_entries ++ spacing_entries ++ typography_entries ++ button_entries ++ layout_entries)
+    |> Kernel.++(IconTokens.entries(settings))
     |> Enum.sort_by(& &1.path)
   end
 
@@ -427,6 +429,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   def source_keys do
     mapping()
     |> Enum.flat_map(& &1.source_keys)
+    |> Kernel.++(IconTokens.source_keys())
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -435,7 +438,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   def normalize(settings, source_metadata, _opts)
       when is_map(settings) and is_map(source_metadata) do
     {tokens, diagnostics, consumed} =
-      Enum.reduce(mapping(), {%{}, [], MapSet.new()}, fn entry, {tokens, diagnostics, consumed} ->
+      Enum.reduce(mapping(settings), {%{}, [], MapSet.new()}, fn entry,
+                                                                 {tokens, diagnostics, consumed} ->
         consumed = Enum.reduce(entry.source_keys, consumed, &MapSet.put(&2, &1))
 
         if Map.has_key?(tokens, entry.path) do
@@ -463,9 +467,56 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         end
       end)
 
+    consumed = consumed_icon_settings(settings, consumed)
+
     {tokens, diagnostics} = resolve_reference_values(tokens, diagnostics)
     diagnostics = add_unknown_settings(settings, consumed, diagnostics)
     {tokens, sort_diagnostics(diagnostics)}
+  end
+
+  defp consumed_icon_settings(settings, consumed) do
+    if IconTokens.enabled?(settings) do
+      consumed =
+        Enum.reduce(IconTokens.omitted_source_keys(), consumed, &MapSet.put(&2, &1))
+
+      MapSet.put(consumed, "option-icons")
+    else
+      Enum.reduce(IconTokens.source_keys(), consumed, &MapSet.put(&2, &1))
+    end
+  end
+
+  defp resolve_entry(%{strategy: :icon_size_default, source_keys: _source_keys}, settings),
+    do: IconTokens.resolve_icon_size_default(settings)
+
+  defp resolve_entry(%{strategy: :icon_dimension, source_keys: [source_key]}, settings) do
+    raw_value = Map.get(settings, source_key)
+
+    if present?(raw_value) do
+      IconTokens.resolve_dimension(raw_value, source_key)
+    else
+      Resolver.unresolved(raw_value, source_key, "source setting is missing or empty")
+    end
+  end
+
+  defp resolve_entry(%{strategy: :icon_css_value, source_keys: [source_key]} = entry, settings) do
+    raw_value = Map.get(settings, source_key)
+
+    if present?(raw_value) do
+      case Map.get(entry, :reference_path) do
+        reference_path when is_binary(reference_path) ->
+          Resolver.reference(
+            raw_value,
+            reference_path,
+            source_key,
+            Map.get(entry, :expected_variable)
+          )
+
+        _ ->
+          IconTokens.resolve_css_value(raw_value, source_key)
+      end
+    else
+      Resolver.unresolved(raw_value, source_key, "source setting is missing or empty")
+    end
   end
 
   defp resolve_entry(%{strategy: :literal, source_keys: [source_key], kind: kind}, settings) do
@@ -721,6 +772,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp variable_authorities(entry, result) do
     source_output_aliases(entry) ++
+      icon_output_aliases(entry, result) ++
       source_reference_authorities(result) ++ project_contract_authorities(entry.path)
   end
 
@@ -764,6 +816,38 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       end
 
     setting_aliases ++ calculated_aliases
+  end
+
+  defp icon_output_aliases(entry, result) do
+    case IconTokens.output_variable(entry.path) do
+      nil ->
+        []
+
+      variable ->
+        source_keys = Map.get(result.metadata, "source_keys", entry.source_keys)
+
+        {source_key, authority_id} =
+          case Map.get(result.metadata, "output_alias") do
+            %{"source_key" => key, "authority_id" => id} when is_binary(key) and is_binary(id) ->
+              {key, id}
+
+            _ ->
+              key = List.first(source_keys)
+
+              {key,
+               "automatic-css-#{@source_authority_version}:setting:#{key}:css-variable-reference"}
+          end
+
+        [
+          authority_record(
+            variable,
+            "source_output_alias",
+            authority_id,
+            source_key,
+            @source_authority_version
+          )
+        ]
+    end
   end
 
   defp source_reference_authorities(%{
