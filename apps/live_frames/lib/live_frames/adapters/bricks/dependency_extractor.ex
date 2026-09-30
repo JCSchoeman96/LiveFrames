@@ -45,6 +45,22 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   # variables/2 never receives declaration context; structural unique resolution is extract-only.
 
+  @s1_icon_svg_keys ~w(full isPlaceholder path url)
+
+  @doc false
+  @spec proven_bricks_icon_s1_settings?(map()) :: boolean()
+  def proven_bricks_icon_s1_settings?(settings) when is_map(settings) do
+    case Map.get(settings, "icon", Map.get(settings, :icon)) do
+      %{"library" => "svg", "svg" => svg} when is_map(svg) ->
+        proven_s1_icon_svg_map?(svg)
+
+      _ ->
+        false
+    end
+  end
+
+  def proven_bricks_icon_s1_settings?(_settings), do: false
+
   @spec assets(term()) :: [map()]
   def assets(values) when is_list(values) do
     values
@@ -111,14 +127,35 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
           class_names = resolved.class_names
 
           element_assets =
-            if element.name == "image" do
-              [
-                asset_record(
-                  Map.get(element.settings, "image", :missing),
-                  element.id,
-                  element.settings
-                )
-              ]
+            case element.name do
+              "image" ->
+                [
+                  asset_record(
+                    Map.get(element.settings, "image", :missing),
+                    element.id,
+                    element.settings
+                  )
+                ]
+
+              "icon" ->
+                case classify_bricks_icon_settings(element.settings) do
+                  {:s1, svg_map} -> [icon_asset_record(svg_map, element.id)]
+                  {:unrecognized, _} -> []
+                end
+
+              _ ->
+                []
+            end
+
+          icon_diagnostics =
+            if element.name == "icon" do
+              case classify_bricks_icon_settings(element.settings) do
+                {:unrecognized, _} ->
+                  [unrecognized_icon_diagnostic(element.id)]
+
+                _ ->
+                  []
+              end
             else
               []
             end
@@ -162,7 +199,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             variable_occurrences_acc ++ occurrences,
             assets_acc ++ add_source(element_assets, element.id),
             runtime_acc ++ runtime_records,
-            diagnostics_acc ++ diagnostics ++ runtime_diagnostics,
+            diagnostics_acc ++ diagnostics ++ runtime_diagnostics ++ icon_diagnostics,
             style_results_acc
           }
         end
@@ -1080,44 +1117,109 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   defp custom_caption?(_settings), do: false
 
+  defp classify_bricks_icon_settings(settings) when is_map(settings) do
+    if proven_bricks_icon_s1_settings?(settings) do
+      icon_settings = Map.get(settings, "icon", Map.get(settings, :icon))
+      svg = Map.fetch!(icon_settings, "svg")
+      {:s1, svg}
+    else
+      {:unrecognized, settings}
+    end
+  end
+
+  defp classify_bricks_icon_settings(_settings), do: {:unrecognized, %{}}
+
+  defp proven_s1_icon_svg_map?(svg) when is_map(svg) do
+    keys =
+      svg
+      |> Map.keys()
+      |> Enum.map(&to_string/1)
+      |> Enum.sort()
+
+    keys == Enum.sort(@s1_icon_svg_keys) and
+      non_empty_reference_string?(Map.get(svg, "full")) and
+      non_empty_reference_string?(Map.get(svg, "url")) and
+      non_empty_reference_string?(Map.get(svg, "path")) and
+      Map.get(svg, "isPlaceholder") == true
+  end
+
+  defp proven_s1_icon_svg_map?(_svg), do: false
+
+  defp non_empty_reference_string?(value) when is_binary(value) and value != "", do: true
+  defp non_empty_reference_string?(_value), do: false
+
+  defp icon_asset_record(svg_map, source_id) do
+    %{
+      asset_kind: :icon,
+      status: :unresolved,
+      uri: nil,
+      alt: nil,
+      resolution_reason: "evidence_insufficient_missing_geometry",
+      source_id: source_id,
+      source_shape: "bricks.icon.library.svg.asset_ref",
+      library: "svg",
+      is_placeholder: true,
+      url_hash: evidence_hash(Map.get(svg_map, "url", Map.get(svg_map, :url))),
+      full_hash: evidence_hash(Map.get(svg_map, "full", Map.get(svg_map, :full))),
+      path_hash: evidence_hash(Map.get(svg_map, "path", Map.get(svg_map, :path)))
+    }
+  end
+
+  defp evidence_hash(value) when is_binary(value) and value != "", do: sha256_hex(value)
+  defp evidence_hash(_value), do: nil
+
+  defp sha256_hex(value),
+    do: :crypto.hash(:sha256, value) |> Base.encode16(case: :lower)
+
   defp asset_diagnostics(asset) do
     unresolved_diagnostic =
-      if asset.status == :unresolved, do: [asset_diagnostic(asset)], else: []
+      case {Map.get(asset, :asset_kind, :image), asset.status} do
+        {:icon, :unresolved} -> [icon_asset_diagnostic(asset)]
+        {:image, :unresolved} -> [asset_diagnostic(asset)]
+        _ -> []
+      end
 
-    sources_diagnostic =
-      if asset.sources_count > 0 do
-        [
-          Diagnostic.new(
-            code: "bricks.asset.sources_unsupported",
-            severity: :warning,
-            source_id: asset.source_id,
-            source_path: "settings.sources",
-            message: "responsive Bricks image sources were preserved but not compiled",
-            metadata: %{"source_count" => asset.sources_count}
-          )
-        ]
+    image_only_diagnostics =
+      if Map.get(asset, :asset_kind, :image) == :image do
+        sources_diagnostic =
+          if asset.sources_count > 0 do
+            [
+              Diagnostic.new(
+                code: "bricks.asset.sources_unsupported",
+                severity: :warning,
+                source_id: asset.source_id,
+                source_path: "settings.sources",
+                message: "responsive Bricks image sources were preserved but not compiled",
+                metadata: %{"source_count" => asset.sources_count}
+              )
+            ]
+          else
+            []
+          end
+
+        caption_diagnostic =
+          if Map.get(asset, :custom_caption?, false) do
+            [
+              Diagnostic.new(
+                code: "bricks.asset.caption_unsupported",
+                severity: :warning,
+                source_id: asset.source_id,
+                source_path: "settings.caption",
+                message:
+                  "Bricks image caption structure and content were preserved as evidence but not compiled in C-04B",
+                metadata: %{"caption_mode" => "custom"}
+              )
+            ]
+          else
+            []
+          end
+
+        sources_diagnostic ++ caption_diagnostic
       else
         []
       end
 
-    caption_diagnostic =
-      if Map.get(asset, :custom_caption?, false) do
-        [
-          Diagnostic.new(
-            code: "bricks.asset.caption_unsupported",
-            severity: :warning,
-            source_id: asset.source_id,
-            source_path: "settings.caption",
-            message:
-              "Bricks image caption structure and content were preserved as evidence but not compiled in C-04B",
-            metadata: %{"caption_mode" => "custom"}
-          )
-        ]
-      else
-        []
-      end
-
-    unresolved_diagnostic ++ sources_diagnostic ++ caption_diagnostic
+    unresolved_diagnostic ++ image_only_diagnostics
   end
 
   defp class_records(resolved, source_id) do
@@ -1306,5 +1408,33 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         raw_value: asset.url,
         message: "Bricks image URI remained unresolved (#{asset.resolution_reason})",
         metadata: %{"resolution_reason" => asset.resolution_reason}
+      )
+
+  defp icon_asset_diagnostic(asset),
+    do:
+      Diagnostic.new(
+        code: "bricks.icon.asset_unresolved",
+        severity: :warning,
+        source_id: asset.source_id,
+        source_path: "settings.icon.svg",
+        message:
+          "Bricks icon asset reference was preserved, but no trustworthy standalone glyph geometry is available",
+        metadata: %{
+          "source_shape" => asset.source_shape,
+          "library" => asset.library,
+          "resolution_reason" => asset.resolution_reason,
+          "is_placeholder" => asset.is_placeholder
+        }
+      )
+
+  defp unrecognized_icon_diagnostic(source_id),
+    do:
+      Diagnostic.new(
+        code: "bricks.icon.source_unrecognized",
+        severity: :warning,
+        source_id: source_id,
+        source_path: "settings.icon",
+        message: "Bricks icon settings did not match a proven standalone source shape",
+        metadata: %{}
       )
 end
