@@ -109,7 +109,7 @@ Each row is one element owning `settings.query`. `hasLoop` is the export flag on
 | feature-section-milan | text-basic b41076 | `settings.text` | `{post_content:16}` modifier | yes | 17 | `e8b1ed82a82259350f2aecc9e97f9af88227e81abad4289fe0d27341760b24a1` |
 | gallery-bravo | text-basic 22de9a | `settings.text` | `{query_results_count:c74cb5}` | no | 43 | `396552e6b5e9e9fc21c75acd9b509d728ea2ae86357e1e8662ce551eaacb6b22` |
 | slider-section-basel | heading 222894 | `settings.text` | `{post_title}` | yes | 12 | `1cec9750eea38d7b02256c8bac377453ef415ac53335e3f2d312b17a9036aa01` |
-| slider-section-basel | text d01006 | `settings.text` | post field ref (21 chars) | yes | 21 | `4552f832a80bf18072dc8747bfe06ca4fe630c4c2d5b798450bec93a7c04d176` |
+| slider-section-basel | text d01006 | `settings.text` | HTML wrapper + `{post_content}` (21 chars) | yes | 21 | `4552f832a80bf18072dc8747bfe06ca4fe630c4c2d5b798450bec93a7c04d176` |
 
 ## 6. Distinct query source shapes
 
