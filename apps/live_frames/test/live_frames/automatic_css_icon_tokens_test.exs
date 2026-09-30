@@ -14,6 +14,12 @@ defmodule LiveFrames.AutomaticCSSIconTokensTest do
     Jason.decode!(File.read!(fixture_path()))
   end
 
+  defp authority(token, variable, kind) do
+    token.metadata
+    |> Map.get("variable_authorities", [])
+    |> Enum.find(&(&1["variable"] == variable and &1["kind"] == kind))
+  end
+
   defp icon_paths(token_set) do
     token_set.tokens
     |> Map.keys()
@@ -54,9 +60,74 @@ defmodule LiveFrames.AutomaticCSSIconTokensTest do
     assert token_set.tokens["icon.scheme"].resolved_value == "inherit"
     assert token_set.tokens["icon.size.default"].resolved_value == "32px"
     assert token_set.tokens["icon.padding.default"].resolved_value == ".15em"
+    assert token_set.tokens["icon.list.gap"].resolved_value == "1em"
+    assert token_set.tokens["icon.size.m"].resolved_value == "32px"
     assert token_set.tokens["icon.radius"].references == ["radius.base"]
+    assert token_set.tokens["icon.background"].references == ["color.neutral.ultra_light"]
+    assert token_set.tokens["icon.background_hover"].references == ["color.neutral.light"]
     assert token_set.tokens["icon.color_hover"].references == ["color.primary"]
     assert token_set.tokens["icon.padding.m"].references == ["icon.padding.default"]
+  end
+
+  test "unknown ACSS CSS-variable references remain unresolved on mapped icon paths" do
+    assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(fixture_settings())
+
+    for path <- [
+          "icon.border.color",
+          "icon.border.width",
+          "icon.border.style",
+          "icon.color"
+        ] do
+      token = token_set.tokens[path]
+      assert token.resolution_status == :unresolved
+      assert is_nil(token.resolved_value)
+      assert is_binary(token.source_expression)
+      assert String.starts_with?(token.source_expression, "var(--")
+    end
+
+    assert token_set.tokens["icon.border.color_hover"].resolved_value == "inherit"
+
+    assert Enum.count(diagnostics, fn diagnostic ->
+             diagnostic.code == "acss.value.unresolved" and
+               diagnostic.path in [
+                 "icon.border.color",
+                 "icon.border.width",
+                 "icon.border.style",
+                 "icon.color"
+               ]
+           end) == 4
+  end
+
+  test "icon.size.default fallback provenance records icon-size-m not icon-size" do
+    assert {:ok, token_set, _} = AutomaticCSS.normalize(fixture_settings())
+
+    token = token_set.tokens["icon.size.default"]
+    assert token.resolved_value == "32px"
+    assert token.provenance["source_keys"] == ["icon-size-m"]
+
+    authority = authority(token, "--icon-size", "source_output_alias")
+
+    assert authority["source_key"] == "icon-size-m"
+
+    assert authority["authority_id"] ==
+             "automatic-css-4.0.1:icon-default-fallback:icon-size-m:icon-size"
+  end
+
+  test "icon.size.default direct setting provenance records icon-size" do
+    settings = Map.put(fixture_settings(), "icon-size", "40px")
+
+    assert {:ok, token_set, _} = AutomaticCSS.normalize(settings)
+
+    token = token_set.tokens["icon.size.default"]
+    assert token.resolved_value == "40px"
+    assert token.provenance["source_keys"] == ["icon-size"]
+
+    authority = authority(token, "--icon-size", "source_output_alias")
+
+    assert authority["source_key"] == "icon-size"
+
+    assert authority["authority_id"] ==
+             "automatic-css-4.0.1:setting:icon-size:css-variable-reference"
   end
 
   test "does not emit icon authority when option-icons is off or missing" do

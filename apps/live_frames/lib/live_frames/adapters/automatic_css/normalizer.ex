@@ -772,6 +772,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp variable_authorities(entry, result) do
     source_output_aliases(entry) ++
+      icon_output_aliases(entry, result) ++
       source_reference_authorities(result) ++ project_contract_authorities(entry.path)
   end
 
@@ -814,22 +815,34 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
           []
       end
 
-    setting_aliases ++ calculated_aliases ++ icon_output_aliases(entry)
+    setting_aliases ++ calculated_aliases
   end
 
-  defp icon_output_aliases(entry) do
+  defp icon_output_aliases(entry, result) do
     case IconTokens.output_variable(entry.path) do
       nil ->
         []
 
       variable ->
-        source_key = List.first(entry.source_keys)
+        source_keys = Map.get(result.metadata, "source_keys", entry.source_keys)
+
+        {source_key, authority_id} =
+          case Map.get(result.metadata, "output_alias") do
+            %{"source_key" => key, "authority_id" => id} when is_binary(key) and is_binary(id) ->
+              {key, id}
+
+            _ ->
+              key = List.first(source_keys)
+
+              {key,
+               "automatic-css-#{@source_authority_version}:setting:#{key}:css-variable-reference"}
+          end
 
         [
           authority_record(
             variable,
             "source_output_alias",
-            "automatic-css-#{@source_authority_version}:setting:#{source_key}:css-variable-reference",
+            authority_id,
             source_key,
             @source_authority_version
           )

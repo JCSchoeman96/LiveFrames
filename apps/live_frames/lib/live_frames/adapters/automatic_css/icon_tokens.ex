@@ -122,6 +122,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.IconTokens do
       :literal ->
         Resolver.literal(raw_value, :css)
 
+      {:unresolved, _variable} ->
+        Resolver.unresolved(
+          raw_value,
+          source_key,
+          "source variable has no proven semantic target"
+        )
+
       :error ->
         Resolver.unresolved(raw_value, source_key, "value is not a supported icon CSS expression")
     end
@@ -142,7 +149,16 @@ defmodule LiveFrames.Adapters.AutomaticCSS.IconTokens do
   def resolve_icon_size_default(settings) when is_map(settings) do
     case Map.get(settings, "icon-size") do
       value when is_binary(value) and value != "" ->
-        resolve_dimension(value, "icon-size")
+        metadata = %{
+          "source_keys" => ["icon-size"],
+          "output_alias" => %{
+            "source_key" => "icon-size",
+            "authority_id" => "automatic-css-4.0.1:setting:icon-size:css-variable-reference"
+          }
+        }
+
+        result = resolve_dimension(value, "icon-size")
+        Map.update(result, :metadata, metadata, &Map.merge(&1, metadata))
 
       _ ->
         case Map.get(settings, "icon-size-m") do
@@ -152,7 +168,12 @@ defmodule LiveFrames.Adapters.AutomaticCSS.IconTokens do
               "source_keys" => ["icon-size-m"],
               "fallback_from" => "icon-size-m",
               "fallback_reason" =>
-                "Automatic.css 4.0.1 SCSS sets $icon-size from $icon-size-m when icon-size is unset"
+                "Automatic.css 4.0.1 SCSS sets $icon-size from $icon-size-m when icon-size is unset",
+              "output_alias" => %{
+                "source_key" => "icon-size-m",
+                "authority_id" =>
+                  "automatic-css-4.0.1:icon-default-fallback:icon-size-m:icon-size"
+              }
             }
 
             result = resolve_dimension(value, "icon-size-m")
@@ -260,7 +281,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.IconTokens do
             {:ok, variable, target_path, expected_variable}
 
           :error ->
-            :literal
+            {:unresolved, variable}
         end
 
       :error ->

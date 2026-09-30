@@ -456,8 +456,28 @@ stay absent when the configured project does not emit them.
 Proven semantic references (for example `icon.radius` → `radius.base`,
 `icon.padding.{xs..xl}` → `icon.padding.default`, `icon.color_hover` →
 `color.primary`) preserve TokenSet reference relationships instead of
-duplicating literals. Other effective project values remain literal CSS
-expressions when no canonical target is mapped.
+duplicating literals. Direct literals such as `inherit`, `1em`, `.15em`, and
+`32px` resolve normally when supplied as non-variable values.
+
+A mapped icon path is not always standalone-resolved. When a configured value
+is a CSS variable reference and LiveFrames has no proven canonical semantic
+target, the path remains in the TokenSet as `unresolved` with the raw source
+expression preserved. This prevents serialized LiveFrames output from silently
+depending on the Automatic.css runtime stylesheet. On the approved fixture,
+these paths are mapped but unresolved:
+
+~~~text
+icon.border.color
+icon.border.width
+icon.border.style
+icon.color
+~~~
+
+`icon.size.default` may resolve from an explicit `icon-size` setting or, when
+that setting is absent, from the ACSS 4.0.1 SCSS fallback
+`$icon-size: $icon-size-m !default`. Variable authority for `--icon-size`
+records which contract applied (`icon-size` direct setting vs `icon-size-m`
+fallback).
 
 **2XL evidence gap:** the fixture still exports `icon-size-2xl` and
 `icon-padding-2xl`, and frontend CSS references `.icon--2xl`, but the audited
