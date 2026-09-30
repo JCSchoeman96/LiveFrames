@@ -69,6 +69,62 @@ defmodule LiveFrames.AutomaticCSSIconTokensTest do
     assert token_set.tokens["icon.padding.m"].references == ["icon.padding.default"]
   end
 
+  test "composite expressions containing var(...) remain unresolved" do
+    settings =
+      fixture_settings()
+      |> Map.put("icon-border-width", "calc(var(--border-width) + 1px)")
+      |> Map.put("icon-color", "color-mix(in srgb, var(--text-dark-muted), white 20%)")
+
+    assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(settings)
+
+    width = token_set.tokens["icon.border.width"]
+    assert width.resolution_status == :unresolved
+    assert is_nil(width.resolved_value)
+    assert width.source_expression == "calc(var(--border-width) + 1px)"
+
+    color = token_set.tokens["icon.color"]
+    assert color.resolution_status == :unresolved
+    assert is_nil(color.resolved_value)
+
+    assert color.source_expression ==
+             "color-mix(in srgb, var(--text-dark-muted), white 20%)"
+
+    assert Enum.count(diagnostics, fn diagnostic ->
+             diagnostic.code == "acss.value.unresolved" and
+               diagnostic.path in ["icon.border.width", "icon.color"]
+           end) == 2
+  end
+
+  test "non-variable icon literals and known references still resolve" do
+    settings = Map.put(fixture_settings(), "icon-border-style", "solid")
+
+    assert {:ok, token_set, _} = AutomaticCSS.normalize(settings)
+
+    assert token_set.tokens["icon.border.style"].resolved_value == "solid"
+    assert token_set.tokens["icon.radius"].references == ["radius.base"]
+    assert token_set.tokens["icon.color_hover"].references == ["color.primary"]
+  end
+
+  test "fixture icon contract remains 24 paths with 20 resolved and 4 unresolved" do
+    assert {:ok, token_set, _} = AutomaticCSS.normalize(fixture_settings())
+    assert length(icon_paths(token_set)) == 24
+
+    {resolved, unresolved} =
+      Enum.split_with(icon_paths(token_set), fn path ->
+        token_set.tokens[path].resolution_status == :resolved
+      end)
+
+    assert length(resolved) == 20
+    assert length(unresolved) == 4
+
+    assert Enum.sort(unresolved) == [
+             "icon.border.color",
+             "icon.border.style",
+             "icon.border.width",
+             "icon.color"
+           ]
+  end
+
   test "unknown ACSS CSS-variable references remain unresolved on mapped icon paths" do
     assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(fixture_settings())
 

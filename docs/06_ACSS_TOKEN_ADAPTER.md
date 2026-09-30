@@ -479,6 +479,11 @@ that setting is absent, from the ACSS 4.0.1 SCSS fallback
 records which contract applied (`icon-size` direct setting vs `icon-size-m`
 fallback).
 
+Composite expressions that contain `var(...)` but are not an exact supported
+variable reference (for example `calc(var(--border-width) + 1px)`) remain
+`unresolved` so hidden ACSS runtime dependencies cannot serialize as standalone
+resolved values.
+
 **2XL evidence gap:** the fixture still exports `icon-size-2xl` and
 `icon-padding-2xl`, and frontend CSS references `.icon--2xl`, but the audited
 DanBricks `automatic-variables.css` snapshot does not emit

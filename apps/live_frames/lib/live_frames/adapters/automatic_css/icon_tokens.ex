@@ -285,15 +285,24 @@ defmodule LiveFrames.Adapters.AutomaticCSS.IconTokens do
         end
 
       :error ->
-        if raw_value != "" do
-          :literal
-        else
-          :error
+        cond do
+          raw_value == "" ->
+            :error
+
+          contains_css_var_dependency?(raw_value) ->
+            {:unresolved, :composite}
+
+          true ->
+            :literal
         end
     end
   end
 
   defp reference_target(_raw_value), do: :error
+
+  defp contains_css_var_dependency?(raw_value) when is_binary(raw_value) do
+    Regex.match?(~r/var\s*\(/i, raw_value)
+  end
 
   defp parse_dimension(value) when is_binary(value) do
     case Regex.run(~r/^(\d+(?:\.\d+)?)(px|em|rem|%)$/, value) do
