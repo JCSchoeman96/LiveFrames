@@ -102,6 +102,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     "text-basic",
     "button",
     "image",
+    "icon",
     "text-link"
   ]
 
@@ -507,6 +508,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp semantic_type(%Element{name: "button"}, _static_semantics), do: "button"
   defp semantic_type(%Element{name: "text-link"}, _static_semantics), do: "link"
   defp semantic_type(%Element{name: "image"}, _static_semantics), do: "image"
+  defp semantic_type(%Element{name: "icon"}, _static_semantics), do: "icon"
   defp semantic_type(%Element{}, _static_semantics), do: "unsupported"
 
   defp apply_static_navigation(attributes, static_navigation, _static_semantics) do
@@ -540,7 +542,39 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
+  defp content_for(%Element{name: "icon", settings: settings}) do
+    case bricks_icon_s1_content(settings) do
+      {:ok, content} -> json_safe(content)
+      :unrecognized -> nil
+    end
+  end
+
   defp content_for(_element), do: nil
+
+  defp bricks_icon_s1_content(settings) when is_map(settings) do
+    icon_settings = Map.get(settings, "icon")
+
+    with %{"library" => "svg"} <- icon_library_map(icon_settings),
+         svg when is_map(svg) <- Map.get(icon_settings, "svg"),
+         true <- Map.get(svg, "isPlaceholder") == true do
+      {:ok,
+       %{
+         "icon_contract_version" => "1",
+         "source_shape" => "bricks.icon.library.svg.asset_ref",
+         "library" => "svg",
+         "embedding" => "bricks_icon_element",
+         "is_placeholder" => true,
+         "glyph" => nil
+       }}
+    else
+      _ -> :unrecognized
+    end
+  end
+
+  defp bricks_icon_s1_content(_settings), do: :unrecognized
+
+  defp icon_library_map(%{"library" => library}), do: %{"library" => library}
+  defp icon_library_map(_), do: %{}
 
   defp styles_for(style_result, trace, authority_index, element, context) do
     styles =
@@ -1366,57 +1400,89 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     |> Enum.reduce({%{}, %{}}, fn {asset, index}, {assets, by_source} ->
       asset_id = "asset_#{String.pad_leading(Integer.to_string(index), 6, "0")}"
 
-      {status, uri, resolution_reason} =
-        case {asset.status, StaticAsset.validate(asset.uri)} do
-          {:resolved, {:ok, validated_uri}} ->
-            {:resolved, validated_uri, "resolved_static"}
-
-          {:resolved, {:error, reason}} ->
-            {:unresolved, nil, "unresolved_#{reason}"}
-
-          _ ->
-            {:unresolved, nil, asset.resolution_reason}
+      reference =
+        case Map.get(asset, :asset_kind, :image) do
+          :icon -> build_icon_asset_reference(asset, asset_id, trace_index)
+          :image -> build_image_asset_reference(asset, asset_id, trace_index)
         end
-
-      trace =
-        asset
-        |> Map.put(:status, status)
-        |> Map.put(:resolution_reason, resolution_reason)
-        |> then(&asset_trace(&1, trace_index))
-
-      reference = %AssetReference{
-        asset_id: asset_id,
-        kind: "image",
-        uri: uri,
-        alt: asset.alt,
-        status: status,
-        metadata:
-          json_safe(%{
-            "attachment_id" => asset.attachment_id,
-            "filename" => asset.filename,
-            "url" => asset.url,
-            "full" => asset.full,
-            "path" => asset.path,
-            "size" => asset.size,
-            "alt" => asset.alt,
-            "dimensions" => asset.dimensions,
-            "resolution_reason" => resolution_reason,
-            "alt_resolution" => asset.alt_resolution,
-            "source_image" => source_image_metadata(trace),
-            "source_node_id" => asset.source_id
-          }),
-        source_trace: trace
-      }
 
       by_source = Map.update(by_source, asset.source_id, [asset_id], &(&1 ++ [asset_id]))
       {Map.put(assets, asset_id, reference), by_source}
     end)
   end
 
-  defp asset_trace(asset, trace_index) do
+  defp build_image_asset_reference(asset, asset_id, trace_index) do
+    {status, uri, resolution_reason} =
+      case {asset.status, StaticAsset.validate(asset.uri)} do
+        {:resolved, {:ok, validated_uri}} ->
+          {:resolved, validated_uri, "resolved_static"}
+
+        {:resolved, {:error, reason}} ->
+          {:unresolved, nil, "unresolved_#{reason}"}
+
+        _ ->
+          {:unresolved, nil, asset.resolution_reason}
+      end
+
+    trace =
+      asset
+      |> Map.put(:status, status)
+      |> Map.put(:resolution_reason, resolution_reason)
+      |> then(&image_asset_trace(&1, trace_index))
+
+    %AssetReference{
+      asset_id: asset_id,
+      kind: "image",
+      uri: uri,
+      alt: asset.alt,
+      status: status,
+      metadata:
+        json_safe(%{
+          "attachment_id" => asset.attachment_id,
+          "filename" => asset.filename,
+          "url" => asset.url,
+          "full" => asset.full,
+          "path" => asset.path,
+          "size" => asset.size,
+          "alt" => asset.alt,
+          "dimensions" => asset.dimensions,
+          "resolution_reason" => resolution_reason,
+          "alt_resolution" => asset.alt_resolution,
+          "source_image" => source_image_metadata(trace),
+          "source_node_id" => asset.source_id
+        }),
+      source_trace: trace
+    }
+  end
+
+  defp build_icon_asset_reference(asset, asset_id, trace_index) do
+    trace = icon_asset_trace(asset, trace_index)
+
+    %AssetReference{
+      asset_id: asset_id,
+      kind: "icon",
+      uri: nil,
+      alt: nil,
+      status: :unresolved,
+      metadata:
+        json_safe(%{
+          "source_shape" => asset.source_shape,
+          "library" => asset.library,
+          "is_placeholder" => asset.is_placeholder,
+          "resolution_reason" => asset.resolution_reason,
+          "url_hash" => asset.url_hash,
+          "full_hash" => asset.full_hash,
+          "path_hash" => asset.path_hash,
+          "source_node_id" => asset.source_id
+        }),
+      source_trace: trace
+    }
+  end
+
+  defp image_asset_trace(asset, trace_index) do
     case Map.get(trace_index, asset.source_id) do
       %{trace: trace} ->
-        inference = asset_inference(asset)
+        inference = image_asset_inference(asset)
 
         %{
           trace
@@ -1437,16 +1503,44 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           source_settings: %{},
           adapter: "bricks",
           adapter_version: Document.adapter_version(),
-          inference: asset_inference(asset),
+          inference: image_asset_inference(asset),
           metadata: %{"asset_resolution" => asset.resolution_reason}
         }
     end
   end
 
-  defp asset_inference(%{status: :resolved}),
+  defp icon_asset_trace(asset, trace_index) do
+    case Map.get(trace_index, asset.source_id) do
+      %{trace: trace} ->
+        %{
+          trace
+          | source_type: "bricks_asset",
+            source_path: "#{trace.source_path}.settings.icon.svg",
+            source_name: "icon_svg",
+            inference: "Bricks SVG icon reference preserved without trusted renderable geometry",
+            metadata: Map.put(trace.metadata, "asset_resolution", asset.resolution_reason)
+        }
+
+      nil ->
+        %SourceTrace{
+          source_type: "bricks_asset",
+          source_id: asset.source_id,
+          source_path: "settings.icon.svg",
+          source_name: "icon_svg",
+          source_classes: [],
+          source_settings: %{},
+          adapter: "bricks",
+          adapter_version: Document.adapter_version(),
+          inference: "Bricks SVG icon reference preserved without trusted renderable geometry",
+          metadata: %{"asset_resolution" => asset.resolution_reason}
+        }
+    end
+  end
+
+  defp image_asset_inference(%{status: :resolved}),
     do: "media-backed Bricks image identity and selected URI passed the local safety contract"
 
-  defp asset_inference(asset),
+  defp image_asset_inference(asset),
     do: "image source evidence preserved without a URI (#{asset.resolution_reason})"
 
   defp source_image_metadata(%SourceTrace{source_settings: source_settings}),
@@ -1660,6 +1754,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp category_for("bricks.variable.unresolved"), do: :unresolved_token
   defp category_for("bricks.asset.unresolved"), do: :asset_missing
+  defp category_for("bricks.icon.asset_unresolved"), do: :asset_missing
+  defp category_for("bricks.icon.source_unrecognized"), do: :provenance
   defp category_for("bricks.breakpoint.unresolved"), do: :ambiguous_semantics
   defp category_for("bricks.setting.value_unresolved"), do: :ambiguous_semantics
   defp category_for("bricks.setting.unsupported"), do: :unsupported_style
