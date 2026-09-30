@@ -372,6 +372,68 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert occurrence["resolution_status"] == "resolved_structural"
   end
 
+  test "equivalent global class and element-local grid declarations both resolve structurally" do
+    source = %{
+      "source" => "bricksCopiedElements",
+      "sourceUrl" => "https://example.test/export.json",
+      "version" => "2.3.1",
+      "content" => [%{"id" => "proxy-a", "cid" => "component-a", "name" => "section"}],
+      "components" => [
+        %{
+          "id" => "component-a",
+          "elements" => [
+            %{
+              "id" => "root",
+              "name" => "block",
+              "parent" => 0,
+              "settings" => %{
+                "_cssGlobalClasses" => ["grid-class"],
+                "_gridTemplateColumns" => "var(--grid-1)"
+              }
+            }
+          ]
+        }
+      ],
+      "globalClasses" => [
+        %{
+          "id" => "grid-class",
+          "name" => "grid-class",
+          "settings" => %{"_gridTemplateColumns" => "var(--grid-1)"}
+        }
+      ]
+    }
+
+    assert {:ok, document} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set(),
+               structural_variable_authority: structural_index()
+             )
+
+    variable = dependency_variable(document, "--grid-1")
+    assert variable["status"] == "resolved_structural"
+    refute variable["resolution_reason"] == "structural_partial_application"
+    assert length(variable["occurrences"]) == 2
+
+    paths =
+      Enum.map(variable["occurrences"], & &1["source_path"]) |> Enum.sort()
+
+    assert paths == [
+             "settings._gridTemplateColumns",
+             "settings.class_refs[0].settings._gridTemplateColumns"
+           ]
+
+    assert Enum.all?(variable["occurrences"], fn occurrence ->
+             occurrence["property"] == "grid-template-columns" and
+               occurrence["resolution_status"] == "resolved_structural"
+           end)
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["source_variable"] == "--grid-1"
+           end)
+  end
+
   test "unrelated variables keep canonical source paths when structural authority is active" do
     document =
       to_ir!(

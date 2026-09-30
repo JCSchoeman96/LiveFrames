@@ -286,7 +286,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
          authority_index,
          structural_authority_index
        ) do
-    declaration_occurrences = declaration_variable_occurrences(style_results)
+    declaration_occurrences =
+      declaration_variable_occurrences(style_results, layer_occurrences)
 
     names_from_strings =
       variable_values
@@ -495,40 +496,119 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
     end
   end
 
-  defp declaration_variable_occurrences(style_results) when is_map(style_results) do
-    Enum.flat_map(style_results, fn {_element_id, style_result} ->
+  defp declaration_variable_occurrences(style_results, layer_occurrences)
+       when is_map(style_results) do
+    layer_by_path =
+      Map.new(layer_occurrences, fn raw ->
+        {{raw.source_id, raw.source_path}, raw}
+      end)
+
+    style_results
+    |> Enum.flat_map(fn {_element_id, style_result} ->
       Enum.flat_map(style_result.resolutions, fn resolution ->
-        declarations =
-          case resolution do
-            %{emitted: emitted} when not is_nil(emitted) -> [emitted]
-            %{unresolved: unresolved} when not is_nil(unresolved) -> [unresolved]
-            _ -> []
-          end
-
-        Enum.flat_map(declarations, fn declaration ->
-          case parse_direct_variable(declaration.value) do
-            {:ok, variable} ->
-              [
-                %{
-                  name: variable,
-                  property: resolution.property,
-                  breakpoint: resolution.breakpoint,
-                  expression: declaration.value,
-                  source_id: Map.get(declaration, :element_source_id),
-                  source_path: declaration.source_path,
-                  canonical_source_path: canonical_layer_source_path(declaration),
-                  origin: Map.get(declaration, :origin),
-                  class_reference_index: Map.get(declaration, :class_reference_index)
-                }
-              ]
-
-            :error ->
-              []
-          end
-        end)
+        declaration_occurrences_for_resolution(resolution, layer_by_path)
       end)
     end)
+    |> Enum.uniq_by(fn occurrence ->
+      {
+        occurrence.name,
+        occurrence.source_id,
+        occurrence.canonical_source_path,
+        occurrence.expression,
+        occurrence.property,
+        occurrence.breakpoint
+      }
+    end)
   end
+
+  defp declaration_occurrences_for_resolution(resolution, layer_by_path) do
+    contributors = Map.get(resolution, :contributors, [])
+
+    if contributors == [] do
+      declaration_occurrences_for_primary_declaration(resolution)
+    else
+      Enum.flat_map(contributors, fn contributor ->
+        declaration_occurrence_from_contributor(resolution, contributor, layer_by_path)
+      end)
+    end
+  end
+
+  defp declaration_occurrences_for_primary_declaration(resolution) do
+    declarations =
+      case resolution do
+        %{emitted: emitted} when not is_nil(emitted) -> [emitted]
+        %{unresolved: unresolved} when not is_nil(unresolved) -> [unresolved]
+        _ -> []
+      end
+
+    Enum.flat_map(declarations, fn declaration ->
+      case parse_direct_variable(declaration.value) do
+        {:ok, variable} ->
+          canonical = canonical_layer_source_path(declaration)
+
+          [
+            %{
+              name: variable,
+              property: resolution.property,
+              breakpoint: resolution.breakpoint,
+              expression: declaration.value,
+              source_id: Map.get(declaration, :element_source_id),
+              source_path: canonical,
+              canonical_source_path: canonical,
+              origin: Map.get(declaration, :origin),
+              class_reference_index: Map.get(declaration, :class_reference_index)
+            }
+          ]
+
+        :error ->
+          []
+      end
+    end)
+  end
+
+  defp declaration_occurrence_from_contributor(resolution, contributor, layer_by_path) do
+    canonical = canonical_contributor_source_path(contributor)
+    source_id = Map.get(contributor, "source_id")
+
+    with true <- is_binary(canonical) and not is_nil(source_id),
+         %{expression: expression} <- Map.get(layer_by_path, {source_id, canonical}),
+         {:ok, variable} <- parse_direct_variable(expression) do
+      [
+        %{
+          name: variable,
+          property: resolution.property,
+          breakpoint: resolution.breakpoint,
+          expression: expression,
+          source_id: source_id,
+          source_path: canonical,
+          canonical_source_path: canonical,
+          origin: contributor_origin(contributor),
+          class_reference_index: Map.get(contributor, "class_reference_index")
+        }
+      ]
+    else
+      _ -> []
+    end
+  end
+
+  defp canonical_contributor_source_path(contributor) do
+    source_path = Map.get(contributor, "source_path")
+
+    case Map.get(contributor, "origin") do
+      "global_class" when is_binary(source_path) ->
+        "settings.class_refs[#{Map.get(contributor, "class_reference_index")}].settings.#{source_path}"
+
+      "element_local" when is_binary(source_path) ->
+        "settings.#{source_path}"
+
+      _ ->
+        nil
+    end
+  end
+
+  defp contributor_origin(%{"origin" => "global_class"}), do: :global_class
+  defp contributor_origin(%{"origin" => "element_local"}), do: :element_local
+  defp contributor_origin(_contributor), do: nil
 
   defp parse_direct_variable(value) when is_binary(value) do
     case Regex.run(@direct_variable_expression, value) do
