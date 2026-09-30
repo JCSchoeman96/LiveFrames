@@ -14,7 +14,7 @@ defmodule LiveFrames.Responsive.BreakpointAuthorityTest do
     assert authority.schema_version == "1.0.0"
 
     assert authority.authority_hash ==
-             "f4ec88bc3099c0885de5453b4350214843ca99084831fce5057b6d40711749c8"
+             "5c9f891da7915fc8d9b94ff9bd74338f4b9e9995341296c324a339b84162bfd0"
 
     assert authority.authority_level == 3
     assert authority.authority_type == "version_matched_default_confirmed_by_source_environment"
@@ -25,9 +25,25 @@ defmodule LiveFrames.Responsive.BreakpointAuthorityTest do
     assert tablet.media_condition == "@media (max-width: 991px)"
     assert tablet.max_width == 991
 
+    assert {:ok, landscape} =
+             BreakpointAuthority.lookup(authority, "mobile_landscape", "mobile_landscape")
+
+    assert landscape.media_condition == "@media (max-width: 767px)"
+    assert landscape.max_width == 767
+
+    assert {:ok, mobile} =
+             BreakpointAuthority.lookup(authority, "mobile_portrait", "mobile_portrait")
+
+    assert mobile.media_condition == "@media (max-width: 478px)"
+    assert mobile.max_width == 478
+
     assert authority
            |> BreakpointAuthority.ordered_entries()
-           |> Enum.map(& &1.source_name) == ["tablet_portrait", "mobile_portrait"]
+           |> Enum.map(& &1.source_name) == [
+             "tablet_portrait",
+             "mobile_landscape",
+             "mobile_portrait"
+           ]
   end
 
   test "requires exact breakpoint identity and rejects missing authority" do
