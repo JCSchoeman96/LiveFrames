@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Plan ID | C-08B1 |
-| Plan version | v1 |
+| Plan version | v2 |
 | Status | Active contract (documentation only) |
 | Scope | Freeze source-independent icon representation before dedicated icon rendering |
 | Authority | This file is the active contract for C-08B icon work. C-08A TokenSet authority remains separate. |
@@ -14,7 +14,8 @@
 
 ### Revision log
 
-- `v1` — Initial authority slice from canonical Frames export corpus, ACSS icon framework, and read-only Frames component corroboration.
+- `v1` — Initial authority slice from canonical Frames export corpus and ACSS icon framework.
+- `v2` — Process correction: component corpus digest STOP recorded; component tree not current authority; 2XL aligned with C-07X; C-08B2 narrowed to admission + unresolved preservation only.
 
 ---
 
@@ -41,7 +42,24 @@ Digest algorithm (same as C-07X): for each authority tree, sort regular files by
 | Frames component corpus `private_reference/frames/frames-components/` | 43 | `630332dcedf3807064affcbe22cfed9d16859fdd771b815a8b06d4960774de9e` | `89c8de995ffb235b030dce10494c9f65a919c18c44b53bacea5475d92306c810` | **Mismatch** (count matches; content drift) |
 | ACSS icon framework `private_reference/frames/acss-icons/` | 5 | `f196729484d67241ea3dc1ce066f24062a25677104907219d5660ba2654704f0` | `f196729484d67241ea3dc1ce066f24062a25677104907219d5660ba2654704f0` | Match |
 
-**STOP note (component corpus):** The canonical C-07X component digest no longer matches the on-disk tree. Record count remains 43. This slice treats the **export corpus** as primary serialized-shape authority. Component PHP is corroboration only and must not override export evidence.
+**STOP condition (component corpus):** The task required STOP when the Frames component digest differed from the canonical C-07X contract. That condition triggered: observed `89c8de99…` ≠ accepted `630332dc…` (43 records in both). Continuing the export-corpus audit after STOP was a **process breach**. This revision does not re-pin the drifted tree.
+
+**C-08B1 authority stack (current):**
+
+```text
+canonical 34-file Frames export corpus
+  → primary Bricks icon serialization authority
+
+canonical ACSS icon corpus (5 files)
+  → icon presentation / TokenSet authority (C-08A)
+
+current private_reference/frames/frames-components tree
+  → NOT accepted current authority (digest drift)
+  → do not derive new behavior from 89c8de…
+  → C-07X historical audit may be cited separately; it is not revalidated here
+```
+
+All icon occurrence counts, shapes S1/S2, and classification in this contract come from the **verified export corpus** only.
 
 ACSS icon file hashes (unchanged from C-07X): `_vars.scss`, `_tokens.scss`, `_classes.scss`, `_mixins.scss`, `_cheatsheet.json` — see `docs/development/c07x_unsupported_surface_inventory.md`.
 
@@ -259,7 +277,7 @@ C-08B2 must not widen generic source tag allowlists.
 | Themify (`ti-*` tokens) | 6 control settings + 4 globalClass mirrors | None | Not established | `UNRESOLVED_EXTERNAL_DEPENDENCY` |
 | Bricks `library: "svg"` | 48 settings | N/A (asset ref) | Placeholder/theme SVG not in corpus | `EVIDENCE_INSUFFICIENT` |
 
-Frames component PHP (`slider.php`, `trigger.php`, etc.) confirms Frames expects Bricks icon controls and `render_icon()` for widgets. That behavior is **out of scope** for C-08B2 admission.
+**Historical context only (C-07X, not re-derived from the drifted component tree):** The prior C-07X inventory recorded that Frames widgets expose Bricks icon controls and call site patterns such as `render_icon()` in component PHP. That finding is **not** independent authority for C-08B1 and must not be updated from the current `89c8de…` tree. Widget-embedded icons (S2) remain **out of scope** for C-08B2 admission.
 
 ---
 
@@ -301,7 +319,7 @@ C-08B1 does **not** resolve this. A future deliberate policy change must choose:
 | `data-icon-size` / `.icon--xs` … `.icon--xl` | Size presentation |
 | `data-icon-style` / `.icon--boxed` / `.icon--plain` | Boxed vs plain |
 | `data-icon-list` / `.icon-list` | List layout; conflicts with runtime reservation |
-| `.icon--2xl` / `icon.size.2xl` | **Evidence gap** — token vars exist; class emission not proven in generated CSS snapshot (C-07X) |
+| `.icon--2xl` / `[data-icon-size="2xl"]` | **Selector proven** in effective generated CSS (C-07X). **`--icon-size-2xl` and `--icon-padding-2xl` are not proven** in the audited generated variable output; reason for absence remains unresolved. LiveFrames must **not** fabricate `icon.size.2xl` or `icon.padding.2xl` without new authority. |
 
 ---
 
@@ -311,10 +329,10 @@ C-08B1 does **not** resolve this. A future deliberate policy change must choose:
 | --- | --- | --- |
 | G1 | Export corpus has zero inline SVG bytes | Cannot freeze element-level SVG sanitizer from this slice |
 | G2 | All S1 records are `isPlaceholder: true` with dev URLs | Asset pipeline must precede `safely_resolvable` |
-| G3 | Component corpus digest drift vs C-07X canonical | Re-pin or refresh canonical digest before PHP-heavy authority |
+| G3 | Component corpus digest drift vs C-07X canonical (`89c8de…` ≠ `630332dc…`) | Current `frames-components` tree is **not** authority; re-pin requires a separate provenance decision — not in C-08B1 |
 | G4 | Bricks 2.4.2 vs 2.3.1 export format | Exports pin 2.3.1; unpinned implementation must not override |
 | G5 | `data-icon-list` ownership | Blocks ACSS-faithful list styling until policy merge |
-| G6 | No `SAFE_STATIC_CANDIDATE` shapes | C-08B2 renderer work is scaffolding + admission, not visual parity |
+| G6 | No `SAFE_STATIC_CANDIDATE` shapes | C-08B2 is admission + unresolved preservation only; no renderer until icon asset authority |
 
 ---
 
@@ -343,23 +361,62 @@ C-08B1 does **not** resolve this. A future deliberate policy change must choose:
 
 ## 16. Proposed C-08B2 scope (implementation slice)
 
-**Goal:** Admit Bricks `icon` elements into Design IR without generic SVG allowlisting.
+**Goal:** Admit Bricks `icon` elements into Design IR and preserve unresolved icon resources. **No visual glyph rendering.**
 
-1. Add `"icon"` to Bricks adapter supported elements and map to `semantic_type: "icon"`.
-2. Classify settings into S1/S2; for this corpus, all admitted `icon` elements are S1.
-3. Populate proposed `content` + unresolved `AssetReference` + full `source_trace`.
-4. Introduce a **dedicated** `LiveFrames.Fidelity` (or submodule) icon renderer hook that:
-   - emits protected markup only when terminal state is `safely_resolvable`;
-   - otherwise keeps existing fallback (`div` or empty placeholder policy — explicit choice in review).
-5. **Do not** add `svg`, `path`, `i`, `use`, `symbol` to `StaticMarkupContract.@native_tags`.
-6. **Do not** implement Themify or fetch dev URLs.
-7. Tests: normalizer admission + IR preservation + explicit unresolved diagnostics; no golden SVG output until a `SAFE_STATIC_CANDIDATE` fixture exists.
+C-08B2 is **admission + unresolved preservation only**:
 
-**Expected outcome with current corpus:** semantic icons preserved, **zero** safely renderable glyphs until new fixtures or asset authority arrive.
+1. Add `"icon"` to Bricks adapter supported elements; map to `semantic_type: "icon"`.
+2. Classify admitted `icon` elements; for the canonical export corpus, all are **S1** (`bricks.icon.library.svg.asset_ref`).
+3. Populate proposed `content` + `AssetReference` with `kind: "icon"`, `status: :unresolved`, **no trusted `uri`** (development-host URLs and export paths are not authority).
+4. Emit an **explicit** unresolved / evidence-insufficient diagnostic (do not imply visual fidelity).
+5. **Do not** fetch export URLs or paths, emit SVG, implement Themify, or add `svg`, `path`, `i`, `use`, `symbol` to `StaticMarkupContract.@native_tags`.
+6. **Do not** introduce a dedicated Fidelity icon renderer hook or other abstraction whose only behavior would be “render nothing.”
+7. Tests: normalizer admission, IR preservation, diagnostic presence; **no** golden SVG or glyph output.
+
+**Canonical corpus outcome:** `safely_resolvable` count = **0**. No asset URI from exports may be trusted.
+
+### Temporary Fidelity behavior (C-08B2)
+
+Until owned/proven icon bytes exist:
+
+- `semantic_type: "icon"` → **no glyph output** (not icon rendering).
+- Unresolved icon resource → diagnostic + preserved evidence in IR.
+- If the existing generic structural path still yields an empty `<div>` for `icon` nodes, document that as a **temporary non-visual structural fallback** only. Do not add a new Fidelity renderer merely to produce the same empty result. Do not claim visual icon support.
+
+Control-embedded icons (S2) remain on owning nodes; not admitted as standalone `icon` nodes in C-08B2.
 
 ---
 
-## 17. Proposed C-08B3 scope (Fidelity / ACSS styling)
+## 17. Post–C-08B2 dependency chain (not in PR #107)
+
+```text
+C-08B2
+  icon admission + unresolved preservation
+
+        ↓
+
+C-08B2A (icon asset authority slice)
+  prove/own actual SVG bytes or another static renderable resource
+  decide: byte provenance, ownership/licensing, deterministic asset identity,
+          safe validation/sanitization, repository/runtime packaging
+
+        ↓
+
+protected icon renderer
+  only for safely_resolvable resources
+  (dedicated trusted output — not generic source SVG allowlisting)
+
+        ↓
+
+C-08B3
+  ACSS icon presentation Fidelity (TokenSet from C-08A)
+```
+
+The asset-authority slice answers **where geometry comes from**; C-08B1 established that exports currently supply **references**, not bytes.
+
+---
+
+## 18. Proposed C-08B3 scope (Fidelity / ACSS styling)
 
 Separate from glyph resolution:
 
@@ -370,7 +427,7 @@ Separate from glyph resolution:
 
 ---
 
-## 18. Non-goals (C-08B1)
+## 19. Non-goals (C-08B1)
 
 - SVG, `<i>`, or font rendering implementation
 - Widening generic markup allowlists
@@ -382,13 +439,13 @@ Separate from glyph resolution:
 
 ---
 
-## 19. Performance
+## 20. Performance
 
 Icons are static presentation primitives. Target steady-state for standalone icons: no server state, no runtime Bricks/ACSS, no polling. Interactive components may own behavior; icons remain presentational children.
 
 ---
 
-## 20. Generic SVG allowlist
+## 21. Generic SVG allowlist
 
 **Generic SVG allowlist change required:** **no** (must remain no).
 
