@@ -9,6 +9,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
 
   alias LiveFrames.Adapters.AutomaticCSS.Loader
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
+  alias LiveFrames.Adapters.AutomaticCSS.StructuralVariables
+  alias LiveFrames.Styles.StructuralVariableAuthority
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.Diagnostic
   alias LiveFrames.Tokens.TokenSet
@@ -88,6 +90,12 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
 
   @spec profiles() :: map()
   def profiles, do: @profiles
+
+  @spec structural_variable_authority(String.t(), keyword()) ::
+          {:ok, StructuralVariableAuthority.t()} | {:error, :unsupported_source_version}
+  def structural_variable_authority(source_version, opts \\ []) do
+    StructuralVariables.authority(source_version, opts)
+  end
 
   @spec required_paths(atom()) :: [String.t()] | {:error, [Diagnostic.t()]}
   def required_paths(profile) do

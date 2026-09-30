@@ -116,15 +116,28 @@ defmodule LiveFrames.BricksDesignIRTest do
     TokenSet.new(tokens: %{path => token})
   end
 
-  defp style_document(setting, value, tokens \\ nil) do
+  defp style_document(setting, value, tokens \\ nil, opts \\ []) do
+    ir_opts =
+      [
+        component_id: "component-a",
+        token_set: tokens || token_set()
+      ]
+      |> Keyword.merge(opts)
+
     assert {:ok, document} =
              Bricks.to_ir(
                synthetic_source([source_element("root", "block", 0, %{setting => value})]),
-               component_id: "component-a",
-               token_set: tokens || token_set()
+               ir_opts
              )
 
     document
+  end
+
+  defp structural_authority do
+    assert {:ok, index} =
+             AutomaticCSS.structural_variable_authority("4.0.1", grid_variables_enabled: true)
+
+    index
   end
 
   defp document do
@@ -972,6 +985,238 @@ defmodule LiveFrames.BricksDesignIRTest do
                "candidate_paths" => []
              }
            } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "resolves responsive grid-template-columns var(--grid-1) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateColumns:tablet_portrait",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    override = node_by_source_id(document, "root").responsive["tablet_portrait"]
+
+    assert override.breakpoint_id == "tablet_portrait"
+    assert override.source_name == "tablet_portrait"
+    assert override.min_width == nil
+    assert override.max_width == nil
+    assert override.resolution_status == :unresolved
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "repeat(1, minmax(0, 1fr))",
+             source_expression: "var(--grid-1)",
+             metadata: %{
+               "source_variable" => "--grid-1",
+               "authority_state" => "no_authority",
+               "structural_authority_state" => "unique_candidate",
+               "structural_authority_id" => "automatic-css-4.0.1:structural-grid:grid-1",
+               "structural_resolved_value" => "repeat(1, minmax(0, 1fr))"
+             }
+           } = override.styles["grid-template-columns"]
+  end
+
+  test "resolves responsive grid-template-rows var(--grid-1) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateRows:mobile_landscape",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    override = node_by_source_id(document, "root").responsive["mobile_landscape"]
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "repeat(1, minmax(0, 1fr))",
+             source_expression: "var(--grid-1)"
+           } = override.styles["grid-template-rows"]
+  end
+
+  test "does not let structural authority override TokenSet ambiguity" do
+    authority = %{
+      "variable" => "--grid-1",
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:grid-1",
+      "source_key" => "grid-1",
+      "source_version" => "4.0.1"
+    }
+
+    shared_token = %Token{
+      path: "layout.grid.alpha",
+      category: :layout,
+      value: "repeat(1, minmax(0, 1fr))",
+      resolved_value: "repeat(1, minmax(0, 1fr))",
+      source_expression: "repeat(1, minmax(0, 1fr))",
+      resolution_status: :resolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    ambiguous_tokens =
+      TokenSet.new(
+        tokens: %{
+          "layout.grid.alpha" => shared_token,
+          "layout.grid.zulu" => %{shared_token | path: "layout.grid.zulu"}
+        }
+      )
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        ambiguous_tokens,
+        structural_variable_authority: structural_authority()
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--grid-1)",
+             metadata: %{
+               "resolution_reason" => "mapping_ambiguous",
+               "authority_state" => "ambiguous_candidates"
+             }
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+  end
+
+  test "does not let structural authority override a unique unresolved TokenSet candidate for --grid-1" do
+    authority = %{
+      "variable" => "--grid-1",
+      "kind" => "source_reference",
+      "authority_id" => "synthetic:grid-1",
+      "source_key" => "grid-1",
+      "source_version" => "4.0.1"
+    }
+
+    unresolved_token = %Token{
+      path: "layout.grid.one",
+      category: :layout,
+      value: nil,
+      resolved_value: nil,
+      source_expression: "var(--grid-1)",
+      resolution_status: :unresolved,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        TokenSet.new(tokens: %{"layout.grid.one" => unresolved_token}),
+        structural_variable_authority: structural_authority()
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--grid-1)",
+             metadata: %{
+               "resolution_reason" => "token_unresolved",
+               "token_path" => "layout.grid.one"
+             }
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+
+    grid_var =
+      Enum.find(
+        document.provenance["dependency_summary"]["variables"],
+        &(&1["name"] == "--grid-1")
+      )
+
+    assert grid_var["status"] == "unresolved_token"
+    assert grid_var["token_path"] == "layout.grid.one"
+    assert grid_var["resolution_reason"] == "token_unresolved"
+  end
+
+  test "does not emit bricks.variable.unresolved for resolved structural --grid-1" do
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["source_variable"] == "--grid-1"
+           end)
+  end
+
+  test "keeps structural authority ambiguity unresolved without picking a candidate" do
+    assert {:ok, ambiguous_index} =
+             LiveFrames.Styles.StructuralVariableAuthority.build([
+               %{
+                 "variable" => "--grid-1",
+                 "resolved_value" => "repeat(1, minmax(0, 1fr))",
+                 "authority_id" => "authority-a",
+                 "source_system" => "automatic_css",
+                 "source_version" => "4.0.1",
+                 "authority_type" => "PROJECT_SOURCE_ENVIRONMENT_GENERATED_CSS"
+               },
+               %{
+                 "variable" => "--grid-1",
+                 "resolved_value" => "repeat(1, minmax(0, 1fr))",
+                 "authority_id" => "authority-b",
+                 "source_system" => "automatic_css",
+                 "source_version" => "4.0.1",
+                 "authority_type" => "PROJECT_SOURCE_ENVIRONMENT_GENERATED_CSS"
+               }
+             ])
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: ambiguous_index
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             metadata: %{"resolution_reason" => "structural_ambiguous"}
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+  end
+
+  test "rejects an unsafe structural authority value through CSSDeclaration validation" do
+    assert {:ok, unsafe_index} =
+             LiveFrames.Styles.StructuralVariableAuthority.build([
+               %{
+                 "variable" => "--grid-1",
+                 "resolved_value" => "url(javascript:evil)",
+                 "authority_id" => "unsafe-grid-1",
+                 "source_system" => "automatic_css",
+                 "source_version" => "4.0.1",
+                 "authority_type" => "PROJECT_SOURCE_ENVIRONMENT_GENERATED_CSS"
+               }
+             ])
+
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: unsafe_index
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             metadata: %{"resolution_reason" => "structural_value_invalid"}
+           } = node_by_source_id(document, "root").styles["grid-template-columns"]
+  end
+
+  test "emits standalone grid-template-columns CSS for structural literals" do
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-1)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.css =~ "grid-template-columns: repeat(1, minmax(0, 1fr));"
+    refute bundle.css =~ "var(--grid-1)"
   end
 
   test "keeps an unproven exact direct variable unresolved" do

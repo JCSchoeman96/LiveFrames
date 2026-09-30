@@ -413,6 +413,13 @@ defmodule LiveFrames.BricksStageATest do
            ] = DependencyExtractor.variables(["var(--gap)"], token_set: token_set)
   end
 
+  test "variable extraction without structural authority leaves --grid-1 as a source variable" do
+    [variable] = DependencyExtractor.variables(["var(--grid-1)"], token_set: token_set())
+
+    assert variable.status == :source_variable
+    assert variable.resolution_reason == "mapping_unproven"
+  end
+
   test "known external variables remain non-token authorities unless B1 authorizes one" do
     external =
       DependencyExtractor.variables(["var(--overlay-bg)"], token_set: token_set())

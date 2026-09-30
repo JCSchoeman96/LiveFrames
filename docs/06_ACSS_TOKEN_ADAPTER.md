@@ -127,6 +127,25 @@ candidate; records for distinct paths remain ambiguous. A candidate's token
 resolution status remains a separate fact. This optional metadata keeps
 TokenSet at version `1.0.0` and does not add a root field.
 
+Structural framework variables such as Automatic.css grid recipes are **not**
+TokenSet tokens. They are recorded separately through
+`LiveFrames.Adapters.AutomaticCSS.StructuralVariables` and consumed by Bricks
+through `structural_variable_authority`. For the proven ACSS 4.0.1 contract,
+`--grid-1` resolves structurally to `repeat(1, minmax(0, 1fr))` from
+project/source-environment generated CSS evidence. TokenSet paths such as
+`layout.grid.one` are intentionally not introduced for these variables.
+
+Structural authority is fail-closed. `StructuralVariableAuthority.build/1`
+rejects malformed records instead of silently dropping them. A variable is a
+unique structural candidate only when exactly one distinct authority record
+remains after exact duplicate deduplication; two records with the same value but
+different authority identities remain ambiguous.
+
+ACSS grid-variable authority requires explicit enabled evidence:
+`grid_variables_enabled: true` or settings
+`option-grid-variables` = `"on"`. Missing or off settings produce an empty
+structural index.
+
 Structural validity and authority trust are separate checks:
 
 * `Tokens.validate/2` checks the TokenSet structure. Processing diagnostics
