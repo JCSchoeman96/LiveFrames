@@ -82,6 +82,27 @@ defmodule LiveFrames.BricksIconAdmissionTest do
     assert diagnostic.metadata["is_placeholder"] == true
   end
 
+  test "missing required svg reference field is unrecognized" do
+    svg = s1_icon_settings()["icon"]["svg"] |> Map.delete("url")
+    assert_unrecognized_icon(to_ir(%{"icon" => %{"library" => "svg", "svg" => svg}}))
+  end
+
+  test "blank path reference is unrecognized" do
+    assert_unrecognized_icon(to_ir(s1_icon_settings(%{"path" => ""})))
+  end
+
+  test "non-string full reference is unrecognized" do
+    assert_unrecognized_icon(to_ir(s1_icon_settings(%{"full" => 123})))
+  end
+
+  test "extra unproven svg field is unrecognized" do
+    assert_unrecognized_icon(to_ir(s1_icon_settings(%{"markup" => "<svg></svg>"})))
+  end
+
+  test "isPlaceholder false is unrecognized" do
+    assert_unrecognized_icon(to_ir(s1_icon_settings(%{"isPlaceholder" => false})))
+  end
+
   test "unknown standalone icon shape stays icon without fabricated asset or URI" do
     document =
       to_ir(%{
@@ -157,6 +178,16 @@ defmodule LiveFrames.BricksIconAdmissionTest do
     [asset] = Map.values(document.assets)
     assert asset.kind == "image"
     assert asset.status == :resolved
+  end
+
+  defp assert_unrecognized_icon(document) do
+    [icon_node] = document.root_nodes
+
+    assert icon_node.semantic_type == "icon"
+    assert icon_node.content == nil
+    assert icon_node.asset_refs == []
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.icon.source_unrecognized"))
+    refute Enum.any?(document.diagnostics, &(&1.code == "bricks.icon.asset_unresolved"))
   end
 
   defp s1_icon_settings(svg_overrides \\ %{}) do

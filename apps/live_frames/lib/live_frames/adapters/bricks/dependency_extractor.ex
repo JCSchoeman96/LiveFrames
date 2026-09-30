@@ -45,6 +45,22 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
   # variables/2 never receives declaration context; structural unique resolution is extract-only.
 
+  @s1_icon_svg_keys ~w(full isPlaceholder path url)
+
+  @doc false
+  @spec proven_bricks_icon_s1_settings?(map()) :: boolean()
+  def proven_bricks_icon_s1_settings?(settings) when is_map(settings) do
+    case Map.get(settings, "icon", Map.get(settings, :icon)) do
+      %{"library" => "svg", "svg" => svg} when is_map(svg) ->
+        proven_s1_icon_svg_map?(svg)
+
+      _ ->
+        false
+    end
+  end
+
+  def proven_bricks_icon_s1_settings?(_settings), do: false
+
   @spec assets(term()) :: [map()]
   def assets(values) when is_list(values) do
     values
@@ -1102,26 +1118,35 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
   defp custom_caption?(_settings), do: false
 
   defp classify_bricks_icon_settings(settings) when is_map(settings) do
-    icon_settings = Map.get(settings, "icon", Map.get(settings, :icon))
-
-    with %{"library" => "svg"} <- normalize_icon_library(icon_settings),
-         svg when is_map(svg) <- Map.get(icon_settings, "svg", Map.get(icon_settings, :svg)),
-         true <- placeholder_icon?(svg) do
+    if proven_bricks_icon_s1_settings?(settings) do
+      icon_settings = Map.get(settings, "icon", Map.get(settings, :icon))
+      svg = Map.fetch!(icon_settings, "svg")
       {:s1, svg}
     else
-      _ -> {:unrecognized, settings}
+      {:unrecognized, settings}
     end
   end
 
   defp classify_bricks_icon_settings(_settings), do: {:unrecognized, %{}}
 
-  defp normalize_icon_library(%{"library" => library}), do: %{"library" => library}
-  defp normalize_icon_library(%{library: library}), do: %{"library" => to_string(library)}
-  defp normalize_icon_library(_), do: %{}
+  defp proven_s1_icon_svg_map?(svg) when is_map(svg) do
+    keys =
+      svg
+      |> Map.keys()
+      |> Enum.map(&to_string/1)
+      |> Enum.sort()
 
-  defp placeholder_icon?(svg) do
-    Map.get(svg, "isPlaceholder", Map.get(svg, :isPlaceholder)) == true
+    keys == Enum.sort(@s1_icon_svg_keys) and
+      non_empty_reference_string?(Map.get(svg, "full")) and
+      non_empty_reference_string?(Map.get(svg, "url")) and
+      non_empty_reference_string?(Map.get(svg, "path")) and
+      Map.get(svg, "isPlaceholder") == true
   end
+
+  defp proven_s1_icon_svg_map?(_svg), do: false
+
+  defp non_empty_reference_string?(value) when is_binary(value) and value != "", do: true
+  defp non_empty_reference_string?(_value), do: false
 
   defp icon_asset_record(svg_map, source_id) do
     %{

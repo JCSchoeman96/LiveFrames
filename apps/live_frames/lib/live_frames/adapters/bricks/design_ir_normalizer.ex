@@ -552,11 +552,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp content_for(_element), do: nil
 
   defp bricks_icon_s1_content(settings) when is_map(settings) do
-    icon_settings = Map.get(settings, "icon")
-
-    with %{"library" => "svg"} <- icon_library_map(icon_settings),
-         svg when is_map(svg) <- Map.get(icon_settings, "svg"),
-         true <- Map.get(svg, "isPlaceholder") == true do
+    if DependencyExtractor.proven_bricks_icon_s1_settings?(settings) do
       {:ok,
        %{
          "icon_contract_version" => "1",
@@ -567,14 +563,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
          "glyph" => nil
        }}
     else
-      _ -> :unrecognized
+      :unrecognized
     end
   end
 
   defp bricks_icon_s1_content(_settings), do: :unrecognized
-
-  defp icon_library_map(%{"library" => library}), do: %{"library" => library}
-  defp icon_library_map(_), do: %{}
 
   defp styles_for(style_result, trace, authority_index, element, context) do
     styles =
