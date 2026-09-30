@@ -97,6 +97,7 @@ Directory location and package metadata do not prove ownership of this exact fil
 | `publication_state` | `classified`; not `public_safe` |
 
 The asset contains no embedded license, copyright, author, creator, rights, or metadata marker. A targeted search found no repository or local-theme record of this exact byte hash. The theme package's GPLv2 metadata is recorded as evidence only; this document does not determine whether it applies to the asset or to LiveFrames redistribution.
+The canonical provenance register was not changed. It reports repository evidence, while these bytes remain outside the repository in the private LocalWP theme tree. This document records the exact local asset evidence without changing the register scope or broader Frames provenance.
 
 ## 10. Redistribution and publication gate
 
