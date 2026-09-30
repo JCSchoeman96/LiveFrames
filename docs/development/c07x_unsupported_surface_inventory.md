@@ -4,7 +4,7 @@
 
 This document records capabilities found in the supplied Frames exports, the extracted Frames component source, Automatic.css 4.0.1 SCSS, its generated DanBricks CSS, and the current LiveFrames pipeline. It does not copy implementation source or change production code.
 
-The clearest gaps are the missing 767px breakpoint authority, the lack of ACSS icon class and attribute semantics in Fidelity, and the missing path from Frames source behavior into the LiveFrames runtime. Existing source intake, token authority, responsive IR, two breakpoint entries, and safe static CSS generation provide partial foundations.
+The clearest gaps are the missing `mobile_landscape` 767px media-query entry, the lack of ACSS icon class and attribute semantics in Fidelity, and the missing path from Frames source behavior into the LiveFrames runtime. Existing source intake, token authority, responsive IR, two of the three media-query entries, and safe static CSS generation provide partial foundations.
 
 ## Baseline identity
 
@@ -128,7 +128,7 @@ Blocked is a dependency note, not a new layer code. The dependency column identi
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | R01 | Desktop/base styles, no media query | Base Bricks declarations are emitted as unconditional CSS. | H | H | N/A | H | H | N/A | H, supported | None |
 | R02 | tablet_portrait, max-width 991px | Accepted authority and Fidelity tests emit max-width 991px. | H | H | H | H | H | N/A | H for this supplied entry | Breakpoint authority input |
-| R03 | mobile_landscape, max-width 767px | Export names exist and task authority supplies 767px; committed breakpoint authority has no entry. | H | H | C | I | C | N/A | I, partial | C-07B3 breakpoint authority |
+| R03 | mobile_landscape, max-width 767px | Export names exist and task authority supplies 767px; committed breakpoint authority has no entry. | H | H | C | I | C | N/A | I, partial | C-07B3 mobile_landscape media entry |
 | R04 | mobile_portrait, max-width 478px | Accepted authority and Fidelity tests emit max-width 478px. | H | H | H | H | H | N/A | H for this supplied entry | Breakpoint authority input |
 | R05 | Responsive declaration precedence | Settings precedence resolves class and element declarations per property at the same breakpoint. | H | H | N/A | H | H | N/A | H for same-breakpoint precedence | StylePrecedence |
 | R06 | Overlapping max-width semantics and cascade | Current 991px and 478px rules overlap and serialize in authority order. The full 991/767/478 chain lacks the 767 authority entry. | H | I | I | I | I | N/A | I, partial | C-07B3 and accepted source ordering |
@@ -136,7 +136,14 @@ Blocked is a dependency note, not a new layer code. The dependency column identi
 | R08 | StyleValue kind `responsive` | The kind validates in IR, but Bricks uses ResponsiveOverride and Fidelity has no serializer branch for this kind. | H | B | N/A | H | E | N/A | Unsupported | StyleValue contract decision |
 | R09 | Fidelity media-query serialization | Fidelity validates supplied max/min semantics, groups output and orders media blocks by authority cascade order. | H | H | H | H | H | N/A | H when authority is supplied | BreakpointAuthority |
 
-The local accepted authority contains tablet_portrait at 991px and mobile_portrait at 478px. It lists desktop as a base and records a source order slot for mobile_landscape, but contains no mobile_landscape numeric entry. Fidelity preserves separate max-width conditions instead of converting them into disjoint ranges. At widths at or below 478px, both existing conditions match; the later authority order lets the mobile portrait declaration win for the same property. The relevant checks are `apps/live_frames/test/live_frames/responsive/breakpoint_authority_test.exs` and `fidelity_responsive_test.exs`.
+| Source responsive context | Representation | Current state |
+| --- | --- | --- |
+| desktop | Unconditional base CSS; no `BreakpointAuthority.Entry` | Cascade metadata names it as the base. |
+| tablet_portrait | `max-width: 991px` media entry | Present in `BreakpointAuthority.breakpoints`. |
+| mobile_landscape | `max-width: 767px` media entry | Listed in cascade source order; numeric entry is missing. |
+| mobile_portrait | `max-width: 478px` media entry | Present in `BreakpointAuthority.breakpoints`. |
+
+The local `BreakpointAuthority` therefore has two of the three required media-query entries. Its validator requires a supported query semantic and a matching media condition (`apps/live_frames/lib/live_frames/responsive/breakpoint_authority.ex:201-262`), so desktop must remain outside the media-entry map. Fidelity preserves separate max-width conditions instead of converting them into disjoint ranges. At widths at or below 478px, all three rules will match once C-07B3 adds the missing entry; the later authority order must let the mobile portrait declaration win for the same property. The relevant checks are `apps/live_frames/test/live_frames/responsive/breakpoint_authority_test.exs` and `fidelity_responsive_test.exs`.
 
 ### ACSS icon capabilities
 
@@ -563,7 +570,7 @@ The runtime/performance table records source timers, observers, listeners and me
 
 ## Shared missing capabilities
 
-1. Accepted authority for the desktop base and all three overlapping max-width breakpoints. Existing authority covers only tablet_portrait and mobile_portrait.
+1. Complete the responsive source model as an unconditional desktop base plus three overlapping max-width breakpoints. `BreakpointAuthority` should contain exactly three media-query entries: tablet_portrait at 991px, mobile_landscape at 767px, and mobile_portrait at 478px. The current entries cover tablet_portrait and mobile_portrait; C-07B3 adds only the missing mobile_landscape entry. Desktop stays unconditional and must not be added to the media-entry map.
 2. A decision on whether StyleValue responsive is an output-capable nested value or an IR-only kind alongside ResponsiveOverride.
 3. A LiveFrames representation for icon markup, icon attributes, icon sizes, boxed/plain utilities, list structure, contextual scheme and configured CSS values.
 4. A safe markup contract for SVG and icon-font nodes. Current tags exclude svg and i; the generic icon semantic type has no Bricks mapping or Fidelity renderer.
@@ -577,7 +584,7 @@ The runtime/performance table records source timers, observers, listeners and me
 
 ```mermaid
 flowchart TD
-  A[Accepted Bricks breakpoint authority] --> B[Responsive overrides and overlap order]
+  A[Desktop unconditional base plus three media entries: 991px, 767px, 478px] --> B[Responsive overrides and overlap order]
   B --> C[Fidelity media CSS]
   D[Automatic.css 4.0.1 settings] --> E[Token and variable authority]
   E --> F[ACSS utility and structural semantics]
@@ -598,13 +605,13 @@ flowchart TD
   R --> S
 ```
 
-The graph shows separate foundations. Breakpoint authority enables responsive output; it does not provide icon or component semantics. ACSS token and utility semantics feed static styling. Interactive components also need source component meaning, a behavior contract and a runtime. Slider and color morphing add external dependency choices. Templates using source queries need an application data contract beyond static markup.
+The graph shows separate foundations. Desktop stays in the unconditional base, while the three media-query authority entries enable overlapping responsive output; neither provides icon or component semantics. ACSS token and utility semantics feed static styling. Interactive components also need source component meaning, a behavior contract and a runtime. Slider and color morphing add external dependency choices. Templates using source queries need an application data contract beyond static markup.
 
 ## Implementation order assessment
 
 The proposed order follows these dependencies and is confirmed with two refinements.
 
-1. C-07B3 breakpoint authority. Add and validate mobile_landscape at 767px, preserve the ordered overlapping max-width rules, and establish how the desktop base and responsive declarations reach Fidelity. Do not convert the overlapping rules to exclusive ranges.
+1. C-07B3 responsive authority context. Add and validate only the missing mobile_landscape `max-width: 767px` media entry, then prove the ordered, overlapping 991px → 767px → 478px Fidelity rules. Keep desktop as unconditional base output and outside `BreakpointAuthority.breakpoints`. Do not convert the overlapping rules to exclusive ranges.
 2. Define the base ACSS styling contract. Resolve the token and structural authority needed by icon attributes, utility classes, scheme, sizes and list structure. Icons are a useful first leaf because their source behavior is pure CSS and has no component state machine.
 3. Define common static component semantics and relationships, then define Behavior IR. Existing generic Interaction records are not enough to preserve accessible state changes and cleanup.
 4. Resolve external dependencies before implementing dependent leaves. Splide and its extension affect Slider and Slider Controls; Flubber affects simple Color Scheme mode; media APIs affect Modal.
@@ -642,7 +649,7 @@ EVIDENCE_GAP_COUNT is eight. These limits do not prevent classification of unrel
 
 ## Proposed next slices
 
-1. C-07B3, 4-breakpoint authority and overlapping max-width output.
+1. C-07B3, add the missing mobile_landscape max-width 767px media entry and verify ordered overlap; keep desktop as unconditional base output.
 2. ACSS icon semantics and the minimum token/utility authority required by the effective DanBricks project CSS.
 3. Static Frames component relationships and Behavior IR contract, including explicit keyboard, ARIA, state and cleanup requirements.
 4. Separate dependency decisions and component slices for Modal, Trigger, Slider/Controls, Tabs, Accordion, Color Scheme, TOC and Switch.
@@ -660,7 +667,7 @@ EVIDENCE_GAP_COUNT is eight. These limits do not prevent classification of unrel
 | Evidence gaps | 8 | Numbered limits above |
 | Architecture decisions | 7 | Unresolved choices above |
 
-The top dependency chain for the next implementation slice is accepted authority for four breakpoints → preserved overlapping ResponsiveOverride order → Fidelity media CSS. Without the 767px entry, the source's mobile_landscape declarations cannot reach emitted CSS. Once that foundation exists, ACSS token and utility authority feeds icon styling, then component and behavior contracts feed runtime implementations, followed by template reconstruction.
+The top dependency chain for the next implementation slice is desktop unconditional base plus a complete three-entry media authority (tablet_portrait 991px, mobile_landscape 767px, mobile_portrait 478px) → preserved overlapping ResponsiveOverride order → Fidelity media CSS. C-07B3 adds only the missing mobile_landscape entry. Desktop remains base output and never becomes a media-query authority entry. Without 767px authority, mobile_landscape declarations cannot reach emitted CSS. After that foundation, ACSS token and utility authority feeds icon styling; component and behavior contracts then feed runtime implementations and template reconstruction.
 
 ## Validation scope
 
