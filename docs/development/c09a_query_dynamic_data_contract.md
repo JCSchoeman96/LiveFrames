@@ -3,6 +3,7 @@
 ## Revision log
 
 - `v1` — initial authority audit from canonical `staging-2026-09` exports; frozen source-independent query/data semantics and IR gate.
+- `v2` — PR #110 review: downgrade QS-01 semantics; precise lifecycles; preserve unbounded/random source intent; generic IR without Bricks expression syntax.
 
 ## 1. Accepted base
 
@@ -106,7 +107,7 @@ Each row is one element owning `settings.query`. `hasLoop` is the export flag on
 | Template | Element | Source path | Category | Under loop subtree | Length | SHA-256 |
 | --- | --- | --- | --- | --- | ---: | --- |
 | feature-section-milan | heading a34333 | `settings.text` | `{post_title}` | yes | 12 | `1cec9750eea38d7b02256c8bac377453ef415ac53335e3f2d312b17a9036aa01` |
-| feature-section-milan | text-basic b41076 | `settings.text` | `{post_content:16}` modifier | yes | 17 | `e8b1ed82a82259350f2aecc9e97f9af88227e81abad4289fe0d27341760b24a1` |
+| feature-section-milan | text-basic b41076 | `settings.text` | `{post_content:16}` (modifier suffix present; semantics unproven) | yes | 17 | `e8b1ed82a82259350f2aecc9e97f9af88227e81abad4289fe0d27341760b24a1` |
 | gallery-bravo | text-basic 22de9a | `settings.text` | `{query_results_count:c74cb5}` | no | 43 | `396552e6b5e9e9fc21c75acd9b509d728ea2ae86357e1e8662ce551eaacb6b22` |
 | slider-section-basel | heading 222894 | `settings.text` | `{post_title}` | yes | 12 | `1cec9750eea38d7b02256c8bac377453ef415ac53335e3f2d312b17a9036aa01` |
 | slider-section-basel | text d01006 | `settings.text` | HTML wrapper + `{post_content}` (21 chars) | yes | 21 | `4552f832a80bf18072dc8747bfe06ca4fe630c4c2d5b798450bec93a7c04d176` |
@@ -115,13 +116,13 @@ Each row is one element owning `settings.query`. `hasLoop` is the export flag on
 
 | Shape ID | Owners | Occurrences | Collection / scalar | Dynamic child bindings | Source dependency | Proposed normalized meaning | Current status |
 | --- | ---: | ---: | --- | --- | --- | --- | --- |
-| QS-01 | Header list `Item` | 15 | Collection intent **uncertain** (`hasLoop` false) | Static link text in export | WP post query stub + `disable_query_merge` | Navigation/menu item collection with merge disabled; child links not dynamically bound in export | Evidence only |
+| QS-01 | Header list `Item` | 15 | **Collection boundary unproven** (`hasLoop` false; 15 static siblings) | No dynamic label/URL bindings | `objectType` + `disable_query_merge` only | Declared query configuration; **kind = evidence_insufficient / unclassified**; repeat_root unproven; data bindings unproven; full query object in `SourceTrace` only | Evidence only |
 | QS-02 | Feature Card | 1 | Collection (`hasLoop` true) | `{post_title}`, `{post_content:16}`, nested QS-03 | Post type `post`, limit 4 | Repeat feature card subtree for up to four posts | Evidence only |
 | QS-03 | Feature media wrapper | 2 | One nested without loop flag | `{featured_image}` on child image | Post query, limit 4; one owner nested under QS-02 | Media slot per loop record; nested query on one path | Evidence only |
 | QS-04 | Slider slide | 1 | Collection (`hasLoop` true) | `{post_title}`, `{featured_image}` | Custom post type `locations` | Repeat slide subtree for location posts | Evidence only |
 | QS-05 | Hero slider wrapper | 2 | Collection (`hasLoop` true) | Child image from attachment context (static image element in export) | Attachment + taxonomy filter, no offset | Repeat wrapper for filtered attachments | Evidence only |
 | QS-06 | Hero slider wrapper | 4 | Collection (`hasLoop` true) | Same | Attachment + taxonomy + numeric **offset** (8 or 12) | Same as QS-05 with staggered window | Evidence only |
-| QS-07 | Gallery media wrapper | 1 | Collection (`hasLoop` true) | `{post_id}` on image; count in sibling text | Attachment + taxonomy; **orderby random**; unbounded limit | Gallery grid of filtered attachments; non-deterministic **ordering intent** at provider | Evidence only |
+| QS-07 | Gallery media wrapper | 1 | Collection (`hasLoop` true) | `{post_id}` on image; count in sibling text | Attachment + taxonomy; **`ordering_intent = random`**; **`limit_intent = unbounded`** (`posts_per_page` `-1`) | Repeat wrapper for filtered attachments; random ordering intent preserved at normalize; execution policy at provider | Evidence only |
 
 **Input fields observed:** `objectType`, `post_type`, `posts_per_page`, `tax_query` (opaque taxonomy tokens), `orderby` (`rand`), `offset`, `disable_query_merge`.
 
@@ -134,13 +135,13 @@ Each row is one element owning `settings.query`. `hasLoop` is the export flag on
 | DB-01 | `useDynamicData` on `image` | 4 | Asset / media field | Loop record |
 | DB-02 | `useDynamicData` on link `url` | 1 | Link destination | Site/global |
 | TB-01 | `text` `{post_title}` | 2 | Text content | Loop record |
-| TB-02 | `text` `{post_content:…}` | 1 | Text content (truncation modifier) | Loop record |
+| TB-02 | `text` `{post_content:…}` | 1 | Text content; base field `post_content`; `:16` suffix present; **modifier semantics unproven** | Loop record |
 | TB-03 | `text` `{query_results_count:…}` | 1 | Text content | References query owner id |
 | TB-04 | `text` other post field | 1 | Text content | Loop record |
 
 ## 8. Collection vs scalar semantics
 
-**Collection binding proven:** yes. Ten query owners set `hasLoop: true` and own a non-empty child subtree that is the repetition template (Gallery, Hero columns, Slider slide, Feature card/media).
+**Collection binding proven:** yes, for owners with `hasLoop: true` and a non-empty child repetition template (ten owners: Gallery, Hero, Slider, Feature card/media paths). **QS-01 is excluded:** fifteen Header Basel query owners do not establish a collection boundary.
 
 **Scalar binding proven:** yes. Five `useDynamicData` bindings and five `text` template bindings read fields from the current or site context.
 
@@ -195,12 +196,13 @@ LiveFrames core should preserve **intent**, not WordPress query API details. Raw
 | Field | Purpose |
 | --- | --- |
 | `id` | Stable document-local id |
-| `kind` | Normalized enum: `post_collection`, `attachment_collection`, `navigation_collection` (last only when export proves bindings) |
+| `kind` | Normalized enum when evidence supports it: e.g. `post_collection`, `attachment_collection`. **`evidence_insufficient` / unclassified** when only a raw query object is present (QS-01). Do not infer navigation or menu semantics without binding evidence. |
 | `cardinality` | `one_or_many` |
 | `record_type` | `post`, `attachment`, `custom_type:<name>` from evidence |
 | `filters` | Opaque filter list + normalized taxonomy intent where shape known |
 | `ordering` | Including `random` as **ordering intent** (not compiler randomness) |
-| `limit` / `offset` | Numeric bounds when present |
+| `limit_intent` | Preserves source limit faithfully (e.g. numeric cap, or **`unbounded`** when source uses `-1` / equivalent). Normalization must not substitute operational caps. |
+| `offset` | Numeric offset when present in source |
 | `merge_policy` | e.g. disable merge when proven |
 | `repeat_root_node_id` | Design node subtree repeated per item |
 | `scope_parent_intent_id` | Optional nested parent |
@@ -209,17 +211,24 @@ LiveFrames core should preserve **intent**, not WordPress query API details. Raw
 
 ### DataBinding (scalar)
 
-| Field | Purpose |
+Generic IR carries **source-independent meaning** only. Raw Bricks strings (e.g. `{post_title}`, `{post_content:16}`) live in `SourceTrace`, not as the primary semantic payload.
+
+| Field (conceptual) | Purpose |
 | --- | --- |
-| `id` | Stable id |
+| `id` | Stable document-local id |
 | `intent_ref` | Optional link to collection intent for loop scope |
 | `target_node_id` | Design node |
 | `target_kind` | `text`, `asset`, `link_url`, `attribute`, … |
-| `field_expression` | Declarative reference token(s), not evaluated PHP/JS |
+| `binding_kind` | e.g. record_field, site_field, query_aggregate (exact enum owned by C-09B) |
+| `field` | Normalized field identity when proven (e.g. `post_title`, `post_content`, `featured_image`, `post_id`, `site_url`) |
+| `modifier_present` / `modifier_value` | When source suffix exists (TB-02: `:16`); **modifier semantics = unproven** unless separate authority says otherwise |
+| `aggregate_ref` | When binding reads query cardinality (TB-03); references data-source intent id, not Bricks element id syntax in generic fields |
 | `scope` | `loop_current`, `site`, `query_aggregate`, … |
 | `fallback` | Explicit unresolved when provider omits field |
-| `source_trace` | Path + raw string hash |
-| `resolution_status` | Lifecycle state |
+| `source_trace` | Source path, raw expression hash, and preserved source string for audit |
+| `resolution_status` | Lifecycle state (see §12) |
+
+**Normalization rule:** known semantic portion → normalized fields; unproven or source-specific syntax → trace + `opaque_expression` / unresolved modifier state. C-09B owns exact field names and validation.
 
 ### Separation from Interaction
 
@@ -227,34 +236,79 @@ User/browser interactions stay in `interactions` registry. DataSourceIntent and 
 
 ## 12. Query and data lifecycle state machines
 
-### Scalar / binding lifecycle
+Lifecycle definitions are **contract only** (no implementation in C-09A). States are explicit; **terminal** states cannot transition further. **Resumable / stable blocked** states may transition when guards are satisfied (e.g. a provider is registered).
 
-```text
-source_seen
-  → source_classified
-  → intent_normalized
-  → provider_unbound
-  → provider_bound
-  → value_resolved
-```
+### Scalar / DataBinding resolution
 
-Terminal / exception: `provider_unbound`, `unsupported_source_shape`, `opaque_expression`, `invalid_binding`, `resolution_failed`, `resolved`.
+**States**
 
-Guards: normalization must not call a provider; `provider_bound` requires explicit application adapter; `value_resolved` requires authorized provider response.
+| State | Role |
+| --- | --- |
+| `source_seen` | Raw binding evidence recorded from export |
+| `source_classified` | Assigned binding_kind / target_kind / scope candidate |
+| `intent_normalized` | Generic IR fields populated; trace retained |
+| `provider_unbound` | **Resumable.** Normalization complete; no provider registered for this binding |
+| `provider_bound` | **Resumable.** Provider registered; resolution may proceed |
+| `value_resolved` | **Terminal (success).** Authorized value supplied for target |
+| `unsupported_source_shape` | **Terminal (failure).** Cannot classify safely |
+| `opaque_expression` | **Terminal (failure).** Expression or modifier semantics insufficient |
+| `invalid_binding` | **Terminal (failure).** Target node/kind invalid |
+| `resolution_failed` | **Terminal (failure).** Provider returned error or wrong shape |
 
-### Collection lifecycle
+**Transition table**
 
-```text
-query_declared
-  → query_normalized
-  → provider_unbound
-  → provider_bound
-  → collection_loaded
-  → items_bound
-  → subtree_instantiated
-```
+| From | To | Guard | Side effects | Terminal / resumable |
+| --- | --- | --- | --- | --- |
+| (start) | `source_seen` | Export contains binding evidence | Append diagnostic trace; hash raw source string | Resumable |
+| `source_seen` | `source_classified` | Shape matches a known TB/DB class | Record binding_kind, target_kind | Resumable |
+| `source_seen` | `unsupported_source_shape` | Shape unknown or unsafe | Diagnostic `unsupported_source_shape`; no generic field invention | Terminal |
+| `source_classified` | `intent_normalized` | Required generic fields derivable; modifier semantics proven or marked opaque | Write normalized fields; store raw in `SourceTrace`; set `modifier_semantics` when unproven | Resumable |
+| `source_classified` | `opaque_expression` | Required semantics unproven and cannot normalize without guessing | Diagnostic; raw in trace only | Terminal |
+| `intent_normalized` | `provider_unbound` | Compile/render phase; no provider | No provider call; binding refs remain unresolved in output | **Resumable (stable blocked)** |
+| `provider_unbound` | `provider_bound` | Application registers compatible provider + tenant context | Register provider handle; no value fetch yet | Resumable |
+| `provider_bound` | `value_resolved` | Provider returns value matching target_kind and scope | Attach resolved value to render context; audit log | **Terminal (success)** |
+| `provider_bound` | `resolution_failed` | Provider error, missing field, or policy rejection | Diagnostic; no silent fallback to live WP data | Terminal |
+| `intent_normalized` | `invalid_binding` | Validation fails (missing target node, etc.) | Diagnostic | Terminal |
 
-Terminal / exception: `empty_collection`, `provider_unbound`, `query_invalid`, `load_failed`, `collection_boundary_unproven`.
+Successful terminal state name is **`value_resolved` only** (not `resolved`).
+
+### Collection / DataSourceIntent resolution
+
+**States**
+
+| State | Role |
+| --- | --- |
+| `query_declared` | Element owns `settings.query` in source |
+| `query_normalized` | Generic intent fields populated (`kind`, filters, `limit_intent`, `ordering_intent`, …) |
+| `provider_unbound` | **Resumable.** Intent in IR; no provider |
+| `provider_bound` | **Resumable.** Provider registered |
+| `collection_loaded` | **Resumable.** Provider returned collection matching cardinality policy |
+| `items_bound` | **Resumable.** Current-record scope available to child bindings |
+| `subtree_instantiated` | **Terminal (success).** Repeat template expanded per item (or explicit empty policy applied) |
+| `collection_boundary_unproven` | **Resumable (stable blocked).** Query declared but repeat_root / loop boundary not proven (QS-01) |
+| `empty_collection` | **Terminal.** Provider returned zero items; subtree policy explicit |
+| `query_invalid` | **Terminal (failure).** Normalized intent invalid |
+| `load_failed` | **Terminal (failure).** Provider error |
+| `unsupported_source_shape` | **Terminal (failure).** Cannot normalize query object |
+
+**Transition table**
+
+| From | To | Guard | Side effects | Terminal / resumable |
+| --- | --- | --- | --- | --- |
+| (start) | `query_declared` | Export contains `settings.query` | Preserve raw query in trace | Resumable |
+| `query_declared` | `query_normalized` | Shape QS-02 … QS-07 (or partial with known fields) | Set `kind`, `limit_intent`, `ordering_intent`, `repeat_root_node_id` when proven | Resumable |
+| `query_declared` | `collection_boundary_unproven` | Query present; `hasLoop` false and repeat subtree not proven (QS-01) | `kind = evidence_insufficient`; no repeat_root; no invented navigation semantics | **Resumable (stable blocked)** |
+| `query_declared` | `unsupported_source_shape` | Query object unsafe or unrecognizable | Diagnostic | Terminal |
+| `query_normalized` | `provider_unbound` | No provider at compile time | Intent serialized deterministically | **Resumable (stable blocked)** |
+| `provider_unbound` | `provider_bound` | Provider + tenant context registered | No fetch until load transition | Resumable |
+| `provider_bound` | `collection_loaded` | Provider accepts intent and operational policy | Fetch/batch per intent; enforce **caller max-items policy** separately from source `limit_intent` | Resumable |
+| `provider_bound` | `load_failed` | Provider error or policy rejection (e.g. random ordering blocked) | Diagnostic; no silent cap/substitute | Terminal |
+| `collection_loaded` | `items_bound` | Items available | Bind loop scope for child DataBindings | Resumable |
+| `items_bound` | `subtree_instantiated` | Repeat template applied per item | Instantiate children; single batch per intent | **Terminal (success)** |
+| `collection_loaded` | `empty_collection` | Zero items | Explicit empty subtree policy | Terminal |
+| `collection_boundary_unproven` | `query_normalized` | **Future:** supplemental authority proves repeat boundary | Upgrade kind only with evidence | Resumable |
+
+`provider_unbound` is **not** terminal; it is a normal stable blocked state before a provider is attached.
 
 ## 13. Security boundary
 
@@ -262,12 +316,12 @@ Dynamic strings are **untrusted templates**. Classification for observed corpus 
 
 | Class | Corpus examples |
 | --- | --- |
-| KNOWN_DECLARATIVE_SHAPE | `{post_title}`, `{featured_image}`, `{site_url}`, `{post_id}`, `{post_content:16}`, `{query_results_count:<id>}` |
-| OPAQUE_SOURCE_EXPRESSION | Taxonomy tokens in `tax_query` (`happyfiles_category::…`) — preserve in trace; do not parse as SQL |
+| KNOWN_DECLARATIVE_SHAPE | Simple field tokens where base field identity is clear from export context (`post_title`, `featured_image`, `site_url`, `post_id`, `post_content` with separate modifier handling) |
+| OPAQUE_SOURCE_EXPRESSION | Taxonomy tokens in `tax_query`; **`post_content` `:16` suffix — modifier present, modifier semantics unproven**; full string in trace |
 | UNSAFE_EXECUTABLE | Not observed as binding values; `javascriptCode` blocks are separate X09 surface |
-| EVIDENCE_INSUFFICIENT | Header menu item population |
+| EVIDENCE_INSUFFICIENT | QS-01 Header list query stubs without loop boundary or dynamic bindings |
 
-Future rules: no `eval` of Bricks/PHP/JS; no implicit shortcodes; no URL fetch from binding strings; HTML/attribute injection mitigated at render boundary; provider enforces tenant isolation; bounded limits on collection size.
+Future rules: no `eval` of Bricks/PHP/JS; no implicit shortcodes; no URL fetch from binding strings; HTML/attribute injection mitigated at render boundary; provider enforces tenant isolation; **operational collection limits are provider/caller policy, not silent normalization rewrites**.
 
 ## 14. Provider boundary
 
@@ -293,8 +347,10 @@ Invariant: **source query cannot choose or escape tenant context**; caller passe
 
 ## 15. Determinism contract
 
-- **Source normalization** must be deterministic: same export + adapter version → same QueryIntent/DataBinding ids and serialized IR, independent of live database contents.
-- **Ordering intent `random`** is stored declaratively; the compiler must not shuffle nodes. Nondeterministic ordering, if any, happens only when the application provider resolves `ordering = random` at render/data time (explicit policy in C-09B+).
+- **Source normalization** must be deterministic: same export + adapter version → same DataSourceIntent/DataBinding ids and serialized IR, independent of live database contents.
+- **`limit_intent`:** Source `posts_per_page: "-1"` (Gallery QS-07) normalizes to **`unbounded`** (or equivalent explicit intent). The adapter must not replace unbounded with a numeric cap.
+- **`ordering_intent`:** Source `orderby: ["rand"]` normalizes to **`random`** exactly. The compiler does not shuffle nodes or substitute ordering during normalization.
+- **Provider/runtime:** May honor `random` or **explicitly reject/block** unsupported random ordering under policy. A deterministic ordering substitute is allowed only as an explicitly authorized **non-fidelity override** with observable diagnostic/metadata—not as default resolution.
 - Database snapshots during compile are out of scope unless a future explicit snapshot mode is authorized separately.
 
 ## 16. Performance and scaling review
@@ -303,8 +359,9 @@ Future implementation (not this PR):
 
 - Load each collection intent once per provider bind; no N+1 provider calls per repeated child node.
 - Batch asset resolution for image bindings sharing an intent.
-- Enforce limits (`posts_per_page`, reasonable caps) at normalization validation.
-- Stream or page large collections at provider discretion.
+- **Normalization:** validate and preserve source `limit_intent` (including **`unbounded`**). Do not silently rewrite unbounded → capped values.
+- **Operational safety:** caller/application **max-items policy** applies at provider execution. If policy caps below source intent, result must carry explicit **policy/degradation** state or diagnostic; provider must not claim full source fidelity while returning a silent subset.
+- Stream or page large collections at provider discretion under policy.
 - Caching belongs to the application provider, not the Bricks adapter.
 
 C-09A audit: DB 0, Redis 0, network 0, runtime fetch 0.
@@ -336,13 +393,14 @@ Adding required root fields (`data_sources`, `data_bindings`, or equivalent) and
 | --- | --- | --- |
 | Unknown query shape | Adapter | `unsupported_source_shape` + diagnostic |
 | Unknown dynamic expression | Adapter | `opaque_expression` |
-| Provider missing | Compile/render | `provider_unbound` |
+| Provider missing at render | Compile/render | `provider_unbound` (resumable until provider registered) |
 | Wrong cardinality returned | Provider | `resolution_failed` |
 | Field missing | Provider | Explicit fallback or `resolution_failed` |
 | Binding target missing | Adapter validation | `invalid_binding` |
 | Asset result unsafe/unapproved | Asset authority gate | Block resolution (C-08 lineage) |
 | Empty collection | Provider | `empty_collection`; optional empty subtree policy |
-| Non-deterministic ordering intent | Normalizer | Store intent; do not randomize in compiler |
+| Non-deterministic ordering intent | Normalizer | Store `ordering_intent = random`; provider honors or explicitly rejects |
+| Provider cap below source limit | Provider policy | Explicit degradation diagnostic; never silent subset |
 | Nested context unresolved | Adapter | `nested_context_unresolved` |
 | Collection boundary unproven | Adapter | `collection_boundary_unproven` (Header Basel) |
 
@@ -361,15 +419,17 @@ No silent defaults to live WordPress data during normalization.
 
 ## 21. Random ordering (Gallery Bravo)
 
-Gallery QS-07 sets `orderby: ["rand"]`. Normalized **`ordering_intent = random`**. Compilation remains deterministic; provider/application chooses shuffle or stable surrogate when serving data.
+Gallery QS-07 sets `orderby: ["rand"]`. Normalization sets **`ordering_intent = random`** with no compiler-side shuffle. Provider may **honor random** or **explicitly reject/block** under policy. A stable deterministic ordering substitute is **not** normal resolution; it requires an explicit non-fidelity override with diagnostic/metadata.
 
 ## 22. Asset bindings vs AssetReference
 
 Dynamic image bindings (`useDynamicData` on `image`) must produce **DataBinding** targets with `resolution_status: provider_unbound`. They must not create `AssetReference` entries with `redistribution_status` implied resolved. Static S1 icon pipeline (C-08) remains separate.
 
-## 23. Navigation / menu data
+## 23. Header Basel query stubs (QS-01)
 
-Header QS-01 proves repeated list **items** with query stubs and merge disabled, but not dynamic label/URL fields. Minimum contract: **`navigation_collection` stub** with `collection_boundary_unproven` until labels/URLs bind to records or authority supplements. No hierarchy or current-page semantics proven in Header export (Slide Menu Alpha uses static structure + JS note about query compatibility without query objects in JSON).
+Fifteen sibling `Item` elements each carry a minimal `settings.query` (`objectType: post`, `disable_query_merge: true`) with **`hasLoop: false`** and **static** link text/URLs in the export. This proves **declared query configuration** only—not runtime repetition, a single navigation collection, menu hierarchy, or record-to-label/link mapping.
+
+Normalization for QS-01: **`kind = evidence_insufficient`**, **`collection_boundary_unproven`**, **`repeat_root` unproven**, **data bindings unproven**. Raw query objects remain in `SourceTrace`. Do not assign `navigation_collection` or menu semantics from this evidence alone.
 
 ## 24. Pagination
 
