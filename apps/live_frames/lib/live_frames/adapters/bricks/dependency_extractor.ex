@@ -681,14 +681,14 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             structural_authority_type: candidate.authority_type
           })
 
-        Enum.any?(statuses, &(&1 == :resolved_structural)) ->
-          %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
-
-        Enum.all?(statuses, &(&1 == :structural_value_invalid)) ->
+        Enum.any?(statuses, &(&1 == :structural_value_invalid)) ->
           %{base | status: :source_variable, resolution_reason: "structural_value_invalid"}
 
-        Enum.all?(statuses, &(&1 == :unresolved_external)) ->
+        Enum.any?(statuses, &(&1 == :unresolved_external)) ->
           %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
+
+        structural_partial_application?(statuses) ->
+          %{base | status: :source_variable, resolution_reason: "structural_partial_application"}
 
         Enum.all?(statuses, &(&1 == :unverified_occurrence)) ->
           %{base | status: :source_variable, resolution_reason: "structural_context_unverified"}
@@ -696,14 +696,20 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
         Enum.all?(statuses, &(&1 == :mapping_unproven_occurrence)) ->
           %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
 
-        Enum.any?(statuses, &(&1 == :unresolved_external)) ->
-          %{base | status: :unresolved_external, resolution_reason: "external_unresolved"}
-
         true ->
           %{base | status: :source_variable, resolution_reason: "mapping_unproven"}
       end
 
     finalize_variable_record(record)
+  end
+
+  defp structural_partial_application?(statuses) do
+    status_set = MapSet.new(statuses)
+    allowed = MapSet.new([:resolved_structural, :unverified_occurrence])
+
+    MapSet.member?(status_set, :resolved_structural) and
+      MapSet.member?(status_set, :unverified_occurrence) and
+      MapSet.subset?(status_set, allowed)
   end
 
   defp variable_record_standalone(name, authority_index, structural_authority_index) do

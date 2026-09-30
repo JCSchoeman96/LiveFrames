@@ -288,7 +288,7 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert Enum.all?(variable["occurrences"], &(&1["resolution_status"] == "resolved_structural"))
   end
 
-  test "mixed valid and invalid structural occurrences do not aggregate as fully resolved" do
+  test "mixed valid and invalid structural occurrences aggregate as structural_value_invalid" do
     document =
       to_ir!(
         %{
@@ -300,11 +300,17 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
 
     variable = dependency_variable(document, "--grid-1")
     assert variable["status"] == "source_variable"
-    assert variable["resolution_reason"] == "structural_partial_application"
+    assert variable["resolution_reason"] == "structural_value_invalid"
+    refute variable["resolution_reason"] == "structural_partial_application"
 
     statuses = Enum.map(variable["occurrences"], & &1["resolution_status"])
     assert "resolved_structural" in statuses
     assert "structural_value_invalid" in statuses
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.variable.unresolved" and
+               diagnostic.metadata["source_variable"] == "--grid-1"
+           end)
   end
 
   test "parsed declaration reconciles with raw layer occurrence without duplication" do
