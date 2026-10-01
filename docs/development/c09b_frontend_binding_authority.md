@@ -82,6 +82,12 @@ supported by evidence. QS-01 has query settings but no proven repeat boundary;
 it remains source trace and a diagnostic, with no CollectionBinding and no
 invented repeat root.
 
+A serialized CollectionBinding always has normalization_status normalized.
+evidence_insufficient and unsupported are normalization outcomes, not
+CollectionBinding record states. Preserve those outcomes in diagnostics and
+source evidence, and emit no registry record. Do not make owner_node_id or
+repeat_root_node_id nullable to represent a non-binding.
+
 ### CollectionBinding fields
 
 | Field | Type | Required | Allowed values or invariant | Frontend meaning |
@@ -90,7 +96,7 @@ invented repeat root.
 | owner_node_id | node ID | yes | Must resolve to a DesignNode | Node that declares or owns the source repetition |
 | repeat_root_node_id | node ID | yes | Must resolve to a DesignNode | Root of the subtree rendered once for each supplied item |
 | parent_collection_binding_id | collection binding ID or nil | no | Must resolve when set; cannot be self; graph must be acyclic | Enclosing repeat context for nested repetition |
-| normalization_status | enum | yes | normalized, evidence_insufficient, unsupported | Compile-time confidence in the frontend repetition contract |
+| normalization_status | enum | yes | normalized | The collection and repeat boundary are proven for this serialized record |
 | source_trace | SourceTrace | yes for source-derived records | Identifies source owner, path, adapter/version, relevant source settings, and inference | Audit trail for the inferred frontend contract |
 
 No item scope name or caller attribute name is stored here. The referenced
@@ -124,8 +130,8 @@ the existing interaction model and is not a value binding.
 | scope | enum | yes | collection_item, site, collection | Caller-data scope from which the value is supplied |
 | value_key | source-independent semantic key or nil | conditional | Required for value_kind field; absent for collection_count | Normalized frontend meaning, not a raw source field name or Phoenix API name |
 | collection_binding_id | collection binding ID or nil | conditional | Required for collection_item and collection scopes; absent for site scope | The repeat context or collection whose supplied values this binding uses |
-| modifier_status | enum | yes | none, opaque | Whether a source modifier exists and whether its meaning is understood |
-| normalization_status | enum | yes | normalized, evidence_insufficient, unsupported | Compile-time confidence in the binding meaning |
+| modifier_status | enum | yes | none, opaque | Whether a source modifier is absent or present with unproven semantics |
+| normalization_status | enum | yes | normalized, evidence_insufficient | Compile-time confidence in the binding meaning |
 | source_trace | SourceTrace | yes for source-derived records | Identifies source target, expression/settings, adapter/version, and inference | Audit trail for the inferred frontend binding |
 
 Scope and value consistency rules:
@@ -136,21 +142,31 @@ Scope and value consistency rules:
 - Other combinations are invalid until evidence and a later authority define
   them.
 
+Emit a ValueBinding only when its required typed fields can be populated from
+evidence without invention. An evidence_insufficient record is allowed only
+when target_node_id, target_kind, value_kind, scope, and its conditional
+value_key or collection_binding_id are still supported by evidence. If the
+source binding is unsupported or those required semantics cannot be
+established, retain it in SourceTrace with a diagnostic and emit no
+ValueBinding.
+
 The value_key is a normalized, source-independent semantic identifier. It is
 not the original source field spelling and does not prescribe a generated
 component input. For example, source post_title may establish the semantic key
 content.title; source featured_image may establish media.primary; source
-post_content may establish content.body when the modifier is absent or
-understood. The original source identity remains in SourceTrace. A later
-componentization phase may map that key to an attribute, slot, item field, or
-another frontend API.
+post_content without a modifier may establish content.body. The original
+source identity remains in SourceTrace. A later componentization phase may map
+that key to an attribute, slot, item field, or another frontend API.
 
 ValueBinding IDs follow the same deterministic rule as collection IDs.
 
-An opaque modifier makes the binding evidence_insufficient unless its
-semantics are separately established. For {post_content:16}, the normalized
-meaning may retain the proven base-field identity and modifier_status opaque.
-The value must not be silently treated as an unmodified body value.
+For {post_content:16}, value_key may retain the proven base-field identity,
+but modifier_status must be opaque and normalization_status must be
+evidence_insufficient. modifier_status none means no source modifier;
+modifier_status opaque means a modifier exists but its semantics are not
+established. A generator must not silently treat this binding as an
+unmodified body value. Supporting an understood modifier requires separate
+authority before adding another modifier status or transformed meaning.
 
 Fallback behavior is deferred. No provider-resolved value, fetched record,
 placeholder asset, or runtime value is stored in Design IR.
@@ -268,14 +284,33 @@ The normalization process is declarative and compile-time:
         -> frontend_semantics_classified
         -> binding_normalized
 
-The persistent terminal statuses are normalized, evidence_insufficient, and
-unsupported. They describe source-to-frontend normalization only:
+The normalization process has three terminal outcomes: normalized,
+evidence_insufficient, and unsupported. These are source-to-frontend
+normalization outcomes, not one shared serialized status enum:
 
 - normalized means the repeat or value-binding semantics are supported by
   evidence;
 - evidence_insufficient means source evidence exists but does not prove the
   needed frontend meaning; and
 - unsupported means the source shape cannot be represented by this contract.
+
+An outcome does not necessarily produce a serialized binding record. Registry
+admission is:
+
+| Registry record | Normalization outcome | Admission |
+| --- | --- | --- |
+| CollectionBinding | normalized | Emit; the collection and repeat boundary are proven |
+| CollectionBinding | evidence_insufficient | Diagnostic and source evidence only; no registry record |
+| CollectionBinding | unsupported | Diagnostic and source evidence only; no registry record |
+| ValueBinding | normalized | Emit |
+| ValueBinding | evidence_insufficient | Emit only when required typed/base semantics remain proven; consumer must treat it as unresolved |
+| ValueBinding | unsupported | Diagnostic and source evidence only; no registry record |
+
+An evidence_insufficient ValueBinding must not be consumed as a static or
+unmodified value. A later generator or componentization step must diagnose or
+block fidelity-dependent use until the missing semantics are established.
+QS-01 remains diagnostic and SourceTrace only because its repeat boundary is
+unproven; it has no CollectionBinding record.
 
 Status changes do not fetch, resolve, sort, filter, or mutate caller data.
 There is no provider lifecycle in this authority. A later generator must
