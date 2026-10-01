@@ -41,6 +41,20 @@ One C09A path label needs correction from the raw corpus. Header Basel element
 export path and retains C09A's classification of the value as a dynamic link
 URL.
 
+C09C2's bounded source re-audit found one additional brace-bearing frontend
+expression outside the C09A DB/TB summary. It scanned all nine canonical
+Bricks component JSON fragments for string-valued settings outside
+`settings.text`, `settings.image.useDynamicData`, and
+`settings.url.useDynamicData`, excluding CSS/Sass, style values, and
+JavaScript/code fields. The audit does not interpret arbitrary expressions.
+
+| Source element | Source path | Raw-expression class | Target surface | Already covered by classifier? | Final policy |
+| --- | --- | --- | --- | --- | --- |
+| `5bf400` | `settings.altText` | Dynamic token followed by literal text (`{site_title} Logo`) | Accessibility / alt-text attribute | No | `NO_BINDING / DIAGNOSTIC_ONLY`; preserve the focused raw setting in SourceTrace, emit `bricks.binding.target_unsupported`, and do not create a static alt attribute. |
+
+No other brace-based expression was found in the bounded nonstandard frontend
+settings audit. This occurrence is not added to the historical C09A summary.
+
 ## 2. Contract boundary
 
 Design IR 2.0.0 owns the `collection_bindings` and `value_bindings` root
@@ -123,12 +137,18 @@ exception.
 
 ## 5. Closed ValueBinding classifier
 
-The adapter recognizes only the exact source forms in the matrix below. For
-text settings, the entire value must equal an admitted token to create a
+The adapter recognizes only the exact supported source forms in the matrix
+below. Supported paths are `settings.text`,
+`settings.image.useDynamicData`, and `settings.url.useDynamicData`. For text
+settings, the entire value must equal an admitted token to create a
 ValueBinding, except that recognized mixed text is diagnosed as unsupported
 interpolation. For dynamic settings, the expression is read only from the
-listed target path. The classifier does not interpret arbitrary brace tokens,
-modifiers, nested objects, or source values as semantic fields.
+listed target path. The observed `settings.altText` expression is an
+unsupported frontend target, not a text binding: `target_kind: :text` means a
+node's content target, not an arbitrary textual attribute. The classifier
+does not interpret arbitrary brace tokens, modifiers, nested objects, or
+source values as semantic fields. Observed unsupported target paths receive a
+specific diagnostic and SourceTrace only; unknown future forms fail closed.
 
 `value_kind: field` uses a proven source-independent `value_key`.
 `collection_item` scope points to the nearest enclosing admitted collection
@@ -141,6 +161,7 @@ context, while `site` scope has no collection reference. A
 | `{featured_image}` on image | DB-01; elements `2a8181`, `0ba4da`, `c22f13` | `settings.image.useDynamicData` | Emit normalized ValueBinding. | `asset` | `field` | `collection_item` | `media.primary` | Nearest emitted collection: `ebbb6e` for `2a8181`, `b71f5d` for `0ba4da`, and `118bbd` for `c22f13`. | `none` | `normalized` | No AssetReference or asset ref for this `settings.image` declaration. Do not copy the expression into another generic node field. | None. | Source element ID, exact path, Bricks adapter/version, the focused `settings.image` source object, exact raw expression, and classification `media.primary`. |
 | `{post_id}` on image | DB-01; element `bbf168` | `settings.image.useDynamicData` | No ValueBinding. The source identifies an attachment ID, but the evidence does not prove an asset value that the frontend asset target can consume. | `asset` | `field` candidate only; no record | `collection_item` candidate only, under `c74cb5` | None. Do not use `post_id`, `media.id`, or another invented key. | `c74cb5` is the nearest collection, but a valid value binding is not emitted. | `none` | `evidence_insufficient` | Suppress AssetReference and `asset_refs` for this dynamic image setting. | `bricks.binding.evidence_insufficient`. | Source element ID, exact path, focused `settings.image` object, raw `{post_id}`, and inference that an attachment ID does not prove a frontend asset value. |
 | `{site_url}` on dynamic URL | DB-02; element `5bf400` | `settings.url.useDynamicData` | Emit normalized ValueBinding. The path is the raw export path; see the C09A correction in section 1. | `link_url` | `field` | `site` | `site.url` | None. | `none` | `normalized` | Remove the raw dynamic `url` object from `attributes`; do not emit a static `navigation` value. | None. | Source element ID, exact path, Bricks adapter/version, focused raw `settings.url` object, exact expression, and classification `site.url`. |
+| `{site_title} Logo` | C09C2 bounded source re-audit; element `5bf400` | `settings.altText` | No ValueBinding. This is mixed dynamic/literal accessibility text, and Design IR 2.0.0 has no authorized attribute or alt-text target. | None | None | None | None | None. | `none` | `unsupported` | Preserve the raw setting only in SourceTrace. Do not emit a static alt attribute or treat this as `content`. | `bricks.binding.target_unsupported`. | Source element ID, exact path, Bricks adapter/version, focused raw `settings.altText`, exact raw value, and inference that the accessibility target has no authorized IR representation. |
 | `{post_title}` | TB-01; elements `a34333`, `222894` | `settings.text` | Emit one normalized ValueBinding per target. | `text` | `field` | `collection_item` | `content.title` | Nearest emitted collection: `ebbb6e` for `a34333`; `118bbd` for `222894`. | `none` | `normalized` | Set `DesignNode.content` to nil. Preserve the source text only in SourceTrace. | None. | Source element ID, exact `settings.text` path, Bricks adapter/version, focused raw text setting, exact expression, and classification `content.title`. |
 | `{post_content:16}` | TB-02; element `b41076` | `settings.text` | Emit an evidence-insufficient ValueBinding because its base field and typed target remain proven. | `text` | `field` | `collection_item` | `content.body` | Nearest emitted collection `ebbb6e`. | `opaque` | `evidence_insufficient` | Set `DesignNode.content` to nil. Do not expose the expression as static content. | `bricks.binding.evidence_insufficient`, with modifier inference. | Source element ID, exact path, focused raw text setting, exact expression, adapter/version, base-field classification, and inference that modifier `16` is opaque. |
 | Exact whole `{post_content}` token | C09B section 6; this exact whole-text shape is not a separate corpus occurrence. | `settings.text` | Emit only when the complete text setting equals the exact token and the target has an admitted collection context. | `text` | `field` | `collection_item` | `content.body` | Nearest emitted collection containing the target. | `none` | `normalized` | Set `DesignNode.content` to nil. | None when all required fields resolve. | Source element ID, exact path, focused raw text setting, exact expression, adapter/version, and classification `content.body`. |
@@ -160,8 +181,11 @@ ValueBinding and no invented key. If `settings.text` contains brace syntax but
 does not equal an allowlisted token, the adapter clears generic content and
 emits `bricks.binding.expression_unsupported`. Unknown dynamic values in
 `settings.image.useDynamicData` or `settings.url.useDynamicData` receive the
-same closed-classifier outcome. Other unrecognized source settings remain
-under the existing unsupported-source handling.
+same closed-classifier outcome. The observed `settings.altText` occurrence
+gets `bricks.binding.target_unsupported` because the target itself has no
+authorized ValueBinding representation. Other unrecognized source settings
+remain under existing unsupported-source handling and must not be promoted to
+generic frontend values.
 
 ## 6. Dynamic asset and link boundaries
 
@@ -215,6 +239,7 @@ not present that raw value as static frontend content or as a resolved target.
 | `text` | Set `content` to nil for an emitted binding, opaque modifier, wrapped expression, or unknown brace-bearing expression. Keep ordinary static text only when it contains no classified dynamic expression. |
 | `asset` | For a dynamic `settings.image` value, emit no AssetReference and no `asset_refs` entry for that declaration. Keep the raw image setting in SourceTrace. |
 | `link_url` | Remove the dynamic source URL object from `attributes`; emit no static `navigation` or `href` from that object. Keep it in SourceTrace. |
+| Unsupported accessibility / attribute target | The current adapter does not normalize `altText` into a generic node attribute; preserve that fail-closed behavior for the observed dynamic `settings.altText`. Keep the raw setting in SourceTrace, emit no ValueBinding, and emit no static alt attribute. Do not add a generic attribute or accessibility target. |
 
 For each source-derived binding, SourceTrace identifies the source element,
 exact source path, adapter name and adapter version, focused raw source
@@ -278,6 +303,7 @@ Diagnostic decisions are specific and stable:
 | Known token with an opaque modifier or unresolved collection reference | Evidence insufficient; `bricks.binding.evidence_insufficient`; emit a ValueBinding only when all C09B required fields are proven. |
 | Known token embedded in surrounding text or markup | Unsupported interpolation; `bricks.binding.interpolation_unsupported`; no ValueBinding. |
 | Unknown expression at a supported target path | Unsupported; `bricks.binding.expression_unsupported`; no ValueBinding. |
+| Observed dynamic `settings.altText` on element `5bf400` | Unsupported target; `bricks.binding.target_unsupported`; no ValueBinding and no static alt attribute. |
 | Proven supported binding | Normalized; no generic unsupported diagnostic for that source occurrence. |
 
 ## 10. Security and performance boundary
@@ -311,6 +337,7 @@ no fetched records in IR.
 | `POST_CONTENT_VALUE_KEY` | Map exact whole `{post_content}` text to `content.body`. |
 | `POST_ID_ASSET_VALUE_KEY` | `NO_BINDING / DIAGNOSTIC_ONLY`; no source-independent asset value key is proven for `{post_id}` targeting an image. |
 | `SITE_URL_VALUE_KEY` | Map exact `settings.url.useDynamicData` `{site_url}` to `site.url`, with site scope. |
+| `DYNAMIC_ALT_TEXT_POLICY` | The observed `settings.altText` value `{site_title} Logo` is `NO_BINDING / DIAGNOSTIC_ONLY`: emit `bricks.binding.target_unsupported`, preserve the raw setting in SourceTrace, and emit no static alt attribute. Design IR 2.0.0 has no authorized alt-text or arbitrary-attribute target; do not add a target kind, field, or value key. |
 | `OPAQUE_POST_CONTENT_MODIFIER_POLICY` | `{post_content:16}` may emit `content.body` only as `modifier_status: :opaque` and `normalization_status: :evidence_insufficient`. Do not interpret `16`. |
 | `WRAPPED_TEXT_EXPRESSION_POLICY` | `NO_BINDING / DIAGNOSTIC_ONLY`; Design IR 2.0.0 has no interpolation template. Preserve the complete raw setting in SourceTrace, clear `DesignNode.content`, and emit `bricks.binding.interpolation_unsupported`. |
 | `QUERY_RESULTS_COUNT_POLICY` | Only an exact whole `{query_results_count:<owner-id>}` text token can map to `target_kind: :text`, `value_kind: :collection_count`, `scope: :collection`, nil `value_key`, and the referenced owner's emitted CollectionBinding ID. Missing or non-admitted owners get no ValueBinding. The observed wrapped TB-03 value gets no ValueBinding and an interpolation diagnostic. |
@@ -319,7 +346,7 @@ no fetched records in IR.
 | `TEXT_NODE_CLEANUP_POLICY` | Clear `DesignNode.content` for dynamic text tokens, opaque modifiers, wrapped expressions, and unknown brace-bearing text. Store the raw setting only in SourceTrace. |
 | `ASSET_NODE_CLEANUP_POLICY` | For any dynamic `settings.image` declaration, emit no AssetReference and no matching `asset_refs` entry. Keep the focused raw image setting in SourceTrace. |
 | `LINK_NODE_CLEANUP_POLICY` | For a dynamic URL declaration, remove the source URL object from `attributes` and emit no static `navigation` or `href` from that declaration. Keep the raw source setting in SourceTrace. |
-| `SUPPORTED_RUNTIME_DIAGNOSTIC_POLICY` | Replace broad `bricks.runtime.unsupported` only for exact paths claimed by the closed binding/collection classifier, including normalized, evidence-insufficient, and unsupported outcomes; emit that occurrence's specific outcome diagnostic. Replace `bricks.navigation.dynamic` only for normalized `{site_url}`. Keep unrelated runtime diagnostics. |
+| `SUPPORTED_RUNTIME_DIAGNOSTIC_POLICY` | Replace broad `bricks.runtime.unsupported` only for exact paths claimed by the closed binding/collection classifier, including normalized, evidence-insufficient, and unsupported outcomes; emit that occurrence's specific outcome diagnostic. The observed unsupported `settings.altText` path gets `bricks.binding.target_unsupported`. Replace `bricks.navigation.dynamic` only for normalized `{site_url}`. Keep unrelated runtime diagnostics. |
 | `EVIDENCE_INSUFFICIENT_DIAGNOSTIC_POLICY` | Preserve SourceTrace and emit the specific evidence-insufficient diagnostic. Emit an evidence-insufficient ValueBinding only when all C09B required typed and base fields remain proven. QS-01 always reports `bricks.collection.boundary_unproven`. |
 | `UNKNOWN_EXPRESSION_POLICY` | `NO_BINDING / DIAGNOSTIC_ONLY`; keep the raw value in SourceTrace, clear its generic node target, emit `bricks.binding.expression_unsupported`, and do not extend the classifier to arbitrary expressions. |
 
