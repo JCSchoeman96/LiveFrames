@@ -35,7 +35,9 @@ migration route:
 - `1.0.0` → `2.0.0` adds empty `collection_bindings` and `value_bindings`
   registries, sets `ir_version` to `2.0.0`, preserves every other root field,
   and records migration evidence without inferring bindings or repetition from
-  `SourceTrace`.
+  `SourceTrace`. The source map must already include a JSON `provenance`
+  object and must not already contain `collection_bindings` or
+  `value_bindings`. Missing or malformed legacy roots are not repaired.
 - `2.0.0` → `2.0.0` is identity.
 - All other versions fail closed.
 
@@ -55,8 +57,10 @@ existing value is not a list or records an incompatible migration.
 
 The fidelity loader runs: decode JSON → classify version → migrate or pass
 through → require every `2.0.0` root field to be present in the serialized map
-→ decode structs → validate. Missing required root keys are not repaired with
-defaults.
+→ verify each root field has the expected JSON container type → decode structs
+→ validate. Missing required root keys, wrong container types (for example an
+array where an object registry is required), and malformed registry entries
+return diagnostics and are not coerced or repaired with defaults.
 
 ### Generator limitation
 

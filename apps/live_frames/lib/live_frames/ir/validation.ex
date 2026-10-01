@@ -37,10 +37,16 @@ defmodule LiveFrames.IR.Validation do
     {_value_binding_ids, diagnostics} =
       validate_value_bindings(document.value_bindings, diagnostics)
 
+    collection_index = collection_binding_index(document.collection_bindings)
+
+    cyclic_collection_ids = cyclic_collection_binding_ids(collection_index)
+
     diagnostics =
       validate_collection_binding_graph(
         document.collection_bindings,
         collection_binding_ids,
+        collection_index,
+        cyclic_collection_ids,
         node_ids,
         node_paths,
         diagnostics
@@ -49,7 +55,7 @@ defmodule LiveFrames.IR.Validation do
     diagnostics =
       validate_value_binding_semantics(
         document.value_bindings,
-        document.collection_bindings,
+        collection_index,
         node_ids,
         node_paths,
         diagnostics
@@ -883,7 +889,15 @@ defmodule LiveFrames.IR.Validation do
         nil
       )
 
-  defp validate_collection_binding_graph(bindings, binding_ids, node_ids, node_paths, diagnostics)
+  defp validate_collection_binding_graph(
+         bindings,
+         binding_ids,
+         collection_index,
+         cyclic_collection_ids,
+         node_ids,
+         node_paths,
+         diagnostics
+       )
        when is_map(bindings) and not is_struct(bindings) do
     Enum.reduce(sorted_entries(bindings), diagnostics, fn {_key, binding}, diagnostics ->
       case binding do
@@ -903,7 +917,13 @@ defmodule LiveFrames.IR.Validation do
             "repeat_root_node_id must resolve to a DesignNode",
             record.source_trace
           )
-          |> validate_parent_collection_binding(record, bindings, binding_ids, node_paths)
+          |> validate_parent_collection_binding(
+            record,
+            collection_index,
+            binding_ids,
+            cyclic_collection_ids,
+            node_paths
+          )
 
         _other ->
           diagnostics
@@ -914,13 +934,22 @@ defmodule LiveFrames.IR.Validation do
   defp validate_collection_binding_graph(
          _bindings,
          _binding_ids,
+         _collection_index,
+         _cyclic_collection_ids,
          _node_ids,
          _node_paths,
          diagnostics
        ),
        do: diagnostics
 
-  defp validate_parent_collection_binding(diagnostics, record, bindings, binding_ids, node_paths) do
+  defp validate_parent_collection_binding(
+         diagnostics,
+         record,
+         collection_index,
+         binding_ids,
+         cyclic_collection_ids,
+         node_paths
+       ) do
     parent_id = record.parent_collection_binding_id
 
     cond do
@@ -945,7 +974,7 @@ defmodule LiveFrames.IR.Validation do
           record.source_trace
         )
 
-      not parent_chain_acyclic?(bindings, record) ->
+      MapSet.member?(cyclic_collection_ids, record.collection_binding_id) ->
         error(
           diagnostics,
           "ir.collection_binding.parent_cycle",
@@ -955,7 +984,7 @@ defmodule LiveFrames.IR.Validation do
         )
 
       true ->
-        parent = Map.get(bindings, parent_id) || find_binding_by_id(bindings, parent_id)
+        parent = Map.get(collection_index, parent_id)
 
         case parent do
           %CollectionBinding{repeat_root_node_id: parent_repeat_root} ->
@@ -1085,45 +1114,43 @@ defmodule LiveFrames.IR.Validation do
       )
 
   defp validate_value_binding_modifier_consistency(diagnostics, binding, trace) do
-    case {binding.modifier_status, binding.normalization_status} do
-      {:opaque, :evidence_insufficient} ->
-        diagnostics
+    diagnostics
+    |> validate_opaque_modifier_requires_evidence_insufficient(binding, trace)
+    |> validate_normalized_requires_none_modifier(binding, trace)
+  end
 
-      {:none, :normalized} ->
-        diagnostics
+  defp validate_opaque_modifier_requires_evidence_insufficient(diagnostics, binding, trace) do
+    if binding.modifier_status == :opaque and
+         binding.normalization_status != :evidence_insufficient do
+      error(
+        diagnostics,
+        "ir.value_binding.modifier_inconsistent",
+        "opaque modifier_status requires evidence_insufficient normalization_status",
+        :schema,
+        trace
+      )
+    else
+      diagnostics
+    end
+  end
 
-      {:opaque, _} ->
-        error(
-          diagnostics,
-          "ir.value_binding.modifier_inconsistent",
-          "opaque modifier_status requires evidence_insufficient normalization_status",
-          :schema,
-          trace
-        )
-
-      {:none, _} ->
-        error(
-          diagnostics,
-          "ir.value_binding.modifier_inconsistent",
-          "normalized value bindings require modifier_status none",
-          :schema,
-          trace
-        )
-
-      {_, _} ->
-        error(
-          diagnostics,
-          "ir.value_binding.modifier_inconsistent",
-          "value binding modifier_status and normalization_status are inconsistent",
-          :schema,
-          trace
-        )
+  defp validate_normalized_requires_none_modifier(diagnostics, binding, trace) do
+    if binding.normalization_status == :normalized and binding.modifier_status != :none do
+      error(
+        diagnostics,
+        "ir.value_binding.modifier_inconsistent",
+        "normalized value bindings require modifier_status none",
+        :schema,
+        trace
+      )
+    else
+      diagnostics
     end
   end
 
   defp validate_value_binding_semantics(
          bindings,
-         collection_bindings,
+         collection_index,
          node_ids,
          node_paths,
          diagnostics
@@ -1143,7 +1170,7 @@ defmodule LiveFrames.IR.Validation do
             )
             |> validate_value_binding_combination(record, record.source_trace)
             |> validate_value_binding_target_kind(record, record.source_trace)
-            |> validate_value_binding_containment(record, collection_bindings, node_paths)
+            |> validate_value_binding_containment(record, collection_index, node_paths)
 
           diagnostics
 
@@ -1155,7 +1182,7 @@ defmodule LiveFrames.IR.Validation do
 
   defp validate_value_binding_semantics(
          _bindings,
-         _collection_bindings,
+         _collection_index,
          _node_ids,
          _node_paths,
          diagnostics
@@ -1228,10 +1255,10 @@ defmodule LiveFrames.IR.Validation do
 
   defp validate_value_binding_target_kind(diagnostics, _binding, _trace), do: diagnostics
 
-  defp validate_value_binding_containment(diagnostics, binding, collection_bindings, node_paths) do
+  defp validate_value_binding_containment(diagnostics, binding, collection_index, node_paths) do
     case {binding.value_kind, binding.scope, binding.collection_binding_id} do
       {:field, :collection_item, collection_id} when is_binary(collection_id) ->
-        case find_collection_binding(collection_bindings, collection_id) do
+        case Map.get(collection_index, collection_id) do
           %CollectionBinding{repeat_root_node_id: repeat_root} ->
             if node_within_subtree?(binding.target_node_id, repeat_root, node_paths) do
               diagnostics
@@ -1256,7 +1283,7 @@ defmodule LiveFrames.IR.Validation do
         end
 
       {:collection_count, :collection, collection_id} when is_binary(collection_id) ->
-        if find_collection_binding(collection_bindings, collection_id) do
+        if Map.has_key?(collection_index, collection_id) do
           diagnostics
         else
           error(
@@ -1317,44 +1344,59 @@ defmodule LiveFrames.IR.Validation do
         trace
       )
 
-  defp parent_chain_acyclic?(bindings, %CollectionBinding{
-         collection_binding_id: id,
-         parent_collection_binding_id: parent_id
-       }) do
-    walk_parent_chain(bindings, parent_id, MapSet.new([id]))
-  end
+  defp collection_binding_index(bindings) when is_map(bindings) and not is_struct(bindings) do
+    Enum.reduce(bindings, %{}, fn
+      {_key, %CollectionBinding{collection_binding_id: id} = binding}, index ->
+        Map.put(index, id, binding)
 
-  defp walk_parent_chain(_bindings, nil, _visited), do: true
-
-  defp walk_parent_chain(bindings, parent_id, visited) do
-    if MapSet.member?(visited, parent_id) do
-      false
-    else
-      case find_collection_binding(bindings, parent_id) do
-        %CollectionBinding{parent_collection_binding_id: next_parent} ->
-          walk_parent_chain(bindings, next_parent, MapSet.put(visited, parent_id))
-
-        _other ->
-          true
-      end
-    end
-  end
-
-  defp find_collection_binding(bindings, id) do
-    case Map.get(bindings, id) do
-      %CollectionBinding{} = binding ->
-        binding
-
-      _other ->
-        find_binding_by_id(bindings, id)
-    end
-  end
-
-  defp find_binding_by_id(bindings, id) do
-    Enum.find_value(bindings, fn
-      {_key, %CollectionBinding{collection_binding_id: ^id} = binding} -> binding
-      _other -> nil
+      _other, index ->
+        index
     end)
+  end
+
+  defp collection_binding_index(_bindings), do: %{}
+
+  defp cyclic_collection_binding_ids(index) when map_size(index) == 0, do: MapSet.new()
+
+  defp cyclic_collection_binding_ids(index) do
+    Enum.reduce(Map.keys(index), {MapSet.new(), MapSet.new()}, fn id, {cyclic, checked} ->
+      if MapSet.member?(checked, id) do
+        {cyclic, checked}
+      else
+        case trace_collection_parent_path(id, index, MapSet.new(), []) do
+          {:ok, path} ->
+            {cyclic, MapSet.union(checked, MapSet.new(path))}
+
+          {:cycle, path} ->
+            {MapSet.union(cyclic, MapSet.new(path)), MapSet.union(checked, MapSet.new(path))}
+        end
+      end
+    end)
+    |> elem(0)
+  end
+
+  defp trace_collection_parent_path(id, index, seen, path) do
+    cond do
+      MapSet.member?(seen, id) ->
+        {:cycle, path}
+
+      true ->
+        case Map.get(index, id) do
+          %CollectionBinding{parent_collection_binding_id: nil} ->
+            {:ok, [id | path]}
+
+          %CollectionBinding{parent_collection_binding_id: parent} when is_binary(parent) ->
+            trace_collection_parent_path(
+              parent,
+              index,
+              MapSet.put(seen, id),
+              [id | path]
+            )
+
+          _other ->
+            {:ok, [id | path]}
+        end
+    end
   end
 
   defp nested_owner_within_parent?(owner_id, parent_repeat_root_id, node_paths) do

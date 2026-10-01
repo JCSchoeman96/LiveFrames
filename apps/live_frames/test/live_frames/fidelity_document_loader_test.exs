@@ -79,6 +79,33 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert migrated["provenance"]["source_hash"] == "abc123"
   end
 
+  test "v1 migration rejects missing, nil, or non-object provenance" do
+    assert {:error, missing} = Migration.to_current(Map.delete(minimal_v1_map(), "provenance"))
+    assert Enum.any?(missing, &(&1.code == "ir.migration.provenance_missing"))
+
+    assert {:error, nil_provenance} =
+             Migration.to_current(put_in(minimal_v1_map(), ["provenance"], nil))
+
+    assert Enum.any?(nil_provenance, &(&1.code == "ir.migration.provenance_invalid"))
+
+    assert {:error, bad_provenance} =
+             Migration.to_current(put_in(minimal_v1_map(), ["provenance"], "bad"))
+
+    assert Enum.any?(bad_provenance, &(&1.code == "ir.migration.provenance_invalid"))
+  end
+
+  test "v1 migration rejects reserved v2 binding roots" do
+    assert {:error, diagnostics} =
+             Migration.to_current(Map.put(minimal_v1_map(), "collection_bindings", %{}))
+
+    assert Enum.any?(diagnostics, &(&1.code == "ir.migration.v1_shape_invalid"))
+
+    assert {:error, value_diagnostics} =
+             Migration.to_current(Map.put(minimal_v1_map(), "value_bindings", %{}))
+
+    assert Enum.any?(value_diagnostics, &(&1.code == "ir.migration.v1_shape_invalid"))
+  end
+
   test "migration fails closed on provenance collision" do
     v1 =
       put_in(minimal_v1_map(), ["provenance", "liveframes_ir_migrations"], %{
@@ -104,6 +131,63 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     v2 = minimal_v2_map() |> Map.delete("collection_bindings")
     assert {:error, diagnostics} = DocumentLoader.from_map(v2)
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.required_root_missing"))
+  end
+
+  test "loader rejects wrong v2 root container types without raising" do
+    for {field, invalid} <- [
+          {"root_nodes", nil},
+          {"root_nodes", %{}},
+          {"assets", []},
+          {"interactions", []},
+          {"collection_bindings", []},
+          {"value_bindings", []},
+          {"diagnostics", %{}}
+        ] do
+      assert {:error, diagnostics} =
+               DocumentLoader.from_map(put_in(minimal_v2_map(), [field], invalid))
+
+      assert Enum.any?(diagnostics, &(&1.code == "ir.document.root_shape_invalid"))
+    end
+  end
+
+  test "loader rejects malformed registry entries without coercing array registries" do
+    assert {:error, asset_diagnostics} =
+             DocumentLoader.from_map(
+               put_in(minimal_v2_map(), ["assets"], %{"asset_001" => "invalid"})
+             )
+
+    assert Enum.any?(asset_diagnostics, &(&1.code == "ir.asset.invalid"))
+
+    assert {:error, interaction_diagnostics} =
+             DocumentLoader.from_map(
+               put_in(minimal_v2_map(), ["interactions"], %{"interaction_001" => 123})
+             )
+
+    assert Enum.any?(interaction_diagnostics, &(&1.code == "ir.interaction.invalid"))
+
+    assert {:error, collection_diagnostics} =
+             DocumentLoader.from_map(
+               put_in(minimal_v2_map(), ["collection_bindings"], %{"collection_001" => []})
+             )
+
+    assert Enum.any?(collection_diagnostics, &(&1.code == "ir.collection_binding.invalid"))
+
+    assert {:error, value_diagnostics} =
+             DocumentLoader.from_map(
+               put_in(minimal_v2_map(), ["value_bindings"], %{"value_001" => "bad"})
+             )
+
+    assert Enum.any?(value_diagnostics, &(&1.code == "ir.value_binding.invalid"))
+  end
+
+  test "loader rejects malformed source_trace without raising" do
+    map =
+      update_in(minimal_v2_map(), ["root_nodes", Access.at(0)], fn node ->
+        Map.put(node, "source_trace", "bad")
+      end)
+
+    assert {:error, diagnostics} = DocumentLoader.from_map(map)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.trace.invalid"))
   end
 
   test "interactions and binding registries survive loader round-trip" do

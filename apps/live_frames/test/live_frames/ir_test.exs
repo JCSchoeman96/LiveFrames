@@ -605,6 +605,65 @@ defmodule LiveFrames.IRTest do
     assert Enum.any?(modifier_diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
   end
 
+  test "ValueBinding modifier and normalization status matrix matches C09B authority" do
+    document = binding_document()
+
+    assert IR.validate(document) == :ok
+
+    evidence_without_modifier =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :none, normalization_status: :evidence_insufficient}
+      end)
+
+    assert IR.validate(evidence_without_modifier) == :ok
+
+    opaque_evidence =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :opaque, normalization_status: :evidence_insufficient}
+      end)
+
+    assert IR.validate(opaque_evidence) == :ok
+
+    opaque_normalized =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :opaque, normalization_status: :normalized}
+      end)
+
+    assert {:error, diagnostics} = IR.validate(opaque_normalized)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
+  test "long acyclic collection parent chain remains valid" do
+    {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
+    depth = 40
+
+    {bindings, last_id} =
+      Enum.reduce(1..depth, {%{}, nil}, fn index, {acc, parent_id} ->
+        id = "collection_#{index}"
+
+        owner_node_id = if parent_id, do: inner_owner_id, else: owner_id
+
+        binding = %CollectionBinding{
+          collection_binding_id: id,
+          owner_node_id: owner_node_id,
+          repeat_root_node_id: repeat_id,
+          parent_collection_binding_id: parent_id,
+          normalization_status: :normalized
+        }
+
+        {Map.put(acc, id, binding), id}
+      end)
+
+    document = %DesignDocument{
+      root_nodes: [owner],
+      collection_bindings: bindings,
+      value_bindings: %{}
+    }
+
+    assert IR.validate(document) == :ok
+    assert last_id == "collection_40"
+  end
+
   test "binding registries round-trip through serialization" do
     alias LiveFrames.Fidelity.DocumentLoader
 

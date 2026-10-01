@@ -47,8 +47,10 @@ defmodule LiveFrames.IR.Migration do
     do: {:error, [error("ir.document.invalid", "expected a decoded JSON object")]}
 
   defp migrate_v1_to_v2(map) do
-    with :ok <- require_provenance_object(map),
-         {:ok, provenance} <- merge_migration_provenance(Map.get(map, "provenance", %{}) || %{}) do
+    with :ok <- reject_v2_only_roots(map),
+         :ok <- require_provenance_object(map),
+         provenance = Map.fetch!(map, "provenance"),
+         {:ok, provenance} <- merge_migration_provenance(provenance) do
       {:ok,
        map
        |> Map.put("ir_version", @v2)
@@ -58,15 +60,55 @@ defmodule LiveFrames.IR.Migration do
     end
   end
 
+  defp reject_v2_only_roots(map) do
+    cond do
+      Map.has_key?(map, "collection_bindings") ->
+        {:error,
+         [
+           error(
+             "ir.migration.v1_shape_invalid",
+             "1.0.0 documents must not contain collection_bindings before migration"
+           )
+         ]}
+
+      Map.has_key?(map, "value_bindings") ->
+        {:error,
+         [
+           error(
+             "ir.migration.v1_shape_invalid",
+             "1.0.0 documents must not contain value_bindings before migration"
+           )
+         ]}
+
+      true ->
+        :ok
+    end
+  end
+
   defp require_provenance_object(map) do
-    case Map.get(map, "provenance") do
-      nil ->
+    case Map.fetch(map, "provenance") do
+      :error ->
+        {:error,
+         [
+           error(
+             "ir.migration.provenance_missing",
+             "provenance is required for 1.0.0 structural migration"
+           )
+         ]}
+
+      {:ok, provenance} when is_map(provenance) and not is_struct(provenance) ->
         :ok
 
-      provenance when is_map(provenance) and not is_struct(provenance) ->
-        :ok
+      {:ok, nil} ->
+        {:error,
+         [
+           error(
+             "ir.migration.provenance_invalid",
+             "provenance must be a JSON object before structural migration"
+           )
+         ]}
 
-      _other ->
+      {:ok, _other} ->
         {:error,
          [
            error(
