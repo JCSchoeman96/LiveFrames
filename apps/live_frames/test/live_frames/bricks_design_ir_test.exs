@@ -1372,6 +1372,7 @@ defmodule LiveFrames.BricksDesignIRTest do
              "styles_normalized",
              "responsive_normalized",
              "dependencies_bound",
+             "frontend_bindings_normalized",
              "document_assembled",
              "ir_validated",
              "serialized"

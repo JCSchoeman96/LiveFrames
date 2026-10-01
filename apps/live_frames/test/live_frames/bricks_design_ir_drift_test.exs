@@ -44,6 +44,8 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
   defp scrub_migration_provenance(map) do
     Map.update!(map, "provenance", fn provenance ->
       Map.delete(provenance, "liveframes_ir_migrations")
+      |> Map.update!("normalization_lifecycle", &List.delete(&1, "frontend_bindings_normalized"))
+      |> Map.update!("source_pipeline", &List.delete(&1, "frontend_binding_normalizer"))
     end)
   end
 

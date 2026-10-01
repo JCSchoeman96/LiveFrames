@@ -211,7 +211,7 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     refute bundle.heex =~ ~s(href="not)
   end
 
-  test "dynamic destinations are preserved as evidence but not emitted" do
+  test "dynamic site URLs become value bindings without generic URL attributes" do
     assert {:ok, document} =
              to_ir([
                source_element("root", "block", 0, %{}, ["nav"]),
@@ -222,13 +222,41 @@ defmodule LiveFrames.BricksStaticNavigationTest do
              ])
 
     node = node_by_source_id(document, "nav")
-    assert node.attributes["url"]["useDynamicData"] == "{site_url}"
+    refute node.attributes["url"]
     refute node.attributes["navigation"]
 
-    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.dynamic"))
+    [binding] = Map.values(document.value_bindings)
+    assert binding.target_kind == :link_url
+    assert binding.value_key == "site.url"
+    assert binding.scope == :site
+    assert binding.source_trace.source_settings["url"]["useDynamicData"] == "{site_url}"
 
-    assert {:ok, bundle} = Fidelity.generate(document)
-    refute bundle.heex =~ ~s(href=")
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code in ["bricks.navigation.dynamic", "bricks.runtime.unsupported"]
+           end)
+
+    assert {:error, _diagnostics} = Fidelity.generate(document)
+  end
+
+  test "dynamic link diagnostics remain when a separate site URL binding is normalized" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["nav"]),
+               source_element("nav", "text-link", "root", %{
+                 "text" => "Site",
+                 "link" => %{"useDynamicData" => false},
+                 "url" => %{"type" => "meta", "useDynamicData" => "{site_url}"}
+               })
+             ])
+
+    assert Enum.any?(document.value_bindings, fn {_id, binding} ->
+             binding.source_trace.source_id == "nav" and binding.value_key == "site.url"
+           end)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.navigation.dynamic" and
+               diagnostic.source_trace.source_id == "nav"
+           end)
   end
 
   test "conflicting link and url destinations are diagnosed and not emitted" do
@@ -620,8 +648,13 @@ defmodule LiveFrames.BricksStaticNavigationTest do
              ])
 
     refute node_by_source_id(document, "logo").attributes["navigation"]
-    assert {:ok, bundle} = Fidelity.generate(document)
-    refute bundle.heex =~ ~s(href=")
+    refute node_by_source_id(document, "logo").attributes["url"]
+
+    assert Enum.any?(document.value_bindings, fn {_id, binding} ->
+             binding.source_trace.source_id == "logo" and binding.value_key == "site.url"
+           end)
+
+    assert {:error, _diagnostics} = Fidelity.generate(document)
   end
 
   test "image lightbox link does not become static navigation" do

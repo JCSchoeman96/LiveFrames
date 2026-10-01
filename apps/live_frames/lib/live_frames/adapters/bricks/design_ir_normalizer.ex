@@ -1,6 +1,6 @@
 defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   @moduledoc """
-  Converts the validated structured Bricks model into Design IR `1.0.0`.
+  Converts the validated structured Bricks model into Design IR `2.0.0`.
 
   This module consumes the source adapter's structured stages directly. It does
   not read Stage A HTML, CSS, or report artifacts, and it never evaluates source
@@ -12,6 +12,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Adapters.Bricks.Diagnostic, as: BricksDiagnostic
   alias LiveFrames.Adapters.Bricks.Document
   alias LiveFrames.Adapters.Bricks.Element
+  alias LiveFrames.Adapters.Bricks.FrontendBindingNormalizer
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
   alias LiveFrames.Adapters.Bricks.StaticNavigation
@@ -51,6 +52,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     "styles_normalized",
     "responsive_normalized",
     "dependencies_bound",
+    "frontend_bindings_normalized",
     "document_assembled",
     "ir_validated",
     "serialized"
@@ -284,10 +286,29 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp assemble(context) do
     trace_index = build_trace_index(context)
-    {assets, asset_ids_by_source} = build_assets(context, trace_index)
+
+    frontend_bindings =
+      FrontendBindingNormalizer.normalize(
+        context.tree,
+        trace_index,
+        context.document.adapter_version
+      )
+
+    source_diagnostics =
+      context.source_diagnostics
+      |> reconcile_frontend_binding_diagnostics(frontend_bindings)
+      |> Kernel.++(frontend_bindings.diagnostics)
 
     context =
-      Map.merge(context, %{trace_index: trace_index, asset_ids_by_source: asset_ids_by_source})
+      Map.merge(context, %{
+        trace_index: trace_index,
+        frontend_bindings: frontend_bindings,
+        source_diagnostics: source_diagnostics
+      })
+
+    {assets, asset_ids_by_source} = build_assets(context, trace_index)
+
+    context = Map.put(context, :asset_ids_by_source, asset_ids_by_source)
 
     root_nodes =
       context.tree.root_ids
@@ -301,6 +322,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       root_nodes: root_nodes,
       assets: assets,
       interactions: %{},
+      collection_bindings: context.frontend_bindings.collection_bindings,
+      value_bindings: context.frontend_bindings.value_bindings,
       diagnostics: to_ir_diagnostics(context.source_diagnostics, context),
       provenance: provenance(context)
     }
@@ -352,7 +375,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     element = Map.fetch!(context.tree.elements, source_id)
     resolved = Map.fetch!(context.resolved.elements, source_id)
     trace = source_trace(element, resolved, path, context)
-    index_map = Map.put(index_map, source_id, %{path: path, trace: trace})
+
+    index_map =
+      Map.put(index_map, source_id, %{
+        path: path,
+        node_id: DesignNode.deterministic_id(path),
+        trace: trace
+      })
 
     context.tree.children_by_id
     |> Map.get(source_id, [])
@@ -361,6 +390,57 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       collect_trace(child_id, path ++ [child_index], context, index_map)
     end)
   end
+
+  defp reconcile_frontend_binding_diagnostics(diagnostics, frontend_bindings) do
+    Enum.reject(diagnostics, fn
+      %BricksDiagnostic{
+        code: "bricks.runtime.unsupported",
+        source_id: source_id,
+        source_path: source_path
+      } ->
+        (MapSet.member?(frontend_bindings.query_owner_ids, source_id) and
+           query_runtime_path?(source_path)) or
+          (MapSet.member?(frontend_bindings.dynamic_image_source_ids, source_id) and
+             source_path == "settings.image.useDynamicData") or
+          (MapSet.member?(frontend_bindings.dynamic_url_source_ids, source_id) and
+             source_path == "settings.url.useDynamicData")
+
+      %BricksDiagnostic{
+        code: "bricks.asset.unresolved",
+        source_id: source_id,
+        metadata: %{"resolution_reason" => "unresolved_dynamic"}
+      } ->
+        MapSet.member?(frontend_bindings.dynamic_image_source_ids, source_id)
+
+      %BricksDiagnostic{code: "bricks.navigation.dynamic"} = diagnostic ->
+        navigation_dynamic_owned_by_site_url?(diagnostic, frontend_bindings)
+
+      _diagnostic ->
+        false
+    end)
+  end
+
+  defp query_runtime_path?("settings.query"), do: true
+  defp query_runtime_path?("settings.query." <> _rest), do: true
+  defp query_runtime_path?("settings.query[" <> _rest), do: true
+  defp query_runtime_path?(_path), do: false
+
+  defp navigation_dynamic_owned_by_site_url?(
+         %BricksDiagnostic{source_id: source_id, raw_value: %{"link" => link, "url" => url}},
+         frontend_bindings
+       ) do
+    MapSet.member?(frontend_bindings.normalized_site_url_source_ids, source_id) and
+      dynamic_site_url?(url) and not dynamic_link_source?(link)
+  end
+
+  defp navigation_dynamic_owned_by_site_url?(_diagnostic, _frontend_bindings), do: false
+
+  defp dynamic_site_url?(%{"useDynamicData" => "{site_url}"}), do: true
+  defp dynamic_site_url?(_url), do: false
+
+  defp dynamic_link_source?(%{"useDynamicData" => _expression}), do: true
+
+  defp dynamic_link_source?(_link), do: false
 
   defp source_trace(%Element{} = element, resolved, path, context) do
     static_semantics = Map.fetch!(context.static_semantics, element.id)
@@ -462,6 +542,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     static_navigation = Map.fetch!(context.static_navigation, source_id)
 
     style_result = Map.fetch!(context.dependencies.style_results, source_id)
+    node_actions = Map.get(context.frontend_bindings.node_actions, source_id, %{})
 
     children =
       context.tree.children_by_id
@@ -473,6 +554,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
     attributes =
       attributes_for(element, static_semantics)
+      |> remove_dynamic_url(node_actions)
       |> apply_static_navigation(static_navigation, static_semantics)
 
     semantic_type =
@@ -483,7 +565,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       semantic_type: semantic_type,
       semantic_role: nil,
       label: element.label,
-      content: content_for(element),
+      content: if(node_actions[:clear_content], do: nil, else: content_for(element)),
       attributes: attributes,
       styles: styles_for(style_result, trace, context.authority_index, element, context),
       responsive: responsive_for(style_result, trace, resolved.class_names, element, context),
@@ -533,6 +615,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
     Map.merge(existing_attributes, static_semantics.attributes)
   end
+
+  defp remove_dynamic_url(attributes, %{remove_dynamic_url: true}),
+    do: Map.delete(attributes, "url")
+
+  defp remove_dynamic_url(attributes, _node_actions), do: attributes
 
   defp content_for(%Element{name: name, settings: settings})
        when name in ["heading", "text", "text-basic", "button", "text-link"] do
@@ -1389,6 +1476,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp build_assets(context, trace_index) do
     context.dependencies.assets
+    |> Enum.reject(fn asset ->
+      Map.get(asset, :asset_kind, :image) == :image and
+        MapSet.member?(context.frontend_bindings.dynamic_image_source_ids, asset.source_id)
+    end)
     |> Enum.with_index(1)
     |> Enum.reduce({%{}, %{}}, fn {asset, index}, {assets, by_source} ->
       asset_id = "asset_#{String.pad_leading(Integer.to_string(index), 6, "0")}"
@@ -1581,6 +1672,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         "class_resolver",
         "settings_extractor",
         "dependency_extractor",
+        "frontend_binding_normalizer",
         "design_ir_normalizer"
       ],
       "dependency_summary" => %{
