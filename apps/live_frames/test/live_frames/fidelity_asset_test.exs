@@ -93,10 +93,9 @@ defmodule LiveFrames.FidelityAssetTest do
     refute bundle.heex =~ "Synthetic caption content"
   end
 
-  test "unsafe, dynamic, malformed, and query-backed sources stay placeholders" do
+  test "unsafe, malformed, and query-backed static sources stay placeholders" do
     image_values = [
       %{"url" => "javascript:alert(1)"},
-      %{"useDynamicData" => "{featured_image}"},
       %{"url" => "images.example.test/uploads/image.webp"},
       %{"url" => "//images.example.test/uploads/image.webp"},
       %{"url" => "https://images.example.test/uploads\\image.webp"},
@@ -111,6 +110,20 @@ defmodule LiveFrames.FidelityAssetTest do
       refute bundle.heex =~ "javascript:"
       refute bundle.heex =~ "srcset="
     end
+  end
+
+  test "dynamic image declarations do not become static assets or placeholders" do
+    document = image_document(%{"useDynamicData" => "{featured_image}"})
+
+    assert document.assets == %{}
+    assert hd(document.root_nodes).asset_refs == []
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.binding.evidence_insufficient"))
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    assert bundle.heex =~ "<img class=\""
+    refute bundle.heex =~ "data-lf-asset-status=\"unresolved\""
+    refute bundle.heex =~ "<img src=\""
+    refute bundle.heex =~ "{featured_image}"
   end
 
   test "revalidates manually constructed resolved assets before emitting src" do
@@ -153,7 +166,7 @@ defmodule LiveFrames.FidelityAssetTest do
   end
 
   test "keeps unresolved assets as placeholders and omits them only when resolved" do
-    unresolved = image_document(%{"useDynamicData" => "{featured_image}"})
+    unresolved = image_document(%{"url" => "javascript:alert(1)"})
     resolved = image_document(%{"url" => @image_uri})
 
     assert {:ok, unresolved_bundle} = Fidelity.generate(unresolved)

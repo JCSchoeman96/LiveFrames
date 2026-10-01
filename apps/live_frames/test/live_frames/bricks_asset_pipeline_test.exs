@@ -78,7 +78,7 @@ defmodule LiveFrames.BricksAssetPipelineTest do
     assert asset.metadata["source_image"]["path"] == "/uploads/synthetic-image.webp"
   end
 
-  test "dynamic image bindings take precedence over valid static fallback values" do
+  test "dynamic image declarations never become static assets" do
     image =
       media_image(%{
         "url" => @large_uri,
@@ -86,12 +86,17 @@ defmodule LiveFrames.BricksAssetPipelineTest do
       })
 
     document = to_ir(%{"image" => image})
-    [asset] = Map.values(document.assets)
 
-    assert asset.status == :unresolved
-    assert asset.uri == nil
-    assert asset.metadata["resolution_reason"] == "unresolved_dynamic"
-    assert asset.metadata["source_image"]["url"] == @large_uri
+    assert document.assets == %{}
+    assert hd(document.root_nodes).asset_refs == []
+    assert document.value_bindings == %{}
+
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.binding.evidence_insufficient"))
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.asset.unresolved" and
+               diagnostic.metadata["resolution_reason"] == "unresolved_dynamic"
+           end)
   end
 
   test "keeps missing and non-string image URLs unresolved" do
