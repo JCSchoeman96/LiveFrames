@@ -104,6 +104,10 @@ alone does not make an additive change semantically breaking. Classification
 must also examine the document shape, accepted values, meanings, validation,
 references, and whether a previous version can preserve the data.
 
+In this policy, a document is valid when it satisfies the authorized contract.
+Implementation acceptance is only observed runtime behavior. A bug can make
+the implementation accept a document that the contract defines as invalid.
+
 | Dimension | Meaning for Design IR |
 | --- | --- |
 | Reader compatibility | Whether a reader can validate and consume a serialized artifact without first transforming its document shape. A version-string rejection is reported separately from a shape or meaning failure. |
@@ -153,8 +157,17 @@ contract, other than the version string for the patch release.
 
 Examples include a documentation clarification that does not change the
 contract and an implementation bug fix that restores the already-authorized
-contract. A fix that makes a previously accepted invalid document fail, changes
-serialized output, or changes a value's meaning is not PATCH.
+contract. If the contract requires a non-empty node_id but a validator bug
+accepts an empty value, fixing the validator to reject that value is PATCH.
+Likewise, if the contract defines serializer output A but an implementation
+bug emits B, restoring A is PATCH even though the observed output changes.
+
+Implementation acceptance does not make a contract-invalid document valid.
+Rejecting such a document after a bug fix is therefore not a contract change.
+By contrast, if a new authorized contract rejects a document that was valid
+under the previous authorized contract, that is a stricter validation rule
+and cannot be PATCH. Under this policy it is normally MAJOR, especially when
+the prior artifact needs repair or migration.
 
 A reader for the new patch version must continue to read earlier patch
 artifacts in the same major and minor line without migration. Existing older
@@ -196,9 +209,10 @@ Use MAJOR if any of these conditions holds:
 - the new contract adds a required serialized field that older documents do
   not contain;
 - an existing field is removed, renamed, or changes meaning;
-- a previously accepted enum value or other document value becomes invalid;
+- an enum value or other document value valid under the previous authorized
+  contract becomes invalid;
 - validation adds a required cross-reference or invariant that rejects
-  formerly valid documents;
+  documents valid under the previous authorized contract;
 - a new required semantic value cannot be expressed by the previous contract;
 - a non-empty new capability cannot be downgraded without losing
   consumer-observable meaning.
@@ -341,7 +355,7 @@ is shown separately from whether the document meanings are compatible.
 | New enum member in a closed-world enum | Yes for documents using existing members | No for those documents | No direct later-version support under the exact reader | No for existing members | No when the new semantic member is used | MAJOR |
 | Removal of an enum member | No for documents using the removed member | Yes for affected documents | No direct later-version support under the exact reader | Accepted domain narrows | No unless a semantics-preserving mapping exists | MAJOR |
 | Field meaning change | No as a semantic artifact | Yes, with an explicit value conversion decision | No; old reader would apply the old meaning | Yes | No in general | MAJOR |
-| New validation rule rejecting formerly valid documents | No for affected documents | Yes, repair or migration required | No direct later-version support under the exact reader | Validation contract tightens | Not generally | MAJOR |
+| New validation rule rejecting documents valid under the previous authorized contract | No for affected documents | Yes, repair or migration required | No direct later-version support under the exact reader | Validation contract tightens | Not generally | MAJOR |
 | New required cross-reference invariant | No for documents that violate it | Yes for affected documents | No direct later-version support under the exact reader | Reference contract tightens | Not generally | MAJOR |
 | Field removal | No until removed data is handled | Yes when the old field is present | No direct later-version support under the exact reader | Meaning is removed unless transferred | No in general | MAJOR |
 | Field rename | No until the old key is mapped | Yes | No direct later-version support under the exact reader | No if only the name changes | Yes if migration maps it exactly | MAJOR |
