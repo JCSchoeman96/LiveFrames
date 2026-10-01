@@ -664,6 +664,88 @@ defmodule LiveFrames.IRTest do
     assert last_id == "collection_40"
   end
 
+  defp collection_only_document(bindings) do
+    {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
+
+    bindings =
+      Map.new(bindings, fn {id, parent_id} ->
+        owner_node_id = if parent_id, do: inner_owner_id, else: owner_id
+
+        {id,
+         %CollectionBinding{
+           collection_binding_id: id,
+           owner_node_id: owner_node_id,
+           repeat_root_node_id: repeat_id,
+           parent_collection_binding_id: parent_id,
+           normalization_status: :normalized
+         }}
+      end)
+
+    %DesignDocument{
+      root_nodes: [owner],
+      collection_bindings: bindings,
+      value_bindings: %{}
+    }
+  end
+
+  test "collection parent graph rejects a simple two-node cycle" do
+    document =
+      collection_only_document(%{
+        "collection_a" => "collection_b",
+        "collection_b" => "collection_a"
+      })
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+  end
+
+  test "collection parent graph rejects a long tail entering a cycle" do
+    document =
+      collection_only_document(%{
+        "collection_a" => "collection_b",
+        "collection_b" => "collection_a",
+        "collection_c" => "collection_a",
+        "collection_d" => "collection_c",
+        "collection_e" => "collection_d"
+      })
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+  end
+
+  test "collection parent graph accepts multiple independent acyclic chains" do
+    document =
+      collection_only_document(%{
+        "chain_a_1" => nil,
+        "chain_a_2" => "chain_a_1",
+        "chain_b_1" => nil,
+        "chain_b_2" => "chain_b_1",
+        "chain_b_3" => "chain_b_2"
+      })
+
+    assert IR.validate(document) == :ok
+  end
+
+  test "collection parent graph rejects mixed acyclic and cyclic components" do
+    assert IR.validate(
+             collection_only_document(%{
+               "acyclic_1" => nil,
+               "acyclic_2" => "acyclic_1"
+             })
+           ) == :ok
+
+    document =
+      collection_only_document(%{
+        "acyclic_1" => nil,
+        "acyclic_2" => "acyclic_1",
+        "cycle_a" => "cycle_b",
+        "cycle_b" => "cycle_a"
+      })
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+  end
+
   test "binding registries round-trip through serialization" do
     alias LiveFrames.Fidelity.DocumentLoader
 

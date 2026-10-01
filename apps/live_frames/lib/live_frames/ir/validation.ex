@@ -1359,43 +1359,57 @@ defmodule LiveFrames.IR.Validation do
   defp cyclic_collection_binding_ids(index) when map_size(index) == 0, do: MapSet.new()
 
   defp cyclic_collection_binding_ids(index) do
-    Enum.reduce(Map.keys(index), {MapSet.new(), MapSet.new()}, fn id, {cyclic, checked} ->
-      if MapSet.member?(checked, id) do
-        {cyclic, checked}
-      else
-        case trace_collection_parent_path(id, index, MapSet.new(), []) do
-          {:ok, path} ->
-            {cyclic, MapSet.union(checked, MapSet.new(path))}
+    states = Map.new(Map.keys(index), &{&1, :unvisited})
 
-          {:cycle, path} ->
-            {MapSet.union(cyclic, MapSet.new(path)), MapSet.union(checked, MapSet.new(path))}
-        end
+    Enum.reduce(Map.keys(index), {MapSet.new(), states}, fn id, {cyclic, states} ->
+      if Map.get(states, id) == :unvisited do
+        walk_collection_parent_chain(id, index, states, cyclic, MapSet.new())
+      else
+        {cyclic, states}
       end
     end)
     |> elem(0)
   end
 
-  defp trace_collection_parent_path(id, index, seen, path) do
-    cond do
-      MapSet.member?(seen, id) ->
-        {:cycle, path}
+  defp walk_collection_parent_chain(id, index, states, cyclic, stack) do
+    case Map.get(states, id) do
+      :visited ->
+        {cyclic, states}
 
-      true ->
-        case Map.get(index, id) do
-          %CollectionBinding{parent_collection_binding_id: nil} ->
-            {:ok, [id | path]}
+      :visiting ->
+        {MapSet.union(cyclic, MapSet.put(stack, id)), states}
 
-          %CollectionBinding{parent_collection_binding_id: parent} when is_binary(parent) ->
-            trace_collection_parent_path(
-              parent,
-              index,
-              MapSet.put(seen, id),
-              [id | path]
-            )
+      :unvisited ->
+        states = Map.put(states, id, :visiting)
+        stack = MapSet.put(stack, id)
 
-          _other ->
-            {:ok, [id | path]}
+        case collection_parent_id(index, id) do
+          nil ->
+            {cyclic, Map.put(states, id, :visited)}
+
+          parent_id ->
+            case Map.get(states, parent_id) do
+              :visited ->
+                {cyclic, Map.put(states, id, :visited)}
+
+              :visiting ->
+                cycle_ids = MapSet.union(stack, MapSet.new([parent_id]))
+                {MapSet.union(cyclic, cycle_ids), states}
+
+              :unvisited ->
+                {cyclic, states} =
+                  walk_collection_parent_chain(parent_id, index, states, cyclic, stack)
+
+                {cyclic, Map.put(states, id, :visited)}
+            end
         end
+    end
+  end
+
+  defp collection_parent_id(index, id) do
+    case Map.get(index, id) do
+      %CollectionBinding{parent_collection_binding_id: parent} when is_binary(parent) -> parent
+      _other -> nil
     end
   end
 
