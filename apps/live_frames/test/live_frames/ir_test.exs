@@ -633,9 +633,40 @@ defmodule LiveFrames.IRTest do
     assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
   end
 
+  test "collection parent graph reports missing parent without crashing cycle analysis" do
+    document =
+      collection_only_document(
+        %{"collection_a" => "missing_collection"},
+        %{"collection_a" => "trace_missing_parent"}
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_missing"))
+    refute "trace_missing_parent" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "collection parent graph reports tail to missing parent without cycle diagnostics" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "missing_collection",
+          "collection_b" => "collection_a"
+        },
+        %{
+          "collection_a" => "trace_missing_parent",
+          "collection_b" => "trace_tail_b"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_missing"))
+    refute "trace_missing_parent" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_tail_b" in parent_cycle_trace_ids(diagnostics)
+  end
+
   test "long acyclic collection parent chain remains valid" do
     {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
-    depth = 40
+    depth = 100
 
     {bindings, last_id} =
       Enum.reduce(1..depth, {%{}, nil}, fn index, {acc, parent_id} ->
@@ -661,7 +692,7 @@ defmodule LiveFrames.IRTest do
     }
 
     assert IR.validate(document) == :ok
-    assert last_id == "collection_40"
+    assert last_id == "collection_100"
   end
 
   defp collection_only_document(bindings, trace_ids \\ %{}) do

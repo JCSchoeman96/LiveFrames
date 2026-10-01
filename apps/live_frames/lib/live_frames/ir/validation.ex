@@ -1381,24 +1381,27 @@ defmodule LiveFrames.IR.Validation do
 
       :unvisited ->
         states = Map.put(states, id, :visiting)
-        stack = stack ++ [id]
+        stack = [id | stack]
 
         case collection_parent_id(index, id) do
           nil ->
             {cyclic, Map.put(states, id, :visited)}
 
           parent_id ->
-            case Map.get(states, parent_id) do
-              :visited ->
+            case Map.fetch(states, parent_id) do
+              :error ->
                 {cyclic, Map.put(states, id, :visited)}
 
-              :visiting ->
+              {:ok, :visited} ->
+                {cyclic, Map.put(states, id, :visited)}
+
+              {:ok, :visiting} ->
                 cycle_members = collection_cycle_suffix(stack, parent_id)
                 cyclic = MapSet.union(cyclic, MapSet.new(cycle_members))
                 states = mark_collection_states_visited(states, cycle_members)
                 {cyclic, Map.put(states, id, :visited)}
 
-              :unvisited ->
+              {:ok, :unvisited} ->
                 {cyclic, states} =
                   walk_collection_parent_chain(parent_id, index, states, cyclic, stack)
 
@@ -1408,11 +1411,14 @@ defmodule LiveFrames.IR.Validation do
     end
   end
 
-  defp collection_cycle_suffix(stack, cycle_start_id) do
-    case Enum.find_index(stack, &(&1 == cycle_start_id)) do
-      nil -> [cycle_start_id]
-      index -> Enum.drop(stack, index)
-    end
+  defp collection_cycle_suffix(reversed_stack, cycle_start_id) do
+    Enum.reduce_while(reversed_stack, [], fn node, acc ->
+      if node == cycle_start_id do
+        {:halt, [node | acc]}
+      else
+        {:cont, [node | acc]}
+      end
+    end)
   end
 
   defp mark_collection_states_visited(states, ids) do
