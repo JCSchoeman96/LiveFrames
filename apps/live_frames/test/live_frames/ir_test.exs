@@ -6,7 +6,9 @@ defmodule LiveFrames.IRTest do
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Diagnostic
+  alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.Interaction
+  alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -93,14 +95,16 @@ defmodule LiveFrames.IRTest do
   end
 
   test "exposes the current supported IR version and uses it by default" do
-    assert DesignDocument.current_ir_version() == "1.0.0"
+    assert DesignDocument.current_ir_version() == "2.0.0"
     assert IR.current_ir_version() == DesignDocument.current_ir_version()
     assert DesignDocument.new().ir_version == IR.current_ir_version()
+    assert DesignDocument.new().collection_bindings == %{}
+    assert DesignDocument.new().value_bindings == %{}
   end
 
   test "validation rejects non-empty unsupported IR versions" do
     assert {:error, diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "2.0.0"})
+             IR.validate(%{valid_document() | ir_version: "3.0.0"})
 
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.version_unsupported"))
     refute Enum.any?(diagnostics, &(&1.code == "ir.document.version_missing"))
@@ -116,7 +120,7 @@ defmodule LiveFrames.IRTest do
     assert Enum.any?(malformed_diagnostics, &(&1.code == "ir.document.version_invalid"))
 
     assert {:error, unsupported_diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "2.0.0"})
+             IR.validate(%{valid_document() | ir_version: "3.0.0"})
 
     assert Enum.any?(unsupported_diagnostics, &(&1.code == "ir.document.version_unsupported"))
   end
@@ -340,7 +344,9 @@ defmodule LiveFrames.IRTest do
     assert first == second
 
     decoded = Jason.decode!(first)
-    assert decoded["ir_version"] == "1.0.0"
+    assert decoded["ir_version"] == "2.0.0"
+    assert decoded["collection_bindings"] == %{}
+    assert decoded["value_bindings"] == %{}
 
     assert get_in(decoded, ["root_nodes", Access.at(0), "styles", "background", "kind"]) ==
              "token_ref"
@@ -387,5 +393,488 @@ defmodule LiveFrames.IRTest do
     invalid = %{valid_document() | root_nodes: [%DesignNode{}]}
 
     assert_raise LiveFrames.IR.ValidationError, fn -> IR.validate!(invalid) end
+  end
+
+  defp binding_tree do
+    owner_id = DesignNode.deterministic_id([1])
+    repeat_id = DesignNode.deterministic_id([1, 1])
+    target_id = DesignNode.deterministic_id([1, 1, 1])
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "section",
+      children: [
+        %DesignNode{
+          node_id: repeat_id,
+          semantic_type: "container",
+          children: [
+            %DesignNode{node_id: target_id, semantic_type: "heading", content: "Title"}
+          ]
+        }
+      ]
+    }
+
+    {owner, owner_id, repeat_id, target_id}
+  end
+
+  defp binding_document(overrides \\ []) do
+    {owner, owner_id, repeat_id, target_id} = binding_tree()
+
+    collection = %CollectionBinding{
+      collection_binding_id: "collection_001",
+      owner_node_id: owner_id,
+      repeat_root_node_id: repeat_id,
+      normalization_status: :normalized
+    }
+
+    value = %ValueBinding{
+      value_binding_id: "value_001",
+      target_node_id: target_id,
+      target_kind: :text,
+      value_kind: :field,
+      scope: :collection_item,
+      value_key: "content.title",
+      collection_binding_id: "collection_001",
+      modifier_status: :none,
+      normalization_status: :normalized
+    }
+
+    document = %DesignDocument{
+      source_metadata: %{},
+      token_set: %{},
+      root_nodes: [owner],
+      collection_bindings: %{"collection_001" => collection},
+      value_bindings: %{"value_001" => value}
+    }
+
+    struct(document, overrides)
+  end
+
+  test "accepts valid collection and value bindings" do
+    assert IR.validate(binding_document()) == :ok
+  end
+
+  test "rejects collection binding registry key mismatch" do
+    document = binding_document()
+
+    invalid =
+      put_in(document.collection_bindings, %{
+        "wrong_key" => Map.fetch!(document.collection_bindings, "collection_001")
+      })
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.id_mismatch"))
+  end
+
+  test "rejects collection binding with missing nodes" do
+    document = binding_document()
+
+    invalid =
+      update_in(document.collection_bindings["collection_001"], fn binding ->
+        %{binding | owner_node_id: "missing"}
+      end)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.owner_missing"))
+  end
+
+  test "rejects collection binding parent self-reference and cycles" do
+    document = binding_document()
+
+    self_parent =
+      update_in(document.collection_bindings["collection_001"], fn binding ->
+        %{binding | parent_collection_binding_id: "collection_001"}
+      end)
+
+    assert {:error, self_diagnostics} = IR.validate(self_parent)
+    assert Enum.any?(self_diagnostics, &(&1.code == "ir.collection_binding.parent_self"))
+
+    nested = %CollectionBinding{
+      collection_binding_id: "collection_002",
+      owner_node_id: DesignNode.deterministic_id([1, 1, 1]),
+      repeat_root_node_id: DesignNode.deterministic_id([1, 1, 1]),
+      parent_collection_binding_id: "collection_001",
+      normalization_status: :normalized
+    }
+
+    cycle_document = %{
+      document
+      | collection_bindings: %{
+          "collection_001" => %{
+            document.collection_bindings["collection_001"]
+            | parent_collection_binding_id: "collection_002"
+          },
+          "collection_002" => %{nested | parent_collection_binding_id: "collection_001"}
+        }
+    }
+
+    assert {:error, cycle_diagnostics} = IR.validate(cycle_document)
+    assert Enum.any?(cycle_diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+  end
+
+  test "rejects nested collection owner outside parent repeat root" do
+    document = binding_document()
+
+    outside_owner = %CollectionBinding{
+      collection_binding_id: "collection_002",
+      owner_node_id: DesignNode.deterministic_id([1]),
+      repeat_root_node_id: DesignNode.deterministic_id([1, 1, 1]),
+      parent_collection_binding_id: "collection_001",
+      normalization_status: :normalized
+    }
+
+    invalid = put_in(document.collection_bindings["collection_002"], outside_owner)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.owner_outside_parent"))
+  end
+
+  test "accepts site and collection_count value bindings when valid" do
+    {owner, _owner_id, repeat_id, target_id} = binding_tree()
+    site_target = DesignNode.deterministic_id([2])
+
+    site_document = %DesignDocument{
+      root_nodes: [
+        owner,
+        %DesignNode{node_id: site_target, semantic_type: "paragraph", content: "count"}
+      ],
+      collection_bindings: %{
+        "collection_001" => %CollectionBinding{
+          collection_binding_id: "collection_001",
+          owner_node_id: DesignNode.deterministic_id([1]),
+          repeat_root_node_id: repeat_id,
+          normalization_status: :normalized
+        }
+      },
+      value_bindings: %{
+        "value_site" => %ValueBinding{
+          value_binding_id: "value_site",
+          target_node_id: target_id,
+          target_kind: :text,
+          value_kind: :field,
+          scope: :site,
+          value_key: "content.title",
+          modifier_status: :none,
+          normalization_status: :normalized
+        },
+        "value_count" => %ValueBinding{
+          value_binding_id: "value_count",
+          target_node_id: site_target,
+          target_kind: :text,
+          value_kind: :collection_count,
+          scope: :collection,
+          collection_binding_id: "collection_001",
+          modifier_status: :none,
+          normalization_status: :normalized
+        }
+      }
+    }
+
+    assert IR.validate(site_document) == :ok
+  end
+
+  test "rejects invalid value binding combinations and containment" do
+    document = binding_document()
+
+    invalid_combo =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | scope: :collection}
+      end)
+
+    assert {:error, combo_diagnostics} = IR.validate(invalid_combo)
+    assert Enum.any?(combo_diagnostics, &(&1.code == "ir.value_binding.combination_invalid"))
+
+    outside_target =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | target_node_id: DesignNode.deterministic_id([1])}
+      end)
+
+    assert {:error, target_diagnostics} = IR.validate(outside_target)
+
+    assert Enum.any?(
+             target_diagnostics,
+             &(&1.code == "ir.value_binding.target_outside_repeat_root")
+           )
+
+    opaque_invalid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :opaque, normalization_status: :normalized}
+      end)
+
+    assert {:error, modifier_diagnostics} = IR.validate(opaque_invalid)
+    assert Enum.any?(modifier_diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
+  test "ValueBinding modifier and normalization status matrix matches C09B authority" do
+    document = binding_document()
+
+    assert IR.validate(document) == :ok
+
+    evidence_without_modifier =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :none, normalization_status: :evidence_insufficient}
+      end)
+
+    assert IR.validate(evidence_without_modifier) == :ok
+
+    opaque_evidence =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :opaque, normalization_status: :evidence_insufficient}
+      end)
+
+    assert IR.validate(opaque_evidence) == :ok
+
+    opaque_normalized =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier_status: :opaque, normalization_status: :normalized}
+      end)
+
+    assert {:error, diagnostics} = IR.validate(opaque_normalized)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
+  test "collection parent graph reports missing parent without crashing cycle analysis" do
+    document =
+      collection_only_document(
+        %{"collection_a" => "missing_collection"},
+        %{"collection_a" => "trace_missing_parent"}
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_missing"))
+    refute "trace_missing_parent" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "collection parent graph reports tail to missing parent without cycle diagnostics" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "missing_collection",
+          "collection_b" => "collection_a"
+        },
+        %{
+          "collection_a" => "trace_missing_parent",
+          "collection_b" => "trace_tail_b"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_missing"))
+    refute "trace_missing_parent" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_tail_b" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "long acyclic collection parent chain remains valid" do
+    {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
+    depth = 100
+
+    {bindings, last_id} =
+      Enum.reduce(1..depth, {%{}, nil}, fn index, {acc, parent_id} ->
+        id = "collection_#{index}"
+
+        owner_node_id = if parent_id, do: inner_owner_id, else: owner_id
+
+        binding = %CollectionBinding{
+          collection_binding_id: id,
+          owner_node_id: owner_node_id,
+          repeat_root_node_id: repeat_id,
+          parent_collection_binding_id: parent_id,
+          normalization_status: :normalized
+        }
+
+        {Map.put(acc, id, binding), id}
+      end)
+
+    document = %DesignDocument{
+      root_nodes: [owner],
+      collection_bindings: bindings,
+      value_bindings: %{}
+    }
+
+    assert IR.validate(document) == :ok
+    assert last_id == "collection_100"
+  end
+
+  defp collection_only_document(bindings, trace_ids \\ %{}) do
+    {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
+
+    bindings =
+      Map.new(bindings, fn {id, parent_id} ->
+        owner_node_id = if parent_id, do: inner_owner_id, else: owner_id
+
+        trace =
+          case Map.get(trace_ids, id) do
+            nil -> nil
+            source_id -> %SourceTrace{source_id: source_id}
+          end
+
+        {id,
+         %CollectionBinding{
+           collection_binding_id: id,
+           owner_node_id: owner_node_id,
+           repeat_root_node_id: repeat_id,
+           parent_collection_binding_id: parent_id,
+           normalization_status: :normalized,
+           source_trace: trace
+         }}
+      end)
+
+    %DesignDocument{
+      root_nodes: [owner],
+      collection_bindings: bindings,
+      value_bindings: %{}
+    }
+  end
+
+  defp parent_cycle_trace_ids(diagnostics) do
+    diagnostics
+    |> Enum.filter(&(&1.code == "ir.collection_binding.parent_cycle"))
+    |> Enum.map(fn diagnostic ->
+      case diagnostic.source_trace do
+        %SourceTrace{source_id: source_id} -> source_id
+        _other -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort()
+  end
+
+  test "collection parent graph marks only actual cycle members for A ↔ B" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a"
+        },
+        %{"collection_a" => "trace_cycle_a", "collection_b" => "trace_cycle_b"}
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+  end
+
+  test "collection parent graph marks only cycle members when a tail enters a cycle" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a",
+          "collection_c" => "collection_a",
+          "collection_d" => "collection_c"
+        },
+        %{
+          "collection_a" => "trace_cycle_a",
+          "collection_b" => "trace_cycle_b",
+          "collection_c" => "trace_tail_c",
+          "collection_d" => "trace_tail_d"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+    refute "trace_tail_c" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_tail_d" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "collection parent graph cycle membership is independent of map key order" do
+    bindings = [
+      {"collection_d", "collection_c"},
+      {"collection_c", "collection_a"},
+      {"collection_b", "collection_a"},
+      {"collection_a", "collection_b"}
+    ]
+
+    trace_ids = %{
+      "collection_a" => "trace_cycle_a",
+      "collection_b" => "trace_cycle_b",
+      "collection_c" => "trace_tail_c",
+      "collection_d" => "trace_tail_d"
+    }
+
+    document = collection_only_document(Map.new(bindings), trace_ids)
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+  end
+
+  test "collection parent graph marks only cycle members when multiple tails enter a cycle" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a",
+          "collection_c" => "collection_a",
+          "collection_d" => "collection_a"
+        },
+        %{
+          "collection_a" => "trace_cycle_a",
+          "collection_b" => "trace_cycle_b",
+          "collection_c" => "trace_tail_c",
+          "collection_d" => "trace_tail_d"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+  end
+
+  test "collection parent graph accepts multiple independent acyclic chains" do
+    document =
+      collection_only_document(%{
+        "chain_a_1" => nil,
+        "chain_a_2" => "chain_a_1",
+        "chain_b_1" => nil,
+        "chain_b_2" => "chain_b_1",
+        "chain_b_3" => "chain_b_2"
+      })
+
+    assert IR.validate(document) == :ok
+  end
+
+  test "collection parent graph rejects mixed acyclic and cyclic components" do
+    assert IR.validate(
+             collection_only_document(
+               %{
+                 "acyclic_1" => nil,
+                 "acyclic_2" => "acyclic_1"
+               },
+               %{"acyclic_1" => "trace_acyclic_1", "acyclic_2" => "trace_acyclic_2"}
+             )
+           ) == :ok
+
+    document =
+      collection_only_document(
+        %{
+          "acyclic_1" => nil,
+          "acyclic_2" => "acyclic_1",
+          "cycle_a" => "cycle_b",
+          "cycle_b" => "cycle_a"
+        },
+        %{
+          "acyclic_1" => "trace_acyclic_1",
+          "acyclic_2" => "trace_acyclic_2",
+          "cycle_a" => "trace_cycle_a",
+          "cycle_b" => "trace_cycle_b"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+    refute "trace_acyclic_1" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_acyclic_2" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "binding registries round-trip through serialization" do
+    alias LiveFrames.Fidelity.DocumentLoader
+
+    document = binding_document()
+    assert {:ok, json} = IR.encode(document)
+    decoded = Jason.decode!(json)
+
+    assert map_size(decoded["collection_bindings"]) == 1
+    assert map_size(decoded["value_bindings"]) == 1
+
+    assert {:ok, reloaded} = DocumentLoader.from_map(decoded)
+    assert IR.encode!(reloaded) == json
   end
 end

@@ -19,42 +19,14 @@ defmodule LiveFrames.Fidelity do
   def generate(document, opts \\ [])
 
   def generate(%DesignDocument{} = document, opts) when is_list(opts) do
-    source_resolver = Keyword.get(opts, :source_resolver, LiveFrames.Fidelity.SourceResolver.Noop)
-
     case IR.validate(document) do
       :ok ->
-        case BreakpointAuthority.coerce(Keyword.get(opts, :responsive_authority)) do
-          {:ok, responsive_authority} ->
-            {plan, state, diagnostics} =
-              build_nodes(
-                document.root_nodes,
-                document,
-                source_resolver,
-                responsive_authority,
-                %{},
-                [],
-                []
-              )
+        case ensure_static_binding_boundary(document) do
+          :ok ->
+            generate_static(document, opts)
 
-            heex = render_heex(plan)
-            css = render_css(plan)
-
-            manifest =
-              manifest(document, plan, state, diagnostics, heex, css, responsive_authority)
-
-            {:ok,
-             %{heex: heex, css: css, manifest: manifest |> Jason.encode!() |> Jason.decode!()}}
-
-          {:error, reason} ->
-            {:error,
-             [
-               diagnostic(
-                 "fidelity.responsive.authority_invalid",
-                 "responsive breakpoint authority was not supported",
-                 nil,
-                 %{reason: Atom.to_string(reason)}
-               )
-             ]}
+          {:error, diagnostics} ->
+            {:error, diagnostics}
         end
 
       {:error, diagnostics} ->
@@ -64,6 +36,59 @@ defmodule LiveFrames.Fidelity do
 
   def generate(_document, _opts),
     do: {:error, [diagnostic("fidelity.input.invalid", "expected a DesignDocument")]}
+
+  defp generate_static(%DesignDocument{} = document, opts) do
+    source_resolver = Keyword.get(opts, :source_resolver, LiveFrames.Fidelity.SourceResolver.Noop)
+
+    case BreakpointAuthority.coerce(Keyword.get(opts, :responsive_authority)) do
+      {:ok, responsive_authority} ->
+        {plan, state, diagnostics} =
+          build_nodes(
+            document.root_nodes,
+            document,
+            source_resolver,
+            responsive_authority,
+            %{},
+            [],
+            []
+          )
+
+        heex = render_heex(plan)
+        css = render_css(plan)
+
+        manifest =
+          manifest(document, plan, state, diagnostics, heex, css, responsive_authority)
+
+        {:ok, %{heex: heex, css: css, manifest: manifest |> Jason.encode!() |> Jason.decode!()}}
+
+      {:error, reason} ->
+        {:error,
+         [
+           diagnostic(
+             "fidelity.responsive.authority_invalid",
+             "responsive breakpoint authority was not supported",
+             nil,
+             %{reason: Atom.to_string(reason)}
+           )
+         ]}
+    end
+  end
+
+  defp ensure_static_binding_boundary(%DesignDocument{} = document) do
+    if map_size(document.collection_bindings) == 0 and map_size(document.value_bindings) == 0 do
+      :ok
+    else
+      {:error,
+       [
+         diagnostic(
+           "fidelity.bindings.unsupported",
+           "non-empty collection_bindings or value_bindings require a binding-aware fidelity generator",
+           nil,
+           %{}
+         )
+       ]}
+    end
+  end
 
   defp build_nodes(
          nodes,

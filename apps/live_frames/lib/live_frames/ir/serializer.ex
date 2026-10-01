@@ -4,10 +4,12 @@ defmodule LiveFrames.IR.Serializer do
   """
 
   alias LiveFrames.IR.AssetReference
+  alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Diagnostic
   alias LiveFrames.IR.Interaction
+  alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -21,6 +23,9 @@ defmodule LiveFrames.IR.Serializer do
       "root_nodes" => Enum.map(document.root_nodes, &node_to_map/1),
       "assets" => registry_to_map(document.assets, &asset_to_map/1),
       "interactions" => registry_to_map(document.interactions, &interaction_to_map/1),
+      "collection_bindings" =>
+        registry_to_map(document.collection_bindings, &collection_binding_to_map/1),
+      "value_bindings" => registry_to_map(document.value_bindings, &value_binding_to_map/1),
       "diagnostics" => Enum.map(document.diagnostics, &diagnostic_to_map/1),
       "provenance" => normalize_json(document.provenance)
     }
@@ -76,6 +81,32 @@ defmodule LiveFrames.IR.Serializer do
       "target_node_ids" => interaction.target_node_ids,
       "parameters" => normalize_json(interaction.parameters),
       "source_trace" => source_trace_to_map(interaction.source_trace)
+    }
+  end
+
+  defp collection_binding_to_map(%CollectionBinding{} = binding) do
+    %{
+      "collection_binding_id" => binding.collection_binding_id,
+      "owner_node_id" => binding.owner_node_id,
+      "repeat_root_node_id" => binding.repeat_root_node_id,
+      "parent_collection_binding_id" => binding.parent_collection_binding_id,
+      "normalization_status" => Atom.to_string(binding.normalization_status),
+      "source_trace" => source_trace_to_map(binding.source_trace)
+    }
+  end
+
+  defp value_binding_to_map(%ValueBinding{} = binding) do
+    %{
+      "value_binding_id" => binding.value_binding_id,
+      "target_node_id" => binding.target_node_id,
+      "target_kind" => Atom.to_string(binding.target_kind),
+      "value_kind" => Atom.to_string(binding.value_kind),
+      "scope" => Atom.to_string(binding.scope),
+      "value_key" => binding.value_key,
+      "collection_binding_id" => binding.collection_binding_id,
+      "modifier_status" => Atom.to_string(binding.modifier_status),
+      "normalization_status" => Atom.to_string(binding.normalization_status),
+      "source_trace" => source_trace_to_map(binding.source_trace)
     }
   end
 
