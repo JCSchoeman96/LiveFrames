@@ -3,6 +3,7 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
+  alias LiveFrames.Fidelity.DocumentLoader
   alias LiveFrames.IR
 
   @fixture_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
@@ -19,16 +20,8 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                    __DIR__
                  )
 
-  test "regeneration byte-compares with the committed Design IR artifact" do
+  test "regeneration matches the committed v1 artifact after structural migration" do
     token_set = token_set()
-
-    temporary_dir =
-      Path.join(System.tmp_dir!(), "live_frames_phase_4b_#{System.unique_integer([:positive])}")
-
-    temporary_output = Path.join(temporary_dir, "design_document.json")
-    File.mkdir_p!(temporary_dir)
-
-    on_exit(fn -> File.rm_rf!(temporary_dir) end)
 
     assert {:ok, document} =
              Bricks.to_ir(@fixture_path,
@@ -37,9 +30,21 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                theme_styles: @theme_styles_path
              )
 
-    File.write!(temporary_output, IR.encode!(document) <> "\n")
+    assert document.ir_version == "2.0.0"
+    assert document.collection_bindings == %{}
+    assert document.value_bindings == %{}
 
-    assert File.read!(@artifact_path) == File.read!(temporary_output)
+    assert {:ok, migrated_fixture} = DocumentLoader.from_file(@artifact_path)
+    assert Jason.decode!(File.read!(@artifact_path))["ir_version"] == "1.0.0"
+
+    assert scrub_migration_provenance(IR.to_map(document)) ==
+             scrub_migration_provenance(IR.to_map(migrated_fixture))
+  end
+
+  defp scrub_migration_provenance(map) do
+    Map.update!(map, "provenance", fn provenance ->
+      Map.delete(provenance, "liveframes_ir_migrations")
+    end)
   end
 
   defp token_set do

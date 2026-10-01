@@ -254,7 +254,7 @@ defmodule LiveFrames.BricksDesignIRTest do
     document = document()
 
     assert IR.validate(document) == :ok
-    assert document.ir_version == "1.0.0"
+    assert document.ir_version == "2.0.0"
     assert length(document.root_nodes) == 1
 
     nodes = flatten(document.root_nodes)

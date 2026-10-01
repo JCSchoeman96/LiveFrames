@@ -13,13 +13,56 @@ source plugin.
 
 ## Version
 
-The current supported contract version is `1.0.0`. `DesignDocument` owns this
+The current supported contract version is `2.0.0`. `DesignDocument` owns this
 authoritative version and exposes it through `current_ir_version/0`; the public
 `LiveFrames.IR.current_ir_version/0` helper delegates to it. Every
 `DesignDocument` carries its `ir_version`, and serialization includes that
 explicit value. A change to required fields, field meaning, validation rules,
 or serialized shape requires a new IR version and an explicit migration
 decision.
+
+Readers accept `2.0.0` documents directly. Serialized `1.0.0` artifacts are
+read only through an explicit `1.0.0` → `2.0.0` structural migration before
+decoding and validation. Writers emit `2.0.0` only. Any other non-empty
+`ir_version` is rejected as unsupported. Missing, empty, or non-string versions
+produce distinct diagnostics from unsupported versions.
+
+### Structural migration from 1.0.0
+
+`LiveFrames.IR.Migration.to_current/1` performs the only supported major
+migration route:
+
+- `1.0.0` → `2.0.0` adds empty `collection_bindings` and `value_bindings`
+  registries, sets `ir_version` to `2.0.0`, preserves every other root field,
+  and records migration evidence without inferring bindings or repetition from
+  `SourceTrace`.
+- `2.0.0` → `2.0.0` is identity.
+- All other versions fail closed.
+
+Migration evidence is stored under the namespaced provenance key
+`liveframes_ir_migrations` as a JSON array of objects:
+
+| Field | Value |
+| --- | --- |
+| `source_version` | `1.0.0` |
+| `target_version` | `2.0.0` |
+| `kind` | `structural` |
+| `frontend_semantics_recovered` | `false` |
+
+Existing provenance keys are never overwritten. If `liveframes_ir_migrations`
+already exists, migration appends an identical entry or fails closed when the
+existing value is not a list or records an incompatible migration.
+
+The fidelity loader runs: decode JSON → classify version → migrate or pass
+through → require every `2.0.0` root field to be present in the serialized map
+→ decode structs → validate. Missing required root keys are not repaired with
+defaults.
+
+### Generator limitation
+
+The current static Fidelity generator accepts `2.0.0` documents only when both
+`collection_bindings` and `value_bindings` are empty. Non-empty registries fail
+closed with a stable diagnostic until a binding-aware generator ships.
 
 ## Root document
 
@@ -33,12 +76,14 @@ decision.
 | `root_nodes` | list of `DesignNode` | Ordered roots of the design tree. |
 | `assets` | asset ID to `AssetReference` map | Canonical asset registry. |
 | `interactions` | interaction ID to `Interaction` map | Canonical interaction registry. |
+| `collection_bindings` | collection binding ID to `CollectionBinding` map | Caller collection inputs and repeat boundaries. |
+| `value_bindings` | value binding ID to `ValueBinding` map | Caller-supplied frontend value bindings. |
 | `diagnostics` | list of `Diagnostic` | Findings carried with the document. |
 | `provenance` | JSON object | Origin, version, hashes, permission and adapter metadata. |
 
-Assets and interactions are registries. Nodes store references, not duplicate
-definitions. Registry keys must match the corresponding `asset_id` or
-`interaction_id`.
+Assets, interactions, collection bindings, and value bindings are registries.
+Nodes store references, not duplicate definitions. Registry keys must match the
+corresponding record ID field.
 
 ## Design nodes
 
@@ -135,6 +180,57 @@ optional `trigger`, target node IDs, JSON parameters, and an optional source
 trace. The IR records intent only. It does not choose between CSS,
 `Phoenix.LiveView.JS`, hooks, server events, or LiveComponents.
 
+## Collection bindings
+
+`LiveFrames.IR.CollectionBinding` declares a caller-supplied collection input
+and the subtree rendered once per item:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `collection_binding_id` | non-empty string | Stable registry identity. |
+| `owner_node_id` | node ID | Node that owns the repetition boundary. |
+| `repeat_root_node_id` | node ID | Root of the per-item template subtree. |
+| `parent_collection_binding_id` | collection binding ID or `nil` | Enclosing repeat for nested collections. |
+| `normalization_status` | `normalized` | Serialized records are always normalized. |
+| `source_trace` | `SourceTrace` or `nil` | Source provenance. |
+
+Parent references must resolve, cannot be self, and must form an acyclic graph.
+For nested repetition, the child `owner_node_id` must lie within the parent
+`repeat_root_node_id` subtree.
+
+## Value bindings
+
+`LiveFrames.IR.ValueBinding` declares that a node receives a value from
+caller-supplied data:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `value_binding_id` | non-empty string | Stable registry identity. |
+| `target_node_id` | node ID | Node receiving the bound value. |
+| `target_kind` | `text`, `asset`, or `link_url` | Frontend destination. |
+| `value_kind` | `field` or `collection_count` | Field value or collection count. |
+| `scope` | `collection_item`, `site`, or `collection` | Caller-data scope. |
+| `value_key` | semantic key or `nil` | Required for `field`; absent for `collection_count`. |
+| `collection_binding_id` | collection binding ID or `nil` | Required for `collection_item` and `collection` scopes. |
+| `modifier_status` | `none` or `opaque` | Source modifier presence. |
+| `normalization_status` | `normalized` or `evidence_insufficient` | Compile-time confidence. |
+| `source_trace` | `SourceTrace` or `nil` | Source provenance. |
+
+Valid combinations:
+
+- `field` + `collection_item` requires `collection_binding_id` and `value_key`.
+- `field` + `site` requires `value_key` and forbids `collection_binding_id`.
+- `collection_count` + `collection` requires `collection_binding_id`, forbids
+  `value_key`, and requires `target_kind` `text`.
+
+`target_kind` `asset` or `link_url` requires `value_kind` `field`. A
+`collection_item` target must lie within the referenced collection
+`repeat_root_node_id` subtree.
+
+`modifier_status` `opaque` requires `normalization_status`
+`evidence_insufficient`. `normalization_status` `normalized` requires
+`modifier_status` `none`.
+
 ## Source trace
 
 `LiveFrames.IR.SourceTrace` is generic and may contain:
@@ -180,10 +276,13 @@ human-readable text.
 5. explicit `StyleValue` kinds and values;
 6. responsive keys matching their override IDs;
 7. unresolved responsive entries retaining a source name;
-8. asset and interaction registry IDs matching their definitions;
-9. node references resolving to registry entries;
-10. interaction target node IDs resolving to nodes; and
-11. diagnostic shape and source-trace shape.
+8. asset, interaction, collection binding, and value binding registry IDs
+   matching their definitions;
+9. collection binding graph, nesting, and repeat-root containment rules;
+10. value binding scope, target kind, and modifier consistency rules;
+11. node references resolving to registry entries;
+12. interaction target node IDs resolving to nodes; and
+13. diagnostic shape and source-trace shape.
 
 The validator reports all discoverable violations in one result. It does not
 silently repair or drop invalid values. `validate!/1` raises

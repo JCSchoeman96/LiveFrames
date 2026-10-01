@@ -4,10 +4,12 @@ defmodule LiveFrames.IR.Validation do
   """
 
   alias LiveFrames.IR.AssetReference
+  alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Diagnostic
   alias LiveFrames.IR.Interaction
+  alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -19,15 +21,39 @@ defmodule LiveFrames.IR.Validation do
     diagnostics = []
     diagnostics = validate_document_fields(document, diagnostics)
 
-    {node_ids, diagnostics} =
+    {node_ids, node_paths, diagnostics} =
       if is_list(document.root_nodes) do
-        collect_nodes(document.root_nodes, MapSet.new(), diagnostics, [])
+        collect_nodes(document.root_nodes, MapSet.new(), %{}, diagnostics, [])
       else
-        {MapSet.new(), diagnostics}
+        {MapSet.new(), %{}, diagnostics}
       end
 
     {asset_ids, diagnostics} = validate_assets(document.assets, diagnostics)
     {interaction_ids, diagnostics} = validate_interactions(document.interactions, diagnostics)
+
+    {collection_binding_ids, diagnostics} =
+      validate_collection_bindings(document.collection_bindings, diagnostics)
+
+    {_value_binding_ids, diagnostics} =
+      validate_value_bindings(document.value_bindings, diagnostics)
+
+    diagnostics =
+      validate_collection_binding_graph(
+        document.collection_bindings,
+        collection_binding_ids,
+        node_ids,
+        node_paths,
+        diagnostics
+      )
+
+    diagnostics =
+      validate_value_binding_semantics(
+        document.value_bindings,
+        document.collection_bindings,
+        node_ids,
+        node_paths,
+        diagnostics
+      )
 
     diagnostics =
       if is_list(document.root_nodes) do
@@ -80,6 +106,16 @@ defmodule LiveFrames.IR.Validation do
       "ir.document.interactions_invalid",
       "interactions must be a registry map"
     )
+    |> require_registry(
+      document.collection_bindings,
+      "ir.document.collection_bindings_invalid",
+      "collection_bindings must be a registry map"
+    )
+    |> require_registry(
+      document.value_bindings,
+      "ir.document.value_bindings_invalid",
+      "value_bindings must be a registry map"
+    )
     |> require_list(
       document.diagnostics,
       "ir.document.diagnostics_invalid",
@@ -126,10 +162,10 @@ defmodule LiveFrames.IR.Validation do
         nil
       )
 
-  defp collect_nodes(nodes, ids, diagnostics, path) do
+  defp collect_nodes(nodes, ids, paths, diagnostics, path) do
     nodes
     |> Enum.with_index(1)
-    |> Enum.reduce({ids, diagnostics}, fn {node, index}, {ids, diagnostics} ->
+    |> Enum.reduce({ids, paths, diagnostics}, fn {node, index}, {ids, paths, diagnostics} ->
       node_path = path ++ [index]
 
       case node do
@@ -138,14 +174,19 @@ defmodule LiveFrames.IR.Validation do
           diagnostics = validate_deterministic_node_id(diagnostics, node.node_id, node_path)
           {ids, diagnostics} = collect_node_id(node.node_id, ids, diagnostics)
 
+          paths =
+            if non_empty_string?(node.node_id),
+              do: Map.put(paths, node.node_id, node_path),
+              else: paths
+
           if is_list(node.children) do
-            collect_nodes(node.children, ids, diagnostics, node_path)
+            collect_nodes(node.children, ids, paths, diagnostics, node_path)
           else
-            {ids, diagnostics}
+            {ids, paths, diagnostics}
           end
 
         _other ->
-          {ids,
+          {ids, paths,
            error(
              diagnostics,
              "ir.node.invalid",
@@ -763,6 +804,576 @@ defmodule LiveFrames.IR.Validation do
         :schema,
         nil
       )
+
+  defp validate_collection_bindings(bindings, diagnostics)
+       when is_map(bindings) and not is_struct(bindings) do
+    diagnostics =
+      validate_unique_keys(
+        diagnostics,
+        bindings,
+        "ir.collection_binding.registry_key_duplicate",
+        "collection binding registry keys must be unique after JSON normalization",
+        nil
+      )
+
+    Enum.reduce(sorted_entries(bindings), {MapSet.new(), diagnostics}, fn {key, binding},
+                                                                          {ids, diagnostics} ->
+      case key_string(key) do
+        nil ->
+          {ids,
+           error(
+             diagnostics,
+             "ir.collection_binding.registry_key_invalid",
+             "collection binding registry keys must be strings",
+             :schema,
+             nil
+           )}
+
+        id ->
+          ids = MapSet.put(ids, id)
+          {ids, validate_collection_binding(diagnostics, id, binding)}
+      end
+    end)
+  end
+
+  defp validate_collection_bindings(_bindings, diagnostics),
+    do:
+      {MapSet.new(),
+       error(
+         diagnostics,
+         "ir.collection_binding.registry_invalid",
+         "collection_bindings must be a JSON object",
+         :schema,
+         nil
+       )}
+
+  defp validate_collection_binding(diagnostics, id, %CollectionBinding{} = binding) do
+    trace = binding.source_trace
+
+    diagnostics
+    |> require_string(
+      binding.collection_binding_id,
+      "ir.collection_binding.id_missing",
+      "collection_binding_id must be a non-empty string",
+      trace
+    )
+    |> require_matching_id(
+      binding.collection_binding_id,
+      id,
+      "ir.collection_binding.id_mismatch",
+      "collection_binding_id must match its registry key",
+      trace
+    )
+    |> require_member(
+      binding.normalization_status,
+      CollectionBinding.normalization_statuses(),
+      "ir.collection_binding.normalization_status_invalid",
+      "collection binding normalization_status must be normalized"
+    )
+    |> validate_source_trace(binding.source_trace)
+  end
+
+  defp validate_collection_binding(diagnostics, _id, _binding),
+    do:
+      error(
+        diagnostics,
+        "ir.collection_binding.invalid",
+        "collection binding registry values must be CollectionBinding structs",
+        :schema,
+        nil
+      )
+
+  defp validate_collection_binding_graph(bindings, binding_ids, node_ids, node_paths, diagnostics)
+       when is_map(bindings) and not is_struct(bindings) do
+    Enum.reduce(sorted_entries(bindings), diagnostics, fn {_key, binding}, diagnostics ->
+      case binding do
+        %CollectionBinding{} = record ->
+          diagnostics
+          |> require_resolved_node(
+            record.owner_node_id,
+            node_ids,
+            "ir.collection_binding.owner_missing",
+            "owner_node_id must resolve to a DesignNode",
+            record.source_trace
+          )
+          |> require_resolved_node(
+            record.repeat_root_node_id,
+            node_ids,
+            "ir.collection_binding.repeat_root_missing",
+            "repeat_root_node_id must resolve to a DesignNode",
+            record.source_trace
+          )
+          |> validate_parent_collection_binding(record, bindings, binding_ids, node_paths)
+
+        _other ->
+          diagnostics
+      end
+    end)
+  end
+
+  defp validate_collection_binding_graph(
+         _bindings,
+         _binding_ids,
+         _node_ids,
+         _node_paths,
+         diagnostics
+       ),
+       do: diagnostics
+
+  defp validate_parent_collection_binding(diagnostics, record, bindings, binding_ids, node_paths) do
+    parent_id = record.parent_collection_binding_id
+
+    cond do
+      is_nil(parent_id) ->
+        diagnostics
+
+      parent_id == record.collection_binding_id ->
+        error(
+          diagnostics,
+          "ir.collection_binding.parent_self",
+          "parent_collection_binding_id cannot reference the same collection binding",
+          :schema,
+          record.source_trace
+        )
+
+      not (is_binary(parent_id) and MapSet.member?(binding_ids, parent_id)) ->
+        error(
+          diagnostics,
+          "ir.collection_binding.parent_missing",
+          "parent_collection_binding_id must resolve to an existing collection binding",
+          :schema,
+          record.source_trace
+        )
+
+      not parent_chain_acyclic?(bindings, record) ->
+        error(
+          diagnostics,
+          "ir.collection_binding.parent_cycle",
+          "collection binding parent graph must be acyclic",
+          :schema,
+          record.source_trace
+        )
+
+      true ->
+        parent = Map.get(bindings, parent_id) || find_binding_by_id(bindings, parent_id)
+
+        case parent do
+          %CollectionBinding{repeat_root_node_id: parent_repeat_root} ->
+            if nested_owner_within_parent?(
+                 record.owner_node_id,
+                 parent_repeat_root,
+                 node_paths
+               ) do
+              diagnostics
+            else
+              error(
+                diagnostics,
+                "ir.collection_binding.owner_outside_parent",
+                "nested collection owner must lie within the parent repeat-root subtree",
+                :schema,
+                record.source_trace
+              )
+            end
+
+          _other ->
+            diagnostics
+        end
+    end
+  end
+
+  defp validate_value_bindings(bindings, diagnostics)
+       when is_map(bindings) and not is_struct(bindings) do
+    diagnostics =
+      validate_unique_keys(
+        diagnostics,
+        bindings,
+        "ir.value_binding.registry_key_duplicate",
+        "value binding registry keys must be unique after JSON normalization",
+        nil
+      )
+
+    Enum.reduce(sorted_entries(bindings), {MapSet.new(), diagnostics}, fn {key, binding},
+                                                                          {ids, diagnostics} ->
+      case key_string(key) do
+        nil ->
+          {ids,
+           error(
+             diagnostics,
+             "ir.value_binding.registry_key_invalid",
+             "value binding registry keys must be strings",
+             :schema,
+             nil
+           )}
+
+        id ->
+          ids = MapSet.put(ids, id)
+          {ids, validate_value_binding(diagnostics, id, binding)}
+      end
+    end)
+  end
+
+  defp validate_value_bindings(_bindings, diagnostics),
+    do:
+      {MapSet.new(),
+       error(
+         diagnostics,
+         "ir.value_binding.registry_invalid",
+         "value_bindings must be a JSON object",
+         :schema,
+         nil
+       )}
+
+  defp validate_value_binding(diagnostics, id, %ValueBinding{} = binding) do
+    trace = binding.source_trace
+
+    diagnostics
+    |> require_string(
+      binding.value_binding_id,
+      "ir.value_binding.id_missing",
+      "value_binding_id must be a non-empty string",
+      trace
+    )
+    |> require_matching_id(
+      binding.value_binding_id,
+      id,
+      "ir.value_binding.id_mismatch",
+      "value_binding_id must match its registry key",
+      trace
+    )
+    |> require_member(
+      binding.target_kind,
+      ValueBinding.target_kinds(),
+      "ir.value_binding.target_kind_invalid",
+      "value binding target_kind is not supported by the IR contract"
+    )
+    |> require_member(
+      binding.value_kind,
+      ValueBinding.value_kinds(),
+      "ir.value_binding.value_kind_invalid",
+      "value binding value_kind is not supported by the IR contract"
+    )
+    |> require_member(
+      binding.scope,
+      ValueBinding.scopes(),
+      "ir.value_binding.scope_invalid",
+      "value binding scope is not supported by the IR contract"
+    )
+    |> require_member(
+      binding.modifier_status,
+      ValueBinding.modifier_statuses(),
+      "ir.value_binding.modifier_status_invalid",
+      "value binding modifier_status is not supported by the IR contract"
+    )
+    |> require_member(
+      binding.normalization_status,
+      ValueBinding.normalization_statuses(),
+      "ir.value_binding.normalization_status_invalid",
+      "value binding normalization_status is not supported by the IR contract"
+    )
+    |> validate_value_binding_modifier_consistency(binding, trace)
+    |> validate_source_trace(binding.source_trace)
+  end
+
+  defp validate_value_binding(diagnostics, _id, _binding),
+    do:
+      error(
+        diagnostics,
+        "ir.value_binding.invalid",
+        "value binding registry values must be ValueBinding structs",
+        :schema,
+        nil
+      )
+
+  defp validate_value_binding_modifier_consistency(diagnostics, binding, trace) do
+    case {binding.modifier_status, binding.normalization_status} do
+      {:opaque, :evidence_insufficient} ->
+        diagnostics
+
+      {:none, :normalized} ->
+        diagnostics
+
+      {:opaque, _} ->
+        error(
+          diagnostics,
+          "ir.value_binding.modifier_inconsistent",
+          "opaque modifier_status requires evidence_insufficient normalization_status",
+          :schema,
+          trace
+        )
+
+      {:none, _} ->
+        error(
+          diagnostics,
+          "ir.value_binding.modifier_inconsistent",
+          "normalized value bindings require modifier_status none",
+          :schema,
+          trace
+        )
+
+      {_, _} ->
+        error(
+          diagnostics,
+          "ir.value_binding.modifier_inconsistent",
+          "value binding modifier_status and normalization_status are inconsistent",
+          :schema,
+          trace
+        )
+    end
+  end
+
+  defp validate_value_binding_semantics(
+         bindings,
+         collection_bindings,
+         node_ids,
+         node_paths,
+         diagnostics
+       )
+       when is_map(bindings) and not is_struct(bindings) do
+    Enum.reduce(sorted_entries(bindings), diagnostics, fn {_key, binding}, diagnostics ->
+      case binding do
+        %ValueBinding{} = record ->
+          diagnostics =
+            diagnostics
+            |> require_resolved_node(
+              record.target_node_id,
+              node_ids,
+              "ir.value_binding.target_missing",
+              "target_node_id must resolve to a DesignNode",
+              record.source_trace
+            )
+            |> validate_value_binding_combination(record, record.source_trace)
+            |> validate_value_binding_target_kind(record, record.source_trace)
+            |> validate_value_binding_containment(record, collection_bindings, node_paths)
+
+          diagnostics
+
+        _other ->
+          diagnostics
+      end
+    end)
+  end
+
+  defp validate_value_binding_semantics(
+         _bindings,
+         _collection_bindings,
+         _node_ids,
+         _node_paths,
+         diagnostics
+       ),
+       do: diagnostics
+
+  defp validate_value_binding_combination(diagnostics, binding, trace) do
+    case {binding.value_kind, binding.scope} do
+      {:field, :collection_item} ->
+        diagnostics
+        |> require_string(
+          binding.value_key,
+          "ir.value_binding.value_key_missing",
+          "field collection_item bindings require value_key",
+          trace
+        )
+        |> require_string(
+          binding.collection_binding_id,
+          "ir.value_binding.collection_missing",
+          "collection_item bindings require collection_binding_id",
+          trace
+        )
+
+      {:field, :site} ->
+        diagnostics
+        |> require_string(
+          binding.value_key,
+          "ir.value_binding.value_key_missing",
+          "field site bindings require value_key",
+          trace
+        )
+        |> require_nil_collection(binding.collection_binding_id, trace)
+
+      {:collection_count, :collection} ->
+        diagnostics
+        |> require_nil_value_key(binding.value_key, trace)
+        |> require_string(
+          binding.collection_binding_id,
+          "ir.value_binding.collection_missing",
+          "collection_count bindings require collection_binding_id",
+          trace
+        )
+        |> require_target_kind(binding.target_kind, :text, trace)
+
+      _invalid ->
+        error(
+          diagnostics,
+          "ir.value_binding.combination_invalid",
+          "value_kind and scope combination is not supported by the IR contract",
+          :schema,
+          trace
+        )
+    end
+  end
+
+  defp validate_value_binding_target_kind(
+         diagnostics,
+         %{target_kind: target_kind, value_kind: value_kind},
+         trace
+       )
+       when target_kind in [:asset, :link_url] and value_kind != :field do
+    error(
+      diagnostics,
+      "ir.value_binding.target_kind_invalid",
+      "asset and link_url targets require field value_kind",
+      :schema,
+      trace
+    )
+  end
+
+  defp validate_value_binding_target_kind(diagnostics, _binding, _trace), do: diagnostics
+
+  defp validate_value_binding_containment(diagnostics, binding, collection_bindings, node_paths) do
+    case {binding.value_kind, binding.scope, binding.collection_binding_id} do
+      {:field, :collection_item, collection_id} when is_binary(collection_id) ->
+        case find_collection_binding(collection_bindings, collection_id) do
+          %CollectionBinding{repeat_root_node_id: repeat_root} ->
+            if node_within_subtree?(binding.target_node_id, repeat_root, node_paths) do
+              diagnostics
+            else
+              error(
+                diagnostics,
+                "ir.value_binding.target_outside_repeat_root",
+                "collection_item binding target must lie within the collection repeat-root subtree",
+                :schema,
+                binding.source_trace
+              )
+            end
+
+          _missing ->
+            error(
+              diagnostics,
+              "ir.value_binding.collection_missing",
+              "collection_item bindings require an existing collection_binding_id",
+              :schema,
+              binding.source_trace
+            )
+        end
+
+      {:collection_count, :collection, collection_id} when is_binary(collection_id) ->
+        if find_collection_binding(collection_bindings, collection_id) do
+          diagnostics
+        else
+          error(
+            diagnostics,
+            "ir.value_binding.collection_missing",
+            "collection_count bindings require an existing collection_binding_id",
+            :schema,
+            binding.source_trace
+          )
+        end
+
+      _other ->
+        diagnostics
+    end
+  end
+
+  defp require_resolved_node(diagnostics, node_id, node_ids, code, message, trace) do
+    if is_binary(node_id) and MapSet.member?(node_ids, node_id) do
+      diagnostics
+    else
+      error(diagnostics, code, message, :schema, trace)
+    end
+  end
+
+  defp require_nil_collection(diagnostics, nil, _trace), do: diagnostics
+
+  defp require_nil_collection(diagnostics, _collection_id, trace),
+    do:
+      error(
+        diagnostics,
+        "ir.value_binding.collection_present",
+        "site scope bindings must not reference a collection_binding_id",
+        :schema,
+        trace
+      )
+
+  defp require_nil_value_key(diagnostics, nil, _trace), do: diagnostics
+
+  defp require_nil_value_key(diagnostics, _value_key, trace),
+    do:
+      error(
+        diagnostics,
+        "ir.value_binding.value_key_present",
+        "collection_count bindings must not include value_key",
+        :schema,
+        trace
+      )
+
+  defp require_target_kind(diagnostics, :text, :text, _trace), do: diagnostics
+
+  defp require_target_kind(diagnostics, _target_kind, _expected, trace),
+    do:
+      error(
+        diagnostics,
+        "ir.value_binding.target_kind_invalid",
+        "collection_count bindings require target_kind text",
+        :schema,
+        trace
+      )
+
+  defp parent_chain_acyclic?(bindings, %CollectionBinding{
+         collection_binding_id: id,
+         parent_collection_binding_id: parent_id
+       }) do
+    walk_parent_chain(bindings, parent_id, MapSet.new([id]))
+  end
+
+  defp walk_parent_chain(_bindings, nil, _visited), do: true
+
+  defp walk_parent_chain(bindings, parent_id, visited) do
+    if MapSet.member?(visited, parent_id) do
+      false
+    else
+      case find_collection_binding(bindings, parent_id) do
+        %CollectionBinding{parent_collection_binding_id: next_parent} ->
+          walk_parent_chain(bindings, next_parent, MapSet.put(visited, parent_id))
+
+        _other ->
+          true
+      end
+    end
+  end
+
+  defp find_collection_binding(bindings, id) do
+    case Map.get(bindings, id) do
+      %CollectionBinding{} = binding ->
+        binding
+
+      _other ->
+        find_binding_by_id(bindings, id)
+    end
+  end
+
+  defp find_binding_by_id(bindings, id) do
+    Enum.find_value(bindings, fn
+      {_key, %CollectionBinding{collection_binding_id: ^id} = binding} -> binding
+      _other -> nil
+    end)
+  end
+
+  defp nested_owner_within_parent?(owner_id, parent_repeat_root_id, node_paths) do
+    node_within_subtree?(owner_id, parent_repeat_root_id, node_paths)
+  end
+
+  defp node_within_subtree?(node_id, subtree_root_id, node_paths) do
+    with %{} = paths <- node_paths,
+         path when is_list(path) <- Map.get(paths, node_id),
+         root_path when is_list(root_path) <- Map.get(paths, subtree_root_id) do
+      path_prefix?(root_path, path)
+    else
+      _ -> false
+    end
+  end
+
+  defp path_prefix?(prefix, path) do
+    length(path) >= length(prefix) and Enum.take(path, length(prefix)) == prefix
+  end
 
   defp validate_node_references(nodes, node_ids, asset_ids, interaction_ids, diagnostics) do
     Enum.reduce(nodes, diagnostics, fn
