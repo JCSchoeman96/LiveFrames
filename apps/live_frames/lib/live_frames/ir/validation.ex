@@ -1363,7 +1363,7 @@ defmodule LiveFrames.IR.Validation do
 
     Enum.reduce(Map.keys(index), {MapSet.new(), states}, fn id, {cyclic, states} ->
       if Map.get(states, id) == :unvisited do
-        walk_collection_parent_chain(id, index, states, cyclic, MapSet.new())
+        walk_collection_parent_chain(id, index, states, cyclic, [])
       else
         {cyclic, states}
       end
@@ -1377,11 +1377,11 @@ defmodule LiveFrames.IR.Validation do
         {cyclic, states}
 
       :visiting ->
-        {MapSet.union(cyclic, MapSet.put(stack, id)), states}
+        {cyclic, states}
 
       :unvisited ->
         states = Map.put(states, id, :visiting)
-        stack = MapSet.put(stack, id)
+        stack = stack ++ [id]
 
         case collection_parent_id(index, id) do
           nil ->
@@ -1393,8 +1393,10 @@ defmodule LiveFrames.IR.Validation do
                 {cyclic, Map.put(states, id, :visited)}
 
               :visiting ->
-                cycle_ids = MapSet.union(stack, MapSet.new([parent_id]))
-                {MapSet.union(cyclic, cycle_ids), states}
+                cycle_members = collection_cycle_suffix(stack, parent_id)
+                cyclic = MapSet.union(cyclic, MapSet.new(cycle_members))
+                states = mark_collection_states_visited(states, cycle_members)
+                {cyclic, Map.put(states, id, :visited)}
 
               :unvisited ->
                 {cyclic, states} =
@@ -1404,6 +1406,17 @@ defmodule LiveFrames.IR.Validation do
             end
         end
     end
+  end
+
+  defp collection_cycle_suffix(stack, cycle_start_id) do
+    case Enum.find_index(stack, &(&1 == cycle_start_id)) do
+      nil -> [cycle_start_id]
+      index -> Enum.drop(stack, index)
+    end
+  end
+
+  defp mark_collection_states_visited(states, ids) do
+    Enum.reduce(ids, states, fn id, states -> Map.put(states, id, :visited) end)
   end
 
   defp collection_parent_id(index, id) do

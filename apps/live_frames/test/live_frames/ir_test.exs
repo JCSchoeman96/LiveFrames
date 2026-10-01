@@ -664,12 +664,18 @@ defmodule LiveFrames.IRTest do
     assert last_id == "collection_40"
   end
 
-  defp collection_only_document(bindings) do
+  defp collection_only_document(bindings, trace_ids \\ %{}) do
     {owner, owner_id, repeat_id, inner_owner_id} = binding_tree()
 
     bindings =
       Map.new(bindings, fn {id, parent_id} ->
         owner_node_id = if parent_id, do: inner_owner_id, else: owner_id
+
+        trace =
+          case Map.get(trace_ids, id) do
+            nil -> nil
+            source_id -> %SourceTrace{source_id: source_id}
+          end
 
         {id,
          %CollectionBinding{
@@ -677,7 +683,8 @@ defmodule LiveFrames.IRTest do
            owner_node_id: owner_node_id,
            repeat_root_node_id: repeat_id,
            parent_collection_binding_id: parent_id,
-           normalization_status: :normalized
+           normalization_status: :normalized,
+           source_trace: trace
          }}
       end)
 
@@ -688,29 +695,96 @@ defmodule LiveFrames.IRTest do
     }
   end
 
-  test "collection parent graph rejects a simple two-node cycle" do
-    document =
-      collection_only_document(%{
-        "collection_a" => "collection_b",
-        "collection_b" => "collection_a"
-      })
-
-    assert {:error, diagnostics} = IR.validate(document)
-    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+  defp parent_cycle_trace_ids(diagnostics) do
+    diagnostics
+    |> Enum.filter(&(&1.code == "ir.collection_binding.parent_cycle"))
+    |> Enum.map(fn diagnostic ->
+      case diagnostic.source_trace do
+        %SourceTrace{source_id: source_id} -> source_id
+        _other -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.sort()
   end
 
-  test "collection parent graph rejects a long tail entering a cycle" do
+  test "collection parent graph marks only actual cycle members for A ↔ B" do
     document =
-      collection_only_document(%{
-        "collection_a" => "collection_b",
-        "collection_b" => "collection_a",
-        "collection_c" => "collection_a",
-        "collection_d" => "collection_c",
-        "collection_e" => "collection_d"
-      })
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a"
+        },
+        %{"collection_a" => "trace_cycle_a", "collection_b" => "trace_cycle_b"}
+      )
 
     assert {:error, diagnostics} = IR.validate(document)
-    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+  end
+
+  test "collection parent graph marks only cycle members when a tail enters a cycle" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a",
+          "collection_c" => "collection_a",
+          "collection_d" => "collection_c"
+        },
+        %{
+          "collection_a" => "trace_cycle_a",
+          "collection_b" => "trace_cycle_b",
+          "collection_c" => "trace_tail_c",
+          "collection_d" => "trace_tail_d"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+    refute "trace_tail_c" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_tail_d" in parent_cycle_trace_ids(diagnostics)
+  end
+
+  test "collection parent graph cycle membership is independent of map key order" do
+    bindings = [
+      {"collection_d", "collection_c"},
+      {"collection_c", "collection_a"},
+      {"collection_b", "collection_a"},
+      {"collection_a", "collection_b"}
+    ]
+
+    trace_ids = %{
+      "collection_a" => "trace_cycle_a",
+      "collection_b" => "trace_cycle_b",
+      "collection_c" => "trace_tail_c",
+      "collection_d" => "trace_tail_d"
+    }
+
+    document = collection_only_document(Map.new(bindings), trace_ids)
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+  end
+
+  test "collection parent graph marks only cycle members when multiple tails enter a cycle" do
+    document =
+      collection_only_document(
+        %{
+          "collection_a" => "collection_b",
+          "collection_b" => "collection_a",
+          "collection_c" => "collection_a",
+          "collection_d" => "collection_a"
+        },
+        %{
+          "collection_a" => "trace_cycle_a",
+          "collection_b" => "trace_cycle_b",
+          "collection_c" => "trace_tail_c",
+          "collection_d" => "trace_tail_d"
+        }
+      )
+
+    assert {:error, diagnostics} = IR.validate(document)
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
   end
 
   test "collection parent graph accepts multiple independent acyclic chains" do
@@ -728,22 +802,35 @@ defmodule LiveFrames.IRTest do
 
   test "collection parent graph rejects mixed acyclic and cyclic components" do
     assert IR.validate(
-             collection_only_document(%{
-               "acyclic_1" => nil,
-               "acyclic_2" => "acyclic_1"
-             })
+             collection_only_document(
+               %{
+                 "acyclic_1" => nil,
+                 "acyclic_2" => "acyclic_1"
+               },
+               %{"acyclic_1" => "trace_acyclic_1", "acyclic_2" => "trace_acyclic_2"}
+             )
            ) == :ok
 
     document =
-      collection_only_document(%{
-        "acyclic_1" => nil,
-        "acyclic_2" => "acyclic_1",
-        "cycle_a" => "cycle_b",
-        "cycle_b" => "cycle_a"
-      })
+      collection_only_document(
+        %{
+          "acyclic_1" => nil,
+          "acyclic_2" => "acyclic_1",
+          "cycle_a" => "cycle_b",
+          "cycle_b" => "cycle_a"
+        },
+        %{
+          "acyclic_1" => "trace_acyclic_1",
+          "acyclic_2" => "trace_acyclic_2",
+          "cycle_a" => "trace_cycle_a",
+          "cycle_b" => "trace_cycle_b"
+        }
+      )
 
     assert {:error, diagnostics} = IR.validate(document)
-    assert Enum.any?(diagnostics, &(&1.code == "ir.collection_binding.parent_cycle"))
+    assert parent_cycle_trace_ids(diagnostics) == ["trace_cycle_a", "trace_cycle_b"]
+    refute "trace_acyclic_1" in parent_cycle_trace_ids(diagnostics)
+    refute "trace_acyclic_2" in parent_cycle_trace_ids(diagnostics)
   end
 
   test "binding registries round-trip through serialization" do
