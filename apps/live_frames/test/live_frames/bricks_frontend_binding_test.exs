@@ -322,6 +322,52 @@ defmodule LiveFrames.BricksFrontendBindingTest do
            end)
   end
 
+  test "non-image featured image setting stays an unsupported runtime occurrence" do
+    assert {:ok, document} =
+             to_ir(
+               loop_with_target("box", "block", %{
+                 "image" => %{"useDynamicData" => "{featured_image}"}
+               })
+             )
+
+    assert binding_for(document, "box") == nil
+    assert document.assets == %{}
+    assert node_by_source_id(document, "box").asset_refs == []
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "box" and
+               diagnostic.metadata["source_path"] == "settings.image.useDynamicData"
+           end)
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.source_trace.source_id == "box" and
+               String.starts_with?(diagnostic.code, "bricks.binding.")
+           end)
+  end
+
+  test "non-image post ID setting does not enter dynamic image classification" do
+    assert {:ok, document} =
+             to_ir(
+               loop_with_target("box", "div", %{"image" => %{"useDynamicData" => "{post_id}"}})
+             )
+
+    assert binding_for(document, "box") == nil
+    assert document.assets == %{}
+    assert node_by_source_id(document, "box").asset_refs == []
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "box" and
+               diagnostic.metadata["source_path"] == "settings.image.useDynamicData"
+           end)
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "box"
+           end)
+  end
+
   test "post ID on a dynamic image is evidence-insufficient and creates no asset" do
     assert {:ok, document} =
              to_ir(

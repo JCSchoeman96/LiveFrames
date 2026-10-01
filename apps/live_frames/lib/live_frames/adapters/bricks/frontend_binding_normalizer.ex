@@ -7,6 +7,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
   """
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
+  alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.Adapters.Bricks.Tree
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.SourceTrace
@@ -475,7 +476,12 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     {[candidate], true, diagnostics}
   end
 
-  defp classify_dynamic_image(element, collection_id, trace_index, adapter_version) do
+  defp classify_dynamic_image(
+         %Element{name: "image"} = element,
+         collection_id,
+         trace_index,
+         adapter_version
+       ) do
     image = Map.get(element.settings, "image")
     expression = if is_map(image), do: Map.get(image, "useDynamicData"), else: nil
 
@@ -547,6 +553,9 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       {[], false, []}
     end
   end
+
+  defp classify_dynamic_image(%Element{}, _collection_id, _trace_index, _adapter_version),
+    do: {[], false, []}
 
   defp classify_dynamic_url(element, trace_index, adapter_version) do
     url = Map.get(element.settings, "url")
