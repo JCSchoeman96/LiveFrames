@@ -86,6 +86,64 @@ values, slot cardinality, category, or module/function intent. If the plan
 references a public member not already present in the contract, the plan is
 **invalid**. No silent creation.
 
+### 2.1 Design document identity
+
+`DesignNode` IDs are traversal-path deterministic (for example `node_000001`,
+`node_000001_000002`) and are **not** globally unique across unrelated
+`DesignDocument` values. A plan must therefore bind to the exact document it
+was built against.
+
+```text
+DESIGN_DOCUMENT_IDENTITY_RULE =
+  design_document_sha256 is lowercase SHA-256 of the exact canonical
+  deterministic JSON bytes returned by LiveFrames.IR.encode!/1 for an
+  intrinsically valid DesignDocument
+
+DESIGN_DOCUMENT_IDENTITY_FIELD = design_document_sha256
+```
+
+Requirements:
+
+```text
+64 lowercase hexadecimal characters
+
+computed only from an intrinsically valid DesignDocument
+
+reference validation recomputes the fingerprint from the supplied DesignDocument
+and requires exact equality before trusting boundary_node_id or any
+RenderProjection target_node_id
+```
+
+Do not use node IDs alone, source IDs, source paths, source labels, provenance
+text, or timestamps as document identity.
+
+### 2.2 Contract staleness
+
+Do not hash the whole `ComponentContract` in C09D3. `contract_id` remains the
+identity link between plan and contract.
+
+```text
+CONTRACT_STALENESS_RULE =
+  plan invalid when referenced contract_id differs from the supplied contract,
+  or when current render-relevant public API semantics referenced by the plan
+  no longer satisfy the plan's role/type/coverage rules
+```
+
+Examples that invalidate placement compatibility:
+
+```text
+referenced attr or slot removed
+referenced attr type changed incompatibly with render_role
+slot cardinality changed incompatibly with subtree_slot
+public target now binding-backed while plan also contains RenderProjection
+required placement coverage changes
+design_document_sha256 mismatch
+```
+
+Changes to review-only metadata such as `approval_status`, contract
+diagnostics, or non-authoritative provenance do **not** by themselves make
+placement stale. Do not create a separate public API fingerprint authority.
+
 ## 3. Authority split
 
 ### 3.1 ComponentContract owns
@@ -123,6 +181,8 @@ target DesignNode IDs (for RenderProjection)
 render roles
 
 relationship to exact ComponentContract (contract_id)
+
+cryptographic bind to exact DesignDocument (design_document_sha256)
 
 plan diagnostics/provenance
 ```
@@ -184,7 +244,28 @@ Do not derive `target_node_id` from node label, `source_trace.source_id`,
 source path, CSS class, or DOM selector. No source-system ID may substitute
 for a Design IR node ID.
 
-### 4.1 First-wave scope
+### 4.1 RenderProjection identity
+
+Each `RenderProjection` is identified by its public target. Serialized form
+retains `public_attr_name` and `public_slot_name` with exactly one non-nil
+field (public target XOR). Do not add a second parallel identity representation.
+
+```text
+RENDER_PROJECTION_IDENTITY_RULE =
+  Attr target -> {:attr, public_attr_name}
+  Slot target -> {:slot, public_slot_name}
+
+  identity is derived from the single non-nil public_attr_name or
+  public_slot_name field
+
+  exactly one RenderProjection per public target identity
+
+  duplicate public-target identity -> invalid
+```
+
+This is what `duplicate projection identities` means in validation.
+
+### 4.2 First-wave scope
 
 ```text
 RENDER_PROJECTION_SCOPE =
@@ -224,8 +305,8 @@ COMPONENT_BOUNDARY_RULE =
   every RenderProjection.target_node_id is that node or a descendant;
   every ComponentContract BindingProjection.target_node_id lies within the
   same boundary subtree;
-  every root CollectionBinding repeat root owned by this component lies within
-  the boundary
+  in-boundary CollectionBinding coverage follows IN_BOUNDARY_BINDING_COVERAGE_RULE
+  (owner_node_id and repeat_root_node_id membership; no vague component ownership)
 ```
 
 The boundary is an explicit semantic decision. Do not infer it from first root,
@@ -276,37 +357,99 @@ Do not add generic roles such as `property`, `expression`, `callback`,
 
 ### 6.1 Role and public-type compatibility
 
+Format `1.0.0` uses an exact machine-checkable matrix. Reference validation
+compares the referenced `ComponentContract` attr or slot definition; no review
+prose substitutes for these rules.
+
 ```text
 RENDER_ROLE_TYPE_COMPATIBILITY =
-  text_content        -> Attr, truthful scalar text-compatible type
-  asset_src           -> Attr, approved media representation
-  asset_alt           -> Attr, explicit accessibility semantics
-  link_url            -> Attr
-  heading_level       -> Attr type :integer with approved heading-level validation
-  root_id             -> Attr
-  root_class          -> Attr
-  root_global_attrs   -> Attr type :global
-  subtree_slot        -> Slot
+  text_content        -> public Attr.type == :string
+  asset_src           -> public Attr.type == :string
+  asset_alt           -> public Attr.type == :string
+  link_url            -> public Attr.type == :string
+  heading_level       -> public Attr.type == :integer
+                        AND validation["values"] == [1,2,3,4,5,6]
+  root_id             -> public Attr.type == :string
+  root_class          -> public Attr.type == :string
+  root_global_attrs   -> public Attr.type == :global
+  subtree_slot        -> public Slot with cardinality "0..1"
+```
+
+Not supported in plan `1.0.0` (later authority required):
+
+```text
+asset_src or asset_alt with Attr.type == :map
+structured media :map attrs
+:boolean or :integer for text_content
+:any without separate authority
+repeated slots (cardinality other than 0..1 for subtree_slot)
+slot attributes
 ```
 
 A render role must never silently reinterpret an incompatible public type.
 
 ### 6.2 Role and node semantic compatibility
 
+Reference validation compares `DesignNode.semantic_type` on
+`target_node_id` (exact equality to one allowed token):
+
 ```text
 RENDER_ROLE_NODE_COMPATIBILITY =
-  text_content     -> heading | paragraph | rich_text or independently justified content node
-  asset_src        -> image (asset_alt pairs with same image node)
+  text_content     -> heading | paragraph | rich_text
+  asset_src        -> image
   asset_alt        -> image
-  link_url         -> link or independently proven LiveFrames-owned navigation shell
+  link_url         -> link
   heading_level    -> heading
-  subtree_slot     -> exact reviewed node/subtree root
-  root_id          -> boundary node only
-  root_class       -> boundary node only
-  root_global_attrs-> boundary node only
+  subtree_slot     -> actions | button | link
+  root_id          -> boundary_node_id only
+  root_class       -> boundary_node_id only
+  root_global_attrs-> boundary_node_id only
 ```
 
-Wrong node semantic type: validation error / `NEEDS_REVIEW`. Do not coerce.
+Any pair outside this closed matrix: invalid / `NEEDS_REVIEW` for generation.
+Do not coerce.
+
+### 6.3 Same-node role co-location
+
+A node may host multiple `RenderProjection` records only under these first-wave
+combinations:
+
+```text
+RENDER_ROLE_COLOCATION_RULE =
+  heading node: at most one text_content; at most one heading_level
+  image node: at most one asset_src; at most one asset_alt
+  link node: at most one link_url
+  boundary node (boundary_node_id): at most one root_id; at most one
+    root_class; at most one root_global_attrs
+  subtree_slot target: exclusive under SUBTREE_SLOT_OWNERSHIP_RULE
+```
+
+Duplicate instances of the **same** render role on one node: invalid. Any other
+multi-role combination on one node: invalid / `NEEDS_REVIEW`.
+
+### 6.4 Subtree slot ownership
+
+```text
+SUBTREE_SLOT_OWNERSHIP_RULE =
+  subtree_slot replaces the target DesignNode subtree as consumer-owned markup
+  for generation purposes
+
+SUBTREE_SLOT_BINDING_DESCENDANT_POLICY =
+  the target node's parent remains part of generated internal structure;
+  the target node and its descendants are not separately emitted from Design IR;
+  no BindingProjection.target_node_id may equal the subtree_slot target or lie
+  beneath it;
+  no other RenderProjection.target_node_id may equal the subtree_slot target
+  or lie beneath it except the subtree_slot projection itself;
+  the replaced subtree must not contain any ValueBinding.target_node_id,
+  CollectionBinding.owner_node_id, or CollectionBinding.repeat_root_node_id
+  -> otherwise invalid / NEEDS_REVIEW
+```
+
+If the subtree contains only supported static internal `DesignNode` records (no
+bindings), `subtree_slot` may replace them subject to role/node compatibility.
+Collection-backed, repeated, `:let`, fallback, or binding-backed slot
+composition requires later authority.
 
 ## 7. Public render link coverage
 
@@ -342,6 +485,67 @@ UNBOUND_PUBLIC_INPUT_RULE =
 
 Unused `RenderProjection` records (public target not in contract, or target
 not used for generation) fail reference validation.
+
+### 7.1 Placement ownership split
+
+```text
+BindingProjection coverage owns:
+  collection attrs
+  item fields
+  nested collections
+  counts
+  binding-backed slots
+  binding-backed scalar attrs
+
+RenderProjection coverage owns:
+  only unbound top-level public attrs and slots authorized by plan 1.0.0
+
+No public item field may use RenderProjection in plan 1.0.0.
+```
+
+### 7.2 In-boundary binding coverage
+
+Public-input placement is necessary but not sufficient. The plan must also
+prove complete representation of in-boundary Design IR bindings.
+
+```text
+VALUE_BINDING_COVERAGE_RULE =
+  every ValueBinding whose target_node_id lies at or beneath boundary_node_id
+  must have exactly one ComponentContract.BindingProjection with
+  source_binding_kind = value and source_binding_id equal to that ValueBinding ID
+
+  zero projections -> invalid / NEEDS_REVIEW
+  more than one -> invalid
+
+  includes normalization_status = normalized and evidence_insufficient;
+  omission does not bypass D1/D2 approval blocks
+```
+
+```text
+COLLECTION_BINDING_COVERAGE_RULE =
+  both owner_node_id and repeat_root_node_id outside boundary -> irrelevant
+  both inside boundary -> exactly one collection-source BindingProjection with
+    source_binding_kind = collection and source_binding_id equal to that
+    CollectionBinding ID
+  nested in-boundary child -> parent CollectionBinding must also be in-boundary
+    and represented
+```
+
+```text
+BOUNDARY_CROSSING_BINDING_RULE =
+  if exactly one of owner_node_id or repeat_root_node_id lies within the
+  component boundary -> invalid / NEEDS_REVIEW;
+  the boundary may not cut through repetition ownership in plan 1.0.0
+```
+
+```text
+IN_BOUNDARY_BINDING_COVERAGE_RULE =
+  VALUE_BINDING_COVERAGE_RULE + COLLECTION_BINDING_COVERAGE_RULE +
+  BOUNDARY_CROSSING_BINDING_RULE
+```
+
+This is the inverse invariant: IR binding semantics ↔ `BindingProjection`
+coverage.
 
 ## 8. Static content, defaults, and internal constants
 
@@ -390,8 +594,8 @@ Root roles mapped to a non-boundary node: invalid.
 
 ```text
 ACTION_SLOT_RULE =
-  consumer-owned actions remain slots; subtree_slot may place a slot at a
-  reviewed semantic action subtree; the plan must not invent navigate, patch,
+  consumer-owned actions remain slots; subtree_slot follows
+  SUBTREE_SLOT_OWNERSHIP_RULE; the plan must not invent navigate, patch,
   phx-click, event names, server handlers, JS commands, or Ash actions
 
 IMAGE_ACCESSIBILITY_RULE =
@@ -422,10 +626,10 @@ EVIDENCE_INSUFFICIENT_RULE =
   NEEDS_REVIEW, no automatic approved proposal
 
 UNSUPPORTED_NODE_RULE =
-  raw | unsupported | unknown nodes inside the boundary that affect visible
-  structure, interaction, accessibility, or public API prevent an automatically
-  review-ready proposal; do not silently drop them; arbitrary provenance is not
-  executable
+  any DesignNode with semantic_type raw | unsupported | unknown inside the
+  selected boundary blocks plan reference validation and generation eligibility
+  in plan 1.0.0; do not inspect arbitrary provenance prose to waive this rule;
+  structured exclusions require later authority
 ```
 
 ## 12. Componentization proposal model
@@ -506,6 +710,7 @@ Minimal conceptual fields (implementation in C09D4):
 ```text
 plan_format_version
 contract_id
+design_document_sha256
 boundary_node_id
 render_projections
 diagnostics
@@ -517,23 +722,121 @@ binding projections, approval_status, category, module/function intent).
 
 `contract_id` links the plan to exactly one `ComponentContract`.
 
+## 14.1 ComponentizationPlan diagnostic model
+
+Define a distinct conceptual record. Do not reuse
+`ComponentContract.Diagnostic` as hidden authority.
+
+```text
+PLAN_DIAGNOSTIC_MODEL = ComponentizationPlan.Diagnostic
+
+PLAN_DIAGNOSTIC_NAMESPACE = componentization_plan.*
+
+PLAN_BLOCKING_SEVERITIES = error | fatal
+```
+
+Fields:
+
+```text
+code
+severity
+message
+path
+suggested_action
+metadata
+```
+
+Defaults follow compiler convention:
+
+```text
+severity = error
+path = nil
+suggested_action = nil
+metadata = %{}
+```
+
+Closed severities: `info`, `warning`, `error`, `fatal`. Blocking:
+`error`, `fatal`. Codes must begin with `componentization_plan.`. Metadata
+must be inert JSON-compatible data.
+
+Validators return generated diagnostics; they do not silently append them to
+`plan.diagnostics`. Stored plan diagnostics are themselves validated on
+intrinsic checks.
+
+Minimum frozen code families:
+
+```text
+componentization_plan.plan.invalid
+componentization_plan.version.invalid
+componentization_plan.version.unsupported
+
+componentization_plan.design_document.fingerprint_invalid
+componentization_plan.design_document.mismatch
+
+componentization_plan.contract.mismatch
+
+componentization_plan.boundary.invalid
+componentization_plan.boundary.missing
+componentization_plan.boundary.binding_crosses
+
+componentization_plan.render_projection.invalid
+componentization_plan.render_projection.duplicate_target
+componentization_plan.render_projection.target_missing
+componentization_plan.render_projection.target_outside_boundary
+componentization_plan.render_projection.role_type_mismatch
+componentization_plan.render_projection.role_node_mismatch
+componentization_plan.render_projection.role_conflict
+
+componentization_plan.slot.subtree_conflict
+
+componentization_plan.binding.uncovered
+componentization_plan.binding.duplicate
+componentization_plan.binding.evidence_insufficient
+
+componentization_plan.public_input.placement_missing
+componentization_plan.public_input.placement_conflict
+
+componentization_plan.unsupported_node
+componentization_plan.metadata.invalid
+componentization_plan.generation_blocked
+```
+
 ## 15. Validation layers
 
 ```text
 PLAN_INTRINSIC_VALIDATION_RULE =
-  without Design IR or contract: format version, contract_id,
-  boundary_node_id shape, RenderProjection shape, closed role enum, public target
-  XOR, duplicate projection identities, JSON diagnostics/provenance, no executable
-  terms
+  without Design IR or contract:
+  plan format version
+  contract_id
+  design_document_sha256 syntax (64 lowercase hex)
+  boundary_node_id shape
+  RenderProjection shape
+  render-role enum
+  public target XOR
+  RenderProjection public-target uniqueness (RENDER_PROJECTION_IDENTITY_RULE)
+  ComponentizationPlan.Diagnostic shape and codes
+  provenance JSON safety
+  no executable terms
 
 PLAN_REFERENCE_VALIDATION_RULE =
   against exact ComponentizationPlan + ComponentContract + DesignDocument:
-  contract_id matches; boundary exists; targets exist and lie in boundary;
-  referenced public attrs/slots exist; role/type and role/node compatibility;
-  BindingProjection targets lie in boundary; no BindingProjection/RenderProjection
-  conflict; every render-relevant public input has required placement;
-  unsupported/raw/unknown policy; stale plan against changed contract or IR ->
-  invalid
+  recompute design_document_sha256 and require exact match first
+  contract_id equality and CONTRACT_STALENESS_RULE render-relevant checks
+  boundary node exists; build boundary membership index once
+  RenderProjection targets exist and lie in boundary
+  exact RENDER_ROLE_TYPE_COMPATIBILITY matrix
+  exact RENDER_ROLE_NODE_COMPATIBILITY matrix
+  RENDER_ROLE_COLOCATION_RULE
+  SUBTREE_SLOT_OWNERSHIP_RULE and binding-descendant exclusion
+  BindingProjection targets lie in boundary
+  IN_BOUNDARY_BINDING_COVERAGE_RULE
+  PUBLIC_RENDER_LINK_XOR_RULE and render-relevant public member coverage
+  UNSUPPORTED_NODE_RULE fail closed
+  no BindingProjection/RenderProjection ownership conflict
+
+REFERENCE_VALIDATION_COMPLEXITY =
+  O(IR nodes + IR bindings + contract records + plan records + references);
+  build indexes once; do not walk the full tree once per projection
 ```
 
 Do not merge intrinsic and reference validation responsibilities.
@@ -550,7 +853,10 @@ GENERATION_INPUT_RULE =
 
 GENERATION_GATE_RULE =
   DesignDocument valid
+  AND plan.design_document_sha256 ==
+     SHA-256(canonical LiveFrames.IR.encode! bytes for that DesignDocument)
   AND ComponentContract.validate_for_generation(...) = :ok
+  AND ComponentizationPlan intrinsic validation = :ok
   AND ComponentizationPlan reference validation = :ok
   AND ComponentContract.approval_status = approved
 ```
@@ -579,7 +885,8 @@ PLAN_PROVENANCE_RULE =
   plan provenance may record boundary selection evidence, unbound mapping rationale,
   classification and accessibility references; never executable instructions;
   structured fields remain authoritative; provenance cannot redefine contract_id,
-  boundary_node_id, public target, target_node_id, or render_role
+  design_document_sha256, boundary_node_id, public target, target_node_id, or
+  render_role
 ```
 
 Expected future indexes (C09D4+): node_id → `DesignNode`, boundary membership,
@@ -621,18 +928,26 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Top-level count | collection_count ValueBinding | Yes (`collection_count_attr`) | No | — | count target | Yes when proven | unproven count |
 | Nested count | nested collection_count | Yes (`collection_item_field`) | No | — | count target | Yes when proven | same |
 | Binding-backed slot | reviewed ValueBinding slot projection | Yes (`slot`) | No | — | slot target | Yes when explicit | auto slot forbidden |
-| Static heading promoted to attr | static IR text + semantic review | No | Yes | `text_content` | heading/content node | No | naming, node mismatch |
-| Static paragraph promoted to attr | static IR text | No | Yes | `text_content` | paragraph/rich_text | No | same |
+| Static heading promoted to attr | static IR text + semantic review | No | Yes | `text_content` | `heading` | No | type/node mismatch |
+| Static paragraph promoted to attr | static IR text | No | Yes | `text_content` | `paragraph` or `rich_text` | No | type/node mismatch |
 | `heading_level` config | semantic review | No | Yes | `heading_level` | heading | No | type/validation |
 | Consumer `image_alt` | accessibility policy | No | Yes | `asset_alt` | image | No | missing informative/decorative policy |
 | Root `id` | integration need | No | Yes | `root_id` | boundary only | No | non-boundary target |
 | Root `class` | additive styling | No | Yes | `root_class` | boundary only | No | source class as API |
 | Root global attrs (`rest`) | Phoenix :global | No | Yes | `root_global_attrs` | boundary only | No | wrong type |
-| Consumer action slot | reviewed action subtree | No (unless binding-backed slot) | Yes | `subtree_slot` | reviewed action node | No | invented behavior |
+| Consumer action slot | reviewed action subtree | No (unless binding-backed slot) | Yes | `subtree_slot` | `actions`, `button`, or `link` | No | subtree binding conflict |
 | Internal static/decorative label | not public | No | No | — | internal constant | Yes as internal | fake public attr |
 | Static collection-item customization | unbound item field request | No | No in 1.0.0 | — | — | No | `STATIC_COLLECTION_ITEM_RULE` |
 | Evidence-insufficient binding | normalization_status | If emitted, blocks approval | Must not bypass | — | — | No | `EVIDENCE_INSUFFICIENT_RULE` |
-| Unsupported/raw/unknown visible node | semantic_type | — | — | — | — | No | `UNSUPPORTED_NODE_RULE` |
+| Unsupported/raw/unknown visible node | semantic_type | — | — | — | any in boundary | No | `UNSUPPORTED_NODE_RULE` |
+| Unprojected normalized in-boundary ValueBinding | ValueBinding in boundary | No | — | — | — | No | `binding.uncovered` |
+| Unprojected evidence-insufficient in-boundary ValueBinding | evidence_insufficient | No (must not omit) | — | — | — | No | `binding.uncovered` + contract block |
+| Unprojected in-boundary root CollectionBinding | both nodes in boundary | No | — | — | — | No | `binding.uncovered` |
+| Unprojected in-boundary nested CollectionBinding | child in boundary | No | — | — | — | No | `binding.uncovered` / missing parent |
+| Boundary-crossing CollectionBinding | owner/repeat split by boundary | — | — | — | — | No | `boundary.binding_crosses` |
+| `subtree_slot` with binding-backed descendant | ValueBinding/CollectionBinding in subtree | — | Yes invalid | `subtree_slot` | actions/button/link | No | `slot.subtree_conflict` |
+| Plan vs different DesignDocument, same node IDs | path-based IDs collide | — | — | — | — | No | `design_document.mismatch` |
+| Structured media attr `:map` request | semantic review | No | No in 1.0.0 | — | — | No | role/type matrix |
 
 ## 19. Edge cases and resulting rules
 
@@ -650,20 +965,23 @@ informal risk list:
   (`PUBLIC_RENDER_LINK_XOR_RULE`).
 - **RenderProjection outside boundary:** invalid reference validation.
 - **Boundary inside a collection repeat root or containing nested
-  CollectionBindings:** allowed only when boundary and all binding repeat roots
-  satisfy `COMPONENT_BOUNDARY_RULE`; otherwise `NEEDS_REVIEW`.
+  CollectionBindings:** allowed only when `IN_BOUNDARY_BINDING_COVERAGE_RULE`
+  and `BOUNDARY_CROSSING_BINDING_RULE` both pass; otherwise invalid /
+  `NEEDS_REVIEW`.
 - **Binding target outside boundary:** invalid.
-- **Slot target subtree contains binding-backed descendants:** allowed when
-  contract and bindings already define consumer/data ownership; plan does not
-  redefine bindings.
+- **Slot target subtree contains binding-backed descendants:** invalid in plan
+  1.0.0 (`SUBTREE_SLOT_BINDING_DESCENDANT_POLICY`); do not combine slot output
+  with separately emitted binding-backed descendants.
 - **Image source without accessibility contract:** blocks generation
   (`IMAGE_ACCESSIBILITY_RULE`).
 - **Fixture literal as public default:** forbidden (`STATIC_DEFAULT_RULE`).
 - **Source label as public name:** forbidden (`PUBLIC_NAMING_RULE`).
 - **Interaction-bearing node projected as plain text:** invalid role/node pairing.
 - **Public attr with no structured placement:** blocks generation (coverage rule).
-- **Stale plan vs changed contract or DesignDocument:** reference validation
-  fails; regenerate or revise plan.
+- **Stale plan vs changed DesignDocument:** `design_document_sha256` mismatch ->
+  invalid.
+- **Stale plan vs changed contract:** `CONTRACT_STALENESS_RULE` render-relevant
+  semantic changes -> invalid; review-only metadata changes alone do not.
 
 ## 20. Expected future sequence
 
@@ -721,6 +1039,16 @@ COMPONENTIZATION_PLAN_ARTIFACT =
 
 PLAN_FORMAT_VERSION = 1.0.0
 
+DESIGN_DOCUMENT_IDENTITY_FIELD = design_document_sha256
+
+DESIGN_DOCUMENT_IDENTITY_RULE =
+  lowercase SHA-256 of canonical LiveFrames.IR.encode!/1 bytes for the exact
+  DesignDocument; reference validation recomputes before trusting nodes
+
+CONTRACT_STALENESS_RULE =
+  invalid on contract_id mismatch or render-relevant public API semantic change;
+  not on approval_status/diagnostics alone
+
 PLAN_PUBLIC_API_AUTHORITY_RULE =
   ComponentContract sole public API authority; plan placement only; no silent
   public members
@@ -730,10 +1058,21 @@ PLAN_LIFECYCLE_RULE =
 
 COMPONENT_BOUNDARY_RULE =
   single explicit boundary_node_id; all projections and binding targets within
-  subtree; root collection repeat roots within boundary
+  subtree; collection membership via owner/repeat boundary rules
 
 MULTI_ROOT_BOUNDARY_RULE =
   multiple disjoint roots -> NEEDS_REVIEW / unsupported in 1.0.0
+
+IN_BOUNDARY_BINDING_COVERAGE_RULE =
+  complete ValueBinding and in-boundary CollectionBinding BindingProjection
+  coverage; see section 7.2
+
+BOUNDARY_CROSSING_BINDING_RULE =
+  owner/repeat split across boundary -> invalid / NEEDS_REVIEW
+
+VALUE_BINDING_COVERAGE_RULE = see section 7.2
+
+COLLECTION_BINDING_COVERAGE_RULE = see section 7.2
 
 COMPONENTIZATION_PROPOSAL_MODEL =
   validated DesignDocument + ComponentContract + ComponentizationPlan tuple
@@ -750,6 +1089,10 @@ CLASSIFICATION_RULE =
 RENDER_PROJECTION_MODEL =
   unbound public attr/slot -> target_node_id + render_role; no source binding
 
+RENDER_PROJECTION_IDENTITY_RULE =
+  {:attr, public_attr_name} | {:slot, public_slot_name}; one projection per
+  public target
+
 RENDER_PROJECTION_SCOPE =
   top-level attr/slot and root extension attrs only in 1.0.0
 
@@ -757,9 +1100,15 @@ RENDER_ROLE_ENUM =
   text_content | asset_src | asset_alt | link_url | heading_level |
   root_id | root_class | root_global_attrs | subtree_slot
 
-RENDER_ROLE_TYPE_COMPATIBILITY = see section 6.1
+RENDER_ROLE_TYPE_COMPATIBILITY = exact matrix section 6.1
 
-RENDER_ROLE_NODE_COMPATIBILITY = see section 6.2
+RENDER_ROLE_NODE_COMPATIBILITY = exact matrix section 6.2
+
+RENDER_ROLE_COLOCATION_RULE = section 6.3
+
+SUBTREE_SLOT_OWNERSHIP_RULE = section 6.4
+
+SUBTREE_SLOT_BINDING_DESCENDANT_POLICY = section 6.4
 
 BINDING_LINK_AUTHORITY = ComponentContract.BindingProjection
 
@@ -796,11 +1145,24 @@ STATIC_COLLECTION_ITEM_RULE = NEEDS_REVIEW in 1.0.0
 
 EVIDENCE_INSUFFICIENT_RULE = fail closed; RenderProjection cannot bypass
 
-UNSUPPORTED_NODE_RULE = visible impact blocks auto review-ready proposal
+UNSUPPORTED_NODE_RULE =
+  raw | unsupported | unknown anywhere inside boundary blocks plan 1.0.0
+
+PLAN_DIAGNOSTIC_MODEL = ComponentizationPlan.Diagnostic section 14.1
+
+PLAN_DIAGNOSTIC_NAMESPACE = componentization_plan.*
+
+PLAN_BLOCKING_SEVERITIES = error | fatal
 
 PLAN_INTRINSIC_VALIDATION_RULE = see section 15
 
 PLAN_REFERENCE_VALIDATION_RULE = see section 15
+
+REFERENCE_VALIDATION_COMPLEXITY = see section 15
+
+PLAN_CONCEPTUAL_FIELDS =
+  plan_format_version, contract_id, design_document_sha256, boundary_node_id,
+  render_projections, diagnostics, provenance
 
 GENERATION_INPUT_RULE =
   approved contract + matching validated plan + exact DesignDocument
