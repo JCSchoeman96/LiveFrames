@@ -2,15 +2,20 @@
 
 **Status:** authority/documentation only
 
-**Accepted base:** `baa969eb61e2454c6889bb29d076fdf1015032f7`
+**Accepted base:** `a6ad6807a59573e07b3212003c80c37d35ab584f`
 
-**Accepted tree:** `9904b56444118989fa99f98b7d5358b9b72f24a1`
+**Accepted tree:** `42bb2de9058d1f6e86e2aa7df33eb0c693642516`
 
-**Post-merge CI:** run `36920938814`, completed with conclusion `success`
+**Post-merge CI:** run `36970165882`, completed with conclusion `success`
 
 This authority defines the componentization boundary after Design IR 2.0.0 and
 before any HEEx generator. It does not implement a struct, componentizer,
 generator, Phoenix module, runtime accessor, or Catalogue record.
+
+C09D1B completes the `BindingProjection` authority before the serialized
+`ComponentContract` format `1.0.0` is implemented. It removes projection
+status, types every source binding reference, freezes target-node meaning, and
+separates intrinsic contract checks from Design IR reference checks.
 
 ## 1. Scope and product boundary
 
@@ -436,8 +441,8 @@ count attr associated with its owning top-level collection. A nested count becom
 the scalar count item field on its parent `CollectionInput`; it does not become a
 top-level attr. Both cases retain `ValueBinding.value_kind = collection_count`.
 
-Every projection records the source binding ID, target node ID, public input,
-and status. A projection cannot silently change an evidence-insufficient or
+Every projection follows the typed, status-free `BindingProjection` rules in
+section 12. A projection cannot silently change an evidence-insufficient or
 unsupported binding into an ordinary field.
 
 ## 9. Evidence and unsupported targets
@@ -513,38 +518,97 @@ contract, but it must remain independent of source vocabulary.
 ## 12. BindingProjection model
 
 `BindingProjection` is compiler/provenance metadata. Consumers do not receive
-it and generated components do not expose it.
+it and generated components do not expose it. It is the sole structured
+relationship between a Design IR binding and a `ComponentContract` public
+attr, item field, or slot. Supporting provenance may explain that relationship,
+but it cannot redefine it.
 
-Every projection records:
+### 12.1 Projection lifecycle and typed source references
+
+`BindingProjection` has no independent lifecycle or `status` field in
+`ComponentContract` format `1.0.0`. Source normalization belongs to the
+referenced `CollectionBinding` or `ValueBinding`; contract review belongs to
+`ComponentContract.approval_status`; unresolved decisions belong to contract
+diagnostics and provenance. Do not add `proposed`, `approved`,
+`needs_review`, `resolved`, `excluded`, or another projection-specific state.
 
 ```text
-source binding ID
-public attr or slot name
-projection kind
-public_attr_name, when the projection targets a top-level attr
-source_collection_binding_id, when a collection input is involved
-owning parent CollectionInput, for a nested collection projection
-parent_item_field_name, for a nested collection or nested count projection
-item field name, when applicable
-target DesignNode ID
-status
+PROJECTION_STATUS_RULE = no independent BindingProjection lifecycle/status
+  in format 1.0.0
 ```
 
-A root `CollectionBinding` uses `projection_kind = collection_attr` and
-references its source binding ID, its existing public `:list` attr, and its
-`CollectionInput` metadata. A nested `CollectionBinding` uses
-`projection_kind = collection_item_field`; it references the owning parent
-`CollectionInput`, the parent item field, the child source binding ID, and the
-child `CollectionInput` metadata. A nested collection never uses
-`collection_attr`.
+A projection that cannot be safely established is not emitted as an approved
+ordinary projection. It remains represented through diagnostics and
+provenance, and contract review decides whether to resolve, exclude, or
+reject it. An evidence-insufficient source binding cannot be turned into an
+ordinary public field by a projection status.
 
-A top-level collection count uses `projection_kind = collection_count_attr`
-and references its scalar public count attr and owning `CollectionInput`. A
-nested collection count uses the existing `collection_item_field` projection
-kind and references the scalar parent item field. Its source
-`ValueBinding.value_kind = collection_count` preserves the count meaning.
+CollectionBinding and ValueBinding occupy separate Design IR registries. Their
+IDs therefore are not globally unique across registries. Every projection
+records a typed source reference:
 
-The first-wave `projection_kind` set is closed:
+```text
+source_binding_kind
+source_binding_id
+```
+
+The first-wave `source_binding_kind` enum is closed:
+
+```text
+collection
+value
+```
+
+These values serialize as the inert strings `"collection"` and `"value"`.
+They are not module names, source-adapter names, or inferred ID prefixes such
+as `cb_*` or `vb_*`. Validation resolves `collection` only through
+`DesignDocument.collection_bindings` and `value` only through
+`DesignDocument.value_bindings`. An ID in the other registry does not satisfy
+the reference. If the same ID exists in both registries, the kind selects the
+registry deterministically. Unknown kinds fail closed. Design IR does not gain
+a cross-registry uniqueness rule.
+
+### 12.2 Canonical shape and target node
+
+The canonical conceptual shape for format `1.0.0` is:
+
+```text
+source_binding_kind
+source_binding_id
+
+projection_kind
+
+public_attr_name
+public_slot_name
+
+source_collection_binding_id
+parent_collection_binding_id
+
+item_field_name
+parent_item_field_name
+
+target_node_id
+```
+
+`source_binding_kind`, `source_binding_id`, `projection_kind`, and
+`target_node_id` are required for every projection. All other fields are
+present as applicable and are otherwise `nil`. There is no generic `public
+input`, `public input name`, or combined attr/slot field alongside the
+explicit public-target fields.
+
+The projection target has one meaning for each source kind:
+
+```text
+VALUE_PROJECTION_TARGET_RULE = target_node_id == ValueBinding.target_node_id
+COLLECTION_PROJECTION_TARGET_RULE =
+  target_node_id == CollectionBinding.repeat_root_node_id
+```
+
+`owner_node_id` is not an alternative collection projection target. A future
+adapter may have distinct owner and repeat-root nodes even when the current
+Bricks evidence happens to make them equal.
+
+The first-wave `projection_kind` set is closed and serializes as these strings:
 
 ```text
 scalar_attr
@@ -554,29 +618,220 @@ collection_count_attr
 slot
 ```
 
-`slot` is valid only when an IR/source semantic explicitly maps to
-consumer-owned markup or behavior. Ordinary `ValueBinding` records never
-become slots by default. No other projection kind may be invented during
-generation.
+No other projection kind may be introduced.
+
+### 12.3 Projection reference rules
+
+The following rules define the complete first-wave relationship. They are
+field-level invariants, not a second projection lifecycle.
+
+#### `scalar_attr`
+
+```text
+projection_kind = scalar_attr
+source_binding_kind = value
+```
+
+The source `ValueBinding` is a proven singular binding projected to a
+top-level public attr. In the first wave it has `value_kind = field` and
+`scope = site`. `public_attr_name` is present, while
+`public_slot_name`, `item_field_name`, and `parent_item_field_name` are nil.
+`source_collection_binding_id` and `parent_collection_binding_id` are nil.
+The named attr exists in `public_attrs`.
+
+#### `collection_attr`
+
+```text
+projection_kind = collection_attr
+source_binding_kind = collection
+```
+
+The source `CollectionBinding` is root/top-level, so its
+`parent_collection_binding_id` is nil. `source_collection_binding_id` equals
+`source_binding_id`. `public_attr_name` is present and names an existing
+`:list` attr. `public_slot_name`, `item_field_name`,
+`parent_item_field_name`, and `parent_collection_binding_id` are nil.
+
+The contract has a matching root `CollectionInput` whose
+`source_collection_binding_id` and `public_attr_name` equal the projection's
+values. The target is the source collection's `repeat_root_node_id`.
+
+#### Ordinary `collection_item_field` from a `ValueBinding`
+
+An ordinary collection-item field has:
+
+```text
+projection_kind = collection_item_field
+source_binding_kind = value
+ValueBinding.scope = collection_item
+```
+
+The source binding's `collection_binding_id` equals
+`source_collection_binding_id`, and the referenced `CollectionInput` exists.
+`item_field_name` is present; `public_attr_name`, `public_slot_name`, and
+`parent_item_field_name` are nil. The named item field exists in that
+`CollectionInput`. The target is `ValueBinding.target_node_id`.
+
+The separately defined nested collection-count case below may use
+`scope = collection`; an ordinary item field may not.
+
+#### Nested `collection_item_field` from a `CollectionBinding`
+
+A nested collection represented as a list field on a parent item has:
+
+```text
+projection_kind = collection_item_field
+source_binding_kind = collection
+```
+
+The source collection is nested, so its `parent_collection_binding_id` is not
+nil. `source_collection_binding_id` equals `source_binding_id`, and
+`parent_collection_binding_id` equals the source collection's parent ID.
+`parent_item_field_name` is present; `public_attr_name`, `public_slot_name`,
+and `item_field_name` are nil.
+
+The child `CollectionInput` exists with the same source binding ID, and its
+`parent_collection_binding_id` and `parent_item_field_name` equal the
+projection values. The parent `CollectionInput` contains the named item field
+and that field has type `:list`. The target is the source collection's
+`repeat_root_node_id`.
+
+#### `collection_count_attr`
+
+```text
+projection_kind = collection_count_attr
+source_binding_kind = value
+ValueBinding.value_kind = collection_count
+ValueBinding.scope = collection
+```
+
+The source `ValueBinding.collection_binding_id` is present and equals
+`source_collection_binding_id`. Its owning `CollectionBinding` is root/top-
+level. `public_attr_name` is present and names the owning root
+`CollectionInput.count_attr_name`. `public_slot_name`, `item_field_name`,
+`parent_item_field_name`, and `parent_collection_binding_id` are nil. The
+public attr exists, has type `:integer`, and has non-negative validation. The
+target is `ValueBinding.target_node_id`.
+
+#### Nested collection count
+
+A nested count keeps the existing projection kind:
+
+```text
+projection_kind = collection_item_field
+source_binding_kind = value
+ValueBinding.value_kind = collection_count
+ValueBinding.scope = collection
+```
+
+The source binding's collection is nested. Its ID equals
+`source_collection_binding_id`; the projection's
+`parent_collection_binding_id` equals the owning nested
+`CollectionBinding.parent_collection_binding_id`; and
+`parent_item_field_name` is present. `public_attr_name`, `public_slot_name`,
+and `item_field_name` are nil. The child `CollectionInput` stores
+`count_item_field_name` equal to the projection's parent item field name. The
+parent `CollectionInput` contains that field with type `:integer` and
+non-negative validation. The target is `ValueBinding.target_node_id`.
+
+This is not a new nested-count projection kind and is never flattened.
+
+#### `slot`
+
+`slot` is an explicit reviewed projection only. For first-wave binding
+projections its source kind is `value`, and the source `ValueBinding` is
+normalized or has an explicit reviewed resolution before it is deliberately
+projected to consumer-owned markup or another reviewed semantic component
+role. `public_slot_name` is present, while `public_attr_name`,
+`item_field_name`, and `parent_item_field_name` are nil. The named slot exists
+in `public_slots`. Ordinary `ValueBinding` records do not become slots by
+default. A reviewed public slot without a Design IR binding needs no fake
+binding ID or projection record.
+
+### 12.4 Public-target exclusivity and provenance
+
+Each projection has exactly one public target family:
+
+```text
+scalar_attr | collection_attr | collection_count_attr
+  -> public_attr_name only
+
+slot
+  -> public_slot_name only
+
+ordinary collection_item_field from a ValueBinding
+  -> item_field_name only
+
+nested collection or nested collection-count collection_item_field
+  -> parent_item_field_name only
+```
+
+Mutually incompatible public-target fields are not accepted, and validators do
+not apply silent precedence.
+
+`BindingProjection` is the sole structured binding-to-public-input linkage
+authority:
+
+```text
+BINDING_LINK_AUTHORITY = BindingProjection
+```
+
+Attr, ItemField, Slot, CollectionInput, and contract provenance may retain
+supporting audit evidence, reviewer decisions, source traces, or fingerprints.
+They must not redefine source kind or ID, projection kind, public target,
+collection ownership, or target node. If machine-checkable provenance
+contradicts a projection, validation reports the contradiction. Arbitrary
+prose is not interpreted as executable or authoritative relationship data.
+
+### 12.5 Evidence-insufficient bindings and serialization
+
+A source `ValueBinding` with `normalization_status = evidence_insufficient`
+must not be silently represented as an ordinary approved projection. If such a
+projection exists, contract approval is blocked unless contract diagnostics
+and provenance record an explicit reviewed resolution under the existing D1
+authority. No per-projection status represents that review.
+
+Complete projection reference validation requires the input `DesignDocument`.
+Intrinsic contract checks and IR reference checks are separate validation
+layers, as specified in section 13. C09D1B validates already-constructed
+records; it does not authorize Design IR to ComponentContract projection.
+
+Serialized projections include the explicit typed fields and the applicable
+reference fields. They always include `source_binding_kind`,
+`source_binding_id`, `projection_kind`, and `target_node_id`. They never
+include `status`. Enum values are inert strings, Elixir module references are
+not serialized, declared projection list order is preserved, and object keys
+are deterministic.
 
 ## 13. Contract validation and diagnostics
 
 Validation accumulates discoverable findings and never silently repairs a
-contract. At minimum it checks:
+contract. C09D2 must keep the following layers distinct.
+
+### 13.1 Intrinsic ComponentContract validation
+
+Intrinsic validation does not require Design IR. It checks:
 
 - `contract_id` and `contract_format_version` are non-empty and valid;
-- category is one of the four approved values;
+- category, projection kinds, source binding kinds, and other enums are closed
+  and valid;
 - module and function intent are source-independent and non-empty;
 - public attr names are unique;
 - public slot names are unique;
 - attr and slot names do not conflict;
 - every attr and item field uses an allowed truthful type;
 - required/default declarations are coherent;
-- every `source_collection_binding_id` is non-empty and unique within the contract;
+- every `source_collection_binding_id` is non-empty and unique within the
+  contract;
 - each collection has unique item field names;
 - every `CollectionInput` uses exactly one location mode: top-level fields
   (`public_attr_name` present and both parent fields nil) or nested fields
   (`public_attr_name` nil and both parent fields present);
+- top-level and nested collection locations are mutually exclusive;
+- collection-input parent references resolve within the contract, cannot
+  self-reference, and form an acyclic graph;
+- the canonical child-to-parent edge is
+  `parent_collection_binding_id`; no second child relationship is accepted;
 - a top-level `CollectionInput` references exactly one existing `public_attrs`
   entry through `public_attr_name`, and that entry has type `:list`;
 - a nested `CollectionInput` references an existing parent `CollectionInput`
@@ -585,34 +840,72 @@ contract. At minimum it checks:
 - `CollectionInput` records do not redefine referenced attr or item field
   type, required/default behavior, semantic purpose, validation, or
   accessibility;
-- the child-to-parent collection graph is acyclic, has no self-parent, and
-  every parent reference resolves;
-- children are derived from the canonical `parent_collection_binding_id` edge;
-- a root `collection_attr` projection references its existing public `:list`
-  attr and `CollectionInput`; nested collections never use `collection_attr`;
-- a nested `collection_item_field` projection references its owning parent
-  `CollectionInput`, parent item field, child source binding ID, and child
-  `CollectionInput`;
-- a top-level count references an existing scalar public attr with type
-  `:integer` and non-negative validation;
-- a nested count references an existing scalar parent item field with type
-  `:integer` and non-negative validation;
 - top-level inputs use `count_attr_name` only, nested inputs use
   `count_item_field_name` only, and both may be nil when no count is visible;
-- all count projections reference their intended collection and use the count
-  location allowed by that collection;
-- all `BindingProjection` source binding IDs exist in the input IR;
-- every referenced public attr, parent input, and item field exists;
-- collection-item projections reference their owning collection and item field;
-- an evidence-insufficient binding is never marked approved without a recorded
-  review decision;
-- unsupported bindings are never silently promoted;
-- no public name contains prohibited source vocabulary;
-- image inputs have an explicit accessibility policy;
+- count references use the location allowed by their collection and point to
+  an existing scalar public attr or parent item field with type `:integer` and
+  non-negative validation;
+- every projection has the canonical fields and exactly one public-target
+  family from section 12;
+- projection fields are mutually exclusive according to their projection
+  kind, with no generic public-target fallback or silent precedence;
+- every referenced public attr, public slot, parent input, collection input,
+  and item field exists within the contract;
 - slot cardinality and consumer responsibility are present;
 - no public universal props/data/bindings map is required;
-- approval is blocked by unresolved required diagnostics; and
-- provenance identifies the IR binding and selected semantic classification.
+- no public name contains prohibited source vocabulary; and
+- image inputs have an explicit accessibility policy;
+- unsupported bindings are not silently promoted;
+- `approval_status` agrees with blocking diagnostics;
+- provenance identifies the IR binding and selected semantic classification;
+- JSON metadata, diagnostics, and provenance are serializable.
+
+Intrinsic validation also checks all collection, item-field, count, slot, and
+projection shape rules in section 12. It can report a missing source reference
+shape, but it cannot prove that a source binding ID or target node exists in a
+particular Design IR document.
+
+### 13.2 ComponentContract to Design IR reference validation
+
+IR reference validation requires the exact `DesignDocument`. It checks:
+
+- `source_binding_kind = collection` resolves
+  `source_binding_id` in `DesignDocument.collection_bindings`;
+- `source_binding_kind = value` resolves `source_binding_id` in
+  `DesignDocument.value_bindings`;
+- a matching ID in the wrong registry does not satisfy the reference;
+- each `target_node_id` exists and equals `ValueBinding.target_node_id` for a
+  value projection or `CollectionBinding.repeat_root_node_id` for a
+  collection projection;
+- the projection kind is compatible with the referenced binding kind and all
+  referenced `ValueBinding` scope, value kind, collection ownership, and
+  normalization fields;
+- scalar, ordinary item-field, count, nested collection, and slot projections
+  satisfy their source-binding-specific rules;
+- collection ownership, parent/root semantics, and nested parent fields match
+  the referenced Design IR records;
+- every referenced binding ID and node ID exists; and
+- a `ValueBinding` with `normalization_status = evidence_insufficient` is
+  blocked from ordinary approved use unless contract diagnostics and
+  provenance record an explicit reviewed resolution.
+
+This layer validates an already-constructed contract against Design IR. It
+does not project Design IR into a contract and it does not interpret arbitrary
+provenance prose.
+
+### 13.3 Approval gate
+
+An `approved` contract is generation-eligible only when intrinsic validation
+and IR reference validation both succeed and no blocking contract diagnostic
+exists. Contract approval remains the authority for review decisions. Binding
+normalization remains the authority for source confidence, and neither is
+duplicated by `BindingProjection`.
+
+Validation must also retain image accessibility, unsupported-target,
+classification, public naming, and semantic completeness diagnostics. A
+visible, required, or accessibility-relevant unsupported or
+evidence-insufficient binding blocks approval unless the existing D1 review
+rules record an explicit resolution, exclusion, rejection, or waiver.
 
 Diagnostics use stable `component_contract.*` codes. The first-wave outcome
 classes are `info`, `warning`, `error`, and `fatal`; a blocking error or fatal
@@ -679,10 +972,10 @@ component contract owns attrs, slots, item fields, projections, and rendering
 meaning. A future Catalogue manifest records identity, taxonomy, lifecycle,
 release metadata, and a contract fingerprint under its own authority.
 
-C09D1 does not create or modify a CatalogueItem, manifest, Catalogue state,
-Hero admission, or release metadata.
+C09D1 and C09D1B do not create or modify a CatalogueItem, manifest, Catalogue
+state, Hero admission, or release metadata.
 
-Only an approved `ComponentContract` may enter a later generator. C09D1
+Only an approved `ComponentContract` may enter a later generator. C09D1B
 authorizes no HEEx templates, Phoenix modules, CSS, JavaScript, LiveView events,
 file writing, ejection, or generator inference. A generator must reject a
 contract that leaves public API semantics undecided.
@@ -710,11 +1003,19 @@ CollectionBinding ID -> CollectionInput
 public attr name -> Attr
 parent CollectionBinding ID -> parent CollectionInput
 (parent CollectionInput, item field name) -> ItemField
+collection_bindings_by_id
+value_bindings_by_id
+nodes_by_id
+attrs_by_name
+slots_by_name
+collection_inputs_by_binding_id
+item_fields_by_collection_and_name
 ```
 
 Children are derived from the child `parent_collection_binding_id` references.
-With these indexes, validation targets `O(contract records + binding
-references)` and does not rescan the complete contract for every field.
+With these indexes, validation targets approximately
+`O(contract records + Design IR records + references)` and does not rescan a
+complete registry for every projection.
 Imported JSON, CSS, JavaScript, PHP, source paths, and expressions are inert
 untrusted data. Componentization performs no evaluation, dynamic module
 loading, query execution, URL fetch, raw HTML injection, or event execution.
@@ -739,7 +1040,8 @@ remains responsible for escaping caller values.
 
 ## 19. Explicit decision register
 
-The following values are final for C09D1. None is delegated to a generator.
+The following values are final for C09D1 and C09D1B. None is delegated to a
+generator.
 
 ```text
 COMPONENT_CONTRACT_ARTIFACT_DECISION = explicit versioned serializable
@@ -847,13 +1149,105 @@ RESPONSIVE_PUBLIC_API_RULE = responsive behavior is internal; source
   breakpoints, pixel thresholds, and style-source details are not public
   inputs.
 
-BINDING_PROJECTION_MODEL = closed projection kinds are scalar_attr,
-  collection_attr, collection_item_field, collection_count_attr, and slot.
-  Root CollectionBindings use collection_attr and reference their public :list
-  attr plus CollectionInput. Nested CollectionBindings use
-  collection_item_field and reference the parent ItemField plus child
-  CollectionInput. Top-level counts use collection_count_attr; nested counts
-  use collection_item_field. No new projection kind is introduced.
+PROJECTION_STATUS_RULE = BindingProjection has no independent lifecycle or
+  status field in ComponentContract format 1.0.0. Source normalization,
+  contract approval, diagnostics, and provenance remain their existing
+  authorities.
+
+SOURCE_BINDING_KIND_FIELD = every projection records source_binding_kind and
+  source_binding_id. The source kind is required and is not inferred from an
+  ID prefix.
+
+SOURCE_BINDING_KIND_VALUES = collection | value, serialized as the strings
+  "collection" and "value" only.
+
+SOURCE_BINDING_REFERENCE_RULE = collection resolves only through
+  DesignDocument.collection_bindings and value resolves only through
+  DesignDocument.value_bindings. Matching IDs in the other registry do not
+  satisfy a reference, and Design IR does not require cross-registry ID
+  uniqueness.
+
+VALUE_PROJECTION_TARGET_RULE = a value projection target_node_id equals the
+  referenced ValueBinding.target_node_id.
+
+COLLECTION_PROJECTION_TARGET_RULE = a collection projection target_node_id
+  equals the referenced CollectionBinding.repeat_root_node_id, never merely
+  owner_node_id.
+
+BINDING_PROJECTION_FIELDS = source_binding_kind, source_binding_id,
+  projection_kind, public_attr_name, public_slot_name,
+  source_collection_binding_id, parent_collection_binding_id,
+  item_field_name, parent_item_field_name, and target_node_id. The required
+  fields are source_binding_kind, source_binding_id, projection_kind, and
+  target_node_id. There is no generic public-input field and no status field.
+
+BINDING_LINK_AUTHORITY = BindingProjection is the sole structured relationship
+  between a Design IR binding and a ComponentContract public attr, item field,
+  or slot. Supporting provenance cannot redefine that relationship.
+
+SCALAR_ATTR_RULE = scalar_attr requires a value source with value_kind field
+  and scope site, public_attr_name, nil public_slot_name, item_field_name,
+  parent_item_field_name, source_collection_binding_id, and
+  parent_collection_binding_id, and an existing public attr.
+
+COLLECTION_ATTR_RULE = collection_attr requires a root collection source,
+  source_collection_binding_id equal to source_binding_id, public_attr_name
+  naming an existing :list attr and root CollectionInput, all other public and
+  parent target fields nil, and target repeat_root_node_id.
+
+ORDINARY_ITEM_FIELD_RULE = an ordinary collection_item_field requires a value
+  source with scope collection_item, source_collection_binding_id equal to
+  ValueBinding.collection_binding_id, an existing CollectionInput and item
+  field, item_field_name only, and target ValueBinding.target_node_id.
+
+NESTED_COLLECTION_PROJECTION_RULE = a nested collection_item_field from a collection
+  source requires a non-nil source parent, source_collection_binding_id equal
+  to source_binding_id, matching parent_collection_binding_id, a list parent
+  ItemField named by parent_item_field_name, a matching child CollectionInput,
+  and target repeat_root_node_id.
+
+TOP_LEVEL_COUNT_RULE = collection_count_attr requires a value source with
+  value_kind collection_count and scope collection, a root owning collection,
+  matching source_collection_binding_id and count_attr_name, an integer
+  non-negative public attr, all other target fields nil, and target
+  ValueBinding.target_node_id.
+
+NESTED_COUNT_RULE = a nested collection count keeps collection_item_field with
+  a value source whose value_kind is collection_count and scope is collection.
+  It matches the nested source parent, uses parent_item_field_name only, and
+  references an integer non-negative parent ItemField through the child
+  count_item_field_name. It is never flattened or given a new projection kind.
+
+SLOT_PROJECTION_RULE = slot is an explicit reviewed value projection with
+  public_slot_name only and an existing public slot. Ordinary ValueBindings do
+  not become slots automatically, and a reviewed unbound slot needs no fake
+  binding ID.
+
+PUBLIC_TARGET_EXCLUSIVITY_RULE = attr projection kinds use public_attr_name
+  only, slot uses public_slot_name only, ordinary value collection-item fields
+  use item_field_name only, and nested collection or nested-count fields use
+  parent_item_field_name only. Mutually incompatible fields are invalid and
+  have no silent precedence.
+
+INTRINSIC_VALIDATION_RULE = without Design IR, validate contract shapes,
+  enums, unique public names, collection location XOR and graph, attr/item/
+  field/slot references, projection field exclusivity, internal collection and
+  count references, approval/diagnostic coherence, and JSON-serializable
+  metadata.
+
+IR_REFERENCE_VALIDATION_RULE = with the exact DesignDocument, resolve typed
+  source IDs, require binding and node existence, enforce target-node equality,
+  normalization status, ValueBinding collection ownership, CollectionBinding
+  parent/root semantics, and projection-kind compatibility.
+
+APPROVAL_VALIDATION_RULE = approval_status approved is generation-eligible only
+  after intrinsic and IR reference validation both succeed and no blocking
+  contract diagnostic exists.
+
+PROJECTION_SERIALIZATION_RULE = serialize explicit typed fields, applicable
+  references, deterministic object keys, and declared list order. Serialize
+  enums as inert strings and never serialize BindingProjection.status,
+  executable module references, or inferred generic public-target fields.
 
 CONTRACT_VALIDATION_RULE = accumulate diagnostics for identity, category,
   names, types, requiredness, location XOR, parent/item relationships,
@@ -983,7 +1377,7 @@ contracts once classification and semantic naming inputs are available.
 
 ## 22. Scope confirmation and stop conditions
 
-This C09D1 change defines componentization semantics only.
+This C09D1/C09D1B change defines componentization semantics only.
 
 ```text
 production code changed = 0
