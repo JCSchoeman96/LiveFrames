@@ -996,10 +996,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
     case Map.get(indexes.attrs_by_name, alt_name) do
       %Attr{type: :string} when is_binary(alt_name) and alt_name != "" ->
-        projections =
-          Enum.filter(Map.get(indexes.render_by_node, target, []), fn projection ->
-            projection.render_role == :asset_alt
-          end)
+        projections = Map.get(indexes.render_by_node_role, {target, :asset_alt}, [])
 
         valid_projection? =
           match?([%RenderProjection{public_attr_name: ^alt_name}], projections)
@@ -1037,8 +1034,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     has_alt_name? = Map.has_key?(policy, "alt_attr_name")
     exact_keys? = map_size(policy) == 1
 
-    has_alt_projection? =
-      Enum.any?(Map.get(indexes.render_by_node, target, []), &(&1.render_role == :asset_alt))
+    has_alt_projection? = Map.has_key?(indexes.render_by_node_role, {target, :asset_alt})
 
     if has_alt_name? or not exact_keys? or has_alt_projection? do
       {false,

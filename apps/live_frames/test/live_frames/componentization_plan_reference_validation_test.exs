@@ -941,6 +941,166 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
            ) == :ok
   end
 
+  test "consumer-supplied image accessibility requires exactly one matching asset_alt projection" do
+    design_document = image_document()
+
+    source_accessibility = %{
+      "image_alt_policy" => "consumer_supplied",
+      "alt_attr_name" => "alt",
+      "required_when_source_present" => true
+    }
+
+    component_contract =
+      contract(
+        public_attrs: [attr("image", :string, accessibility: source_accessibility), attr("alt")]
+      )
+
+    matching_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          render_attr("image", :asset_src, @image_id),
+          render_attr("alt", :asset_alt, @image_id)
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             matching_plan,
+             component_contract,
+             design_document
+           ) == :ok
+
+    missing_alt_plan = %{
+      matching_plan
+      | render_projections: [render_attr("image", :asset_src, @image_id)]
+    }
+
+    assert "componentization_plan.accessibility.alt_projection_mismatch" in codes(
+             ComponentizationPlan.validate_references(
+               missing_alt_plan,
+               component_contract,
+               design_document
+             )
+           )
+
+    multiple_contract =
+      contract(
+        public_attrs: [
+          attr("image", :string, accessibility: source_accessibility),
+          attr("alt"),
+          attr("other_alt")
+        ]
+      )
+
+    multiple_alt_plan =
+      plan(multiple_contract, design_document,
+        render_projections: [
+          render_attr("image", :asset_src, @image_id),
+          render_attr("alt", :asset_alt, @image_id),
+          render_attr("other_alt", :asset_alt, @image_id)
+        ]
+      )
+
+    assert "componentization_plan.accessibility.alt_projection_mismatch" in codes(
+             ComponentizationPlan.validate_references(
+               multiple_alt_plan,
+               multiple_contract,
+               design_document
+             )
+           )
+  end
+
+  test "decorative image accessibility rejects any asset_alt projection" do
+    design_document = image_document()
+    accessibility = %{"image_alt_policy" => "decorative"}
+
+    no_alt_contract =
+      contract(public_attrs: [attr("image", :string, accessibility: accessibility)])
+
+    no_alt_plan =
+      plan(no_alt_contract, design_document,
+        render_projections: [render_attr("image", :asset_src, @image_id)]
+      )
+
+    assert ComponentizationPlan.validate_references(no_alt_plan, no_alt_contract, design_document) ==
+             :ok
+
+    one_alt_contract =
+      contract(
+        public_attrs: [
+          attr("image", :string, accessibility: accessibility),
+          attr("alt")
+        ]
+      )
+
+    one_alt_plan =
+      plan(one_alt_contract, design_document,
+        render_projections: [
+          render_attr("image", :asset_src, @image_id),
+          render_attr("alt", :asset_alt, @image_id)
+        ]
+      )
+
+    assert "componentization_plan.accessibility.image_policy_invalid" in codes(
+             ComponentizationPlan.validate_references(
+               one_alt_plan,
+               one_alt_contract,
+               design_document
+             )
+           )
+
+    multiple_alt_contract =
+      contract(
+        public_attrs: [
+          attr("image", :string, accessibility: accessibility),
+          attr("alt"),
+          attr("other_alt")
+        ]
+      )
+
+    multiple_alt_plan =
+      plan(multiple_alt_contract, design_document,
+        render_projections: [
+          render_attr("image", :asset_src, @image_id),
+          render_attr("alt", :asset_alt, @image_id),
+          render_attr("other_alt", :asset_alt, @image_id)
+        ]
+      )
+
+    assert "componentization_plan.accessibility.image_policy_invalid" in codes(
+             ComponentizationPlan.validate_references(
+               multiple_alt_plan,
+               multiple_alt_contract,
+               design_document
+             )
+           )
+  end
+
+  test "validates many image sources sharing one node without changing diagnostics" do
+    design_document = image_document()
+    source_names = Enum.map(1..64, &"image_#{&1}")
+
+    component_contract =
+      contract(
+        public_attrs:
+          Enum.map(source_names, fn name ->
+            attr(name, :string, accessibility: %{"image_alt_policy" => "decorative"})
+          end)
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: Enum.map(source_names, &render_attr(&1, :asset_src, @image_id))
+      )
+
+    assert "componentization_plan.render_projection.role_conflict" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
   test "checks accessibility when the top-level image source is binding-backed" do
     design_document = %{
       image_document()
