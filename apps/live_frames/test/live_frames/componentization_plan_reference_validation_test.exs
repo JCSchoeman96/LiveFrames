@@ -74,6 +74,13 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
     }
   end
 
+  defp semantic_boundary_document(semantic_type) do
+    design_document = document()
+    [_boundary, outside] = design_document.root_nodes
+    boundary = %DesignNode{node_id: @boundary_id, semantic_type: semantic_type}
+    %{design_document | root_nodes: [boundary, outside]}
+  end
+
   defp contract(overrides \\ []) do
     struct!(
       %ComponentContract{
@@ -273,6 +280,205 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
                design_document
              )
            )
+  end
+
+  test "allows semantic render roles on a heading boundary" do
+    design_document = semantic_boundary_document("heading")
+
+    text_contract = contract(public_attrs: [attr("title")])
+
+    text_plan =
+      plan(text_contract, design_document,
+        render_projections: [render_attr("title", :text_content, @boundary_id)]
+      )
+
+    assert ComponentizationPlan.validate_references(text_plan, text_contract, design_document) ==
+             :ok
+
+    component_contract =
+      contract(
+        public_attrs: [
+          attr("title"),
+          attr("level", :integer, validation: %{"values" => [1, 2, 3, 4, 5, 6]})
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          render_attr("title", :text_content, @boundary_id),
+          render_attr("level", :heading_level, @boundary_id)
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+
+    root_contract = contract(public_attrs: [attr("id"), attr("class")])
+
+    root_plan =
+      plan(root_contract, design_document,
+        render_projections: [
+          render_attr("id", :root_id, @boundary_id),
+          render_attr("class", :root_class, @boundary_id)
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(root_plan, root_contract, design_document) ==
+             :ok
+  end
+
+  test "allows accessible image source and alt roles on an image boundary" do
+    design_document = semantic_boundary_document("image")
+
+    decorative_contract =
+      contract(
+        public_attrs: [
+          attr("src", :string, accessibility: %{"image_alt_policy" => "decorative"})
+        ]
+      )
+
+    decorative_plan =
+      plan(decorative_contract, design_document,
+        render_projections: [render_attr("src", :asset_src, @boundary_id)]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             decorative_plan,
+             decorative_contract,
+             design_document
+           ) == :ok
+
+    consumer_contract =
+      contract(
+        public_attrs: [
+          attr("src", :string,
+            accessibility: %{
+              "image_alt_policy" => "consumer_supplied",
+              "alt_attr_name" => "alt",
+              "required_when_source_present" => true
+            }
+          ),
+          attr("alt")
+        ]
+      )
+
+    consumer_plan =
+      plan(consumer_contract, design_document,
+        render_projections: [
+          render_attr("src", :asset_src, @boundary_id),
+          render_attr("alt", :asset_alt, @boundary_id)
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             consumer_plan,
+             consumer_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "allows link_url on a link boundary" do
+    design_document = semantic_boundary_document("link")
+    component_contract = contract(public_attrs: [attr("href")])
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("href", :link_url, @boundary_id)]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "allows subtree_slot on an actions boundary without bindings" do
+    design_document = semantic_boundary_document("actions")
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{name: "actions", semantic_purpose: "actions", consumer_responsibility: "caller"}
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "actions",
+            target_node_id: @boundary_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "rejects mixed root and semantic render roles on a boundary" do
+    heading_document = semantic_boundary_document("heading")
+    heading_contract = contract(public_attrs: [attr("id"), attr("title")])
+
+    heading_plan =
+      plan(heading_contract, heading_document,
+        render_projections: [
+          render_attr("id", :root_id, @boundary_id),
+          render_attr("title", :text_content, @boundary_id)
+        ]
+      )
+
+    image_document = semantic_boundary_document("image")
+
+    image_contract =
+      contract(
+        public_attrs: [
+          attr("class"),
+          attr("src", :string, accessibility: %{"image_alt_policy" => "decorative"})
+        ]
+      )
+
+    image_plan =
+      plan(image_contract, image_document,
+        render_projections: [
+          render_attr("class", :root_class, @boundary_id),
+          render_attr("src", :asset_src, @boundary_id)
+        ]
+      )
+
+    link_document = semantic_boundary_document("link")
+    link_contract = contract(public_attrs: [attr("rest", :global), attr("href")])
+
+    link_plan =
+      plan(link_contract, link_document,
+        render_projections: [
+          render_attr("rest", :root_global_attrs, @boundary_id),
+          render_attr("href", :link_url, @boundary_id)
+        ]
+      )
+
+    for {component_plan, component_contract, design_document} <- [
+          {heading_plan, heading_contract, heading_document},
+          {image_plan, image_contract, image_document},
+          {link_plan, link_contract, link_document}
+        ] do
+      assert "componentization_plan.render_projection.role_conflict" in codes(
+               ComponentizationPlan.validate_references(
+                 component_plan,
+                 component_contract,
+                 design_document
+               )
+             )
+    end
   end
 
   test "rejects unsupported render role co-location" do

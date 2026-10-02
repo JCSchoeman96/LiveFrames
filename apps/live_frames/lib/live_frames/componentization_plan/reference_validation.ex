@@ -796,9 +796,20 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       role_counts = Enum.frequencies(roles)
       duplicate? = Enum.any?(role_counts, fn {_role, count} -> count > 1 end)
       node = Map.get(indexes.nodes_by_id, node_id)
+      boundary? = node_id == plan.boundary_node_id
+      root_role_present? = Enum.any?(roles, &(&1 in @root_roles))
+      semantic_role_present? = Enum.any?(roles, &(&1 not in @root_roles))
+      mixed_boundary_roles? = boundary? and root_role_present? and semantic_role_present?
 
-      allowed_roles = allowed_colocated_roles(node_id, node, plan.boundary_node_id)
-      unsupported? = Enum.any?(roles, &(&1 not in allowed_roles))
+      allowed_roles =
+        if boundary? and root_role_present? and not semantic_role_present? do
+          @root_roles
+        else
+          semantic_allowed_roles(node)
+        end
+
+      unsupported? =
+        mixed_boundary_roles? or Enum.any?(roles, &(&1 not in allowed_roles))
 
       if duplicate? or unsupported? do
         add(
@@ -815,24 +826,24 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end)
   end
 
-  defp allowed_colocated_roles(node_id, _node, node_id), do: @root_roles
-
-  defp allowed_colocated_roles(_node_id, %DesignNode{semantic_type: "heading"}, _boundary),
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "heading"}),
     do: [:text_content, :heading_level]
 
-  defp allowed_colocated_roles(_node_id, %DesignNode{semantic_type: type}, _boundary)
-       when type in ["paragraph", "rich_text"], do: [:text_content]
+  defp semantic_allowed_roles(%DesignNode{semantic_type: type})
+       when type in ["paragraph", "rich_text"],
+       do: [:text_content]
 
-  defp allowed_colocated_roles(_node_id, %DesignNode{semantic_type: "image"}, _boundary),
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "image"}),
     do: [:asset_src, :asset_alt]
 
-  defp allowed_colocated_roles(_node_id, %DesignNode{semantic_type: "link"}, _boundary),
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "link"}),
     do: [:link_url, :subtree_slot]
 
-  defp allowed_colocated_roles(_node_id, %DesignNode{semantic_type: type}, _boundary)
-       when type in ["actions", "button"], do: [:subtree_slot]
+  defp semantic_allowed_roles(%DesignNode{semantic_type: type})
+       when type in ["actions", "button"],
+       do: [:subtree_slot]
 
-  defp allowed_colocated_roles(_node_id, _node, _boundary), do: []
+  defp semantic_allowed_roles(_node), do: []
 
   defp validate_image_sources(plan, contract, indexes, boundary_ids, diagnostics) do
     {valid_source_nodes, diagnostics} =
