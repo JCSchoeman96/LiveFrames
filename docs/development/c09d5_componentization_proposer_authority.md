@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D5-A
 
-**Plan version:** v2
+**Plan version:** v3
 
 **Scope:** freeze explicit semantic-decision input model and proposer construction
 rules; no proposer production code in this slice
@@ -31,6 +31,9 @@ non-authoritative examples only.
 - `v2` — freeze EvidenceHandlingDecision outcomes, canonical decision/output
   ordering, complete decision-record field shapes, outcome taxonomy, multi-root
   behavior (PR #122 review)
+- `v3` — image-source detection (D3-only), accessibility map equality,
+  remove InputProvenanceAudit and review_required, freeze ProposerResult pair
+  and provisional approval_status (PR #122 final tightening)
 
 ---
 
@@ -137,7 +140,7 @@ approval and generation are downstream.
 | `RenderProjection` | `{:attr, name}` or `{:slot, name}` | ComponentizationPlan | one per public target (D3) |
 | `ComponentContract.Diagnostic` | stable `component_contract.*` code | ComponentContract.diagnostics | info / warning / error / fatal |
 | `ComponentizationPlan.Diagnostic` | stable `componentization_plan.*` code | ComponentizationPlan.diagnostics | info / warning / error / fatal |
-| `ProposerResult` | outcome enum + optional pair + transient diagnostics | **process only**; not serialized | terminal: proposed, needs_review, invalid_input, construction_failed |
+| `ProposerResult` | outcome enum + pair (only when proposed/needs_review) + transient diagnostics | **process only**; not serialized | terminal: proposed, needs_review, invalid_input, construction_failed |
 
 ### Invariants (cross-cutting)
 
@@ -234,7 +237,10 @@ Closed first-wave decision record kinds:
 | `ImageAccessibilityDecision` | closed D3 accessibility maps (section 13) |
 | `EvidenceHandlingDecision` | closed handling for `evidence_insufficient` bindings (section 6.6) |
 | `StaticContentDispositionDecision` | internal vs promoted static content (section 15) |
-| `InputProvenanceAudit` | optional non-executable audit map; never overrides structured decisions |
+
+Per-record `provenance` on semantic decisions (section 6.3) is the only
+first-wave input audit surface. There is no separate `InputProvenanceAudit`
+record kind.
 
 Forbidden fields on any decision record (reject input during semantic-input
 validation):
@@ -293,7 +299,7 @@ Maps 1:1 to `ComponentContract.Attr` fields the proposer materializes:
 | `default` | yes | explicit term (use `nil` when no default) |
 | `semantic_purpose` | yes | non-empty string (intrinsic validator) |
 | `validation` | yes | JSON object (may be `%{}`) |
-| `accessibility` | yes | JSON object (may be `%{}`; image sources need `ImageAccessibilityDecision` too) |
+| `accessibility` | yes | JSON object (may be `%{}`; image **source** members per §6.3.1) |
 | `provenance` | yes | JSON object audit (may be `%{}`) |
 
 #### `PublicSlotDecision`
@@ -336,7 +342,7 @@ Top-level vs nested location XOR matches D1 `COLLECTION_LOCATION_EXCLUSIVITY_RUL
 | `default` | yes | explicit term (`nil` allowed) |
 | `semantic_purpose` | yes | non-empty string |
 | `validation` | yes | JSON object |
-| `accessibility` | yes | JSON object |
+| `accessibility` | yes | JSON object (image **source** item fields per §6.3.1) |
 | `provenance` | yes | JSON object audit |
 
 #### `CollectionCountLinkDecision`
@@ -397,16 +403,51 @@ Must not reference `evidence_insufficient` bindings unless paired with
 | `target_kind` | yes | `attr` \| `item_field` |
 | `target_name` | yes | public attr or item field name |
 | `source_collection_binding_id` | item_field only | required when `target_kind = item_field` |
-| `accessibility` | yes | exact D3 closed map copied onto attr/item field |
+| `accessibility` | yes | exact D3 closed map; must match public-member decision per §6.3.1 |
 
-Semantic-input validation **must** include one `ImageAccessibilityDecision` per
-image-generating public source member, identified when **any** of:
+#### 6.3.1 Image source members and accessibility authority (D3-aligned)
 
 ```text
-a RenderPlacementDecision on that target uses render_role = asset_src
-a BindingAssignmentDecision on that target resolves to a ValueBinding with
-  target_kind = asset on a DesignNode with semantic_type = image
-the PublicAttrDecision or ItemFieldDecision accessibility map is non-empty
+IMAGE_SOURCE_MEMBER_RULE =
+  a public attr or item field is an image SOURCE member only when explicit
+  placement proves it (against the supplied DesignDocument during step 2):
+
+  top-level attr:
+    RenderPlacementDecision on that attr with render_role = asset_src
+    OR BindingAssignmentDecision on that attr resolves to a ValueBinding with
+      target_kind = asset and DesignNode.semantic_type = image at
+      ValueBinding.target_node_id
+
+  collection item field:
+    BindingAssignmentDecision on that field resolves to a ValueBinding with
+      value_kind = field, scope = collection_item, target_kind = asset, and
+      DesignNode.semantic_type = image at ValueBinding.target_node_id
+    (RenderProjection does not apply to item fields in plan 1.0.0)
+
+  a non-empty accessibility map alone does NOT make a member an image source.
+```
+
+```text
+IMAGE_ACCESSIBILITY_DECISION_CONSISTENCY_RULE =
+  for every image SOURCE member (IMAGE_SOURCE_MEMBER_RULE):
+    exactly one ImageAccessibilityDecision is required (identity per section 6.4)
+
+    PublicAttrDecision.accessibility or ItemFieldDecision.accessibility must
+    exactly equal ImageAccessibilityDecision.accessibility (deep term equality
+    on the JSON object maps)
+
+    mismatch -> invalid_input (componentization_proposer.input.conflict)
+    missing ImageAccessibilityDecision -> invalid_input
+    extra ImageAccessibilityDecision with no matching image source member ->
+      invalid_input
+
+  no precedence, no silent overwrite, no inference from accessibility maps
+
+  the accessibility map must be one of the exact D3 closed policies
+  (consumer_supplied or decorative per D3 §10.1 / §10.2)
+
+  non-image public members may carry ordinary accessibility metadata without
+  an ImageAccessibilityDecision
 ```
 
 #### `StaticContentDispositionDecision`
@@ -598,9 +639,8 @@ Legend (aligned with section 16 outcome taxonomy):
 \* `design_document_sha256` missing on plan is proposer materialization failure;
 IR invalid is caught at step 1 (`invalid_input`).
 
-\*\* missing `ImageAccessibilityDecision` for a declared image **source** member
-is `invalid_input` at semantic-input validation when the attr/field decision
-marks an image-generating source; uncovered policy at reference layer → `needs_review`.
+Image-source and accessibility input rules: section 6.3.1. Reference-layer
+accessibility mismatches on an otherwise input-valid pair → `needs_review`.
 
 ---
 
@@ -609,33 +649,48 @@ marks an image-generating source; uncovered policy at reference layer → `needs
 Deterministic ordering:
 
 ```text
-1. LiveFrames.IR.validate(design_document) -> invalid => ProposerResult invalid_input
-2. validate ComponentizationSemanticInput intrinsic -> invalid => invalid_input
-3. canonicalize decision lists (section 6.4) and reject duplicate keys
-4. build ComponentContract shell:
-     contract_format_version, contract_id, classification, empty collections
+1. LiveFrames.IR.validate(design_document) -> invalid => invalid_input, no pair
+2. validate ComponentizationSemanticInput (sections 6.3, 6.3.1, 6.4, 6.6)
+     against design_document -> invalid => invalid_input, no pair
+3. canonicalize decision lists (section 6.4)
+4. build ComponentContract with approval_status = :proposed (provisional only;
+     PROPOSER_PROVISIONAL_APPROVAL_STATUS_RULE)
 5. materialize PublicAttrDecision / PublicSlotDecision / ItemFieldDecision /
      CollectionAdmissionDecision into contract lists (no IR inference)
 6. materialize BindingProjection from BindingAssignmentDecision + IR registries
-7. materialize CollectionInput records from CollectionAdmissionDecision +
+7. materialize CollectionInput from CollectionAdmissionDecision +
      CollectionCountLinkDecision + IR
-8. sort artifact lists (section 6.5)
+8. sort contract lists (section 6.5)
 9. compute design_document_sha256
-10. build ComponentizationPlan:
-     plan_format_version, contract_id, fingerprint, boundary_node_id,
-     RenderProjection from RenderPlacementDecision
-11. ComponentContract.validate/1 -> errors => construction_failed (section 16.6)
-12. ComponentizationPlan.validate/1 -> errors => construction_failed
-13. ComponentContract.validate_ir_references/2
-14. ComponentizationPlan.validate_references/3
-15. classify approval_status and ProposerResult outcome (section 16)
-16. merge owned diagnostics into contract/plan lists; re-sort diagnostics (6.5)
-17. STOP — no approval transition, no generation
+10. build ComponentizationPlan (boundary_node_id from BoundaryDecision)
+11. sort plan lists (section 6.5)
+12. ComponentContract.validate/1 -> {:error, _} => construction_failed, no pair,
+     transient construction diagnostics only
+13. ComponentizationPlan.validate/1 -> {:error, _} => construction_failed, no pair
+14. ComponentContract.validate_ir_references/2 (generated diagnostics)
+15. ComponentizationPlan.validate_references/3 (generated diagnostics)
+16. classify ProposerResult outcome and final approval_status (section 16)
+17. merge only diagnostics owned by returned artifacts (section 18); canonical
+     sort diagnostics (section 6.5)
+18. ComponentContract.validate/1 and ComponentizationPlan.validate/1 again on the
+     returned pair (PROPOSER_FINAL_INTRINSIC_VALIDATE_RULE); failure =>
+     construction_failed, no pair
+19. STOP — no approval transition, no generation
+```
+
+```text
+PROPOSER_PROVISIONAL_APPROVAL_STATUS_RULE =
+  materialize ComponentContract with approval_status = :proposed before step 12
+  so intrinsic validation has a closed enum value; replace with final
+  :proposed | :needs_review only at step 16; never :approved | :rejected
+
+PROPOSER_FINAL_INTRINSIC_VALIDATE_RULE =
+  after diagnostic merge (step 17), re-run intrinsic validation on the returned
+  pair; if either fails, construction_failed with no pair (proposer defect)
 ```
 
 The proposer does **not** reimplement validation rules; it calls existing
-validators. It may add **additional** proposer-owned semantic diagnostics before
-step 10 when input validation requires them.
+validators.
 
 ---
 
@@ -661,8 +716,12 @@ step 10 when input validation requires them.
   redefine projections.
 - **Collection counts:** `CollectionCountLinkDecision` populates
   `count_attr_name` / `count_item_field_name` per `COLLECTION_COUNT_LINK_RULE`.
-- **Initial approval_status:** set in step 15 only; never `:approved` /
-  auto `:rejected`.
+- **Provisional approval_status:** `:proposed` during steps 4–15 per
+  `PROPOSER_PROVISIONAL_APPROVAL_STATUS_RULE`.
+- **Final approval_status:** set at step 16 only; `:proposed` or `:needs_review`;
+  never `:approved` / auto `:rejected`.
+- **Image accessibility:** copy `accessibility` from `PublicAttrDecision` /
+  `ItemFieldDecision` (already equal to `ImageAccessibilityDecision` per §6.3.1).
 
 ---
 
@@ -753,18 +812,14 @@ Only from `RenderPlacementDecision` for public attrs/slots **without**
 
 ## 13. Accessibility
 
-- Top-level image sources: `ImageAccessibilityDecision` on the asset **source**
-  attr must set closed `Attr.accessibility` maps per D3 (`consumer_supplied` or
-  `decorative`).
-- Collection-item image sources: same on `ItemField.accessibility` with sibling
-  alt field decisions and binding assignments per D3 §10.2.
+- Image **source** membership: `IMAGE_SOURCE_MEMBER_RULE` (§6.3.1) only; not
+  inferred from non-empty `accessibility` maps.
+- Input consistency: `IMAGE_ACCESSIBILITY_DECISION_CONSISTENCY_RULE` (§6.3.1).
 - Proposer **must not** infer decorative/informative/alt from nil, source alt,
   or provenance prose.
-- When a `PublicAttrDecision` / `ItemFieldDecision` is an image **source**
-  member, semantic-input validation **must** require a matching
-  `ImageAccessibilityDecision` (section 6.3); absence → `invalid_input`.
-  Wrong or incomplete policy maps → `invalid_input`. Reference-layer
-  accessibility mismatches on an otherwise valid pair → `needs_review`.
+- Reference validation enforces D3 `IMAGE_ACCESSIBILITY_VALIDATION_RULE` on
+  constructed pairs; failures → `needs_review` when intrinsic validation still
+  passes.
 
 ---
 
@@ -810,18 +865,28 @@ PROPOSER_OUTCOME_TAXONOMY =
     -> no ComponentContract / ComponentizationPlan pair
 
   construction_failed
-    -> semantic input valid, but ComponentContract.validate/1 or
-       ComponentizationPlan.validate/1 fails
-    -> MUST NOT occur when semantic-input validation mirrors section 6.3;
-       indicates proposer implementation defect if input was valid
+    -> semantic input valid, but intrinsic validation fails at step 12–13 or 18
+    -> no ComponentContract / ComponentizationPlan pair returned
+    -> transient construction diagnostics only; never copy onto artifacts
+    -> MUST NOT occur when semantic-input validation mirrors section 6.3 and the
+       proposer is correct; indicates implementation defect
 
   needs_review
-    -> pair constructed; both artifacts pass intrinsic validation; approval_status = needs_review
-    -> reference/coverage/accessibility/policy blockers and/or section 16.3 triggers
+    -> intrinsically valid pair returned (steps 12–13 and 18 pass)
+    -> final approval_status = needs_review
+    -> reference/coverage/accessibility/policy blockers per section 16.4
 
   proposed
-    -> pair constructed; intrinsic + reference validation pass; no blocking diagnostics;
-       approval_status = proposed
+    -> intrinsically and reference-valid pair returned
+    -> final approval_status = proposed
+```
+
+```text
+PROPOSER_RESULT_PAIR_RULE =
+  invalid_input -> contract = nil, plan = nil, input_diagnostics only
+  construction_failed -> contract = nil, plan = nil, construction_diagnostics only
+  needs_review -> contract != nil, plan != nil, both intrinsically valid
+  proposed -> contract != nil, plan != nil, both intrinsically valid
 ```
 
 Malformed decision shape, missing required decision fields, forbidden fields,
@@ -833,10 +898,10 @@ duplicate identity keys, contradictory assignments, and invalid
 
 | ProposerResult outcome | Meaning |
 | --- | --- |
-| `:invalid_input` | steps 1–2 or multi-root rule; **no candidate pair** |
-| `:construction_failed` | step 11–12 intrinsic failure after valid input (defect if input complete) |
-| `:needs_review` | pair assembled; `approval_status = needs_review` |
-| `:proposed` | pair assembled; `approval_status = proposed` |
+| `:invalid_input` | steps 1–2 or multi-root rule; **no pair** (§16.8) |
+| `:construction_failed` | steps 12–13 or 18 intrinsic failure; **no pair** |
+| `:needs_review` | pair returned; final `approval_status = needs_review` |
+| `:proposed` | pair returned; final `approval_status = proposed` |
 
 Ordinary semantic ambiguity uses `:needs_review`, not exceptions.
 
@@ -857,7 +922,8 @@ PROPOSER_APPROVAL_CLASSIFICATION_RULE =
     AND no generated or stored contract/plan diagnostic with severity error or fatal
     AND no mandatory semantic review trigger in section 16.4
 
-  OTHERWISE approval_status = needs_review (when a pair was constructed)
+  OTHERWISE final approval_status = needs_review (pair returned per
+  PROPOSER_RESULT_PAIR_RULE)
 ```
 
 Do **not** call `validate_for_generation` during proposal classification.
@@ -872,7 +938,6 @@ BINDING_BACKED_SLOT_PLAN_RULE
 STATIC_COLLECTION_ITEM_RULE
 UNSUPPORTED_NODE_RULE inside boundary
 STATIC_INTERNAL_IMAGE_RULE
-any optional input flag review_required = true on a decision record (explicit only)
 ```
 
 `MULTI_ROOT_PROPOSER_RULE` and missing required decision fields are
@@ -899,7 +964,8 @@ PROPOSER_DIAGNOSTIC_APPROVAL_RULE =
 | Conflicting assignments / evidence handling | `invalid_input` |
 | Decisions reference missing IR binding/node | `invalid_input` |
 | `multi_root_unsupported` | `invalid_input` (no pair) |
-| Constructed contract/plan fail intrinsic validation | `construction_failed` |
+| Constructed contract/plan fail intrinsic validation (steps 12–13 or 18) | `construction_failed` (no pair) |
+| ImageAccessibilityDecision / public-member accessibility mismatch | `invalid_input` |
 | Intrinsic-valid pair; reference/coverage/accessibility failures | `needs_review` |
 | Intrinsic-valid pair; all pass; no triggers | `proposed` |
 
@@ -907,15 +973,28 @@ PROPOSER_DIAGNOSTIC_APPROVAL_RULE =
 
 ```text
 SEMANTIC_INPUT_VALIDATION_RULE =
-  step 2 validates every section 6.3 record, section 6.4 uniqueness, section 6.6
-  evidence rules, and forbidden fields. Failures are invalid_input only.
+  step 2 validates every section 6.3 record, section 6.3.1 image-source and
+  accessibility consistency, section 6.4 uniqueness, section 6.6 evidence rules,
+  and forbidden fields (using the supplied DesignDocument). Failures are
+  invalid_input only.
 
 ARTIFACT_INTRINSIC_RULE =
-  steps 11–12 assume materialized fields satisfy ComponentContract and
-  ComponentizationPlan intrinsic validators. When input validation is correct,
-  steps 11–12 always succeed; failure is construction_failed and indicates a
-  proposer bug.
-```
+  steps 12–13 and 18 assume materialized fields satisfy intrinsic validators.
+  When semantic-input validation mirrors section 6.3, steps 12–13 succeed;
+  failure at 12–13 or 18 is construction_failed with no pair (proposer bug).
+
+### 16.8 `ProposerResult` fields (frozen API)
+
+| Field | `invalid_input` | `construction_failed` | `needs_review` | `proposed` |
+| --- | --- | --- | --- | --- |
+| `contract` | `nil` | `nil` | non-nil | non-nil |
+| `plan` | `nil` | `nil` | non-nil | non-nil |
+| `input_diagnostics` | non-empty allowed | empty | empty | empty |
+| `construction_diagnostics` | empty | non-empty allowed | empty | empty |
+| `outcome` | atom above | atom above | atom above | atom above |
+
+Persisted contract/plan diagnostics: only for `needs_review` and `proposed`,
+merged deterministically at step 17, never for failure outcomes.
 
 ---
 
@@ -964,17 +1043,22 @@ REVIEWER_APPROVAL_AUTHORITY =
 
 | Finding source | Owner | Persisted on |
 | --- | --- | --- |
-| Input shape / forbidden field | transient `ProposerResult.input_diagnostics` | not serialized as artifact |
-| Intrinsic contract failure | transient construction diagnostics | optional copy to contract.diagnostics |
-| Intrinsic plan failure | transient | optional copy to plan.diagnostics |
-| IR reference contract | `ComponentContract.Diagnostic` | contract.diagnostics |
-| IR reference plan | `ComponentizationPlan.Diagnostic` | plan.diagnostics |
-| Semantic review triggers | both per D1/D3 code families | respective artifact |
+| Input shape / forbidden field | `ProposerResult.input_diagnostics` | never on artifacts |
+| Intrinsic failure (steps 12–13, 18) | `ProposerResult.construction_diagnostics` | never on artifacts |
+| IR reference / policy blockers | `ComponentContract.Diagnostic` / `ComponentizationPlan.Diagnostic` | `contract.diagnostics` / `plan.diagnostics` only when pair returned (`needs_review` or `proposed`) |
+| Evidence omit (§6.6) | contract + plan codes | contract/plan when pair returned |
+
+```text
+PROPOSER_DIAGNOSTIC_PERSISTENCE_RULE =
+  invalid_input and construction_failed never attach diagnostics to contract or
+  plan structs because no pair is returned; determinism requires a single
+  canonical merge at step 17 for successful pair outcomes only
+```
 
 No third serialized diagnostic artifact. Provenance remains audit-only;
 structured fields on contract/plan/decisions win on conflict.
 
-Suggested proposer-only transient codes (not stored on artifacts unless copied):
+Transient proposer codes (never stored on artifacts):
 
 ```text
 componentization_proposer.input.invalid
@@ -992,22 +1076,21 @@ Exact order (matches §8):
 
 ```text
 1. LiveFrames.IR.validate/1
-2. semantic input validate (sections 6.3, 6.4, 6.6)
-3. construct contract + plan (canonical output order §6.5)
-4–10. materialization substeps inside construction (§8)
-11. ComponentContract.validate/1
-12. ComponentizationPlan.validate/1
-13. ComponentContract.validate_ir_references/2
-14. ComponentizationPlan.validate_references/3
-15. classify proposed vs needs_review (§16)
+2. semantic input validate (sections 6.3, 6.3.1, 6.4, 6.6) with DesignDocument
+3–11. construct contract (provisional :proposed) + plan per §8
+12–13. intrinsic validate; failure → construction_failed, no pair
+14–15. reference validate (diagnostics generated, not yet merged)
+16. classify outcome and final approval_status
+17. merge + sort diagnostics on returned pair only
+18. final intrinsic validate; failure → construction_failed, no pair
 ```
 
 **Never** invoke `ComponentContract.validate_for_generation/2` or
 `ComponentizationPlan.validate_for_generation/3` as part of proposal success.
 
-Failures in steps 11–12 → `construction_failed` (section 16.7). Failures in
-steps 13–14 with valid intrinsic → `needs_review` (unless steps 1–2 already
-returned `invalid_input`).
+Failures in steps 12–13 or 18 → `construction_failed`, no pair (§16.8). Failures
+in steps 14–15 with passing intrinsic → `needs_review` pair (unless steps 1–2
+already returned `invalid_input`).
 
 ---
 
@@ -1064,7 +1147,9 @@ Do not scan the full IR tree per decision.
 | boundary-crossing collection | | yes | `componentization_plan.boundary.binding_crosses` | plan |
 | nested collection parent missing | yes | | input / construction | transient |
 | static internal image | | yes | STATIC_INTERNAL_IMAGE (plan) | plan |
-| image policy missing | | yes | `componentization_plan.accessibility.*` | plan |
+| image source missing ImageAccessibilityDecision at input | yes | | `componentization_proposer.input.missing_decision` | transient |
+| image accessibility map mismatch (decision vs attr/field) | yes | | `componentization_proposer.input.conflict` | transient |
+| image policy invalid at reference validation | | yes | `componentization_plan.accessibility.*` | plan |
 | consumer alt target mismatch | | yes | alt mismatch codes | plan |
 | binding-backed slot | | yes | `componentization_plan.slot.binding_backed_unsupported` | plan |
 | subtree slot hides bindings | | yes | `componentization_plan.slot.subtree_conflict` | plan |
@@ -1110,7 +1195,7 @@ Generalization is via decision records, not special cases.
 | Map ordering alters output? | Section 6.4 input sort + section 6.5 output sort. |
 | Bypass D1/D3 validation? | Proposer calls existing validators; no duplicate weakened rules. |
 | `needs_review` vs malformed? | §16.1 taxonomy and §16.6 table. |
-| Accidental `approved`? | `PROPOSER_APPROVAL_RULE` forbids; construction sets only proposed/needs_review. |
+| Accidental `approved`? | `PROPOSER_APPROVAL_RULE`; provisional `:proposed` only until step 16. |
 | Duplicate artifact? | No serialized proposal wrapper; pair only. |
 | New serialized decision artifact? | Not required; compile-time input only. |
 | Collection/accessibility edge cases? | §13–14, D3 §10, failure matrix. |
@@ -1183,8 +1268,19 @@ EVIDENCE_HANDLING_INPUT_RULE = §6.6; assignment + evidence_insufficient ->
 STATIC_PROMOTION_INPUT_RULE = promotion requires Public*Decision or explicit
   disposition; STATIC_DEFAULT_RULE preserved
 
-IMAGE_ACCESSIBILITY_INPUT_RULE = ImageAccessibilityDecision required for
-  admitted image sources; D3 closed maps only
+IMAGE_SOURCE_MEMBER_RULE = §6.3.1
+
+IMAGE_ACCESSIBILITY_DECISION_CONSISTENCY_RULE = §6.3.1
+
+IMAGE_ACCESSIBILITY_INPUT_RULE = §6.3.1; D3 closed maps only
+
+PROPOSER_PROVISIONAL_APPROVAL_STATUS_RULE = §8
+
+PROPOSER_FINAL_INTRINSIC_VALIDATE_RULE = §8
+
+PROPOSER_RESULT_PAIR_RULE = §16.1 / §16.8
+
+PROPOSER_DIAGNOSTIC_PERSISTENCE_RULE = §18
 
 BINDING_BACKED_SLOT_PROPOSER_RULE = BINDING_BACKED_SLOT_PLAN_RULE -> needs_review
 
@@ -1195,7 +1291,7 @@ PLAN_LIFECYCLE_RULE = restated; plan valid | invalid only
 
 REVIEWER_APPROVAL_AUTHORITY = §17.4
 
-PROPOSER_RESULT_MODEL = process-only outcome + optional pair + transient diagnostics
+PROPOSER_RESULT_MODEL = §16.8; pair only for proposed | needs_review
 ```
 
 ---
