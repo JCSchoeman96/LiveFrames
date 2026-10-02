@@ -931,7 +931,7 @@ Do **not** call `validate_for_generation` during proposal classification.
 ### 16.4 Mandatory `needs_review` triggers (pair must be intrinsic-valid)
 
 ```text
-any blocking diagnostic from steps 13–14 (reference validation)
+any blocking diagnostic from steps 14–15 (reference validation)
 in-boundary evidence_insufficient binding (with or without
   EvidenceHandlingDecision omit_public_projection) — never :proposed
 BINDING_BACKED_SLOT_PLAN_RULE
@@ -982,6 +982,7 @@ ARTIFACT_INTRINSIC_RULE =
   steps 12–13 and 18 assume materialized fields satisfy intrinsic validators.
   When semantic-input validation mirrors section 6.3, steps 12–13 succeed;
   failure at 12–13 or 18 is construction_failed with no pair (proposer bug).
+```
 
 ### 16.8 `ProposerResult` fields (frozen API)
 
