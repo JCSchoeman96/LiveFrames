@@ -125,8 +125,9 @@ identity link between plan and contract.
 ```text
 CONTRACT_STALENESS_RULE =
   plan invalid when referenced contract_id differs from the supplied contract,
-  or when current render-relevant public API semantics referenced by the plan
-  no longer satisfy the plan's role/type/coverage rules
+  or when the supplied ComponentContract no longer satisfies
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE, role matrices, or
+  IMAGE_ACCESSIBILITY_VALIDATION_RULE referenced by the plan
 ```
 
 Examples that invalidate placement compatibility:
@@ -136,7 +137,8 @@ referenced attr or slot removed
 referenced attr type changed incompatibly with render_role
 slot cardinality changed incompatibly with subtree_slot
 public target now binding-backed while plan also contains RenderProjection
-required placement coverage changes
+PUBLIC_TOP_LEVEL_PLACEMENT_RULE no longer satisfied
+IMAGE_ACCESSIBILITY_VALIDATION_RULE no longer satisfied
 design_document_sha256 mismatch
 ```
 
@@ -418,6 +420,12 @@ combinations:
 RENDER_ROLE_COLOCATION_RULE =
   heading node: at most one text_content; at most one heading_level
   image node: at most one asset_src; at most one asset_alt
+  IMAGE_ALT_SAME_NODE_RULE =
+    consumer_supplied image policy -> asset_src (BindingProjection or
+    RenderProjection) and matching asset_alt RenderProjection on the same
+    image target_node_id;
+    decorative image policy -> asset_src placement only; no asset_alt
+    RenderProjection on that image node
   link node: at most one link_url
   boundary node (boundary_node_id): at most one root_id; at most one
     root_class; at most one root_global_attrs
@@ -453,21 +461,70 @@ composition requires later authority.
 
 ## 7. Public render link coverage
 
-For generation eligibility, every public input that affects rendered output must
-have exactly one structured placement source:
+`ComponentContract` format `1.0.0` has no field that classifies a public `Attr`
+or `Slot` as rendering vs non-rendering. Plan `1.0.0` therefore must not
+require a later implementation to infer that distinction.
 
 ```text
-BindingProjection
-OR
-RenderProjection
+PUBLIC_TOP_LEVEL_PLACEMENT_RULE =
+  every ComponentContract.public_attrs entry and every
+  ComponentContract.public_slots entry must have exactly one structured
+  placement source:
+
+  exactly one matching BindingProjection
+  XOR
+  exactly one matching RenderProjection
+
+PUBLIC_ATTR_ZERO_PLACEMENT_POLICY =
+  zero BindingProjection and zero RenderProjection for a public attr -> invalid
+
+PUBLIC_SLOT_ZERO_PLACEMENT_POLICY =
+  zero BindingProjection and zero RenderProjection for a public slot -> invalid
+
+PUBLIC_MULTIPLE_PLACEMENT_POLICY =
+  more than one BindingProjection, more than one RenderProjection, or both
+  kinds for the same public target -> invalid
 ```
 
-unless proven non-rendering metadata.
+There is no first-wave exemption for:
+
+```text
+non-rendering public attr
+metadata-only public slot
+```
+
+If a future public configuration attr would affect rendering through a mechanism
+not covered by the current render-role vocabulary (for example `image_position`,
+`overlay_variant`, or `layout_variant`):
+
+```text
+NEEDS_REVIEW
+```
+
+until a later render-role authority defines that mechanism.
+
+Reference validation indexes public targets and computes, per
+`{:attr, public_attr_name}` or `{:slot, public_slot_name}`:
+
+```text
+binding_projection_count
+render_projection_count
+```
+
+Require:
+
+```text
+(binding_projection_count == 1 AND render_projection_count == 0)
+OR
+(binding_projection_count == 0 AND render_projection_count == 1)
+```
+
+All other combinations are invalid.
 
 ```text
 PUBLIC_RENDER_LINK_XOR_RULE =
-  the same public attr or slot must not be simultaneously driven by
-  BindingProjection and RenderProjection in first-wave authority
+  complete top-level coverage per PUBLIC_TOP_LEVEL_PLACEMENT_RULE;
+  not only conflict prevention between BindingProjection and RenderProjection
 ```
 
 Binding-backed members obtain target node, binding scope, target kind, and
@@ -478,22 +535,21 @@ evidence; no public name is inferred from it.
 ```text
 UNBOUND_PUBLIC_INPUT_RULE =
   a public attr or slot without a Design IR binding is permitted when semantic
-  review proves the reusable API; when the generator must know where it
-  renders, an explicit RenderProjection is required; absence of RenderProjection
-  means the generator must not guess
+  review proves the reusable API; it must still satisfy
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE through exactly one RenderProjection; absence
+  of that RenderProjection is invalid, not an invitation to guess
 ```
 
-Unused `RenderProjection` records (public target not in contract, or target
-not used for generation) fail reference validation.
+Unused `RenderProjection` records whose public target is not a contract member
+fail reference validation.
 
 ### 7.1 Placement ownership split
 
 ```text
 BindingProjection coverage owns:
-  collection attrs
-  item fields
+  top-level collection attrs and top-level count attrs (public attrs)
+  collection item fields (via item_field projections, not RenderProjection)
   nested collections
-  counts
   binding-backed slots
   binding-backed scalar attrs
 
@@ -502,6 +558,11 @@ RenderProjection coverage owns:
 
 No public item field may use RenderProjection in plan 1.0.0.
 ```
+
+`CollectionInput.item_fields`, nested collection fields, and collection counts
+represented as item fields are **not** subject to
+`PUBLIC_TOP_LEVEL_PLACEMENT_RULE`. They remain governed by `CollectionInput`,
+`BindingProjection`, and `IN_BOUNDARY_BINDING_COVERAGE_RULE`.
 
 ### 7.2 In-boundary binding coverage
 
@@ -567,10 +628,12 @@ STATIC_DEFAULT_RULE =
   defaults must satisfy D1 genuinely reusable rules
 
 INTERNAL_CONSTANT_RULE =
-  a node with no BindingProjection or RenderProjection may retain Design IR
-  content as an internal generated value when content is supported, semantics
-  are complete, the value is not consumer-owned, and behavior is not concealed;
-  do not create a fake attr merely to preserve literal text
+  a non-image node with no BindingProjection or RenderProjection may retain
+  Design IR content as an internal generated value when content is supported,
+  semantics are complete, the value is not consumer-owned, and behavior is not
+  concealed; do not create a fake attr merely to preserve literal text;
+  an in-boundary image node without authorized public asset-source placement is
+  not an ordinary internal constant (see STATIC_INTERNAL_IMAGE_RULE)
 ```
 
 ## 9. Root extension attrs
@@ -597,11 +660,119 @@ ACTION_SLOT_RULE =
   consumer-owned actions remain slots; subtree_slot follows
   SUBTREE_SLOT_OWNERSHIP_RULE; the plan must not invent navigate, patch,
   phx-click, event names, server handlers, JS commands, or Ash actions
+```
 
-IMAGE_ACCESSIBILITY_RULE =
-  asset_src alone does not prove alt contract; generation eligibility requires
-  truthful informative or decorative consumer policy on ComponentContract;
-  do not infer decorative alt="" from RenderProjection
+### 10.1 Image accessibility representation
+
+Do not change `ComponentContract` schema. Use the existing `Attr.accessibility`
+JSON map on the **asset source** public attr.
+
+An asset source is any public attr whose rendered image source is established by
+either a `BindingProjection` to an image node or a `RenderProjection` with
+`render_role = asset_src`.
+
+```text
+IMAGE_SOURCE_BINDING_POLICY =
+  binding-backed image source: image node from BindingProjection.target_node_id
+  plus referenced ValueBinding semantics; accessibility map on source public attr
+
+IMAGE_SOURCE_RENDER_PROJECTION_POLICY =
+  unbound image source: RenderProjection(render_role = asset_src) on image node;
+  accessibility map on that source public attr
+```
+
+Both paths require `IMAGE_ACCESSIBILITY_VALIDATION_RULE`. Binding-backed sources
+do not bypass accessibility validation.
+
+Plan `1.0.0` admits exactly two policies.
+
+#### Consumer-supplied alt
+
+```text
+CONSUMER_SUPPLIED_ALT_POLICY =
+  source Attr.accessibility = %{
+    "image_alt_policy" => "consumer_supplied",
+    "alt_attr_name" => "<public attr name>",
+    "required_when_source_present" => true
+  }
+```
+
+Require:
+
+```text
+alt_attr_name resolves to an existing public_attrs entry with type :string
+
+named alt attr satisfies PUBLIC_TOP_LEVEL_PLACEMENT_RULE through exactly one
+asset_alt RenderProjection on the same image target_node_id as the asset source
+
+when image source renders -> consumer must supply a binary alt value at runtime
+(empty string = deliberate decorative for that invocation; non-empty = informative;
+do not infer either from nil)
+```
+
+#### Decorative image
+
+```text
+DECORATIVE_ALT_POLICY =
+  source Attr.accessibility = %{
+    "image_alt_policy" => "decorative"
+  }
+
+no alt_attr_name key
+no asset_alt RenderProjection for that image node
+later generation emits alt="" as explicit decorative output
+```
+
+Do not derive decorative semantics from nil, missing accessibility metadata,
+empty source alt, source-editor defaults, or provenance prose.
+
+#### Invalid policies
+
+These block plan reference validation (`IMAGE_ACCESSIBILITY_VALIDATION_RULE`):
+
+```text
+missing image_alt_policy
+unknown image_alt_policy
+consumer_supplied without alt_attr_name
+consumer_supplied without required_when_source_present = true
+alt_attr_name missing from public_attrs
+alt attr type not :string
+asset_alt projection on a different image node than the source
+multiple asset_alt RenderProjections for the same source image
+decorative policy with alt_attr_name
+decorative policy with asset_alt RenderProjection
+```
+
+Use diagnostics under `componentization_plan.accessibility.*`:
+
+```text
+componentization_plan.accessibility.image_policy_missing
+componentization_plan.accessibility.image_policy_invalid
+componentization_plan.accessibility.alt_attr_missing
+componentization_plan.accessibility.alt_projection_mismatch
+```
+
+```text
+IMAGE_ACCESSIBILITY_REPRESENTATION_RULE =
+  closed first-wave keys inside existing Attr.accessibility on asset source attrs
+
+IMAGE_ACCESSIBILITY_VALIDATION_RULE =
+  reference validation enforces CONSUMER_SUPPLIED_ALT_POLICY or
+  DECORATIVE_ALT_POLICY for every authorized asset source; no arbitrary
+  provenance satisfies accessibility validation
+```
+
+#### Static internal images
+
+```text
+STATIC_INTERNAL_IMAGE_RULE =
+  an in-boundary DesignNode with semantic_type = image that is not replaced by
+  subtree_slot and is not represented by an authorized public asset-source
+  placement (BindingProjection or asset_src RenderProjection) blocks plan 1.0.0
+  generation eligibility -> NEEDS_REVIEW
+
+do not inspect DesignNode.attributes, SourceTrace, source HTML, or source-editor
+alt fields to invent static accessibility policy in C09D3
 ```
 
 ```text
@@ -796,6 +967,11 @@ componentization_plan.binding.evidence_insufficient
 componentization_plan.public_input.placement_missing
 componentization_plan.public_input.placement_conflict
 
+componentization_plan.accessibility.image_policy_missing
+componentization_plan.accessibility.image_policy_invalid
+componentization_plan.accessibility.alt_attr_missing
+componentization_plan.accessibility.alt_projection_mismatch
+
 componentization_plan.unsupported_node
 componentization_plan.metadata.invalid
 componentization_plan.generation_blocked
@@ -821,18 +997,20 @@ PLAN_INTRINSIC_VALIDATION_RULE =
 PLAN_REFERENCE_VALIDATION_RULE =
   against exact ComponentizationPlan + ComponentContract + DesignDocument:
   recompute design_document_sha256 and require exact match first
-  contract_id equality and CONTRACT_STALENESS_RULE render-relevant checks
+  contract_id equality and CONTRACT_STALENESS_RULE checks against exact
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE, role matrices, and
+  IMAGE_ACCESSIBILITY_VALIDATION_RULE
   boundary node exists; build boundary membership index once
   RenderProjection targets exist and lie in boundary
   exact RENDER_ROLE_TYPE_COMPATIBILITY matrix
   exact RENDER_ROLE_NODE_COMPATIBILITY matrix
-  RENDER_ROLE_COLOCATION_RULE
+  RENDER_ROLE_COLOCATION_RULE and IMAGE_ALT_SAME_NODE_RULE
   SUBTREE_SLOT_OWNERSHIP_RULE and binding-descendant exclusion
   BindingProjection targets lie in boundary
   IN_BOUNDARY_BINDING_COVERAGE_RULE
-  PUBLIC_RENDER_LINK_XOR_RULE and render-relevant public member coverage
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE with per-target binding/render counts
+  IMAGE_ACCESSIBILITY_VALIDATION_RULE and STATIC_INTERNAL_IMAGE_RULE
   UNSUPPORTED_NODE_RULE fail closed
-  no BindingProjection/RenderProjection ownership conflict
 
 REFERENCE_VALIDATION_COMPLEXITY =
   O(IR nodes + IR bindings + contract records + plan records + references);
@@ -931,7 +1109,7 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Static heading promoted to attr | static IR text + semantic review | No | Yes | `text_content` | `heading` | No | type/node mismatch |
 | Static paragraph promoted to attr | static IR text | No | Yes | `text_content` | `paragraph` or `rich_text` | No | type/node mismatch |
 | `heading_level` config | semantic review | No | Yes | `heading_level` | heading | No | type/validation |
-| Consumer `image_alt` | accessibility policy | No | Yes | `asset_alt` | image | No | missing informative/decorative policy |
+| Consumer `image_alt` | `consumer_supplied` policy | No | Yes | `asset_alt` | same image as source | No | accessibility / same-node |
 | Root `id` | integration need | No | Yes | `root_id` | boundary only | No | non-boundary target |
 | Root `class` | additive styling | No | Yes | `root_class` | boundary only | No | source class as API |
 | Root global attrs (`rest`) | Phoenix :global | No | Yes | `root_global_attrs` | boundary only | No | wrong type |
@@ -948,21 +1126,31 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | `subtree_slot` with binding-backed descendant | ValueBinding/CollectionBinding in subtree | — | Yes invalid | `subtree_slot` | actions/button/link | No | `slot.subtree_conflict` |
 | Plan vs different DesignDocument, same node IDs | path-based IDs collide | — | — | — | — | No | `design_document.mismatch` |
 | Structured media attr `:map` request | semantic review | No | No in 1.0.0 | — | — | No | role/type matrix |
+| Public attr with zero placement | top-level attr | No | No | — | — | No | `public_input.placement_missing` |
+| Public slot with zero placement | top-level slot | No | No | — | — | No | `public_input.placement_missing` |
+| Public attr with both placements | conflict | Yes | Yes | — | — | No | `public_input.placement_conflict` |
+| Binding-backed image + consumer alt | BindingProjection + policy map | Yes source | Yes alt | `asset_src` / `asset_alt` | same image node | No when complete | accessibility codes |
+| Unbound `asset_src` + consumer alt | RenderProjection + policy map | No source | Yes | `asset_src` / `asset_alt` | same image node | No when complete | same |
+| Decorative public image source | `decorative` policy | Yes or RenderProjection | No alt projection | `asset_src` | image | No when complete | alt projection forbidden |
+| Image source missing accessibility metadata | no `image_alt_policy` | — | — | — | image | No | `accessibility.image_policy_missing` |
+| Consumer alt on wrong image node | policy map | — | Yes invalid | `asset_alt` | wrong node | No | `accessibility.alt_projection_mismatch` |
+| Static internal image, no public source | internal image node | No | No | — | image | No | `STATIC_INTERNAL_IMAGE_RULE` |
 
 ## 19. Edge cases and resulting rules
 
 The following cases are encoded in the authority above, not deferred to an
 informal risk list:
 
-- **Multiple headings/images/action groups inside boundary:** each render-relevant
-  public input still requires exactly one placement source; duplicate public
-  targets or duplicate nodes for different attrs require explicit separate
-  contract members and non-conflicting projections.
+- **Multiple headings/images/action groups inside boundary:** each top-level
+  public attr and slot satisfies `PUBLIC_TOP_LEVEL_PLACEMENT_RULE`; duplicate
+  public targets or invalid role co-location remain invalid.
 - **Same public attr mapped to two nodes:** invalid (duplicate public target).
 - **Same node mapped by two public attrs:** allowed only when contract defines
   two distinct public attrs and roles/types are compatible without ambiguity.
 - **Public target in both BindingProjection and RenderProjection:** invalid
-  (`PUBLIC_RENDER_LINK_XOR_RULE`).
+  (`PUBLIC_MULTIPLE_PLACEMENT_POLICY`).
+- **Top-level public attr or slot with zero placements:** invalid
+  (`PUBLIC_TOP_LEVEL_PLACEMENT_RULE`).
 - **RenderProjection outside boundary:** invalid reference validation.
 - **Boundary inside a collection repeat root or containing nested
   CollectionBindings:** allowed only when `IN_BOUNDARY_BINDING_COVERAGE_RULE`
@@ -972,16 +1160,20 @@ informal risk list:
 - **Slot target subtree contains binding-backed descendants:** invalid in plan
   1.0.0 (`SUBTREE_SLOT_BINDING_DESCENDANT_POLICY`); do not combine slot output
   with separately emitted binding-backed descendants.
-- **Image source without accessibility contract:** blocks generation
-  (`IMAGE_ACCESSIBILITY_RULE`).
+- **Image source without structured accessibility policy:** blocks generation
+  (`IMAGE_ACCESSIBILITY_VALIDATION_RULE`).
+- **Static internal image without public asset-source placement:** blocks plan
+  1.0.0 (`STATIC_INTERNAL_IMAGE_RULE`).
 - **Fixture literal as public default:** forbidden (`STATIC_DEFAULT_RULE`).
 - **Source label as public name:** forbidden (`PUBLIC_NAMING_RULE`).
 - **Interaction-bearing node projected as plain text:** invalid role/node pairing.
-- **Public attr with no structured placement:** blocks generation (coverage rule).
+- **Public attr with no structured placement:** invalid
+  (`PUBLIC_ATTR_ZERO_PLACEMENT_POLICY`).
+- **Stale plan vs changed contract:** `CONTRACT_STALENESS_RULE` when current
+  contract no longer satisfies exact placement, role, or accessibility validation;
+  review-only metadata changes alone do not.
 - **Stale plan vs changed DesignDocument:** `design_document_sha256` mismatch ->
   invalid.
-- **Stale plan vs changed contract:** `CONTRACT_STALENESS_RULE` render-relevant
-  semantic changes -> invalid; review-only metadata changes alone do not.
 
 ## 20. Expected future sequence
 
@@ -1046,8 +1238,10 @@ DESIGN_DOCUMENT_IDENTITY_RULE =
   DesignDocument; reference validation recomputes before trusting nodes
 
 CONTRACT_STALENESS_RULE =
-  invalid on contract_id mismatch or render-relevant public API semantic change;
-  not on approval_status/diagnostics alone
+  invalid on contract_id mismatch or when the supplied ComponentContract no
+  longer satisfies PUBLIC_TOP_LEVEL_PLACEMENT_RULE, role matrices, or
+  IMAGE_ACCESSIBILITY_VALIDATION_RULE referenced by the plan; not on
+  approval_status/diagnostics alone
 
 PLAN_PUBLIC_API_AUTHORITY_RULE =
   ComponentContract sole public API authority; plan placement only; no silent
@@ -1116,17 +1310,21 @@ BINDING_RENDER_DUPLICATION_RULE =
   no RenderProjection for binding-backed public targets
 
 PUBLIC_RENDER_LINK_XOR_RULE =
-  BindingProjection XOR RenderProjection per public attr/slot
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE: exactly one BindingProjection XOR exactly
+  one RenderProjection per top-level public attr/slot
+
+PUBLIC_TOP_LEVEL_PLACEMENT_RULE = section 7
 
 UNBOUND_PUBLIC_INPUT_RULE =
-  RenderProjection required when generator needs placement; no guessing
+  unbound public attr/slot still requires exactly one RenderProjection under
+  PUBLIC_TOP_LEVEL_PLACEMENT_RULE
 
 STATIC_CONTENT_PROMOTION_RULE = see section 8
 
 STATIC_DEFAULT_RULE =
   source literals do not auto-become public defaults
 
-INTERNAL_CONSTANT_RULE = see section 8
+INTERNAL_CONSTANT_RULE = see section 8; excludes unprojected image nodes
 
 ROOT_ID_RULE = root_id on boundary_node_id only
 
@@ -1136,7 +1334,24 @@ ROOT_GLOBAL_ATTR_RULE = root_global_attrs on boundary_node_id only
 
 ACTION_SLOT_RULE = subtree_slot only; no invented behavior
 
-IMAGE_ACCESSIBILITY_RULE = contract policy required; no inferred decorative alt
+IMAGE_ACCESSIBILITY_RULE =
+  IMAGE_ACCESSIBILITY_REPRESENTATION_RULE + IMAGE_ACCESSIBILITY_VALIDATION_RULE
+
+IMAGE_ACCESSIBILITY_REPRESENTATION_RULE = section 10.1
+
+IMAGE_ACCESSIBILITY_VALIDATION_RULE = section 10.1
+
+CONSUMER_SUPPLIED_ALT_POLICY = section 10.1
+
+DECORATIVE_ALT_POLICY = section 10.1
+
+STATIC_INTERNAL_IMAGE_RULE = section 10.1
+
+IMAGE_SOURCE_BINDING_POLICY = section 10.1
+
+IMAGE_SOURCE_RENDER_PROJECTION_POLICY = section 10.1
+
+IMAGE_ALT_SAME_NODE_RULE = section 6.3
 
 COLLECTION_RENDER_PROJECTION_RULE =
   collections via bindings/projections only
