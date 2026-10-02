@@ -739,16 +739,30 @@ This is not a new nested-count projection kind and is never flattened.
 #### `slot`
 
 `slot` is an explicit reviewed projection only. For first-wave binding
-projections its source kind is `value`, and the source `ValueBinding` is
-normalized or has an explicit reviewed resolution before it is deliberately
-projected to consumer-owned markup or another reviewed semantic component
-role. `public_slot_name` is present, while `public_attr_name`,
-`item_field_name`, and `parent_item_field_name` are nil. The named slot exists
-in `public_slots`. Ordinary `ValueBinding` records do not become slots by
-default. A reviewed public slot without a Design IR binding needs no fake
-binding ID or projection record.
+projections use a site-scoped field binding:
 
-### 12.4 Public-target exclusivity and provenance
+```text
+projection_kind = slot
+source_binding_kind = value
+ValueBinding.value_kind = field
+ValueBinding.scope = site
+ValueBinding.collection_binding_id = nil
+```
+
+`public_slot_name` is present, while `public_attr_name`, `item_field_name`,
+`parent_item_field_name`, `source_collection_binding_id`, and
+`parent_collection_binding_id` are nil. The named slot exists in
+`public_slots`, and the target is `ValueBinding.target_node_id`.
+
+The first-wave slot is a component-level consumer-owned markup surface. A
+collection-item ValueBinding remains an ItemField in its CollectionInput and
+cannot use `projection_kind = slot`. A `scope = collection` binding also
+cannot use `slot`, and a `collection_count` binding cannot become a slot. A
+future repeated collection-backed slot requires separate authority. A
+reviewed public slot without a Design IR binding needs no fake binding ID or
+projection record.
+
+### 12.4 Public-target and collection-reference exclusivity
 
 Each projection has exactly one public target family:
 
@@ -757,7 +771,8 @@ scalar_attr | collection_attr | collection_count_attr
   -> public_attr_name only
 
 slot
-  -> public_slot_name only
+  -> public_slot_name only, with source_collection_binding_id and
+     parent_collection_binding_id nil
 
 ordinary collection_item_field from a ValueBinding
   -> item_field_name only
@@ -767,7 +782,8 @@ nested collection or nested collection-count collection_item_field
 ```
 
 Mutually incompatible public-target fields are not accepted, and validators do
-not apply silent precedence.
+not apply silent precedence. A slot projection with either collection
+reference is invalid.
 
 `BindingProjection` is the sole structured binding-to-public-input linkage
 authority:
@@ -849,11 +865,14 @@ Intrinsic validation does not require Design IR. It checks:
   family from section 12;
 - projection fields are mutually exclusive according to their projection
   kind, with no generic public-target fallback or silent precedence;
+- a `slot` projection has `public_slot_name` only and rejects
+  `source_collection_binding_id`, `parent_collection_binding_id`,
+  `public_attr_name`, `item_field_name`, and `parent_item_field_name`;
 - every referenced public attr, public slot, parent input, collection input,
   and item field exists within the contract;
 - slot cardinality and consumer responsibility are present;
 - no public universal props/data/bindings map is required;
-- no public name contains prohibited source vocabulary; and
+- no public name contains prohibited source vocabulary;
 - image inputs have an explicit accessibility policy;
 - unsupported bindings are not silently promoted;
 - `approval_status` agrees with blocking diagnostics;
@@ -882,6 +901,8 @@ IR reference validation requires the exact `DesignDocument`. It checks:
   normalization fields;
 - scalar, ordinary item-field, count, nested collection, and slot projections
   satisfy their source-binding-specific rules;
+- a `slot` projection resolves a value binding with `value_kind = field`,
+  `scope = site`, and `collection_binding_id = nil`;
 - collection ownership, parent/root semantics, and nested parent fields match
   the referenced Design IR records;
 - every referenced binding ID and node ID exists; and
@@ -1218,16 +1239,29 @@ NESTED_COUNT_RULE = a nested collection count keeps collection_item_field with
   references an integer non-negative parent ItemField through the child
   count_item_field_name. It is never flattened or given a new projection kind.
 
-SLOT_PROJECTION_RULE = slot is an explicit reviewed value projection with
-  public_slot_name only and an existing public slot. Ordinary ValueBindings do
-  not become slots automatically, and a reviewed unbound slot needs no fake
-  binding ID.
+SLOT_PROJECTION_RULE = slot is an explicit reviewed projection with
+  source_binding_kind value, value_kind field and scope site,
+  collection_binding_id nil,
+  source_collection_binding_id nil, parent_collection_binding_id nil,
+  public_slot_name present, public_attr_name nil, item_field_name nil,
+  parent_item_field_name nil, an existing public slot, and target
+  ValueBinding.target_node_id. Ordinary ValueBindings do not become slots
+  automatically, and a reviewed unbound slot needs no fake binding ID.
+
+COLLECTION_ITEM_SLOT_POLICY = a collection-item ValueBinding remains an
+  ItemField in its CollectionInput and cannot use projection_kind slot in
+  format 1.0.0. A future repeated collection-backed slot requires separate
+  authority.
+
+COLLECTION_COUNT_SLOT_POLICY = a collection_count ValueBinding cannot use
+  projection_kind slot. Root counts use collection_count_attr and nested counts
+  use collection_item_field.
 
 PUBLIC_TARGET_EXCLUSIVITY_RULE = attr projection kinds use public_attr_name
-  only, slot uses public_slot_name only, ordinary value collection-item fields
-  use item_field_name only, and nested collection or nested-count fields use
-  parent_item_field_name only. Mutually incompatible fields are invalid and
-  have no silent precedence.
+  only, slot uses public_slot_name only with both collection reference fields
+  nil, ordinary value collection-item fields use item_field_name only, and
+  nested collection or nested-count fields use parent_item_field_name only.
+  Mutually incompatible fields are invalid and have no silent precedence.
 
 INTRINSIC_VALIDATION_RULE = without Design IR, validate contract shapes,
   enums, unique public names, collection location XOR and graph, attr/item/
