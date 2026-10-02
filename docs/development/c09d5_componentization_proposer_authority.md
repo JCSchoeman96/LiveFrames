@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D5-A
 
-**Plan version:** v1
+**Plan version:** v2
 
 **Scope:** freeze explicit semantic-decision input model and proposer construction
 rules; no proposer production code in this slice
@@ -28,6 +28,9 @@ non-authoritative examples only.
 
 - `v1` — initial C09D5-A authority: semantic input model, derivation matrix,
   proposer lifecycle, outcome rules, failure modes, decision register
+- `v2` — freeze EvidenceHandlingDecision outcomes, canonical decision/output
+  ordering, complete decision-record field shapes, outcome taxonomy, multi-root
+  behavior (PR #122 review)
 
 ---
 
@@ -110,7 +113,7 @@ C09D5 -> proposal construction using explicit semantic decision inputs
 ```text
 source design
   -> normalized DesignDocument (LiveFrames.IR.validate/1)
-  -> explicit semantic componentization decisions (compile-time input; section 7)
+  -> explicit semantic componentization decisions (compile-time input; section 6)
   -> proposer (C09D5-B)
   -> ComponentContract + ComponentizationPlan candidate pair
   -> human/reviewer approval on ComponentContract only
@@ -127,7 +130,7 @@ approval and generation are downstream.
 | Concept | Identity | Owner | Lifecycle / terminal state |
 | --- | --- | --- | --- |
 | `DesignDocument` | IR document value; node IDs path-scoped per document | Design IR | validated or invalid; fingerprint via `ComponentizationPlan.design_document_sha256/1` |
-| `ComponentizationSemanticInput` | compile-time input bundle (section 7); **not serialized** | proposer caller / review tooling | valid or invalid input; no approval state |
+| `ComponentizationSemanticInput` | compile-time input bundle (section 6); **not serialized** | proposer caller / review tooling | valid or invalid input; no approval state |
 | `ComponentContract` | `contract_id` | persisted compiler artifact | `approval_status`: proposed, needs_review, approved, rejected — **proposer may set only proposed or needs_review** |
 | `ComponentizationPlan` | `(contract_id, design_document_sha256)` link | persisted compiler artifact | structurally/reference valid or invalid; **no approval_status** |
 | `BindingProjection` | `(source_binding_kind, source_binding_id, projection_kind, public target fields)` | ComponentContract | no independent status (D1) |
@@ -209,29 +212,32 @@ authority slice**; C09D5-B must not invent one silently.
 
 ### 6.2 Input bundle shape
 
-`ComponentizationSemanticInput` contains **ordered, typed decision records**.
-Serialization order of maps in the host language is irrelevant; the proposer
-**must** sort each decision list by a stable key before construction (section 21).
+`ComponentizationSemanticInput` contains typed decision records in caller-supplied
+lists. Host-language map/list order is **not** authoritative. Before construction
+the proposer **must** canonicalize every repeatable decision family per section
+6.4 and emit artifact lists per section 6.5.
 
 Closed first-wave decision record kinds:
 
 | Record kind | Purpose |
 | --- | --- |
-| `ContractIdentityDecision` | `contract_id` |
-| `ClassificationDecision` | `category`, `module_intent`, `function_intent` |
-| `BoundaryDecision` | `boundary_node_id` **or** explicit `multi_root_unsupported` flag |
-| `PublicAttrDecision` | full public attr semantics (name, type, required, default, purpose, validation, accessibility, provenance audit) |
-| `PublicSlotDecision` | slot name, cardinality, required/optional, consumer responsibility, accessibility, provenance audit |
-| `CollectionAdmissionDecision` | admit IR `CollectionBinding` as top-level `:list` attr or nested list item field (names + parent linkage explicit) |
-| `ItemFieldDecision` | item field semantics under a specific `CollectionAdmissionDecision` / collection binding id |
-| `BindingAssignmentDecision` | assign one IR binding to one public contract member (attr, slot, item field, or collection attr) |
+| `ContractIdentityDecision` | `contract_id` (singleton) |
+| `ClassificationDecision` | `category`, `module_intent`, `function_intent` (singleton) |
+| `BoundaryDecision` | exactly one `boundary_node_id` **or** `multi_root_unsupported` (singleton; section 10) |
+| `PublicAttrDecision` | complete `ComponentContract.Attr` semantics (section 6.3) |
+| `PublicSlotDecision` | complete `ComponentContract.Slot` semantics (section 6.3) |
+| `CollectionAdmissionDecision` | admit one IR `CollectionBinding` (section 6.3) |
+| `ItemFieldDecision` | complete item-field semantics under a collection (section 6.3) |
+| `CollectionCountLinkDecision` | link `count_attr_name` / `count_item_field_name` on `CollectionInput` (section 6.3) |
+| `BindingAssignmentDecision` | assign one IR binding to one public member |
 | `RenderPlacementDecision` | unbound public attr/slot → `target_node_id` + `render_role` |
-| `ImageAccessibilityDecision` | closed D3 policies on a named public attr or item field |
-| `EvidenceHandlingDecision` | explicit handling for `evidence_insufficient` bindings (section 13) |
-| `StaticContentDispositionDecision` | promote to public vs leave internal constant (section 16) |
+| `ImageAccessibilityDecision` | closed D3 accessibility maps (section 13) |
+| `EvidenceHandlingDecision` | closed handling for `evidence_insufficient` bindings (section 6.6) |
+| `StaticContentDispositionDecision` | internal vs promoted static content (section 15) |
 | `InputProvenanceAudit` | optional non-executable audit map; never overrides structured decisions |
 
-Forbidden fields on any decision record (reject input):
+Forbidden fields on any decision record (reject input during semantic-input
+validation):
 
 ```text
 source_system, bricks_*, wp_*, frame_*, editor_label, source_path, source_class,
@@ -239,7 +245,276 @@ source_id as semantic authority, fixture_id, value_key as public name,
 DesignNode id as contract_id, mechanical hashes of source identity as contract_id
 ```
 
-### 6.3 What counts as an explicit semantic decision
+Duplicate canonical identity keys within one family (section 6.4) → `invalid_input`
+with `componentization_proposer.input.conflict`. Input order must not resolve
+duplicates.
+
+### 6.3 Decision record field schemas (required unless marked optional)
+
+Semantic-input validation (step 2) **must** reject any record with missing
+required fields, wrong types, or empty strings where non-empty is required.
+The proposer **must not** rely on `ComponentContract` / `Slot` / `ItemField`
+struct defaults for semantic fields.
+
+#### `ContractIdentityDecision` (singleton)
+
+| Field | Required | Type / constraint |
+| --- | --- | --- |
+| `contract_id` | yes | non-empty string; source-independent |
+
+#### `ClassificationDecision` (singleton)
+
+| Field | Required | Type / constraint |
+| --- | --- | --- |
+| `category` | yes | `primitive` \| `component` \| `pattern` \| `section` |
+| `module_intent` | yes | non-empty string |
+| `function_intent` | yes | non-empty string |
+
+#### `BoundaryDecision` (singleton; XOR)
+
+Exactly one mode:
+
+| Mode | Fields |
+| --- | --- |
+| single boundary | `boundary_node_id` (non-empty Design IR node id string) |
+| multi-root declared | `multi_root_unsupported` = `true` and **no** `boundary_node_id` |
+
+`boundary_node_id` and `multi_root_unsupported: true` together → `invalid_input`.
+
+#### `PublicAttrDecision`
+
+Maps 1:1 to `ComponentContract.Attr` fields the proposer materializes:
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `name` | yes | non-empty; unique among attrs |
+| `type` | yes | closed Phoenix types per D1 |
+| `required` | yes | boolean |
+| `default` | yes | explicit term (use `nil` when no default) |
+| `semantic_purpose` | yes | non-empty string (intrinsic validator) |
+| `validation` | yes | JSON object (may be `%{}`) |
+| `accessibility` | yes | JSON object (may be `%{}`; image sources need `ImageAccessibilityDecision` too) |
+| `provenance` | yes | JSON object audit (may be `%{}`) |
+
+#### `PublicSlotDecision`
+
+Maps 1:1 to `ComponentContract.Slot`:
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `name` | yes | non-empty; unique among slots |
+| `cardinality` | yes | first-wave only `"0..1"` unless later authority |
+| `required` | yes | boolean |
+| `semantic_purpose` | yes | non-empty string |
+| `consumer_responsibility` | yes | non-empty string (intrinsic validator) |
+| `validation` | yes | JSON object (may be `%{}`) |
+| `accessibility` | yes | JSON object (may be `%{}`) |
+| `provenance` | yes | JSON object audit (may be `%{}`) |
+
+#### `CollectionAdmissionDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `source_collection_binding_id` | yes | non-empty; unique per decision list |
+| `public_attr_name` | top-level XOR | non-empty when root collection; `nil` when nested |
+| `parent_collection_binding_id` | nested XOR | non-empty when nested; `nil` when top-level |
+| `parent_item_field_name` | nested XOR | non-empty when nested; names existing `ItemFieldDecision.name` on parent collection with `type: :list` |
+| `provenance` | yes | JSON object audit (may be `%{}`) |
+
+Top-level vs nested location XOR matches D1 `COLLECTION_LOCATION_EXCLUSIVITY_RULE`.
+`count_attr_name` / `count_item_field_name` are **not** set here; see
+`CollectionCountLinkDecision`.
+
+#### `ItemFieldDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `source_collection_binding_id` | yes | owning collection binding id |
+| `name` | yes | non-empty; unique per `(source_collection_binding_id, name)` |
+| `type` | yes | closed Phoenix types |
+| `required` | yes | boolean |
+| `default` | yes | explicit term (`nil` allowed) |
+| `semantic_purpose` | yes | non-empty string |
+| `validation` | yes | JSON object |
+| `accessibility` | yes | JSON object |
+| `provenance` | yes | JSON object audit |
+
+#### `CollectionCountLinkDecision`
+
+Required when a visible count is part of the public API for a collection.
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `source_collection_binding_id` | yes | collection owning the count |
+| `count_public_name` | yes | non-empty; must equal an existing `PublicAttrDecision.name` (top-level) or `ItemFieldDecision.name` on the parent collection (nested) with `type: :integer` |
+| `count_value_binding_id` | yes | non-empty `ValueBinding` id with `value_kind = collection_count` assigned via `BindingAssignmentDecision` |
+
+Population rule:
+
+```text
+COLLECTION_COUNT_LINK_RULE =
+  top-level CollectionAdmissionDecision (public_attr_name present):
+    CollectionInput.count_attr_name = count_public_name
+    CollectionInput.count_item_field_name = nil
+
+  nested CollectionAdmissionDecision:
+    CollectionInput.count_item_field_name = count_public_name
+    CollectionInput.count_attr_name = nil
+
+  when no count is part of the public API, omit CollectionCountLinkDecision;
+  both count fields on CollectionInput remain nil
+```
+
+#### `BindingAssignmentDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `source_binding_kind` | yes | `collection` \| `value` |
+| `source_binding_id` | yes | non-empty |
+| `assignment_kind` | yes | closed discriminant: `scalar_attr`, `collection_attr`, `collection_item_field_value`, `collection_item_field_nested_collection`, `collection_count_attr`, `collection_count_item_field`, `slot` |
+| `public_attr_name` | per kind | when assignment targets top-level attr |
+| `public_slot_name` | per kind | when assignment targets slot |
+| `item_field_name` | per kind | when assignment targets ordinary item field |
+| `parent_item_field_name` | per kind | when assignment targets nested collection list field |
+| `source_collection_binding_id` | per kind | when required by D1 projection shape |
+
+Must not reference `evidence_insufficient` bindings unless paired with
+`EvidenceHandlingDecision` per section 6.6 (otherwise `invalid_input`).
+
+#### `RenderPlacementDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `public_target_kind` | yes | `attr` \| `slot` |
+| `public_target_name` | yes | non-empty |
+| `target_node_id` | yes | non-empty Design IR node id |
+| `render_role` | yes | closed D3 enum |
+
+#### `ImageAccessibilityDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `target_kind` | yes | `attr` \| `item_field` |
+| `target_name` | yes | public attr or item field name |
+| `source_collection_binding_id` | item_field only | required when `target_kind = item_field` |
+| `accessibility` | yes | exact D3 closed map copied onto attr/item field |
+
+Semantic-input validation **must** include one `ImageAccessibilityDecision` per
+image-generating public source member, identified when **any** of:
+
+```text
+a RenderPlacementDecision on that target uses render_role = asset_src
+a BindingAssignmentDecision on that target resolves to a ValueBinding with
+  target_kind = asset on a DesignNode with semantic_type = image
+the PublicAttrDecision or ItemFieldDecision accessibility map is non-empty
+```
+
+#### `StaticContentDispositionDecision`
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `target_kind` | yes | `internal_node` \| `promote_attr` \| `promote_slot` |
+| `design_node_id` | `internal_node` | node left as internal constant |
+| `public_target_name` | promote_* | must match an existing attr/slot decision when promoting |
+
+### 6.4 Canonical input ordering (pre-construction sort)
+
+Sort each family by **UTF-8 byte order** (`<` on strings) unless noted.
+After sorting, reject duplicate identity keys.
+
+| Decision family | Canonical identity key (duplicate → `invalid_input`) | Sort key (ascending) |
+| --- | --- | --- |
+| `PublicAttrDecision` | `name` | `name` |
+| `PublicSlotDecision` | `name` | `name` |
+| `CollectionAdmissionDecision` | `source_collection_binding_id` | `source_collection_binding_id` |
+| `ItemFieldDecision` | `{source_collection_binding_id, name}` | `source_collection_binding_id`, then `name` |
+| `CollectionCountLinkDecision` | `source_collection_binding_id` | `source_collection_binding_id` |
+| `BindingAssignmentDecision` | `{source_binding_kind, source_binding_id}` | `source_binding_kind` (`collection` before `value`), then `source_binding_id` |
+| `RenderPlacementDecision` | `{public_target_kind, public_target_name}` | `public_target_kind` (`attr` before `slot`), then `public_target_name` |
+| `ImageAccessibilityDecision` | attr: `{attr, name}`; item: `{item_field, source_collection_binding_id, name}` | `target_kind`, then `source_collection_binding_id` (empty for attr), then `target_name` |
+| `EvidenceHandlingDecision` | `{source_binding_kind, source_binding_id}` | same as binding assignment |
+| `StaticContentDispositionDecision` | `target_kind` + (`design_node_id` or `public_target_name`) | `target_kind`, then node or public name |
+
+Singleton records (`ContractIdentityDecision`, `ClassificationDecision`,
+`BoundaryDecision`) have no list ordering.
+
+### 6.5 Canonical output ordering (serialized artifact lists)
+
+After construction, lists on artifacts **must** appear in this order before
+serialization so value-equivalent inputs produce byte-identical
+`ComponentContract` / `ComponentizationPlan` JSON:
+
+| Artifact field | Sort key (ascending) |
+| --- | --- |
+| `public_attrs` | `Attr.name` |
+| `public_slots` | `Slot.name` |
+| `collection_inputs` | `source_collection_binding_id` |
+| each `CollectionInput.item_fields` | `ItemField.name` |
+| `binding_projections` | `source_binding_kind` (`collection` before `value`), `source_binding_id`, `projection_kind` (enum order: `scalar_attr`, `collection_attr`, `collection_item_field`, `collection_count_attr`, `slot`), then `public_attr_name`, `public_slot_name`, `item_field_name`, `parent_item_field_name` (empty last) |
+| `render_projections` | `public_attr_name` if present else `public_slot_name` (exactly one) |
+| `diagnostics` (contract and plan) | `code`, then `path` (empty last), then `message` |
+
+`ComponentContract` / `ComponentizationPlan` serializers already preserve list
+order; the proposer must emit sorted lists.
+
+### 6.6 `EvidenceHandlingDecision` (frozen first wave)
+
+Applies only when the referenced IR `ValueBinding` has
+`normalization_status = evidence_insufficient` (verified against the supplied
+`DesignDocument` during semantic-input validation).
+
+#### Decision shape
+
+| Field | Required |
+| --- | --- |
+| `source_binding_kind` | yes; must be `value` |
+| `source_binding_id` | yes; non-empty |
+| `outcome` | yes; closed enum below |
+
+#### Closed outcomes (only these)
+
+D1 allows reviewer resolve / exclude / reject / waiver, but does **not** define a
+machine-level waiver or “ordinary projection while insufficient” encoding for
+the proposer. C09D5 first wave therefore admits **one** construction outcome:
+
+```text
+outcome = omit_public_projection
+```
+
+| Effect | Value |
+| --- | --- |
+| `BindingProjection` emitted? | **no** |
+| `BindingAssignmentDecision` allowed for same binding? | **no** — if present → `invalid_input` (`componentization_proposer.input.conflict`) |
+| Public attr/slot/item field from that binding? | **no** — public members come only from explicit `Public*` / `ItemField` decisions, not from this binding |
+| Contract diagnostic stored | yes — `component_contract.binding_evidence_insufficient` severity `error` on `contract.diagnostics` when a contract is returned |
+| Plan diagnostic | when binding is in-boundary: `componentization_plan.binding.uncovered` and/or `componentization_plan.binding.evidence_insufficient` from reference validation |
+| Contract `provenance` audit | append-only map entry under `provenance["evidence_handling"]` keyed by `source_binding_id` with `%{"outcome" => "omit_public_projection"}` (inert JSON) |
+| `approval_status` / `ProposerResult` | always `needs_review` when a pair is returned; **never** `:proposed` for this binding |
+| Ordinary approved projection? | **forbidden** — proposer must not emit `BindingProjection` for this binding in C09D5 first wave |
+
+```text
+EVIDENCE_INSUFFICIENT_PROJECTION_RULE =
+  evidence_insufficient ValueBinding -> BindingProjection forbidden unless IR
+  normalization_status changes to normalized in a future document version;
+  EvidenceHandlingDecision does not authorize ordinary projection
+```
+
+#### Missing / invalid handling
+
+| Situation | ProposerResult |
+| --- | --- |
+| in-boundary `evidence_insufficient` binding, no `EvidenceHandlingDecision` and no `BindingAssignmentDecision` | `needs_review` (pair allowed); reference diagnostics as above |
+| `BindingAssignmentDecision` for `evidence_insufficient` binding without matching `EvidenceHandlingDecision` | `invalid_input` |
+| `EvidenceHandlingDecision` for binding that is not `evidence_insufficient` | `invalid_input` |
+| `EvidenceHandlingDecision` with outcome other than `omit_public_projection` | `invalid_input` |
+| `EvidenceHandlingDecision` + `BindingAssignmentDecision` same binding | `invalid_input` |
+
+Reviewer-side D1 outcomes (`resolve`, `reject`, `waiver`) that change
+approval or ordinary projection while IR remains `evidence_insufficient` are
+**out of scope** for the proposer; defer richer encodings to later authority.
+C09D5-B must not invent them.
+
+### 6.7 What counts as an explicit semantic decision
 
 A value is an **explicit semantic decision** when:
 
@@ -261,28 +536,34 @@ on `BindingProjection` from referenced `ValueBinding` / `CollectionBinding`;
 `source_collection_binding_id` on projections when assignment references a
 collection; canonical child `parent_collection_binding_id` from IR.
 
-### 6.4 Missing decisions
+### 6.8 Missing decisions
 
 ```text
 MISSING_SEMANTIC_DECISION_RULE =
   the proposer MUST NOT synthesize missing semantic decisions from IR, source
-  metadata, map order, or defaults. A missing mandatory decision yields a
-  deterministic outcome (section 17): invalid_input when the input model cannot
-  be validated, or needs_review when a structurally constructible candidate
-  still reflects unresolved semantics via blocking diagnostics and
-  approval_status = needs_review.
+  metadata, map order, or struct defaults.
+
+SEMANTIC_INPUT_COMPLETENESS_RULE =
+  any missing required field on a decision record (section 6.3), missing
+  singleton decision, or duplicate identity key (section 6.4) is rejected during
+  semantic-input validation as invalid_input with no candidate pair.
+
+  needs_review is reserved for a fully input-valid, intrinsically valid contract
+  and plan pair that still has reference/coverage/accessibility or policy
+  blockers (section 16).
 ```
 
 ---
 
 ## 7. Decision versus derivation matrix
 
-Legend:
+Legend (aligned with section 16 outcome taxonomy):
 
 - **Explicit?** — must appear in semantic input (yes/no/partial).
 - **Derived?** — proposer may compute when explicit assignment exists.
-- **Missing** — outcome: `invalid_input` (I), `needs_review` (R), `construction_failed` (C), or N/A.
-- **Invalid decision** — outcome: `invalid_input` (I) or `construction_failed` (C).
+- **Missing** — `invalid_input` (I), `needs_review` (R), or N/A.
+- **Invalid** — `invalid_input` (I). Intrinsic artifact failure after valid input
+  is `construction_failed` (implementer defect; section 16.6).
 
 | Field / relationship | Owning artifact | Explicit? | May derive? | Authoritative derivation source | Forbidden inference | Missing | Invalid |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -291,27 +572,35 @@ Legend:
 | `module_intent` | Contract | yes | no | — | source module names | I | I |
 | `function_intent` | Contract | yes | no | — | DOM tag, component name | I | I |
 | public attr `name` | Contract | yes | no | — | value_key, label, class | I | I |
-| public attr `type` | Contract | yes | no | — | source string type | I | C |
-| required / default | Contract | yes | no | — | fixture literal | partial → R if default implied | C |
-| `semantic_purpose` | Contract | yes | no | — | auto prose from IR | R if absent on promoted member | C |
-| `validation` | Contract | yes | partial | heading_level may copy explicit decision values | IR attributes | R if role needs matrix | C |
-| `accessibility` (image) | Contract Attr / ItemField | yes | no | — | nil alt, source HTML, filename | R | C |
-| attr `provenance` | Contract | partial | audit only | binding ids from assignments | executable prose | N/A | C |
-| public slot `name` | Contract | yes | no | — | child order, button count | I | I |
-| slot cardinality | Contract | yes | no | — | repeat count in source | I | C |
-| consumer responsibility | Contract | yes | no | — | — | R | C |
-| `CollectionInput` location | Contract | yes | partial | parent ids from IR graph once names chosen | auto `items` name | I/R | C |
-| `ItemField` names/types | Contract | yes | no | — | value_key | I | I |
-| nested collection parent field | Contract | yes | partial | IR parent binding id | flatten to top-level | R | C |
-| `BindingProjection` rows | Contract | partial | yes | IR binding + assignment decision | unassigned binding | R (uncovered) | C |
-| `boundary_node_id` | Plan | yes | no | — | first root, largest subtree | I | I/R |
-| `design_document_sha256` | Plan | no | yes | `ComponentizationPlan.design_document_sha256/1` | stale manual hash | C if IR invalid | C |
-| `RenderProjection` | Plan | yes | partial | roles/targets only from `RenderPlacementDecision` | name→node | R | C |
-| `contract approval_status` | Contract | no | yes | outcome rules §17 | auto approved | N/A | C if approved |
-| contract diagnostics | Contract | partial | generated | validation + semantic rules | — | — | — |
-| plan diagnostics | Plan | partial | generated | validation + semantic rules | — | — | — |
-| plan `contract_id` link | Plan | partial | yes | contract `contract_id` | — | C | C |
-| provenance (both) | both | audit | copy | decision audit + IR ids | override structured fields | N/A | C |
+| public attr `type` | Contract | yes | no | — | source string type | I | I |
+| required / default | Contract | yes | no | — | fixture literal | I | I |
+| `semantic_purpose` (attr/slot/field) | Contract | yes | no | — | auto prose from IR | I | I |
+| `validation` | Contract | yes | yes | copy from decision record | IR attributes alone | I | I |
+| `consumer_responsibility` (slot) | Contract | yes | no | — | — | I | I |
+| `accessibility` (image) | Contract Attr / ItemField | yes | no | — | nil alt, source HTML, filename | I** | I |
+| attr/slot/field `provenance` | Contract | yes | audit | decision `provenance` field | executable prose | I | I |
+| public slot `name` / cardinality | Contract | yes | no | — | child order, repeat count | I | I |
+| `CollectionInput` location | Contract | yes | partial | IR parent ids after names chosen | auto `items` name | I | I |
+| `count_attr_name` / `count_item_field_name` | Contract | yes | yes | `CollectionCountLinkDecision` | infer `count` name | I | I |
+| `ItemField` full shape | Contract | yes | no | — | value_key, struct defaults | I | I |
+| nested collection parent field | Contract | yes | partial | IR parent binding id | flatten to top-level | I | I |
+| `BindingProjection` rows | Contract | partial | yes | IR + `BindingAssignmentDecision` | unassigned in-boundary binding | R (uncovered) | I |
+| `evidence_insufficient` handling | Contract | yes | no | `EvidenceHandlingDecision` §6.6 | ordinary projection | R | I |
+| `boundary_node_id` | Plan | yes | no | — | first root, largest subtree | I | I |
+| `multi_root_unsupported` | — | yes | no | — | invented boundary id | I (no pair) | I |
+| `design_document_sha256` | Plan | no | yes | `ComponentizationPlan.design_document_sha256/1` | manual hash | I* | I* |
+| `RenderProjection` | Plan | yes | partial | `RenderPlacementDecision` only | name→node | I | I |
+| `contract approval_status` | Contract | no | yes | outcome rules §16 | auto approved | N/A | I if approved |
+| contract/plan diagnostics | both | partial | generated | validators + §6.6 | — | — | — |
+| plan `contract_id` link | Plan | partial | yes | contract `contract_id` | — | I | I |
+| provenance (both) | both | audit | copy | decision audit + IR ids | override structured fields | N/A | I |
+
+\* `design_document_sha256` missing on plan is proposer materialization failure;
+IR invalid is caught at step 1 (`invalid_input`).
+
+\*\* missing `ImageAccessibilityDecision` for a declared image **source** member
+is `invalid_input` at semantic-input validation when the attr/field decision
+marks an image-generating source; uncovered policy at reference layer → `needs_review`.
 
 ---
 
@@ -322,24 +611,26 @@ Deterministic ordering:
 ```text
 1. LiveFrames.IR.validate(design_document) -> invalid => ProposerResult invalid_input
 2. validate ComponentizationSemanticInput intrinsic -> invalid => invalid_input
-3. sort all decision lists by stable keys (section 21)
+3. canonicalize decision lists (section 6.4) and reject duplicate keys
 4. build ComponentContract shell:
      contract_format_version, contract_id, classification, empty collections
 5. materialize PublicAttrDecision / PublicSlotDecision / ItemFieldDecision /
      CollectionAdmissionDecision into contract lists (no IR inference)
 6. materialize BindingProjection from BindingAssignmentDecision + IR registries
-7. materialize CollectionInput records from CollectionAdmissionDecision + IR
-8. compute design_document_sha256
-9. build ComponentizationPlan:
+7. materialize CollectionInput records from CollectionAdmissionDecision +
+     CollectionCountLinkDecision + IR
+8. sort artifact lists (section 6.5)
+9. compute design_document_sha256
+10. build ComponentizationPlan:
      plan_format_version, contract_id, fingerprint, boundary_node_id,
      RenderProjection from RenderPlacementDecision
-10. ComponentContract.validate/1 -> errors => construction_failed
-11. ComponentizationPlan.validate/1 -> errors => construction_failed
-12. ComponentContract.validate_ir_references/2
-13. ComponentizationPlan.validate_references/3
-14. classify approval_status and ProposerResult outcome (section 17)
-15. merge owned diagnostics into contract/plan lists deterministically
-16. STOP — no approval transition, no generation
+11. ComponentContract.validate/1 -> errors => construction_failed (section 16.6)
+12. ComponentizationPlan.validate/1 -> errors => construction_failed
+13. ComponentContract.validate_ir_references/2
+14. ComponentizationPlan.validate_references/3
+15. classify approval_status and ProposerResult outcome (section 16)
+16. merge owned diagnostics into contract/plan lists; re-sort diagnostics (6.5)
+17. STOP — no approval transition, no generation
 ```
 
 The proposer does **not** reimplement validation rules; it calls existing
@@ -368,7 +659,9 @@ step 10 when input validation requires them.
   sets `default` satisfying D1 `STATIC_DEFAULT_RULE`.
 - **Provenance:** may record reviewer audit and IR binding ids; must not
   redefine projections.
-- **Initial approval_status:** set in step 14 only; never `:approved` /
+- **Collection counts:** `CollectionCountLinkDecision` populates
+  `count_attr_name` / `count_item_field_name` per `COLLECTION_COUNT_LINK_RULE`.
+- **Initial approval_status:** set in step 15 only; never `:approved` /
   auto `:rejected`.
 
 ---
@@ -378,10 +671,17 @@ step 10 when input validation requires them.
 - **Fingerprint:** always computed from the same `DesignDocument` passed to the
   proposer; stored on plan.
 - **contract_id:** must equal contract’s `contract_id`.
-- **boundary_node_id:** from `BoundaryDecision`, or `multi_root_unsupported`
-  yields `needs_review` with plan diagnostic `componentization_plan.boundary.invalid`
-  if implementer emits a placeholder — prefer **invalid_input** if boundary
-  record absent entirely.
+- **boundary_node_id:** only from `BoundaryDecision.boundary_node_id` (single-root
+  mode). See `MULTI_ROOT_PROPOSER_RULE` below; no placeholder or sentinel node id.
+
+```text
+MULTI_ROOT_PROPOSER_RULE =
+  BoundaryDecision.multi_root_unsupported = true ->
+    ProposerResult = invalid_input
+    componentization_proposer.input.multi_root_unsupported (transient)
+    no ComponentContract, no ComponentizationPlan returned
+    caller must supply exactly one boundary_node_id to obtain a plan (D3 plan 1.0.0)
+```
 - **RenderProjection:** one per `RenderPlacementDecision`; public target must
   exist on contract; closed `render_role` enum (D3).
 - **No duplication:** omit `RenderProjection` for public targets already covered
@@ -428,8 +728,11 @@ public_attr_name | public_slot_name | item_field_name | parent_item_field_name
 - projecting bindings without assignment;
 - slot projection for `collection_item` value bindings;
 - using `RenderProjection` to cover the same public target;
-- ordinary projection for `evidence_insufficient` without `EvidenceHandlingDecision`
-  resolving to an allowed D1 outcome.
+- any `BindingProjection` for a `ValueBinding` with
+  `normalization_status = evidence_insufficient` (section 6.6).
+- `BindingAssignmentDecision` paired with `evidence_insufficient` binding without
+  matching `EvidenceHandlingDecision.outcome = omit_public_projection` and without
+  assignment (assignments are forbidden for that binding).
 
 ---
 
@@ -457,9 +760,11 @@ Only from `RenderPlacementDecision` for public attrs/slots **without**
   alt field decisions and binding assignments per D3 §10.2.
 - Proposer **must not** infer decorative/informative/alt from nil, source alt,
   or provenance prose.
-- Missing policy on an admitted image public member → `needs_review` with D3
-  accessibility diagnostics on plan reference validation (and contract intrinsic
-  image rules where applicable).
+- When a `PublicAttrDecision` / `ItemFieldDecision` is an image **source**
+  member, semantic-input validation **must** require a matching
+  `ImageAccessibilityDecision` (section 6.3); absence → `invalid_input`.
+  Wrong or incomplete policy maps → `invalid_input`. Reference-layer
+  accessibility mismatches on an otherwise valid pair → `needs_review`.
 
 ---
 
@@ -469,11 +774,12 @@ Only from `RenderPlacementDecision` for public attrs/slots **without**
   public `:list` name (top-level) or `parent_item_field_name` (nested).
 - IR proves parent/child edges; proposer does not invent parentage.
 - Boundary-crossing collections → plan `boundary.binding_crosses` → `needs_review`.
-- Nested collection without represented parent admission → `construction_failed`
-  or `invalid_input` depending on whether parent decision is missing (missing → I)
-  vs inconsistent with IR (C).
-- Count attrs/fields require explicit item/attr decisions plus binding assignment
-  for `collection_count` value bindings; no `length(items)` inference.
+- Nested collection without represented parent admission → `invalid_input` when
+  parent admission or parent item field decision is missing; `invalid_input`
+  when decisions contradict IR parent graph.
+- Count attrs/fields require `CollectionCountLinkDecision`, matching integer
+  `PublicAttrDecision` / `ItemFieldDecision`, and `BindingAssignmentDecision`
+  for the `collection_count` value binding; no `length(items)` inference.
 
 ---
 
@@ -495,18 +801,46 @@ Per D3 `STATIC_CONTENT_PROMOTION_RULE`, `STATIC_DEFAULT_RULE`,
 
 ## 16. Proposal outcome and approval rules
 
-### 16.1 Outcome classes
+### 16.1 Outcome taxonomy (single authority)
+
+```text
+PROPOSER_OUTCOME_TAXONOMY =
+  invalid_input
+    -> semantic-input validation (step 2) or MULTI_ROOT_PROPOSER_RULE or step 1 IR invalid
+    -> no ComponentContract / ComponentizationPlan pair
+
+  construction_failed
+    -> semantic input valid, but ComponentContract.validate/1 or
+       ComponentizationPlan.validate/1 fails
+    -> MUST NOT occur when semantic-input validation mirrors section 6.3;
+       indicates proposer implementation defect if input was valid
+
+  needs_review
+    -> pair constructed; both artifacts pass intrinsic validation; approval_status = needs_review
+    -> reference/coverage/accessibility/policy blockers and/or section 16.3 triggers
+
+  proposed
+    -> pair constructed; intrinsic + reference validation pass; no blocking diagnostics;
+       approval_status = proposed
+```
+
+Malformed decision shape, missing required decision fields, forbidden fields,
+duplicate identity keys, contradictory assignments, and invalid
+`EvidenceHandlingDecision` pairings are **`invalid_input`**, not
+`needs_review` and not `construction_failed`.
+
+### 16.2 Outcome classes (summary)
 
 | ProposerResult outcome | Meaning |
 | --- | --- |
-| `:invalid_input` | semantic input fails intrinsic validation; no candidate pair |
-| `:construction_failed` | input valid but contract/plan fail **intrinsic** validation |
-| `:needs_review` | candidate pair assembled; `approval_status = needs_review` |
-| `:proposed` | candidate pair assembled; `approval_status = proposed` |
+| `:invalid_input` | steps 1–2 or multi-root rule; **no candidate pair** |
+| `:construction_failed` | step 11–12 intrinsic failure after valid input (defect if input complete) |
+| `:needs_review` | pair assembled; `approval_status = needs_review` |
+| `:proposed` | pair assembled; `approval_status = proposed` |
 
 Ordinary semantic ambiguity uses `:needs_review`, not exceptions.
 
-### 16.2 `approval_status` mapping
+### 16.3 `approval_status` mapping
 
 ```text
 PROPOSER_APPROVAL_RULE (restated) =
@@ -521,50 +855,67 @@ PROPOSER_APPROVAL_CLASSIFICATION_RULE =
     AND ComponentContract.validate_ir_references/2 = :ok
     AND ComponentizationPlan.validate_references/3 = :ok
     AND no generated or stored contract/plan diagnostic with severity error or fatal
-    AND no mandatory semantic review trigger in section 16.3
+    AND no mandatory semantic review trigger in section 16.4
 
   OTHERWISE approval_status = needs_review (when a pair was constructed)
 ```
 
 Do **not** call `validate_for_generation` during proposal classification.
 
-### 16.3 Mandatory `needs_review` triggers (non-exhaustive; pair may still be intrinsic-valid)
+### 16.4 Mandatory `needs_review` triggers (pair must be intrinsic-valid)
 
 ```text
-any blocking diagnostic from steps 11–13
-EvidenceHandlingDecision absent for in-boundary evidence_insufficient binding
-  that remains projected or uncovered
+any blocking diagnostic from steps 13–14 (reference validation)
+in-boundary evidence_insufficient binding (with or without
+  EvidenceHandlingDecision omit_public_projection) — never :proposed
 BINDING_BACKED_SLOT_PLAN_RULE
 STATIC_COLLECTION_ITEM_RULE
 UNSUPPORTED_NODE_RULE inside boundary
-MULTI_ROOT_BOUNDARY_RULE
-missing ImageAccessibilityDecision on admitted image source
 STATIC_INTERNAL_IMAGE_RULE
-explicit EvidenceHandlingDecision outcome = defer_review
-any PublicAttrDecision / ItemFieldDecision flagged review_required in input
+any optional input flag review_required = true on a decision record (explicit only)
 ```
 
-### 16.4 Blocking diagnostics vs `approval_status`
+`MULTI_ROOT_PROPOSER_RULE` and missing required decision fields are
+`invalid_input`, not listed here.
+
+### 16.5 Blocking diagnostics vs `approval_status`
 
 ```text
 PROPOSER_DIAGNOSTIC_APPROVAL_RULE =
   error or fatal diagnostics on the contract or plan (stored or generated in the
   proposer pass) force approval_status = needs_review when a pair is returned.
   info and warning alone do not force needs_review if all validations pass and
-  section 16.3 triggers are absent.
+  section 16.4 triggers are absent.
 ```
 
-### 16.5 `needs_review` vs malformed data
+### 16.6 `needs_review` vs malformed data
 
 | Situation | Outcome |
 | --- | --- |
 | Wrong types / forbidden source fields in semantic input | `invalid_input` |
-| Missing `contract_id` / category / boundary record | `invalid_input` |
-| Duplicate decision keys / conflicting assignments | `invalid_input` |
+| Missing singleton or required decision field (section 6.3) | `invalid_input` |
+| Missing `semantic_purpose` / `consumer_responsibility` on decision record | `invalid_input` |
+| Duplicate decision identity keys | `invalid_input` |
+| Conflicting assignments / evidence handling | `invalid_input` |
 | Decisions reference missing IR binding/node | `invalid_input` |
-| Constructed contract/plan fail intrinsic shape | `construction_failed` |
-| Valid shape but reference/coverage/accessibility failures | `needs_review` |
-| Valid shape + all pass + no triggers | `proposed` |
+| `multi_root_unsupported` | `invalid_input` (no pair) |
+| Constructed contract/plan fail intrinsic validation | `construction_failed` |
+| Intrinsic-valid pair; reference/coverage/accessibility failures | `needs_review` |
+| Intrinsic-valid pair; all pass; no triggers | `proposed` |
+
+### 16.7 Semantic-input validation vs artifact intrinsic validation
+
+```text
+SEMANTIC_INPUT_VALIDATION_RULE =
+  step 2 validates every section 6.3 record, section 6.4 uniqueness, section 6.6
+  evidence rules, and forbidden fields. Failures are invalid_input only.
+
+ARTIFACT_INTRINSIC_RULE =
+  steps 11–12 assume materialized fields satisfy ComponentContract and
+  ComponentizationPlan intrinsic validators. When input validation is correct,
+  steps 11–12 always succeed; failure is construction_failed and indicates a
+  proposer bug.
+```
 
 ---
 
@@ -629,6 +980,7 @@ Suggested proposer-only transient codes (not stored on artifacts unless copied):
 componentization_proposer.input.invalid
 componentization_proposer.input.conflict
 componentization_proposer.input.missing_decision
+componentization_proposer.input.multi_root_unsupported
 componentization_proposer.construction.failed
 ```
 
@@ -636,24 +988,26 @@ componentization_proposer.construction.failed
 
 ## 19. Validation ordering
 
-Exact order (repeat of §8 for implementers):
+Exact order (matches §8):
 
 ```text
 1. LiveFrames.IR.validate/1
-2. semantic input validate
-3. construct contract + plan
-4. ComponentContract.validate/1
-5. ComponentizationPlan.validate/1
-6. ComponentContract.validate_ir_references/2
-7. ComponentizationPlan.validate_references/3
-8. classify proposed vs needs_review
+2. semantic input validate (sections 6.3, 6.4, 6.6)
+3. construct contract + plan (canonical output order §6.5)
+4–10. materialization substeps inside construction (§8)
+11. ComponentContract.validate/1
+12. ComponentizationPlan.validate/1
+13. ComponentContract.validate_ir_references/2
+14. ComponentizationPlan.validate_references/3
+15. classify proposed vs needs_review (§16)
 ```
 
 **Never** invoke `ComponentContract.validate_for_generation/2` or
 `ComponentizationPlan.validate_for_generation/3` as part of proposal success.
 
-Failures in steps 4–5 → `construction_failed`. Failures in steps 6–7 with
-valid intrinsic → `needs_review` (unless step 2 already rejected input).
+Failures in steps 11–12 → `construction_failed` (section 16.7). Failures in
+steps 13–14 with valid intrinsic → `needs_review` (unless steps 1–2 already
+returned `invalid_input`).
 
 ---
 
@@ -673,7 +1027,7 @@ no String.to_atom, Code.eval*, dynamic apply from untrusted data, MFA callbacks
 ```text
 PROPOSER_DETERMINISM_RULE =
   identical DesignDocument, ComponentizationSemanticInput (value-equal decisions
-  under stable sorting), and authority version -> identical contract, plan,
+  under section 6.4 canonicalization), and authority version -> identical contract, plan,
   diagnostics, and approval_status classification.
 ```
 
@@ -704,7 +1058,8 @@ Do not scan the full IR tree per decision.
 | one binding, multiple public members | yes | | same | transient |
 | public member both binding + render decision | yes | | same | transient |
 | uncovered in-boundary binding | | yes | `componentization_plan.binding.uncovered` | plan |
-| evidence_insufficient unresolved | | yes | `componentization_plan.binding.evidence_insufficient` + contract | both |
+| evidence_insufficient in-boundary (omit_public_projection or absent handling) | | yes | `component_contract.binding_evidence_insufficient` + plan binding codes | both |
+| BindingAssignment on evidence_insufficient binding | yes | | `componentization_proposer.input.conflict` | transient |
 | unsupported/raw/unknown node in boundary | | yes | `componentization_plan.unsupported_node` | plan |
 | boundary-crossing collection | | yes | `componentization_plan.boundary.binding_crosses` | plan |
 | nested collection parent missing | yes | | input / construction | transient |
@@ -715,7 +1070,8 @@ Do not scan the full IR tree per decision.
 | subtree slot hides bindings | | yes | `componentization_plan.slot.subtree_conflict` | plan |
 | role/type or role/node mismatch | | yes | render_projection.* | plan |
 | role co-location conflict | | yes | `render_projection.role_conflict` | plan |
-| multi-root boundary flag | | yes | `componentization_plan.boundary.invalid` | plan |
+| multi-root boundary flag (`multi_root_unsupported`) | yes | | `componentization_proposer.input.multi_root_unsupported` | transient |
+| missing required field on decision record (e.g. semantic_purpose) | yes | | `componentization_proposer.input.missing_decision` | transient |
 | conflicting explicit decisions | yes | | input conflict | transient |
 | stale decisions vs changed IR | yes* | | *invalid if node/binding ids no longer resolve | transient |
 | same decisions, different map order | no | | — | deterministic output |
@@ -751,9 +1107,9 @@ Generalization is via decision records, not special cases.
 | Source-adapter-specific proposer? | Forbidden fields on input; no Bricks/WP vocabulary. |
 | Missing decision → fallback? | `MISSING_SEMANTIC_DECISION_RULE`; no generic names. |
 | Two decision sets → same identity? | `contract_id` is explicit; distinct inputs must not collide on identity intentionally. |
-| Map ordering alters output? | Stable sort on all decision lists before construction. |
+| Map ordering alters output? | Section 6.4 input sort + section 6.5 output sort. |
 | Bypass D1/D3 validation? | Proposer calls existing validators; no duplicate weakened rules. |
-| `needs_review` vs malformed? | §16.5 table. |
+| `needs_review` vs malformed? | §16.1 taxonomy and §16.6 table. |
 | Accidental `approved`? | `PROPOSER_APPROVAL_RULE` forbids; construction sets only proposed/needs_review. |
 | Duplicate artifact? | No serialized proposal wrapper; pair only. |
 | New serialized decision artifact? | Not required; compile-time input only. |
@@ -768,8 +1124,26 @@ Generalization is via decision records, not special cases.
 SEMANTIC_INPUT_ARTIFACT_DECISION = compile-time ComponentizationSemanticInput only;
   no versioned serialized decision artifact in C09D5 first wave
 
-MISSING_SEMANTIC_DECISION_RULE = no fill-in; deterministic invalid_input or
-  needs_review per §16
+MISSING_SEMANTIC_DECISION_RULE = no fill-in; §6.8
+
+SEMANTIC_INPUT_COMPLETENESS_RULE = §6.8 / §16.7
+
+SEMANTIC_INPUT_VALIDATION_RULE = §16.7
+
+PROPOSER_OUTCOME_TAXONOMY = §16.1
+
+CANONICAL_INPUT_ORDER_RULE = §6.4
+
+CANONICAL_OUTPUT_ORDER_RULE = §6.5
+
+COLLECTION_COUNT_LINK_RULE = §6.3 CollectionCountLinkDecision
+
+EVIDENCE_INSUFFICIENT_PROJECTION_RULE = §6.6
+
+EVIDENCE_HANDLING_OUTCOME_OMIT_PUBLIC_PROJECTION = only closed outcome in C09D5
+  first wave; no ordinary projection; see §6.6
+
+MULTI_ROOT_PROPOSER_RULE = §10
 
 SEMANTIC_INPUT_CONTRACT_ID_RULE = contract_id supplied only by
   ContractIdentityDecision; no hashing of source or node ids
@@ -791,9 +1165,9 @@ PROPOSER_APPROVAL_RULE = proposed | needs_review only; never approved
 
 PROPOSER_REJECTED_STATUS_RULE = proposer never auto-sets rejected
 
-PROPOSER_APPROVAL_CLASSIFICATION_RULE = §16.2
+PROPOSER_APPROVAL_CLASSIFICATION_RULE = §16.3
 
-PROPOSER_DIAGNOSTIC_APPROVAL_RULE = §16.4
+PROPOSER_DIAGNOSTIC_APPROVAL_RULE = §16.5
 
 PROPOSER_VALIDATION_ORDER_RULE = §19
 
@@ -803,8 +1177,8 @@ PROPOSER_DETERMINISM_RULE = §20.2
 
 PROPOSER_INDEX_ONCE_RULE = §20.3
 
-EVIDENCE_HANDLING_INPUT_RULE = evidence_insufficient bindings require
-  EvidenceHandlingDecision or force needs_review
+EVIDENCE_HANDLING_INPUT_RULE = §6.6; assignment + evidence_insufficient ->
+  invalid_input; omit_public_projection -> needs_review when pair returned
 
 STATIC_PROMOTION_INPUT_RULE = promotion requires Public*Decision or explicit
   disposition; STATIC_DEFAULT_RULE preserved
@@ -879,7 +1253,10 @@ merge performed = 0
 | ID | Question | Owner / next step |
 | --- | --- | --- |
 | U1 | Durable storage format if product requires replayable semantic decisions outside compile-time | future authority; not blocking C09D5-B API |
-| U2 | Whether `EvidenceHandlingDecision` should encode reviewer `exclude` as contract diagnostic codes only vs omitting projections | C09D5-B implementation must follow D1 §9 outcomes literally |
-| U3 | Exact Elixir struct names for decision records | C09D5-B naming; semantics frozen here |
+| U3 | Exact Elixir struct/module names for decision records | C09D5-B naming only; field shapes frozen in §6.3 |
+
+Reviewer-side D1 `resolve` / `waiver` / `reject` encodings while IR remains
+`evidence_insufficient` are deferred to later authority (not U2 — frozen as
+`omit_public_projection` only in §6.6).
 
 No STOP triggered on accepted base.
