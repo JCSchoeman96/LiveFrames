@@ -50,14 +50,14 @@ The conceptual record contains these fields:
 
 | Field | Meaning |
 | --- | --- |
-| `contract_version` | Version of the ComponentContract serialized contract, initially `1.0.0`. This is separate from Design IR and CatalogueItem versions. |
+| `contract_format_version` | Version of the serialized ComponentContract format, initially `1.0.0`. This is separate from Design IR, CatalogueItem release, and package versions. |
 | `contract_id` | Stable, non-empty semantic identity for the component contract. It is not a source ID. |
 | `category` | One of `primitive`, `component`, `pattern`, or `section`. |
 | `module_intent` | Source-independent Phoenix module intent selected by componentization. |
 | `function_intent` | Source-independent Phoenix function-component intent selected by componentization. |
 | `public_attrs` | Ordered semantic attr definitions. |
 | `public_slots` | Ordered semantic slot definitions. |
-| `collection_inputs` | Ordered `CollectionInput` definitions for admitted repeated data. |
+| `collection_inputs` | Ordered `CollectionInput` metadata records for admitted repeated data. Each record references one `public_attrs` list entry. |
 | `binding_projections` | Compiler metadata connecting IR bindings and targets to public inputs. |
 | `diagnostics` | Accumulated contract findings. Validation does not hide them. |
 | `provenance` | Source traces, IR binding IDs, selected classification evidence, and reviewer decisions. |
@@ -65,11 +65,13 @@ The conceptual record contains these fields:
 
 Each attr definition records `name`, Phoenix type, required/default behavior,
 semantic purpose, binding provenance, validation requirements, and any
-accessibility consequence. Each slot definition records the same purpose and
-validation information plus cardinality and consumer responsibility. Each
-collection input records its public name, owning `CollectionBinding`, item
-fields, count relationship, nested collection relationships, and required or
-optional behavior.
+accessibility consequence. `public_attrs` is the sole authority for those
+Phoenix attr properties. Each slot definition records its semantic purpose,
+validation information, cardinality, and consumer responsibility. Each
+collection input records the referenced public attr name, owning
+`CollectionBinding`, item fields, count relationship, nested collection
+relationships, and provenance. It does not redefine the referenced attr's
+type, requiredness, or default.
 
 The contract contains no fetched records, query plans, provider references,
 runtime values, raw HTML, executable expressions, or source-system fields.
@@ -78,22 +80,30 @@ Source-specific identifiers may appear only under provenance.
 ### 2.1 Artifact decision
 
 `ComponentContract` is an explicit, versioned, serializable compiler artifact.
-Its initial format version is `1.0.0`. C09D2 must provide deterministic
-representation, validation, and serialization for this artifact. The version
-is not reused from Design IR 2.0.0, CatalogueItem SemVer, or the Mix package.
+Its `contract_format_version` starts at `1.0.0`. C09D2 must provide
+deterministic representation, validation, and serialization for this format.
+The format version is not reused from Design IR 2.0.0, CatalogueItem release
+SemVer, or the Mix package.
 
-Contract format SemVer follows these rules:
+`contract_format_version` describes only serialized shape and meaning:
 
-- PATCH fixes representation or documentation without changing accepted
-  component meaning.
-- MINOR adds optional public metadata or optional inputs without changing
-  existing input meaning.
-- MAJOR changes or removes public attrs, slots, item fields, projection
-  meaning, requiredness, or validation in a way that can break callers.
+- PATCH corrects representation, documentation, or validation while preserving
+  the authorized serialized shape and meaning.
+- MINOR adds an optional serialized field or optional format capability that a
+  newer reader can read without migration while preserving earlier contracts.
+- MAJOR adds a required field, removes or renames a field, changes serialized
+  meaning incompatibly, changes enum or shape semantics incompatibly, makes a
+  previously valid contract structurally incompatible, or requires migration.
 
-Generated component API compatibility and Catalogue release metadata remain
-separate authorities. A generated module must not infer a public API from a
-contract that lacks approval.
+Adding or removing a component attr, changing a slot, changing cardinality, or
+changing behavior ownership does not change `contract_format_version` by
+itself. Those are consumer-facing compatibility questions owned by
+`docs/24_CATALOGUE_VERSIONING_POLICY.md` once a component participates in
+Catalogue release/versioning. A pre-Catalogue contract content change does not
+create a new format version unless the serialized format itself changes.
+
+A generated module must not infer a public API from a contract that lacks
+approval.
 
 ## 3. Category and page decisions
 
@@ -266,16 +276,23 @@ renders a deliberate empty state.
 
 ### 7.2 CollectionInput and item shape
 
-Each collection attr has one conceptual `CollectionInput` definition:
+Each collection attr has one conceptual `CollectionInput` metadata definition.
+The corresponding `public_attrs` entry remains the sole authority for the
+Phoenix attr contract:
 
 ```text
-public input name
+public_attr_name
 source CollectionBinding ID
 item field definitions
-count input relationship, if visible
+count_attr_name, when applicable
+parent_collection_input_name, when nested
 nested collection relationships
-required/optional semantics
+binding/provenance metadata
 ```
+
+The referenced public attr must have type `:list`. `CollectionInput` cannot
+redefine its Phoenix type, requiredness, default, semantic purpose, or
+validation. A collection attr has at most one `CollectionInput` record.
 
 Items are caller-provided semantic maps or struct-like values. Item fields use
 public semantic names chosen by componentization, such as `name`, `price`,
@@ -298,12 +315,28 @@ as a string. It resolves, in order:
 1. an exact string key in a map;
 2. an existing atom key whose `Atom.to_string/1` equals the public field name.
 
-Structs use the same existing-key lookup. Missing fields, non-map items, and
-invalid item shapes fail with a clear contract error. The accessor never calls
-`String.to_atom/1`, `String.to_existing_atom/1`, a source-dependent module, or
-an arbitrary function supplied by source data. It does not interpret dotted
-paths or execute accessors from strings. If both string and atom keys exist,
-the exact string key wins.
+Structs use the same existing-key lookup. After lookup, the item-field
+definition controls absence and validation:
+
+```text
+required field missing
+    -> clear contract validation/access error
+
+optional field missing with an explicit default
+    -> use the contract-defined default
+
+optional field missing without an explicit default
+    -> resolve as nil / absent optional value
+
+present field with an invalid value
+    -> field validation error
+```
+
+Non-map items and invalid item shapes fail with a clear contract error. The
+accessor never calls `String.to_atom/1`, `String.to_existing_atom/1`, a
+source-dependent module, or an arbitrary function supplied by source data. It
+does not interpret dotted paths or execute accessors from strings. If both
+string and atom keys exist, the exact string key wins.
 
 This is an explicit accessor contract for later implementation, not a request
 to add the accessor in C09D1.
@@ -321,10 +354,14 @@ role; otherwise approval is blocked.
 ### 7.5 Collection count
 
 When the design visibly renders a collection count, componentization projects
-the `ValueBinding` as an explicit scalar attr associated with its collection.
-The attr uses `:integer`, requires a non-negative value, and receives a
-semantic name such as `plan_count` selected by the component role. It is not
-automatically called `count` or `length`.
+the `ValueBinding` as an ordinary scalar entry in `public_attrs` and associates
+that attr with its collection metadata. The attr uses `:integer`, requires a
+non-negative value, and receives a semantic name such as `plan_count` selected
+by the component role. It is not automatically called `count` or `length`.
+
+The `CollectionInput` stores only the related `count_attr_name`. The count
+attr's type, requiredness, default, semantic purpose, and validation live in
+`public_attrs`.
 
 The host may supply a total count that differs from the rendered list length.
 The contract must not generate `length(@items)` unless reviewed semantics prove
@@ -431,8 +468,9 @@ Every projection records:
 
 ```text
 source binding ID
-public input name
+public attr or slot name
 projection kind
+public_attr_name, when the projection targets an attr
 collection input name, when applicable
 item field name, when applicable
 target DesignNode ID
@@ -459,7 +497,7 @@ generation.
 Validation accumulates discoverable findings and never silently repairs a
 contract. At minimum it checks:
 
-- `contract_id` and `contract_version` are non-empty and valid;
+- `contract_id` and `contract_format_version` are non-empty and valid;
 - category is one of the four approved values;
 - module and function intent are source-independent and non-empty;
 - public attr names are unique;
@@ -469,7 +507,18 @@ contract. At minimum it checks:
 - required/default declarations are coherent;
 - collection input names are unique;
 - each collection has unique item field names;
+- each `CollectionInput` references exactly one existing `public_attrs` entry
+  through `public_attr_name`;
+- every referenced collection attr has type `:list`;
+- each collection attr has at most one `CollectionInput`;
+- `CollectionInput` cannot redefine a public attr's type, requiredness, or
+  default;
+- every `collection_attr` projection references both its existing public attr
+  and its `CollectionInput` metadata;
 - nested collection relationships are acyclic and reference existing inputs;
+- nested `CollectionInput` records reference their actual parent metadata;
+- every collection count relationship references an existing scalar public
+  attr, whose type, requiredness, and default remain in `public_attrs`;
 - all `BindingProjection` source binding IDs exist in the input IR;
 - every referenced public input exists;
 - collection-item projections reference their owning collection and item field;
@@ -604,8 +653,9 @@ The following values are final for C09D1. None is delegated to a generator.
 
 ```text
 COMPONENT_CONTRACT_ARTIFACT_DECISION = explicit versioned serializable
-  ComponentContract artifact, format version 1.0.0, separate from Design IR
-  and CatalogueItem versions.
+  ComponentContract artifact with contract_format_version 1.0.0. The field
+  describes only serialized format/schema compatibility and is separate from
+  Design IR, CatalogueItem release, public API, and package versions.
 
 COMPONENT_CATEGORY_MODEL = primitive | component | pattern | section only.
 
@@ -634,20 +684,26 @@ SLOT_RULE = use slots for consumer-owned Phoenix markup, navigation/action
   behavior, events, interactive roots, or application composition; default
   singular cardinality is 0..1.
 
-COLLECTION_PUBLIC_INPUT_RULE = an admitted CollectionBinding becomes a
-  semantic caller-data list attr whose name comes from the component role;
-  never use a backend query or mandate the literal name items.
+COLLECTION_PUBLIC_INPUT_RULE = an admitted CollectionBinding becomes one
+  public_attrs entry with a semantic name and type :list, plus one
+  CollectionInput that references that attr; never use a backend query or
+  mandate the literal name items.
 
 COLLECTION_ITEM_SHAPE_RULE = caller-provided semantic maps or struct-like
   values with contract-defined public item fields; value_key strings remain
-  internal.
+  internal. ItemField required/default/type/validation metadata controls item
+  access, while CollectionInput stores only repeated-data metadata.
 
 COLLECTION_ITEM_ACCESS_RULE = one explicit safe accessor uses exact string-key
-  lookup, then existing atom-key lookup by Atom.to_string comparison; missing
-  fields fail clearly and no dynamic atom or module creation is allowed.
+  lookup, then existing atom-key lookup by Atom.to_string comparison. Missing
+  required fields fail, optional fields use an explicit default or nil, and
+  present invalid values fail validation. No dynamic atom or module creation
+  is allowed.
 
 NESTED_COLLECTION_RULE = keep nested collections as nested item list fields
-  with parent CollectionInput metadata; do not flatten or turn them into slots.
+  with parent CollectionInput metadata. The child references its actual parent
+  metadata and does not redefine the parent attr contract; do not flatten or
+  turn nested collections into slots.
 
 SINGULAR_FIELD_PROJECTION_RULE = a proven site/root ValueBinding becomes a
   semantic scalar attr only when LiveFrames owns rendering and the role is
@@ -657,8 +713,10 @@ COLLECTION_ITEM_FIELD_PROJECTION_RULE = a collection-item ValueBinding becomes
   a semantic field inside its owning collection item, never a top-level attr.
 
 COLLECTION_COUNT_PROJECTION_RULE = a visible collection count becomes an
-  explicit non-negative integer attr associated with its collection; do not
-  infer list length without reviewed evidence.
+  ordinary non-negative integer public_attrs entry associated with its
+  collection through count_attr_name; CollectionInput does not redefine its
+  type, requiredness, or default, and list length is not inferred without
+  reviewed evidence.
 
 EVIDENCE_INSUFFICIENT_RULE = no automatic approval for an unresolved binding
   affecting visible, required, or accessibility semantics; reviewer may
@@ -691,21 +749,57 @@ RESPONSIVE_PUBLIC_API_RULE = responsive behavior is internal; source
 
 BINDING_PROJECTION_MODEL = closed projection kinds are scalar_attr,
   collection_attr, collection_item_field, collection_count_attr, and slot;
-  each records source binding, public input, collection/item context, target
-  node, and status.
+  each records source binding, public attr or slot name, collection/item
+  context, target node, and status. A collection_attr projection references
+  both its public :list attr and CollectionInput metadata.
 
 CONTRACT_VALIDATION_RULE = accumulate diagnostics for identity, category,
-  names, types, requiredness, collection/item relationships, projections,
-  evidence, source leakage, accessibility, and approval; do not silently
-  repair contracts.
+  names, types, requiredness, collection/item relationships, one-authority
+  public attr references, projections, evidence, source leakage,
+  accessibility, and approval; reject conflicting CollectionInput attr
+  metadata and do not silently repair contracts.
 
 CONTRACT_DETERMINISM_RULE = same IR, approved classification, naming input,
   and authority version produce the same contract and deterministic
   serialization, independent of runtime data or map order.
 
-CONTRACT_VERSIONING_RULE = ComponentContract has its own SemVer format;
-  public API-breaking changes are MAJOR, additive optional changes MINOR, and
-  representation-only corrections PATCH.
+CONTRACT_VERSIONING_RULE = contract_format_version has its own format-only
+  SemVer rules: representation-preserving corrections are PATCH,
+  backwards-compatible optional serialized fields/capabilities are MINOR,
+  and incompatible serialized shape/meaning or required migration is MAJOR.
+  Consumer-facing public API SemVer belongs to docs/24 CatalogueItem release
+  versioning, not this field.
+
+PUBLIC_ATTR_AUTHORITY = public_attrs is the sole authority for Phoenix attr
+  name, type, required/default behavior, semantic purpose, validation, and
+  accessibility consequence.
+
+COLLECTION_INPUT_AUTHORITY = CollectionInput owns only repeated-data metadata:
+  public_attr_name, source CollectionBinding ID, item fields, count relation,
+  parent/nested relationships, binding metadata, and provenance.
+
+COLLECTION_ATTR_RELATIONSHIP = one collection attr is one public_attrs entry
+  with type :list plus at most one CollectionInput reference; CollectionInput
+  cannot redefine type, requiredness, or default.
+
+COUNT_ATTR_RELATIONSHIP = count_attr_name references an existing scalar
+  public_attrs entry; its type, required/default behavior, validation, and
+  semantic purpose are defined only by public_attrs.
+
+ITEM_REQUIRED_MISSING_POLICY = missing required item field raises a clear
+  contract validation/access error.
+
+ITEM_OPTIONAL_DEFAULT_POLICY = missing optional item field with an explicit
+  default resolves to that contract-defined default.
+
+ITEM_OPTIONAL_NO_DEFAULT_POLICY = missing optional item field without an
+  explicit default resolves to nil / absent optional value.
+
+ITEM_LOOKUP_ORDER = exact string key first, then an existing atom key matched
+  by Atom.to_string comparison; an exact string key wins when both exist.
+
+DYNAMIC_ATOM_POLICY = never create atoms or resolve modules/functions from
+  public item field names.
 
 CATALOGUE_BOUNDARY = Catalogue metadata records identity, taxonomy,
   lifecycle, release information, and a contract fingerprint; production
