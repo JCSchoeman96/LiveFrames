@@ -57,7 +57,7 @@ The conceptual record contains these fields:
 | `function_intent` | Source-independent Phoenix function-component intent selected by componentization. |
 | `public_attrs` | Ordered semantic attr definitions. |
 | `public_slots` | Ordered semantic slot definitions. |
-| `collection_inputs` | Ordered `CollectionInput` metadata records for admitted repeated data. Each record references one `public_attrs` list entry. |
+| `collection_inputs` | Ordered `CollectionInput` metadata records for admitted repeated data. Each record references one source `CollectionBinding` and either a top-level `public_attrs` list entry or a nested parent item field. |
 | `binding_projections` | Compiler metadata connecting IR bindings and targets to public inputs. |
 | `diagnostics` | Accumulated contract findings. Validation does not hide them. |
 | `provenance` | Source traces, IR binding IDs, selected classification evidence, and reviewer decisions. |
@@ -68,10 +68,10 @@ semantic purpose, binding provenance, validation requirements, and any
 accessibility consequence. `public_attrs` is the sole authority for those
 Phoenix attr properties. Each slot definition records its semantic purpose,
 validation information, cardinality, and consumer responsibility. Each
-collection input records the referenced public attr name, owning
-`CollectionBinding`, item fields, count relationship, nested collection
-relationships, and provenance. It does not redefine the referenced attr's
-type, requiredness, or default.
+collection input records its source `CollectionBinding` identity, its location
+(top-level public attr or nested parent item field), item fields, count
+relationship, and provenance. It does not redefine the referenced attr or
+parent item field type, requiredness, default, semantic purpose, or validation.
 
 The contract contains no fetched records, query plans, provider references,
 runtime values, raw HTML, executable expressions, or source-system fields.
@@ -254,9 +254,11 @@ silently folded into LiveFrames accessibility guarantees.
 
 ### 7.1 Public collection input
 
-An admitted `CollectionBinding` projects by default to a semantic list attr,
-not to a repeatable arbitrary-markup slot and not to a backend query. The
-componentizer chooses the public name from the component's role:
+An admitted root/top-level `CollectionBinding` has
+`parent_collection_binding_id = nil`. It projects by default to one semantic
+`:list` attr in `public_attrs`, not to a repeatable arbitrary-markup slot and
+not to a backend query. The componentizer chooses the public name from the
+component role:
 
 ```text
 pricing section -> plans
@@ -268,31 +270,54 @@ An unresolved semantic role produces `NEEDS_REVIEW`; it does not fall back to
 the literal name `items`. Query names, source element IDs, and source field
 paths never choose the public name.
 
-The public collection attr has Phoenix type `:list`. Requiredness depends on
-the approved component semantics. An optional collection may default to `[]`
-only when the component has a valid empty state. A required collection has no
-invented default. The contract records whether an empty list omits, empties, or
-renders a deliberate empty state.
+The top-level `CollectionInput` stores `public_attr_name`, with both parent
+location fields set to `nil`, its item fields, any top-level count relation,
+and binding/provenance metadata. `public_attr_name` must identify exactly one
+existing `public_attrs` entry with type `:list`. That entry remains the sole
+authority for its name, type, required/default behavior, semantic purpose,
+validation, and accessibility consequence. The public collection attr has
+Phoenix type `:list`. Requiredness depends on the approved component
+semantics. An optional collection may default to `[]` only when the component
+has a valid empty state. A required collection has no invented default. The
+contract records whether an empty list omits, empties, or renders a deliberate
+empty state.
 
 ### 7.2 CollectionInput and item shape
 
-Each collection attr has one conceptual `CollectionInput` metadata definition.
-The corresponding `public_attrs` entry remains the sole authority for the
-Phoenix attr contract:
+Each source `CollectionBinding` produces exactly one conceptual
+`CollectionInput`. The compiler identity and reference key is
+`source_collection_binding_id`, which must be non-empty and unique within the
+contract. It is compiler/provenance metadata, not a public Phoenix name. No
+separate `collection_input_name` is required.
+
+The two location modes use this conceptual shape:
 
 ```text
+source_collection_binding_id
+
 public_attr_name
-source CollectionBinding ID
-item field definitions
-count_attr_name, when applicable
-parent_collection_input_name, when nested
-nested collection relationships
+  # top-level only
+
+parent_collection_binding_id
+parent_item_field_name
+  # nested only
+
+item_fields
+
+count_attr_name
+  # top-level count only
+
+count_item_field_name
+  # nested count only
+
 binding/provenance metadata
 ```
 
-The referenced public attr must have type `:list`. `CollectionInput` cannot
-redefine its Phoenix type, requiredness, default, semantic purpose, or
-validation. A collection attr has at most one `CollectionInput` record.
+A top-level record has `public_attr_name` present and both nested location
+fields nil. A nested record has `public_attr_name` nil and both nested location
+fields present. These modes are mutually exclusive. A `CollectionInput` cannot
+redefine the referenced attr or item field type, required/default behavior,
+semantic purpose, validation, or accessibility consequence.
 
 Items are caller-provided semantic maps or struct-like values. Item fields use
 public semantic names chosen by componentization, such as `name`, `price`,
@@ -343,31 +368,52 @@ to add the accessor in C09D1.
 
 ### 7.4 Nested collections
 
-A nested `CollectionBinding` remains nested in its enclosing item model. Its
-public list field belongs to the parent item and has its own `CollectionInput`
-definition. The contract records the parent collection input and child item
-fields. It does not flatten nested data into unrelated top-level attrs, merge
-nested lists, or turn an inner collection into a slot. A nested collection
-must have a proven parent relationship in IR and a selected semantic child
-role; otherwise approval is blocked.
+A nested `CollectionBinding` has
+`parent_collection_binding_id != nil`. It does not create a top-level
+`public_attrs` entry. Its `CollectionInput` sets `public_attr_name` to `nil`,
+references the existing parent `CollectionInput` through
+`parent_collection_binding_id`, and sets `parent_item_field_name` to an
+existing item field on that parent. The parent item field must have type
+`:list` and owns the nested field public name, required/default behavior,
+semantic purpose, validation, and accessibility consequence.
+
+The nested binding must have a proven parent relationship in IR and a selected
+semantic child role. If either is unresolved, approval is blocked. The child
+`CollectionInput` adds only the source binding relationship, child item shape,
+nested count relationship, and provenance. Its child fields stay inside the
+nested list on each parent item. They are not flattened into the outer item or
+top-level attrs, merged with sibling lists, or converted to a slot. The
+child-to-parent reference is canonical; child collections are derived by
+indexing `parent_collection_binding_id` when needed. The parent graph must be
+acyclic, and a child cannot reference itself or a missing parent.
 
 ### 7.5 Collection count
 
-When the design visibly renders a collection count, componentization projects
-the `ValueBinding` as an ordinary scalar entry in `public_attrs` and associates
-that attr with its collection metadata. The attr uses `:integer`, requires a
-non-negative value, and receives a semantic name such as `plan_count` selected
-by the component role. It is not automatically called `count` or `length`.
+When a design visibly renders a collection count, the location follows the
+owning `CollectionInput`.
 
-The `CollectionInput` stores only the related `count_attr_name`. The count
-attr's type, requiredness, default, semantic purpose, and validation live in
-`public_attrs`.
+For a top-level collection, the count is a scalar `:integer` entry in
+`public_attrs` with non-negative validation. The top-level `CollectionInput`
+stores `count_attr_name`, and the count uses
+`projection_kind = collection_count_attr`. The count attr owns its name, type,
+required/default behavior, semantic purpose, and validation. It receives a
+semantic name such as `plan_count` selected by the component role. It is not
+automatically called `count` or `length`.
 
-The host may supply a total count that differs from the rendered list length.
-The contract must not generate `length(@items)` unless reviewed semantics prove
-that the displayed number means rendered items. If no count is supplied, the
-contract either omits the count display or remains `NEEDS_REVIEW`; it does not
-silently derive one.
+For a nested collection, the count varies per parent item. It is a scalar
+`:integer` item field on the parent `CollectionInput`, with non-negative
+validation. The child `CollectionInput` stores `count_item_field_name`, and
+the count uses the existing `collection_item_field` projection kind. Its
+source `ValueBinding.value_kind = collection_count` records that the field is a
+collection count. The parent item field owns the count field name, type,
+required/default behavior, semantic purpose, and validation.
+
+A top-level `CollectionInput` has `count_item_field_name = nil`; a nested
+`CollectionInput` has `count_attr_name = nil`. Both count fields may be nil
+when no visible count exists. The contract never silently derives a count from
+`length(items)`. The host may supply a total that differs from rendered list
+length. If no count is supplied, the contract omits the count display or stays
+`NEEDS_REVIEW`.
 
 ## 8. ValueBinding projection
 
@@ -382,11 +428,13 @@ role. A link URL may become `destination` or `href` only when that role is
 proven. The source `value_key` is not exposed merely for convenience.
 
 For `scope = collection_item`, a field becomes an item field in its owning
-`CollectionInput`, never an unrelated top-level attr. Nested collection fields
-remain in the nested input.
+`CollectionInput`, never an unrelated top-level attr. Fields owned by a nested
+`CollectionBinding` remain in that child input, below the parent item list field.
 
-For `value_kind = collection_count`, the binding becomes the explicit count
-attr associated with its owning collection as described above.
+For `value_kind = collection_count`, a top-level binding becomes the explicit
+count attr associated with its owning top-level collection. A nested count becomes
+the scalar count item field on its parent `CollectionInput`; it does not become a
+top-level attr. Both cases retain `ValueBinding.value_kind = collection_count`.
 
 Every projection records the source binding ID, target node ID, public input,
 and status. A projection cannot silently change an evidence-insufficient or
@@ -439,8 +487,8 @@ Hero's names and field set are not a generic generated template.
 Public names are semantic, short, Phoenix-idiomatic, stable under source
 adapter replacement, and selected as part of the approved classification.
 
-These names are prohibited in attrs, slots, item fields, module intent,
-function intent, and collection input names:
+These names are prohibited in attrs, slots, item fields, module intent, and
+function intent:
 
 ```text
 post_title
@@ -455,9 +503,12 @@ ValueBinding IDs
 CollectionBinding IDs
 ```
 
-`value_key` remains internal componentization and provenance input. It is
-never a public API default. A human-selected semantic name may be recorded in
-the approved contract, but it must remain independent of source vocabulary.
+`source_collection_binding_id` is compiler/provenance metadata. It is not a
+consumer-facing collection identifier or a public Phoenix name. The contract
+does not require a separate `collection_input_name`. `value_key` remains
+internal componentization and provenance input. It is never a public API
+default. A human-selected semantic name may be recorded in the approved
+contract, but it must remain independent of source vocabulary.
 
 ## 12. BindingProjection model
 
@@ -470,12 +521,28 @@ Every projection records:
 source binding ID
 public attr or slot name
 projection kind
-public_attr_name, when the projection targets an attr
-collection input name, when applicable
+public_attr_name, when the projection targets a top-level attr
+source_collection_binding_id, when a collection input is involved
+owning parent CollectionInput, for a nested collection projection
+parent_item_field_name, for a nested collection or nested count projection
 item field name, when applicable
 target DesignNode ID
 status
 ```
+
+A root `CollectionBinding` uses `projection_kind = collection_attr` and
+references its source binding ID, its existing public `:list` attr, and its
+`CollectionInput` metadata. A nested `CollectionBinding` uses
+`projection_kind = collection_item_field`; it references the owning parent
+`CollectionInput`, the parent item field, the child source binding ID, and the
+child `CollectionInput` metadata. A nested collection never uses
+`collection_attr`.
+
+A top-level collection count uses `projection_kind = collection_count_attr`
+and references its scalar public count attr and owning `CollectionInput`. A
+nested collection count uses the existing `collection_item_field` projection
+kind and references the scalar parent item field. Its source
+`ValueBinding.value_kind = collection_count` preserves the count meaning.
 
 The first-wave `projection_kind` set is closed:
 
@@ -505,24 +572,38 @@ contract. At minimum it checks:
 - attr and slot names do not conflict;
 - every attr and item field uses an allowed truthful type;
 - required/default declarations are coherent;
-- collection input names are unique;
+- every `source_collection_binding_id` is non-empty and unique within the contract;
 - each collection has unique item field names;
-- each `CollectionInput` references exactly one existing `public_attrs` entry
-  through `public_attr_name`;
-- every referenced collection attr has type `:list`;
-- each collection attr has at most one `CollectionInput`;
-- `CollectionInput` cannot redefine a public attr's type, requiredness, or
-  default;
-- every `collection_attr` projection references both its existing public attr
-  and its `CollectionInput` metadata;
-- nested collection relationships are acyclic and reference existing inputs;
-- nested `CollectionInput` records reference their actual parent metadata;
-- every collection count relationship references an existing scalar public
-  attr, whose type, requiredness, and default remain in `public_attrs`;
+- every `CollectionInput` uses exactly one location mode: top-level fields
+  (`public_attr_name` present and both parent fields nil) or nested fields
+  (`public_attr_name` nil and both parent fields present);
+- a top-level `CollectionInput` references exactly one existing `public_attrs`
+  entry through `public_attr_name`, and that entry has type `:list`;
+- a nested `CollectionInput` references an existing parent `CollectionInput`
+  through `parent_collection_binding_id` and an existing parent item field
+  through `parent_item_field_name`, and that field has type `:list`;
+- `CollectionInput` records do not redefine referenced attr or item field
+  type, required/default behavior, semantic purpose, validation, or
+  accessibility;
+- the child-to-parent collection graph is acyclic, has no self-parent, and
+  every parent reference resolves;
+- children are derived from the canonical `parent_collection_binding_id` edge;
+- a root `collection_attr` projection references its existing public `:list`
+  attr and `CollectionInput`; nested collections never use `collection_attr`;
+- a nested `collection_item_field` projection references its owning parent
+  `CollectionInput`, parent item field, child source binding ID, and child
+  `CollectionInput`;
+- a top-level count references an existing scalar public attr with type
+  `:integer` and non-negative validation;
+- a nested count references an existing scalar parent item field with type
+  `:integer` and non-negative validation;
+- top-level inputs use `count_attr_name` only, nested inputs use
+  `count_item_field_name` only, and both may be nil when no count is visible;
+- all count projections reference their intended collection and use the count
+  location allowed by that collection;
 - all `BindingProjection` source binding IDs exist in the input IR;
-- every referenced public input exists;
+- every referenced public attr, parent input, and item field exists;
 - collection-item projections reference their owning collection and item field;
-- count projections reference their intended collection;
 - an evidence-insufficient binding is never marked approved without a recorded
   review decision;
 - unsupported bindings are never silently promoted;
@@ -622,10 +703,18 @@ GenServer = NO
 Oban = NO
 ```
 
-The future implementation should build binding and node indexes and target
-`O(nodes + bindings + contract inputs)`. It must not rescan the complete node
-tree for every binding.
+The future implementation should build indexes for deterministic validation:
 
+```text
+CollectionBinding ID -> CollectionInput
+public attr name -> Attr
+parent CollectionBinding ID -> parent CollectionInput
+(parent CollectionInput, item field name) -> ItemField
+```
+
+Children are derived from the child `parent_collection_binding_id` references.
+With these indexes, validation targets `O(contract records + binding
+references)` and does not rescan the complete contract for every field.
 Imported JSON, CSS, JavaScript, PHP, source paths, and expressions are inert
 untrusted data. Componentization performs no evaluation, dynamic module
 loading, query execution, URL fetch, raw HTML injection, or event execution.
@@ -639,11 +728,12 @@ remains responsible for escaping caller values.
 | Singular text field | `site` or component root | A scalar semantic role rendered by the component | Named scalar attr chosen by role | Attr when LiveFrames owns plain-text rendering; slot only when consumer markup/behavior is required | Ambiguous role, required accessibility text unresolved, or unsupported evidence | `heading` or `label` |
 | Singular asset field | `site` or component root | A media role rendered by the component | Semantic media attr, usually `:string` for a URL or `:map` for an approved structured media value | Attr plus explicit informative-alt or decorative policy; never a slot by dynamic origin alone | No trustworthy accessibility policy, unsupported asset meaning, or required companion field missing | `image` with `image_alt` |
 | Singular `link_url` field | `site` or component root | A destination consumed by a rendered link/action | Named URL attr when LiveFrames owns the link shell | Attr for a LiveFrames-owned link; slot when consumer owns link/button markup or events | Link role or safe destination semantics unproven | `destination` |
-| Collection | collection scope | Caller-supplied repeated data with LiveFrames-owned item rendering | Semantic `:list` collection attr | Attr with `CollectionInput`; not a repeatable arbitrary-markup slot | Boundary/category/name unresolved or no stable item shape | `plans` |
+| Root collection | `collection` | Caller-supplied repeated data with LiveFrames-owned item rendering | Top-level semantic `:list` public attr | Attr with `CollectionInput`; not a repeatable arbitrary-markup slot | Boundary/category/name unresolved or no stable item shape | `plans` |
 | Collection-item text field | `collection_item` | A field on each item in the enclosing collection | Semantic item field | Item field inside the owning `CollectionInput`, never a top-level attr | Field role, requiredness, or safe item shape unresolved | `plan.name` |
 | Collection-item asset field | `collection_item` | Media rendered for each item | Semantic item media field plus alt/decorative companion | Item field inside the owning collection; no asset slot by default | Accessibility policy, media shape, or required companion unresolved | `member.image` plus `member.image_alt` |
-| Collection count | `collection` | Host-supplied displayed count associated with one collection | Explicit non-negative `:integer` attr tied to that collection | Scalar count attr; never inferred from list length by default | Display meaning or owning collection unresolved | `plan_count` |
+| Top-level collection count | `collection` | Host-supplied displayed count associated with one root collection | Explicit non-negative `:integer` public attr tied to that collection | Scalar public attr; never inferred from list length by default | Display meaning or owning collection unresolved | `plan_count` |
 | Nested collection | nested collection scope | A repeated child list belonging to a parent item | Nested `:list` item field with child `CollectionInput` metadata | Remains nested under parent item; never flattened and never converted to a slot | Parent containment, child role, or nested item shape unresolved | `plan.features` |
+| Nested collection count | `collection` | Host-supplied displayed count associated with a child list on each parent item | Scalar non-negative `:integer` parent item field | Item field on the parent `CollectionInput`; never a top-level attr | Display meaning, parent field, or owning collection unresolved | `plan.feature_count` |
 | Evidence-insufficient value binding | any proven scope | Unresolved semantic declaration requiring review | No approved public projection | Keep diagnostic/provenance; proposal remains `NEEDS_REVIEW` unless reviewed resolution, exclusion, or rejection is recorded | Always blocks automatic approval when visible, required, or accessibility-relevant | Opaque modifier on a visible text field |
 | Unsupported diagnosed source target | any | Source occurrence has no authorized IR target | No public input | Preserve diagnostic/provenance; exclude or redesign only by explicit review | Blocks approval when output would be incomplete; no silent static fallback | Unsupported dynamic accessibility target |
 
@@ -684,10 +774,12 @@ SLOT_RULE = use slots for consumer-owned Phoenix markup, navigation/action
   behavior, events, interactive roots, or application composition; default
   singular cardinality is 0..1.
 
-COLLECTION_PUBLIC_INPUT_RULE = an admitted CollectionBinding becomes one
-  public_attrs entry with a semantic name and type :list, plus one
-  CollectionInput that references that attr; never use a backend query or
-  mandate the literal name items.
+COLLECTION_PUBLIC_INPUT_RULE = only a root CollectionBinding with
+  parent_collection_binding_id = nil becomes one public_attrs entry with a
+  semantic name and type :list plus one CollectionInput. The CollectionInput
+  stores public_attr_name for that root attr. Nested CollectionBindings do not
+  create top-level attrs. Never use a backend query or mandate the literal name
+  items.
 
 COLLECTION_ITEM_SHAPE_RULE = caller-provided semantic maps or struct-like
   values with contract-defined public item fields; value_key strings remain
@@ -700,10 +792,12 @@ COLLECTION_ITEM_ACCESS_RULE = one explicit safe accessor uses exact string-key
   present invalid values fail validation. No dynamic atom or module creation
   is allowed.
 
-NESTED_COLLECTION_RULE = keep nested collections as nested item list fields
-  with parent CollectionInput metadata. The child references its actual parent
-  metadata and does not redefine the parent attr contract; do not flatten or
-  turn nested collections into slots.
+NESTED_COLLECTION_RULE = a nested CollectionBinding remains a :list item
+  field on its parent collection item. Its child CollectionInput references
+  the actual parent through parent_collection_binding_id and the parent list
+  ItemField through parent_item_field_name. It does not create a top-level
+  public attr, redefine the parent field contract, flatten data, or become a
+  slot. The canonical child-to-parent edge is indexed when children are needed.
 
 SINGULAR_FIELD_PROJECTION_RULE = a proven site/root ValueBinding becomes a
   semantic scalar attr only when LiveFrames owns rendering and the role is
@@ -712,11 +806,17 @@ SINGULAR_FIELD_PROJECTION_RULE = a proven site/root ValueBinding becomes a
 COLLECTION_ITEM_FIELD_PROJECTION_RULE = a collection-item ValueBinding becomes
   a semantic field inside its owning collection item, never a top-level attr.
 
-COLLECTION_COUNT_PROJECTION_RULE = a visible collection count becomes an
-  ordinary non-negative integer public_attrs entry associated with its
-  collection through count_attr_name; CollectionInput does not redefine its
-  type, requiredness, or default, and list length is not inferred without
-  reviewed evidence.
+COLLECTION_COUNT_PROJECTION_RULE = a visible count for a top-level
+  collection becomes an ordinary non-negative integer public_attrs entry
+  associated through count_attr_name and projected as collection_count_attr.
+  The attr owns its type, required/default behavior, validation, and semantic
+  purpose. List length is not inferred without reviewed evidence.
+
+NESTED_COLLECTION_COUNT_RULE = a visible count for a nested collection becomes
+  a non-negative integer ItemField on the parent CollectionInput and is
+  associated through count_item_field_name. It uses the existing
+  collection_item_field projection kind and is never flattened to a top-level
+  attr. Its ValueBinding keeps value_kind = collection_count.
 
 EVIDENCE_INSUFFICIENT_RULE = no automatic approval for an unresolved binding
   affecting visible, required, or accessibility semantics; reviewer may
@@ -748,15 +848,20 @@ RESPONSIVE_PUBLIC_API_RULE = responsive behavior is internal; source
   inputs.
 
 BINDING_PROJECTION_MODEL = closed projection kinds are scalar_attr,
-  collection_attr, collection_item_field, collection_count_attr, and slot;
-  each records source binding, public attr or slot name, collection/item
-  context, target node, and status. A collection_attr projection references
-  both its public :list attr and CollectionInput metadata.
+  collection_attr, collection_item_field, collection_count_attr, and slot.
+  Root CollectionBindings use collection_attr and reference their public :list
+  attr plus CollectionInput. Nested CollectionBindings use
+  collection_item_field and reference the parent ItemField plus child
+  CollectionInput. Top-level counts use collection_count_attr; nested counts
+  use collection_item_field. No new projection kind is introduced.
 
 CONTRACT_VALIDATION_RULE = accumulate diagnostics for identity, category,
-  names, types, requiredness, collection/item relationships, one-authority
-  public attr references, projections, evidence, source leakage,
-  accessibility, and approval; reject conflicting CollectionInput attr
+  names, types, requiredness, location XOR, parent/item relationships,
+  one-authority attr and ItemField references, projections, count placement,
+  evidence, source leakage, accessibility, and approval. Require unique
+  source_collection_binding_id values, an acyclic canonical child-to-parent
+  graph, root public :list attrs, nested parent list ItemFields, and count
+  locations that match collection location. Reject conflicting CollectionInput
   metadata and do not silently repair contracts.
 
 CONTRACT_DETERMINISM_RULE = same IR, approved classification, naming input,
@@ -774,17 +879,51 @@ PUBLIC_ATTR_AUTHORITY = public_attrs is the sole authority for Phoenix attr
   name, type, required/default behavior, semantic purpose, validation, and
   accessibility consequence.
 
+COLLECTION_INPUT_IDENTITY_RULE = source_collection_binding_id is the
+  non-empty, unique compiler identity/reference key for each CollectionInput.
+  It is not a public Phoenix identifier, and no separate
+  collection_input_name is required.
+
+COLLECTION_LOCATION_EXCLUSIVITY_RULE = a top-level CollectionInput has
+  public_attr_name present with parent_collection_binding_id and
+  parent_item_field_name nil. A nested CollectionInput has public_attr_name
+  nil with both parent fields present. No other combination is valid.
+
+NESTED_PARENT_REFERENCE_RULE = parent_collection_binding_id is the only
+  authoritative child-to-parent edge. It must resolve to an existing parent
+  CollectionInput, cannot self-reference, and must form an acyclic graph.
+
+NESTED_ITEM_FIELD_RULE = parent_item_field_name must resolve to an existing
+  parent ItemField with type :list. The parent ItemField owns the nested
+  field public contract; the child CollectionInput adds child shape and
+  provenance only.
+
+NESTED_CHILD_DERIVATION_RULE = derive child collections by indexing
+  parent_collection_binding_id when needed. Do not store a second authoritative
+  child relationship list.
+
 COLLECTION_INPUT_AUTHORITY = CollectionInput owns only repeated-data metadata:
-  public_attr_name, source CollectionBinding ID, item fields, count relation,
-  parent/nested relationships, binding metadata, and provenance.
+  source_collection_binding_id, top-level public_attr_name or nested parent
+  references, item fields, count relation, binding metadata, and provenance.
+  It never redefines the referenced Attr or ItemField contract.
 
-COLLECTION_ATTR_RELATIONSHIP = one collection attr is one public_attrs entry
-  with type :list plus at most one CollectionInput reference; CollectionInput
-  cannot redefine type, requiredness, or default.
+COLLECTION_ATTR_RELATIONSHIP = only a root collection has one
+  public_attrs entry with type :list plus at most one CollectionInput reference.
+  A nested collection has no top-level public_attrs entry; its parent ItemField
+  with type :list is the public field authority.
 
-COUNT_ATTR_RELATIONSHIP = count_attr_name references an existing scalar
-  public_attrs entry; its type, required/default behavior, validation, and
-  semantic purpose are defined only by public_attrs.
+COUNT_ATTR_RELATIONSHIP = count_attr_name is top-level only and references an
+  existing scalar public_attrs entry with type :integer and non-negative
+  validation. Its attr owns required/default behavior, semantic purpose, and
+  validation.
+
+COUNT_ITEM_FIELD_RELATIONSHIP = count_item_field_name is nested only and
+  references an existing scalar parent ItemField with type :integer and
+  non-negative validation. That ItemField owns its public contract.
+
+COUNT_LOCATION_EXCLUSIVITY_RULE = a top-level CollectionInput may store only
+  count_attr_name; a nested CollectionInput may store only
+  count_item_field_name. Both may be nil when no visible count exists.
 
 ITEM_REQUIRED_MISSING_POLICY = missing required item field raises a clear
   contract validation/access error.
