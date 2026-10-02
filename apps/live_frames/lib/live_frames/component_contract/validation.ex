@@ -64,16 +64,22 @@ defmodule LiveFrames.ComponentContract.Validation do
         err("component_contract.approval_blocked", "contract is not approved for generation")
       ])
     else
+      intrinsic_result = validate(contract)
+
       diagnostics =
-        case validate(contract) do
+        case intrinsic_result do
           :ok -> []
           {:error, ds} -> ds
         end
 
       diagnostics =
-        case ReferenceValidation.validate(contract, design_document) do
-          :ok -> diagnostics
-          {:error, ds} -> diagnostics ++ ds
+        if intrinsic_result == :ok do
+          case ReferenceValidation.validate(contract, design_document) do
+            :ok -> diagnostics
+            {:error, ds} -> diagnostics ++ ds
+          end
+        else
+          diagnostics
         end
 
       diagnostics =
@@ -83,10 +89,6 @@ defmodule LiveFrames.ComponentContract.Validation do
         end)
 
       diagnostics = diagnostics ++ generation_capability_diagnostics(contract)
-
-      diagnostics =
-        diagnostics ++
-          ReferenceValidation.evidence_insufficient_diagnostics(contract, design_document)
 
       case finish(diagnostics) do
         :ok -> :ok
@@ -332,6 +334,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   defp validate_slot(%Slot{} = slot, path, diagnostics) do
     diagnostics
     |> validate_public_name(slot.name, path <> ".name")
+    |> validate_boolean_required_flag(slot.required, path <> ".required")
     |> then(fn d ->
       if is_binary(slot.cardinality) and slot.cardinality != "" do
         if slot.cardinality == Slot.first_wave_cardinality() do
@@ -955,11 +958,11 @@ defmodule LiveFrames.ComponentContract.Validation do
          diagnostics
        )
        when is_list(projections) do
-    Enum.reduce(projections, diagnostics, fn projection, diagnostics ->
+    Enum.reduce(Enum.with_index(projections), diagnostics, fn {projection, idx}, diagnostics ->
+      path = "binding_projections[#{idx}]"
+
       case projection do
         %BindingProjection{} = p ->
-          path = "binding_projections[#{projection_index(projections, p)}]"
-
           validate_binding_projection(
             p,
             path,
@@ -973,7 +976,9 @@ defmodule LiveFrames.ComponentContract.Validation do
         _ ->
           add(
             diagnostics,
-            err("component_contract.projection.invalid", "expected BindingProjection struct")
+            err_at("component_contract.projection.invalid", "expected BindingProjection struct",
+              path: path
+            )
           )
       end
     end)
@@ -984,10 +989,6 @@ defmodule LiveFrames.ComponentContract.Validation do
       diagnostics,
       err("component_contract.projection.invalid", "binding_projections must be a list")
     )
-  end
-
-  defp projection_index(projections, target) do
-    Enum.find_index(projections, &(&1 == target)) || 0
   end
 
   defp validate_binding_projection(
@@ -1160,7 +1161,7 @@ defmodule LiveFrames.ComponentContract.Validation do
       end
     end)
     |> then(fn d ->
-      if opts[:forbid_collection] and
+      if opts[:forbid_collection] == true and
            (p.source_collection_binding_id != nil or p.parent_collection_binding_id != nil or
               p.item_field_name != nil or p.parent_item_field_name != nil) do
         add(
@@ -1426,16 +1427,32 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_required_default(diagnostics, required, default, path) do
-    if required and default != nil do
-      add(
-        diagnostics,
-        err_at("component_contract.attr.default_conflict", "required attrs cannot have a default",
-          path: path
+    diagnostics
+    |> validate_boolean_required_flag(required, path <> ".required")
+    |> then(fn d ->
+      if is_boolean(required) and required and default != nil do
+        add(
+          d,
+          err_at(
+            "component_contract.attr.default_conflict",
+            "required attrs cannot have a default",
+            path: path
+          )
         )
-      )
-    else
-      diagnostics
-    end
+      else
+        d
+      end
+    end)
+  end
+
+  defp validate_boolean_required_flag(diagnostics, required, _path) when is_boolean(required),
+    do: diagnostics
+
+  defp validate_boolean_required_flag(diagnostics, _required, path) do
+    add(
+      diagnostics,
+      err_at("component_contract.attr.invalid", "required must be a boolean", path: path)
+    )
   end
 
   defp validate_semantic_purpose(diagnostics, purpose, path) do
@@ -1568,11 +1585,29 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp json_object?(value) when is_map(value) and not is_struct(value) do
-    Enum.all?(Map.keys(value), fn key -> match?({:ok, _}, Json.key_string(key)) end) and
-      Enum.all?(Map.values(value), &json_value?/1)
+    case json_keys(Map.keys(value)) do
+      {:ok, keys} ->
+        length(keys) == length(Enum.uniq(keys)) and Enum.all?(Map.values(value), &json_value?/1)
+
+      :error ->
+        false
+    end
   end
 
   defp json_object?(_), do: false
+
+  defp json_keys(keys) do
+    Enum.reduce_while(keys, [], fn key, acc ->
+      case Json.key_string(key) do
+        {:ok, key} -> {:cont, [key | acc]}
+        :error -> {:halt, :error}
+      end
+    end)
+    |> case do
+      :error -> :error
+      keys -> {:ok, keys}
+    end
+  end
 
   defp json_value?(nil), do: true
   defp json_value?(value) when is_binary(value) or is_boolean(value), do: true

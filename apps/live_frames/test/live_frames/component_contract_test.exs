@@ -339,4 +339,64 @@ defmodule LiveFrames.ComponentContractTest do
     assert {:error, diagnostics} = ComponentContract.validate(invalid)
     assert Enum.any?(diagnostics, &(&1.code == "component_contract.metadata.invalid"))
   end
+
+  test "rejects non-boolean required flags without raising" do
+    for bad <- ["yes", :yes, nil] do
+      assert {:error, diagnostics} =
+               ComponentContract.validate(base_contract(public_attrs: [attr("x", required: bad)]))
+
+      assert Enum.any?(diagnostics, &(&1.code == "component_contract.attr.invalid"))
+    end
+
+    assert {:error, diagnostics} =
+             ComponentContract.validate(
+               base_contract(public_slots: [slot("inner", required: nil)])
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "component_contract.attr.invalid"))
+  end
+
+  test "rejects JSON key collisions after normalization" do
+    assert {:error, diagnostics} =
+             ComponentContract.validate(base_contract(provenance: %{:foo => 1, "foo" => 2}))
+
+    assert Enum.any?(diagnostics, &(&1.code == "component_contract.metadata.invalid"))
+
+    assert {:error, diagnostics} =
+             ComponentContract.validate(
+               base_contract(public_attrs: [attr("title", provenance: %{:key => 1, "key" => 2})])
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "component_contract.metadata.invalid"))
+  end
+
+  test "duplicate equal projections report distinct binding_projections paths" do
+    invalid = %BindingProjection{
+      source_binding_kind: :value,
+      projection_kind: :scalar_attr
+    }
+
+    contract =
+      base_contract(binding_projections: [invalid, invalid])
+
+    assert {:error, diagnostics} = ComponentContract.validate(contract)
+
+    paths =
+      diagnostics
+      |> Enum.filter(&(&1.code == "component_contract.projection.binding_missing"))
+      |> Enum.map(& &1.path)
+
+    assert "binding_projections[0]" in paths
+    assert "binding_projections[1]" in paths
+  end
+
+  test "malformed nested contract does not raise public validators" do
+    document = LiveFrames.IR.DesignDocument.new()
+    bad = base_contract(public_attrs: ["not-an-attr"])
+
+    assert {:error, _} = ComponentContract.validate(bad)
+    assert {:error, _} = ComponentContract.validate_ir_references(bad, document)
+    assert {:error, _} = ComponentContract.validate_for_generation(bad, document)
+    assert {:error, _} = ComponentContract.encode(bad)
+  end
 end
