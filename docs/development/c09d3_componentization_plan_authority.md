@@ -456,8 +456,8 @@ SUBTREE_SLOT_BINDING_DESCENDANT_POLICY =
 
 If the subtree contains only supported static internal `DesignNode` records (no
 bindings), `subtree_slot` may replace them subject to role/node compatibility.
-Collection-backed, repeated, `:let`, fallback, or binding-backed slot
-composition requires later authority.
+Collection-backed, repeated, `:let`, fallback, or other slot composition beyond
+`subtree_slot` and `BINDING_BACKED_SLOT_PLAN_RULE` requires later authority.
 
 ## 7. Public render link coverage
 
@@ -550,7 +550,8 @@ BindingProjection coverage owns:
   top-level collection attrs and top-level count attrs (public attrs)
   collection item fields (via item_field projections, not RenderProjection)
   nested collections
-  binding-backed slots
+  binding-backed slots (structured placement only; see BINDING_BACKED_SLOT_PLAN_RULE
+  for generation eligibility)
   binding-backed scalar attrs
 
 RenderProjection coverage owns:
@@ -657,8 +658,10 @@ Root roles mapped to a non-boundary node: invalid.
 
 ```text
 ACTION_SLOT_RULE =
-  consumer-owned actions remain slots; subtree_slot follows
-  SUBTREE_SLOT_OWNERSHIP_RULE; the plan must not invent navigate, patch,
+  consumer-owned actions remain slots; unbound action slots use subtree_slot and
+  SUBTREE_SLOT_OWNERSHIP_RULE; binding-backed slot projections remain valid
+  contract placement but are not generation-eligible in plan 1.0.0 under
+  BINDING_BACKED_SLOT_PLAN_RULE; the plan must not invent navigate, patch,
   phx-click, event names, server handlers, JS commands, or Ash actions
 ```
 
@@ -754,12 +757,28 @@ componentization_plan.accessibility.alt_projection_mismatch
 
 ```text
 IMAGE_ACCESSIBILITY_REPRESENTATION_RULE =
-  closed first-wave keys inside existing Attr.accessibility on asset source attrs
+  closed first-wave keys inside existing Attr.accessibility on top-level asset
+  source attrs and inside existing ItemField.accessibility on collection-item
+  asset source fields (section 10.2)
 
 IMAGE_ACCESSIBILITY_VALIDATION_RULE =
-  reference validation enforces CONSUMER_SUPPLIED_ALT_POLICY or
-  DECORATIVE_ALT_POLICY for every authorized asset source; no arbitrary
-  provenance satisfies accessibility validation
+  reference validation enforces accessibility for every image-generating public
+  representation:
+
+  TOP-LEVEL IMAGE SOURCE
+    -> ComponentContract.Attr.accessibility
+    -> CONSUMER_SUPPLIED_ALT_POLICY or DECORATIVE_ALT_POLICY in this section
+
+  COLLECTION-ITEM IMAGE SOURCE
+    -> ComponentContract.ItemField.accessibility
+    -> COLLECTION_ITEM_CONSUMER_ALT_POLICY or
+       COLLECTION_ITEM_DECORATIVE_ALT_POLICY in section 10.2
+
+  NESTED_ITEM_IMAGE_POLICY =
+    nested collection item image fields use the same ItemField policy within
+    their owning CollectionInput
+
+  no arbitrary provenance satisfies accessibility validation
 ```
 
 #### Static internal images
@@ -768,12 +787,143 @@ IMAGE_ACCESSIBILITY_VALIDATION_RULE =
 STATIC_INTERNAL_IMAGE_RULE =
   an in-boundary DesignNode with semantic_type = image that is not replaced by
   subtree_slot and is not represented by an authorized public asset-source
-  placement (BindingProjection or asset_src RenderProjection) blocks plan 1.0.0
-  generation eligibility -> NEEDS_REVIEW
+  placement (top-level BindingProjection or asset_src RenderProjection, or a
+  collection-item asset BindingProjection whose ItemField passes
+  COLLECTION_ITEM_IMAGE_ACCESSIBILITY_RULE) blocks plan 1.0.0 generation
+  eligibility -> NEEDS_REVIEW
 
 do not inspect DesignNode.attributes, SourceTrace, source HTML, or source-editor
 alt fields to invent static accessibility policy in C09D3
 ```
+
+### 10.2 Collection-item image accessibility
+
+Do not add `RenderProjection` for collection-item fields. Do not change
+`ComponentContract` schema. Use existing `ItemField.accessibility`.
+
+```text
+COLLECTION_ITEM_IMAGE_SOURCE_RULE =
+  a collection-item image source exists when all are true:
+
+  BindingProjection.source_binding_kind = value
+  BindingProjection.projection_kind = collection_item_field
+  BindingProjection.item_field_name is present
+  referenced ValueBinding:
+    value_kind = field
+    scope = collection_item
+    target_kind = asset
+  referenced DesignNode at ValueBinding.target_node_id has semantic_type = image
+
+  source ItemField resolved from CollectionInput identified by
+  BindingProjection.source_collection_binding_id and item_field_name
+```
+
+Admit exactly two first-wave policies on that source `ItemField.accessibility`.
+
+#### Consumer-supplied item alt
+
+```text
+COLLECTION_ITEM_CONSUMER_ALT_POLICY =
+  source ItemField.accessibility = %{
+    "image_alt_policy" => "consumer_supplied",
+    "alt_item_field_name" => "<sibling item field>",
+    "required_when_source_present" => true
+  }
+
+  alt_item_field_name -> existing ItemField in the SAME owning CollectionInput
+  alt ItemField.type -> :string
+
+  alt ItemField has exactly one ordinary value-source BindingProjection:
+    projection_kind = collection_item_field
+    item_field_name = alt_item_field_name
+    source_collection_binding_id =
+      image source projection.source_collection_binding_id
+
+  referenced alt ValueBinding:
+    value_kind = field
+    scope = collection_item
+    target_kind = text
+    collection_binding_id =
+      image source ValueBinding.collection_binding_id
+    target_node_id = image source ValueBinding.target_node_id
+
+COLLECTION_ITEM_ALT_SAME_NODE_RULE =
+  informative collection-item images require the sibling alt field to target
+  the exact same image DesignNode as the asset source within the same collection
+  item shape; if no such binding-backed sibling alt field exists -> NEEDS_REVIEW;
+  do not manufacture an unbound ItemField (RenderProjection does not support
+  item fields in plan 1.0.0)
+```
+
+#### Decorative collection-item image
+
+```text
+COLLECTION_ITEM_DECORATIVE_ALT_POLICY =
+  source ItemField.accessibility = %{"image_alt_policy" => "decorative"}
+
+  no alt_item_field_name key
+  no sibling collection-item text BindingProjection on that same image node as
+  an accessibility-alt field
+  later generation emits alt="" for each repeated image from that item field
+```
+
+Do not infer decorative semantics from nil, missing metadata, source alt,
+source provenance, or empty source text.
+
+#### Invalid collection-item image policies
+
+Block plan reference validation when any occur:
+
+```text
+collection-item asset source missing image_alt_policy
+unknown image_alt_policy
+consumer_supplied without alt_item_field_name
+consumer_supplied without required_when_source_present = true
+alt item field missing
+alt item field belongs to another CollectionInput
+alt item field type != :string
+alt BindingProjection missing
+alt BindingProjection belongs to another source collection
+alt ValueBinding.scope != collection_item
+alt ValueBinding.target_kind != text
+alt ValueBinding targets a different DesignNode than the image source
+decorative policy contains alt_item_field_name
+```
+
+Diagnostics (do not reuse top-level alt_attr codes for ItemField failures):
+
+```text
+componentization_plan.accessibility.item_image_policy_missing
+componentization_plan.accessibility.item_image_policy_invalid
+componentization_plan.accessibility.alt_item_field_missing
+componentization_plan.accessibility.alt_item_projection_mismatch
+```
+
+```text
+COLLECTION_ITEM_IMAGE_ACCESSIBILITY_RULE =
+  every COLLECTION_ITEM_IMAGE_SOURCE must satisfy
+  COLLECTION_ITEM_CONSUMER_ALT_POLICY or COLLECTION_ITEM_DECORATIVE_ALT_POLICY;
+  no image-generating collection-item binding is exempt
+```
+
+### 10.3 Binding-backed slot plan rule
+
+```text
+BINDING_BACKED_SLOT_PLAN_RULE =
+  a ComponentContract BindingProjection with projection_kind = slot is a valid
+  structured public placement under PUBLIC_TOP_LEVEL_PLACEMENT_RULE, but it is
+  NOT generation-eligible under ComponentizationPlan 1.0.0
+
+BINDING_BACKED_SLOT_GENERATION_ELIGIBLE = no in plan 1.0.0
+
+reference validation emits a blocking diagnostic; proposal remains NEEDS_REVIEW
+until later authority defines slot target ownership, subtree replacement vs
+insertion, fallback semantics, binding value relationship, and slot composition
+
+componentization_plan.slot.binding_backed_unsupported
+```
+
+Do not invent binding-backed slot composition semantics in C09D3.
 
 ```text
 COLLECTION_RENDER_PROJECTION_RULE =
@@ -845,7 +995,9 @@ Transition to `GENERATING` requires:
 ```text
 ComponentContract.approval_status = approved
 AND ComponentContract generation validation passes
-AND ComponentizationPlan reference validation passes
+AND ComponentizationPlan intrinsic validation passes with no blocking diagnostics
+AND ComponentizationPlan reference validation passes with no blocking diagnostics
+AND no stored ComponentizationPlan error/fatal diagnostics (PLAN_STORED_DIAGNOSTIC_GATE)
 ```
 
 No plan status transition occurs.
@@ -904,6 +1056,21 @@ PLAN_DIAGNOSTIC_MODEL = ComponentizationPlan.Diagnostic
 PLAN_DIAGNOSTIC_NAMESPACE = componentization_plan.*
 
 PLAN_BLOCKING_SEVERITIES = error | fatal
+
+PLAN_ERROR_FATAL_POLICY =
+  any generated or stored ComponentizationPlan diagnostic with severity error
+  or fatal blocks generation eligibility
+
+PLAN_INFO_WARNING_POLICY =
+  info and warning diagnostics do not block generation when all other validation
+  passes
+
+PLAN_STORED_DIAGNOSTIC_GATE =
+  any stored plan.diagnostics entry with severity error or fatal blocks
+  generation eligibility; intrinsic validation validates stored diagnostic shape
+  only; generation eligibility must consider BOTH stored plan diagnostics and
+  generated intrinsic/reference diagnostics; any blocking diagnostic from either
+  source blocks
 ```
 
 Fields:
@@ -972,6 +1139,13 @@ componentization_plan.accessibility.image_policy_invalid
 componentization_plan.accessibility.alt_attr_missing
 componentization_plan.accessibility.alt_projection_mismatch
 
+componentization_plan.accessibility.item_image_policy_missing
+componentization_plan.accessibility.item_image_policy_invalid
+componentization_plan.accessibility.alt_item_field_missing
+componentization_plan.accessibility.alt_item_projection_mismatch
+
+componentization_plan.slot.binding_backed_unsupported
+
 componentization_plan.unsupported_node
 componentization_plan.metadata.invalid
 componentization_plan.generation_blocked
@@ -1009,12 +1183,21 @@ PLAN_REFERENCE_VALIDATION_RULE =
   BindingProjection targets lie in boundary
   IN_BOUNDARY_BINDING_COVERAGE_RULE
   PUBLIC_TOP_LEVEL_PLACEMENT_RULE with per-target binding/render counts
-  IMAGE_ACCESSIBILITY_VALIDATION_RULE and STATIC_INTERNAL_IMAGE_RULE
+  top-level IMAGE_ACCESSIBILITY_VALIDATION_RULE (Attr sources)
+  collection-item image accessibility for every value binding with
+    scope = collection_item and target_kind = asset (ItemField sources);
+    nested collections use NESTED_ITEM_IMAGE_POLICY within owning CollectionInput
+  STATIC_INTERNAL_IMAGE_RULE
+  BINDING_BACKED_SLOT_PLAN_RULE
   UNSUPPORTED_NODE_RULE fail closed
 
 REFERENCE_VALIDATION_COMPLEXITY =
   O(IR nodes + IR bindings + contract records + plan records + references);
-  build indexes once; do not walk the full tree once per projection
+  build indexes once; do not walk the full tree once per projection;
+  recommended indexes include collection_input_by_binding_id,
+  item_field_by_{collection_binding_id, field_name},
+  binding_projection_by_source_binding,
+  binding_projection_by_{collection_binding_id, item_field_name}
 ```
 
 Do not merge intrinsic and reference validation responsibilities.
@@ -1036,6 +1219,9 @@ GENERATION_GATE_RULE =
   AND ComponentContract.validate_for_generation(...) = :ok
   AND ComponentizationPlan intrinsic validation = :ok
   AND ComponentizationPlan reference validation = :ok
+  AND no stored ComponentizationPlan error/fatal diagnostics
+  AND no generated ComponentizationPlan error/fatal diagnostics from intrinsic
+     or reference validation
   AND ComponentContract.approval_status = approved
 ```
 
@@ -1105,7 +1291,7 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Nested collection | nested CollectionBinding | Yes (`collection_item_field`) | No | — | nested repeat root | Yes when complete | parent field errors |
 | Top-level count | collection_count ValueBinding | Yes (`collection_count_attr`) | No | — | count target | Yes when proven | unproven count |
 | Nested count | nested collection_count | Yes (`collection_item_field`) | No | — | count target | Yes when proven | same |
-| Binding-backed slot | reviewed ValueBinding slot projection | Yes (`slot`) | No | — | slot target | Yes when explicit | auto slot forbidden |
+| Binding-backed slot | reviewed ValueBinding slot projection | Yes (`slot`) | No | — | slot target | No | `slot.binding_backed_unsupported` in plan 1.0.0 |
 | Static heading promoted to attr | static IR text + semantic review | No | Yes | `text_content` | `heading` | No | type/node mismatch |
 | Static paragraph promoted to attr | static IR text | No | Yes | `text_content` | `paragraph` or `rich_text` | No | type/node mismatch |
 | `heading_level` config | semantic review | No | Yes | `heading_level` | heading | No | type/validation |
@@ -1135,6 +1321,13 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Image source missing accessibility metadata | no `image_alt_policy` | — | — | — | image | No | `accessibility.image_policy_missing` |
 | Consumer alt on wrong image node | policy map | — | Yes invalid | `asset_alt` | wrong node | No | `accessibility.alt_projection_mismatch` |
 | Static internal image, no public source | internal image node | No | No | — | image | No | `STATIC_INTERNAL_IMAGE_RULE` |
+| Collection-item asset + consumer alt | ItemField policy + sibling binding | Yes item fields | No | — | same image node | No when complete | item accessibility codes |
+| Collection-item asset + decorative | ItemField `decorative` | Yes source | No alt sibling | — | image | No when complete | alt sibling forbidden |
+| Collection-item asset missing policy | ItemField | Yes | — | — | image | No | `item_image_policy_missing` |
+| Collection-item alt field missing | consumer_supplied | Yes source | No alt projection | — | — | No | `alt_item_field_missing` |
+| Collection-item alt on wrong image node | sibling text binding | Yes | — | — | wrong node | No | `alt_item_projection_mismatch` |
+| Nested collection-item image | nested CollectionInput | Yes | No RenderProjection | — | image | No when complete | same ItemField rules |
+| Binding-backed slot (generation) | slot projection | Yes | No | — | — | No | `BINDING_BACKED_SLOT_PLAN_RULE` |
 
 ## 19. Edge cases and resulting rules
 
@@ -1160,8 +1353,15 @@ informal risk list:
 - **Slot target subtree contains binding-backed descendants:** invalid in plan
   1.0.0 (`SUBTREE_SLOT_BINDING_DESCENDANT_POLICY`); do not combine slot output
   with separately emitted binding-backed descendants.
-- **Image source without structured accessibility policy:** blocks generation
-  (`IMAGE_ACCESSIBILITY_VALIDATION_RULE`).
+- **Binding-backed slot with valid placement:** satisfies
+  `PUBLIC_TOP_LEVEL_PLACEMENT_RULE` but blocks generation under
+  `BINDING_BACKED_SLOT_PLAN_RULE` (`slot.binding_backed_unsupported`).
+- **Top-level image source without structured accessibility policy:** blocks
+  generation (`IMAGE_ACCESSIBILITY_VALIDATION_RULE` Attr path).
+- **Collection-item image source without ItemField accessibility policy:** blocks
+  generation (`COLLECTION_ITEM_IMAGE_ACCESSIBILITY_RULE`).
+- **Stored plan error/fatal diagnostic:** blocks generation
+  (`PLAN_STORED_DIAGNOSTIC_GATE`).
 - **Static internal image without public asset-source placement:** blocks plan
   1.0.0 (`STATIC_INTERNAL_IMAGE_RULE`).
 - **Fixture literal as public default:** forbidden (`STATIC_DEFAULT_RULE`).
@@ -1332,18 +1532,30 @@ ROOT_CLASS_RULE = root_class on boundary_node_id only
 
 ROOT_GLOBAL_ATTR_RULE = root_global_attrs on boundary_node_id only
 
-ACTION_SLOT_RULE = subtree_slot only; no invented behavior
+ACTION_SLOT_RULE = section 10; binding-backed slots blocked by BINDING_BACKED_SLOT_PLAN_RULE
 
 IMAGE_ACCESSIBILITY_RULE =
   IMAGE_ACCESSIBILITY_REPRESENTATION_RULE + IMAGE_ACCESSIBILITY_VALIDATION_RULE
 
-IMAGE_ACCESSIBILITY_REPRESENTATION_RULE = section 10.1
+IMAGE_ACCESSIBILITY_REPRESENTATION_RULE = sections 10.1 and 10.2
 
-IMAGE_ACCESSIBILITY_VALIDATION_RULE = section 10.1
+IMAGE_ACCESSIBILITY_VALIDATION_RULE = sections 10.1 and 10.2
 
 CONSUMER_SUPPLIED_ALT_POLICY = section 10.1
 
 DECORATIVE_ALT_POLICY = section 10.1
+
+COLLECTION_ITEM_IMAGE_SOURCE_RULE = section 10.2
+
+COLLECTION_ITEM_IMAGE_ACCESSIBILITY_RULE = section 10.2
+
+COLLECTION_ITEM_CONSUMER_ALT_POLICY = section 10.2
+
+COLLECTION_ITEM_DECORATIVE_ALT_POLICY = section 10.2
+
+COLLECTION_ITEM_ALT_SAME_NODE_RULE = section 10.2
+
+NESTED_ITEM_IMAGE_POLICY = section 10.2 (same rules within owning CollectionInput)
 
 STATIC_INTERNAL_IMAGE_RULE = section 10.1
 
@@ -1352,6 +1564,10 @@ IMAGE_SOURCE_BINDING_POLICY = section 10.1
 IMAGE_SOURCE_RENDER_PROJECTION_POLICY = section 10.1
 
 IMAGE_ALT_SAME_NODE_RULE = section 6.3
+
+BINDING_BACKED_SLOT_PLAN_RULE = section 10.3
+
+BINDING_BACKED_SLOT_GENERATION_ELIGIBLE = no in plan 1.0.0
 
 COLLECTION_RENDER_PROJECTION_RULE =
   collections via bindings/projections only
@@ -1368,6 +1584,12 @@ PLAN_DIAGNOSTIC_MODEL = ComponentizationPlan.Diagnostic section 14.1
 PLAN_DIAGNOSTIC_NAMESPACE = componentization_plan.*
 
 PLAN_BLOCKING_SEVERITIES = error | fatal
+
+PLAN_ERROR_FATAL_POLICY = section 14.1
+
+PLAN_INFO_WARNING_POLICY = section 14.1
+
+PLAN_STORED_DIAGNOSTIC_GATE = section 14.1
 
 PLAN_INTRINSIC_VALIDATION_RULE = see section 15
 
