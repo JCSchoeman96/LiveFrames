@@ -399,4 +399,38 @@ defmodule LiveFrames.ComponentContractTest do
     assert {:error, _} = ComponentContract.validate_for_generation(bad, document)
     assert {:error, _} = ComponentContract.encode(bad)
   end
+
+  describe "approved malformed generation gate" do
+    test "approved contracts with malformed lists return diagnostics without raising" do
+      document = LiveFrames.IR.DesignDocument.new()
+
+      for {field, value} <- [
+            {:public_attrs, ["bad"]},
+            {:public_slots, ["bad"]},
+            {:collection_inputs, ["bad"]},
+            {:diagnostics, ["bad"]}
+          ] do
+        contract = struct!(base_contract(approval_status: :approved), [{field, value}])
+
+        assert {:error, _diagnostics} =
+                 ComponentContract.validate_for_generation(contract, document)
+      end
+
+      nested_item_fields =
+        base_contract(
+          approval_status: :approved,
+          public_attrs: [attr("items", type: :list)],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "cb_root",
+              public_attr_name: "items",
+              item_fields: ["bad"]
+            }
+          ]
+        )
+
+      assert {:error, _} =
+               ComponentContract.validate_for_generation(nested_item_fields, document)
+    end
+  end
 end

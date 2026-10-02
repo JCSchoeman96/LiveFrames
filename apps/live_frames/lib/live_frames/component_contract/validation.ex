@@ -64,35 +64,29 @@ defmodule LiveFrames.ComponentContract.Validation do
         err("component_contract.approval_blocked", "contract is not approved for generation")
       ])
     else
-      intrinsic_result = validate(contract)
+      case validate(contract) do
+        {:error, diagnostics} ->
+          finish(diagnostics)
 
-      diagnostics =
-        case intrinsic_result do
-          :ok -> []
-          {:error, ds} -> ds
-        end
+        :ok ->
+          diagnostics =
+            case ReferenceValidation.validate(contract, design_document) do
+              :ok -> []
+              {:error, ds} -> ds
+            end
 
-      diagnostics =
-        if intrinsic_result == :ok do
-          case ReferenceValidation.validate(contract, design_document) do
-            :ok -> diagnostics
-            {:error, ds} -> diagnostics ++ ds
+          diagnostics =
+            Enum.reduce(contract.diagnostics, diagnostics, fn
+              %Diagnostic{severity: sev} = d, acc when sev in [:error, :fatal] -> [d | acc]
+              _, acc -> acc
+            end)
+
+          diagnostics = diagnostics ++ generation_capability_diagnostics(contract)
+
+          case finish(diagnostics) do
+            :ok -> :ok
+            {:error, ds} -> {:error, ds}
           end
-        else
-          diagnostics
-        end
-
-      diagnostics =
-        Enum.reduce(contract.diagnostics, diagnostics, fn
-          %Diagnostic{severity: sev} = d, acc when sev in [:error, :fatal] -> [d | acc]
-          _, acc -> acc
-        end)
-
-      diagnostics = diagnostics ++ generation_capability_diagnostics(contract)
-
-      case finish(diagnostics) do
-        :ok -> :ok
-        {:error, ds} -> {:error, ds}
       end
     end
   end

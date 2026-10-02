@@ -123,7 +123,8 @@ defmodule LiveFrames.ComponentContract.ReferenceValidation do
           document,
           indexes,
           attrs_by_name,
-          collection_by_id
+          collection_by_id,
+          item_index
         )
 
       :value ->
@@ -155,7 +156,8 @@ defmodule LiveFrames.ComponentContract.ReferenceValidation do
          document,
          indexes,
          attrs_by_name,
-         collection_by_id
+         collection_by_id,
+         item_index
        ) do
     case Map.get(document.collection_bindings, p.source_binding_id) do
       %CollectionBinding{} = binding ->
@@ -200,7 +202,7 @@ defmodule LiveFrames.ComponentContract.ReferenceValidation do
               binding,
               diagnostics,
               collection_by_id,
-              item_index_from_inputs(collection_by_id)
+              item_index
             )
 
           _ ->
@@ -221,12 +223,6 @@ defmodule LiveFrames.ComponentContract.ReferenceValidation do
           )
         ]
     end
-  end
-
-  defp item_index_from_inputs(collection_by_id) do
-    Map.new(collection_by_id, fn {id, %CollectionInput{item_fields: fields}} ->
-      {id, Map.new(fields, fn %ItemField{name: name} = field -> {name, field} end)}
-    end)
   end
 
   defp collection_binding_normalization(

@@ -409,4 +409,328 @@ defmodule LiveFrames.ComponentContractReferenceValidationTest do
              )
     end
   end
+
+  describe "complete projection reference matrix" do
+    test "ordinary collection_item_field valid and ownership mismatch" do
+      document =
+        ir_document(
+          collection_bindings: %{
+            "cb_root" => collection_binding("cb_root", repeat_root_node_id: @repeat_id)
+          },
+          value_bindings: %{
+            "vb_item" =>
+              value_binding("vb_item",
+                target_node_id: @repeat_id,
+                value_kind: :field,
+                scope: :collection_item,
+                collection_binding_id: "cb_root",
+                value_key: "label"
+              )
+          }
+        )
+
+      contract =
+        base_contract(
+          public_attrs: [struct!(%Attr{name: "items", type: :list, semantic_purpose: "items"})],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "cb_root",
+              public_attr_name: "items",
+              item_fields: [
+                struct!(%ItemField{name: "label", type: :string, semantic_purpose: "label"})
+              ]
+            }
+          ],
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :value,
+              source_binding_id: "vb_item",
+              projection_kind: :collection_item_field,
+              source_collection_binding_id: "cb_root",
+              item_field_name: "label",
+              target_node_id: @repeat_id
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_ir_references(contract, document) == :ok
+
+      [projection] = contract.binding_projections
+
+      bad = %{
+        contract
+        | binding_projections: [
+            %{projection | source_collection_binding_id: "cb_other"}
+          ]
+      }
+
+      assert {:error, diagnostics} = ComponentContract.validate_ir_references(bad, document)
+
+      assert Enum.any?(
+               diagnostics,
+               &(&1.code == "component_contract.projection.collection_ownership_mismatch")
+             )
+    end
+
+    test "valid root collection_count_attr reference" do
+      document =
+        ir_document(
+          collection_bindings: %{
+            "cb_root" => collection_binding("cb_root", repeat_root_node_id: @repeat_id)
+          },
+          value_bindings: %{
+            "vb_count" =>
+              value_binding("vb_count",
+                target_node_id: @site_id,
+                value_kind: :collection_count,
+                scope: :collection,
+                collection_binding_id: "cb_root"
+              )
+          }
+        )
+
+      contract =
+        base_contract(
+          public_attrs: [
+            struct!(%Attr{name: "items", type: :list, semantic_purpose: "items"}),
+            struct!(%Attr{
+              name: "count",
+              type: :integer,
+              semantic_purpose: "count",
+              validation: %{"min" => 0}
+            })
+          ],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "cb_root",
+              public_attr_name: "items",
+              count_attr_name: "count"
+            }
+          ],
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :value,
+              source_binding_id: "vb_count",
+              projection_kind: :collection_count_attr,
+              public_attr_name: "count",
+              source_collection_binding_id: "cb_root",
+              target_node_id: @site_id
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_ir_references(contract, document) == :ok
+    end
+
+    test "valid nested count collection_item_field reference" do
+      document =
+        ir_document(
+          collection_bindings: %{
+            "cb_root" => collection_binding("cb_root", repeat_root_node_id: @repeat_id),
+            "cb_child" =>
+              collection_binding("cb_child",
+                repeat_root_node_id: @repeat_id,
+                parent_collection_binding_id: "cb_root"
+              )
+          },
+          value_bindings: %{
+            "vb_count" =>
+              value_binding("vb_count",
+                target_node_id: @site_id,
+                value_kind: :collection_count,
+                scope: :collection,
+                collection_binding_id: "cb_child"
+              )
+          }
+        )
+
+      contract =
+        base_contract(
+          public_attrs: [struct!(%Attr{name: "items", type: :list, semantic_purpose: "items"})],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "cb_root",
+              public_attr_name: "items",
+              item_fields: [
+                struct!(%ItemField{name: "kids", type: :list, semantic_purpose: "kids"}),
+                struct!(%ItemField{
+                  name: "child_count",
+                  type: :integer,
+                  semantic_purpose: "child count",
+                  validation: %{"min" => 0}
+                })
+              ]
+            },
+            %CollectionInput{
+              source_collection_binding_id: "cb_child",
+              parent_collection_binding_id: "cb_root",
+              parent_item_field_name: "kids",
+              count_item_field_name: "child_count"
+            }
+          ],
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :value,
+              source_binding_id: "vb_count",
+              projection_kind: :collection_item_field,
+              source_collection_binding_id: "cb_child",
+              parent_collection_binding_id: "cb_root",
+              parent_item_field_name: "child_count",
+              target_node_id: @site_id
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_ir_references(contract, document) == :ok
+
+      [projection] = contract.binding_projections
+
+      assert {:error, bad_parent} =
+               ComponentContract.validate_ir_references(
+                 %{
+                   contract
+                   | binding_projections: [
+                       %{projection | parent_collection_binding_id: "cb_child"}
+                     ]
+                 },
+                 document
+               )
+
+      assert Enum.any?(
+               bad_parent,
+               &(&1.code == "component_contract.projection.collection_ownership_mismatch")
+             )
+
+      assert {:error, bad_field} =
+               ComponentContract.validate_ir_references(
+                 %{
+                   contract
+                   | binding_projections: [%{projection | parent_item_field_name: "wrong"}]
+                 },
+                 document
+               )
+
+      assert Enum.any?(
+               bad_field,
+               &(&1.code == "component_contract.projection.collection_ownership_mismatch")
+             )
+    end
+
+    test "slot reference valid and collection-scoped rejection" do
+      document =
+        ir_document(
+          value_bindings: %{
+            "vb_site" =>
+              value_binding("vb_site",
+                target_node_id: @site_id,
+                value_kind: :field,
+                scope: :site
+              ),
+            "vb_item" =>
+              value_binding("vb_item",
+                target_node_id: @repeat_id,
+                value_kind: :field,
+                scope: :collection_item,
+                collection_binding_id: "cb_root",
+                value_key: "label"
+              )
+          },
+          collection_bindings: %{
+            "cb_root" => collection_binding("cb_root", repeat_root_node_id: @repeat_id)
+          }
+        )
+
+      slot_contract =
+        base_contract(
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :value,
+              source_binding_id: "vb_site",
+              projection_kind: :slot,
+              public_slot_name: "inner",
+              target_node_id: @site_id
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_ir_references(slot_contract, document) == :ok
+
+      bad_slot =
+        base_contract(
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :value,
+              source_binding_id: "vb_item",
+              projection_kind: :slot,
+              public_slot_name: "inner",
+              target_node_id: @repeat_id
+            }
+          ]
+        )
+
+      assert {:error, diagnostics} = ComponentContract.validate_ir_references(bad_slot, document)
+
+      assert Enum.any?(
+               diagnostics,
+               &(&1.code == "component_contract.projection.binding_kind_mismatch")
+             )
+    end
+
+    test "approved nested collection passes generation gate" do
+      document =
+        ir_document(
+          collection_bindings: %{
+            "cb_root" => collection_binding("cb_root", repeat_root_node_id: @repeat_id),
+            "cb_child" =>
+              collection_binding("cb_child",
+                repeat_root_node_id: @repeat_id,
+                parent_collection_binding_id: "cb_root"
+              )
+          }
+        )
+
+      contract =
+        base_contract(
+          approval_status: :approved,
+          public_attrs: [
+            struct!(%Attr{name: "items", type: :list, semantic_purpose: "items"})
+          ],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "cb_root",
+              public_attr_name: "items",
+              item_fields: [
+                struct!(%ItemField{name: "kids", type: :list, semantic_purpose: "kids"})
+              ]
+            },
+            %CollectionInput{
+              source_collection_binding_id: "cb_child",
+              parent_collection_binding_id: "cb_root",
+              parent_item_field_name: "kids"
+            }
+          ],
+          binding_projections: [
+            %BindingProjection{
+              source_binding_kind: :collection,
+              source_binding_id: "cb_root",
+              projection_kind: :collection_attr,
+              public_attr_name: "items",
+              source_collection_binding_id: "cb_root",
+              target_node_id: @repeat_id
+            },
+            %BindingProjection{
+              source_binding_kind: :collection,
+              source_binding_id: "cb_child",
+              projection_kind: :collection_item_field,
+              source_collection_binding_id: "cb_child",
+              parent_collection_binding_id: "cb_root",
+              parent_item_field_name: "kids",
+              target_node_id: @repeat_id
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_for_generation(contract, document) == :ok
+    end
+  end
 end
