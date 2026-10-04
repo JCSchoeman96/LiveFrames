@@ -3,7 +3,8 @@ defmodule LiveFrames.ComponentizationPlan.Json do
 
   @spec normalize(term()) :: {:ok, term()} | :error
   def normalize(nil), do: {:ok, nil}
-  def normalize(value) when is_binary(value) or is_boolean(value), do: {:ok, value}
+  def normalize(value) when is_binary(value), do: key_string(value)
+  def normalize(value) when is_boolean(value), do: {:ok, value}
   def normalize(value) when is_integer(value) or is_float(value), do: {:ok, value}
 
   def normalize([]), do: {:ok, []}
@@ -45,7 +46,9 @@ defmodule LiveFrames.ComponentizationPlan.Json do
   defp normalize_list_tail(_improper_tail), do: :error
 
   @spec key_string(term()) :: {:ok, String.t()} | :error
-  def key_string(key) when is_binary(key), do: {:ok, key}
+  def key_string(key) when is_binary(key) do
+    if String.valid?(key), do: {:ok, key}, else: :error
+  end
 
   def key_string(key) when is_atom(key) and key not in [nil, true, false],
     do: {:ok, Atom.to_string(key)}

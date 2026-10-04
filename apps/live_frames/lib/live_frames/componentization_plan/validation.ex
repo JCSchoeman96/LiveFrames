@@ -87,7 +87,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
   end
 
   defp validate_non_empty_string(diagnostics, value, code, message, path) do
-    if is_binary(value) and byte_size(value) > 0 do
+    if valid_string?(value) and byte_size(value) > 0 do
       diagnostics
     else
       add(diagnostics, error_at(code, message, path))
@@ -95,7 +95,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
   end
 
   defp validate_fingerprint(diagnostics, value) do
-    if is_binary(value) and Regex.match?(@fingerprint_pattern, value) do
+    if valid_string?(value) and Regex.match?(@fingerprint_pattern, value) do
       diagnostics
     else
       add(
@@ -214,20 +214,20 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
 
   defp validate_optional_name(diagnostics, nil, _path), do: {false, diagnostics}
 
-  defp validate_optional_name(diagnostics, value, _path)
-       when is_binary(value) and byte_size(value) > 0,
-       do: {true, diagnostics}
-
-  defp validate_optional_name(diagnostics, _value, path) do
-    {false,
-     add(
-       diagnostics,
-       error_at(
-         "componentization_plan.render_projection.invalid",
-         "public target names must be non-empty strings or nil",
-         path
-       )
-     )}
+  defp validate_optional_name(diagnostics, value, path) do
+    if valid_string?(value) and byte_size(value) > 0 do
+      {true, diagnostics}
+    else
+      {false,
+       add(
+         diagnostics,
+         error_at(
+           "componentization_plan.render_projection.invalid",
+           "public target names must be non-empty strings or nil",
+           path
+         )
+       )}
+    end
   end
 
   defp projection_identity(%RenderProjection{public_attr_name: name, public_slot_name: nil})
@@ -274,7 +274,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
 
   defp validate_diagnostic(diagnostics, diagnostic, path) do
     diagnostics =
-      if is_binary(diagnostic.code) and
+      if valid_string?(diagnostic.code) and
            String.starts_with?(diagnostic.code, "componentization_plan.") do
         diagnostics
       else
@@ -303,7 +303,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
       end
 
     diagnostics =
-      if is_binary(diagnostic.message) and byte_size(diagnostic.message) > 0 do
+      if valid_string?(diagnostic.message) and byte_size(diagnostic.message) > 0 do
         diagnostics
       else
         add(
@@ -337,19 +337,22 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
 
   defp validate_optional_string(diagnostics, nil, _path), do: diagnostics
 
-  defp validate_optional_string(diagnostics, value, _path) when is_binary(value),
-    do: diagnostics
-
-  defp validate_optional_string(diagnostics, _value, path) do
-    add(
-      diagnostics,
-      error_at(
-        "componentization_plan.metadata.invalid",
-        "value must be a string or nil",
-        path
+  defp validate_optional_string(diagnostics, value, path) do
+    if valid_string?(value) do
+      diagnostics
+    else
+      add(
+        diagnostics,
+        error_at(
+          "componentization_plan.metadata.invalid",
+          "value must be a string or nil",
+          path
+        )
       )
-    )
+    end
   end
+
+  defp valid_string?(value), do: is_binary(value) and String.valid?(value)
 
   defp finish([]), do: :ok
 

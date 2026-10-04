@@ -55,6 +55,244 @@ defmodule LiveFrames.ComponentContractTest do
     )
   end
 
+  defp serializable_contract do
+    base_contract(
+      public_attrs: [attr("label"), attr("entries", type: :list)],
+      public_slots: [slot("body")],
+      collection_inputs: [
+        %CollectionInput{
+          source_collection_binding_id: "collection",
+          public_attr_name: "entries",
+          item_fields: [item_field("label")]
+        }
+      ],
+      binding_projections: [
+        %BindingProjection{
+          source_binding_kind: :value,
+          source_binding_id: "value",
+          projection_kind: :scalar_attr,
+          public_attr_name: "label",
+          target_node_id: "node"
+        }
+      ],
+      diagnostics: [
+        %Diagnostic{code: "component_contract.note", severity: :info, message: "Note"}
+      ]
+    )
+  end
+
+  defp replace_field(value, path, replacement) do
+    access =
+      Enum.map(path, fn
+        index when is_integer(index) -> Access.at(index)
+        key -> Access.key(key)
+      end)
+
+    put_in(value, access, replacement)
+  end
+
+  test "JSON surfaces reject invalid UTF-8 and improper lists as deterministic diagnostics" do
+    contract = serializable_contract()
+    assert ComponentContract.validate(contract) == :ok
+
+    paths = [
+      [:public_attrs, 0, :default],
+      [:public_attrs, 0, :validation],
+      [:public_attrs, 0, :accessibility],
+      [:public_attrs, 0, :provenance],
+      [:public_slots, 0, :validation],
+      [:public_slots, 0, :accessibility],
+      [:public_slots, 0, :provenance],
+      [:collection_inputs, 0, :item_fields, 0, :default],
+      [:collection_inputs, 0, :item_fields, 0, :validation],
+      [:collection_inputs, 0, :item_fields, 0, :accessibility],
+      [:collection_inputs, 0, :item_fields, 0, :provenance],
+      [:collection_inputs, 0, :provenance],
+      [:provenance],
+      [:diagnostics, 0, :metadata]
+    ]
+
+    malformed = [
+      %{<<255>> => "v"},
+      %{"k" => <<255>>},
+      %{"nested" => [1 | :tail]},
+      %{"nested" => [[], %{key: [true | "tail"]}]},
+      %{:foo => 1, "foo" => 2},
+      %{nil => 1},
+      %{true => 1},
+      %{1 => 1},
+      %{value: {1, 2}},
+      %{value: self()},
+      %{value: make_ref()},
+      %{value: fn -> :inert end},
+      %{value: %Attr{}}
+    ]
+
+    for path <- paths, bad <- malformed do
+      invalid = replace_field(contract, path, bad)
+      assert {:error, diagnostics} = ComponentContract.validate(invalid)
+      assert Enum.any?(diagnostics, &(&1.code == "component_contract.metadata.invalid"))
+      assert ComponentContract.validate(invalid) == {:error, diagnostics}
+      assert {:error, _} = ComponentContract.encode(invalid)
+    end
+
+    for path <- [[:public_attrs, 0, :default], [:collection_inputs, 0, :item_fields, 0, :default]],
+        bad <- [[1 | :tail], <<255>>, ["valid", [1 | :tail]]] do
+      assert {:error, diagnostics} =
+               ComponentContract.validate(replace_field(contract, path, bad))
+
+      assert Enum.any?(diagnostics, &(&1.code == "component_contract.metadata.invalid"))
+    end
+  end
+
+  test "serialized ordinary strings reject invalid UTF-8 before string operations" do
+    contract = serializable_contract()
+
+    paths = [
+      [:contract_format_version],
+      [:contract_id],
+      [:module_intent],
+      [:function_intent],
+      [:public_attrs, 0, :name],
+      [:public_attrs, 0, :semantic_purpose],
+      [:public_slots, 0, :name],
+      [:public_slots, 0, :cardinality],
+      [:public_slots, 0, :semantic_purpose],
+      [:public_slots, 0, :consumer_responsibility],
+      [:collection_inputs, 0, :source_collection_binding_id],
+      [:collection_inputs, 0, :public_attr_name],
+      [:collection_inputs, 0, :parent_collection_binding_id],
+      [:collection_inputs, 0, :parent_item_field_name],
+      [:collection_inputs, 0, :count_attr_name],
+      [:collection_inputs, 0, :count_item_field_name],
+      [:collection_inputs, 0, :item_fields, 0, :name],
+      [:collection_inputs, 0, :item_fields, 0, :semantic_purpose],
+      [:binding_projections, 0, :source_binding_id],
+      [:binding_projections, 0, :target_node_id],
+      [:binding_projections, 0, :public_attr_name],
+      [:binding_projections, 0, :public_slot_name],
+      [:binding_projections, 0, :source_collection_binding_id],
+      [:binding_projections, 0, :parent_collection_binding_id],
+      [:binding_projections, 0, :item_field_name],
+      [:binding_projections, 0, :parent_item_field_name],
+      [:diagnostics, 0, :message],
+      [:diagnostics, 0, :path],
+      [:diagnostics, 0, :suggested_action]
+    ]
+
+    for path <- paths do
+      invalid = replace_field(contract, path, <<255>>)
+      assert {:error, diagnostics} = ComponentContract.validate(invalid)
+      assert ComponentContract.validate(invalid) == {:error, diagnostics}
+      assert {:error, _} = ComponentContract.encode(invalid)
+    end
+
+    invalid = replace_field(contract, [:diagnostics, 0, :code], "component_contract." <> <<255>>)
+    assert {:error, _} = ComponentContract.validate(invalid)
+  end
+
+  test "malformed artifact lists return diagnostics without raising" do
+    contract = serializable_contract()
+
+    for field <- [
+          :public_attrs,
+          :public_slots,
+          :collection_inputs,
+          :binding_projections,
+          :diagnostics
+        ] do
+      invalid = Map.put(contract, field, [hd(Map.fetch!(contract, field)) | :tail])
+      assert {:error, _} = ComponentContract.validate(invalid)
+    end
+
+    invalid =
+      replace_field(contract, [:collection_inputs, 0, :item_fields], [item_field("label") | :tail])
+
+    assert {:error, _} = ComponentContract.validate(invalid)
+  end
+
+  test "malformed count validation objects and collection IDs remain diagnostic errors" do
+    for validation <- [nil, [], :invalid, %{min: [1 | :tail]}, %{"min" => <<255>>}] do
+      contract =
+        base_contract(
+          public_attrs: [
+            attr("entries", type: :list),
+            attr("total", type: :integer, validation: validation)
+          ],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "collection",
+              public_attr_name: "entries",
+              count_attr_name: "total"
+            }
+          ]
+        )
+
+      assert {:error, _} = ComponentContract.validate(contract)
+    end
+
+    for id <- [{:not, :text}, [1 | :tail], %{}, nil, self()] do
+      contract =
+        replace_field(
+          serializable_contract(),
+          [:collection_inputs, 0, :source_collection_binding_id],
+          id
+        )
+
+      assert {:error, _} = ComponentContract.validate(contract)
+    end
+  end
+
+  test "validated contracts encode valid deterministic JSON across supported recursive values" do
+    values = [
+      nil,
+      false,
+      true,
+      0,
+      -123,
+      1.5,
+      1.0e308,
+      "héllo",
+      [],
+      [1, true, nil],
+      %{:foo => %{"bar" => [1, true, nil]}, "baz" => "ok"}
+    ]
+
+    for value <- values do
+      metadata = %{payload: value}
+      contract = serializable_contract()
+      contract = replace_field(contract, [:public_attrs, 0, :default], value)
+
+      contract =
+        replace_field(contract, [:collection_inputs, 0, :item_fields, 0, :default], value)
+
+      for path <- [
+            [:provenance],
+            [:public_attrs, 0, :validation],
+            [:public_attrs, 0, :accessibility],
+            [:public_attrs, 0, :provenance],
+            [:public_slots, 0, :validation],
+            [:public_slots, 0, :accessibility],
+            [:public_slots, 0, :provenance],
+            [:collection_inputs, 0, :provenance],
+            [:collection_inputs, 0, :item_fields, 0, :validation],
+            [:collection_inputs, 0, :item_fields, 0, :accessibility],
+            [:collection_inputs, 0, :item_fields, 0, :provenance],
+            [:diagnostics, 0, :metadata]
+          ] do
+        artifact = replace_field(contract, path, metadata)
+        assert ComponentContract.validate(artifact) == :ok
+        assert {:ok, encoded} = ComponentContract.encode(artifact)
+        assert {:ok, _} = Jason.decode(encoded)
+        assert ComponentContract.encode(artifact) == {:ok, encoded}
+      end
+    end
+
+    mixed = base_contract(provenance: %{:foo => %{"bar" => [1, true, nil]}, "baz" => "ok"})
+    strings = base_contract(provenance: %{"foo" => %{"bar" => [1, true, nil]}, "baz" => "ok"})
+    assert ComponentContract.encode(mixed) == ComponentContract.encode(strings)
+  end
+
   test "format version and enums" do
     assert ComponentContract.current_format_version() == "1.0.0"
     assert ComponentContract.categories() == [:primitive, :component, :pattern, :section]
