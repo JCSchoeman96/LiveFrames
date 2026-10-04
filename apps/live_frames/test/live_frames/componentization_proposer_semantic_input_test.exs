@@ -997,6 +997,47 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
       assert {:error, _} = Input.validate(malformed, document())
     end
 
+    test "unresolved nested assignment targets do not raise during ownership indexing" do
+      {doc, _decisions} = collections()
+
+      doc = %{
+        doc
+        | collection_bindings:
+            Map.put(
+              doc.collection_bindings,
+              "inner_b",
+              %CollectionBinding{
+                collection_binding_id: "inner_b",
+                owner_node_id: "node_000001_000001",
+                repeat_root_node_id: "node_000001_000001_000002",
+                parent_collection_binding_id: "outer"
+              }
+            )
+      }
+
+      malformed_nested =
+        input(
+          binding_assignments: [
+            assignment("inner", nil,
+              source_binding_kind: :collection,
+              assignment_kind: :collection_item_field_nested_collection,
+              source_collection_binding_id: "missing_owner",
+              parent_item_field_name: "children"
+            ),
+            assignment("inner_b", nil,
+              source_binding_kind: :collection,
+              assignment_kind: :collection_item_field_nested_collection,
+              source_collection_binding_id: "missing_owner",
+              parent_item_field_name: "children"
+            )
+          ]
+        )
+
+      assert {:error, diagnostics} = Input.validate(malformed_nested, doc)
+      assert Enum.all?(diagnostics, &(&1.severity == :error))
+      assert Enum.any?(diagnostics, &(&1.code == "componentization_proposer.input.invalid"))
+    end
+
     test "rejects invalid UTF-8 strings without raising" do
       invalid_utf8 = <<255>>
 

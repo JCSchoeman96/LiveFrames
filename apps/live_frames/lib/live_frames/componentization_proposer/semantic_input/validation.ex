@@ -358,7 +358,10 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
   defp indexes(input, document) do
     assignments_by_target =
       Enum.reduce(input.binding_assignments, %{}, fn d, acc ->
-        Map.update(acc, assignment_target(d, document.collection_bindings), [d], &[d | &1])
+        case assignment_target(d, document.collection_bindings) do
+          nil -> acc
+          target -> Map.update(acc, target, [d], &[d | &1])
+        end
       end)
 
     %{
@@ -743,8 +746,15 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
   defp assignment_target(d, collections) do
     case Map.get(collections, d.source_collection_binding_id) do
-      nil -> {:item_field, nil, d.parent_item_field_name}
-      source -> {:item_field, source.parent_collection_binding_id, d.parent_item_field_name}
+      nil ->
+        nil
+
+      %{parent_collection_binding_id: parent_id} ->
+        if is_binary(parent_id) and parent_id != "" do
+          {:item_field, parent_id, d.parent_item_field_name}
+        else
+          nil
+        end
     end
   end
 
