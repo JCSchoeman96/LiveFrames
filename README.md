@@ -35,16 +35,18 @@ Completed foundations include:
   `max-width: 478px` and `tablet_portrait` at `max-width: 991px`; tablet
   remains active at mobile widths.
 
-The current pipeline is:
+The current pipelines split after Design IR + TokenSet:
 
 ```text
 source
 → source adapter
 → Design IR + TokenSet
-→ Fidelity
-→ HEEx/CSS
-→ preview
-→ later native componentization
+   ├→ Fidelity → HEEx/CSS → preview
+   └→ explicit semantic decisions
+      → ComponentizationProposer
+      → proposed/needs_review ComponentContract + ComponentizationPlan
+      → reviewer approval (not yet implemented)
+      → future native generator (not yet implemented)
 ```
 
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.

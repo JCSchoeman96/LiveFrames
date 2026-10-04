@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v1
+**Plan version:** v2
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -33,6 +33,9 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
 - `v1` — initial C09D6-A authority: domain boundaries, review model,
   generator lifecycle, generation semantics, styling split, determinism, Fidelity
   and Catalogue/P10 boundaries, CTA Tango tracer preflight, near-term roadmap
+- `v2` — PR #133 review: `validate_references/3`, shared
+  `validate_generation_prerequisites`, module/function emission naming, C09D6-D
+  style-coverage preflight (candidate sufficient)
 
 ---
 
@@ -184,39 +187,76 @@ The **native generator must never** change `approval_status`.
 
 First-wave human approval **must not** directly promote a blocker-bearing
 `needs_review` candidate to `:approved`. Blockers include any contract or plan
-diagnostic with severity `:error` or `:fatal`, and any failed validator in §6.4.
+diagnostic with severity `:error` or `:fatal`, and any failed
+`validate_generation_prerequisites/3` (§6.4).
 
 Resolution path: revise upstream semantic input and/or IR, re-run proposer,
 then review the **new** pair.
 
-### 6.4 Reviewer approval guards (ordering)
+### 6.4 Shared non-status generation prerequisites (frozen)
 
-Reviewers establish `:approved` only after **all** steps succeed on the **same
-tuple** `(ComponentContract, ComponentizationPlan, DesignDocument)`:
+**Invariant:** a reviewer may set `:approved` **if and only if** the same
+tuple would satisfy every generation prerequisite **except** the
+`approval_status == :approved` check itself. No candidate that would fail
+generation eligibility (for example `:any` public attrs or collection item
+fields) may be approved.
 
-| Step | Function | Purpose |
-| --- | --- | --- |
-| 1 | `LiveFrames.IR.validate/1` | Design document intrinsic validity |
-| 2 | `ComponentContract.validate/1` | Contract intrinsic validity |
-| 3 | `ComponentContract.validate_ir_references/2` | Contract ↔ IR linkage (**strict**; `evidence_insufficient` blocks approval) |
-| 4 | `ComponentizationPlan.validate/1` | Plan intrinsic validity |
-| 5 | `ComponentizationPlan.validate/3` | Plan ↔ contract ↔ IR references |
-| 6 | Tuple linkage | `plan.contract_id == contract.contract_id` and `plan.design_document_sha256` equals fingerprint from `ComponentizationPlan.design_document_sha256/1` on the supplied document |
-| 7 | Stored diagnostics | No `:error` or `:fatal` in `contract.diagnostics` or `plan.diagnostics` |
+C09D6-B **must** introduce a single reusable, pure prerequisite boundary so
+review approval and generator entry cannot drift. Conceptual API (exact module
+name is implementation detail; behavior is frozen):
 
-**Circularity resolution:** `ComponentContract.validate_for_generation/2` and
-`ComponentizationPlan.validate_for_generation/3` require `approval_status ==
-:approved` **before** running generation-eligibility checks. Human approval
-therefore uses steps 1–7 only; it does **not** call `validate_for_generation` to
-decide whether approval is allowed. After a reviewer sets `:approved`, the
-**generator entry gate** calls `validate_for_generation` on contract and plan to
-confirm the tuple still satisfies generation prerequisites.
+```text
+validate_generation_prerequisites(contract, plan, design_document) :: :ok | {:error, diagnostics}
+```
+
+**Must include** (same semantics as today's `validate_for_generation` paths,
+**excluding** only the contract `approval_status` guard):
+
+| Check | Public API (reference) |
+| --- | --- |
+| Design document intrinsic validity | `LiveFrames.IR.validate/1` |
+| Contract intrinsic validity | `ComponentContract.validate/1` |
+| Contract ↔ IR linkage (**strict**; `evidence_insufficient` blocks) | `ComponentContract.validate_ir_references/2` |
+| Plan intrinsic validity | `ComponentizationPlan.validate/1` |
+| Plan ↔ contract ↔ IR references | `ComponentizationPlan.validate_references/3` |
+| Tuple linkage | `plan.contract_id == contract.contract_id` and matching `design_document_sha256` |
+| Stored blockers | No `:error` or `:fatal` in `contract.diagnostics` or `plan.diagnostics` |
+| Generation capability | Same rules as `ComponentContract` generation-capability diagnostics today (for example rejection of `:any` public attrs and collection `ItemField` types, first-wave slot cardinality) |
+| Plan generation reference index | Same indexed reference rules invoked by `ComponentizationPlan.validate_for_generation/3` after preflight |
+| Intent emission eligibility | §10.1 generation token grammar |
+
+**Must not** require `approval_status == :approved`.
+
+**Implementation rule (C09D6-B):** extract shared logic from existing
+`ComponentContract.validate_for_generation/2` and
+`ComponentizationPlan.validate_for_generation/3`. Public `validate_for_generation`
+**must** compose:
+
+```text
+approval_status == :approved
+AND validate_generation_prerequisites(contract, plan, design_document) == :ok
+```
+
+Do **not** maintain two independent rule sets that can diverge.
 
 C09D6-A does **not** add a machine-level `evidence_insufficient` waiver for
-step 3. (Plan `preflight` may treat that code specially for **pairing**
-validation; that existing behavior does not authorize silent human approval.)
+human approval or prerequisites. C09D6-B may refactor internal plan preflight
+so pairing validation aligns with this strict prerequisite policy.
 
-### 6.5 Generation entry gate (post-approval, generator-only)
+### 6.5 Review approval gate
+
+On a **proposed** or **needs_review** candidate (after §6.3 guards):
+
+```text
+validate_generation_prerequisites(contract, plan, design_document) == :ok
+→ reviewer may set approval_status = :approved
+```
+
+Otherwise approval is forbidden. Setting `:approved` does **not** call
+`validate_for_generation/2` or `/3` directly; prerequisites already cover every
+non-status generation check.
+
+### 6.6 Generation entry gate (post-approval)
 
 Immediately before native generation:
 
@@ -225,8 +265,9 @@ ComponentContract.validate_for_generation(contract, design_document)
 ComponentizationPlan.validate_for_generation(plan, contract, design_document)
 ```
 
-Both must return `:ok`. Failure → `generation_blocked` (§9), not a change to
-`approval_status`.
+Both must return `:ok`. Equivalently: `approval_status == :approved` plus
+`validate_generation_prerequisites/3 == :ok`. Failure → `generation_blocked` (§9),
+not a change to `approval_status`.
 
 ---
 
@@ -260,7 +301,8 @@ Compile-time / cold-path only. States, guards, and side effects:
 received
   guard: tuple present
   → gate_validated
-      guard: IR validate + validate_for_generation on contract and plan (§6.5)
+      guard: validate_generation_prerequisites + approved status (§6.4–6.6);
+         equivalently validate_for_generation on contract and plan
       fail terminal: generation_blocked
   → render_model_built
       guard: mechanical indexes built; projections resolved from plan + contract
@@ -307,13 +349,66 @@ The generator is **mechanical**. It must not make semantic decisions omitted
 upstream (names, roles, placement, accessibility policy, and public API shape
 come from the approved contract and plan).
 
-### 10.1 Module and function intents
+### 10.1 Module and function intents → Elixir source names
 
-- Emit `defmodule` from `module_intent` and `def` function component from
-  `function_intent` using the same bounded validation as
-  `ComponentContract.Validation` (`validate_intent_name/2` rules).
-- **No** arbitrary executable identifiers: intents must pass existing intent
-  name validation before emission.
+`ComponentContract.Validation.validate_intent_name/2` proves only a **non-empty,
+non-source-vocabulary** string. It does **not** prove a valid Elixir module alias
+or function identifier. Examples such as `module_intent: "marketing_block"` are
+**semantic Phoenix module intents**, not literal `defmodule` names.
+
+First-wave generation **must** map intents through a frozen, package-owned rule
+(no `String.to_atom/1`, no dynamic `apply`, no arbitrary user module alias, no
+filesystem/path inference):
+
+#### Generation token grammar (additional prerequisite)
+
+Both `module_intent` and `function_intent` must match:
+
+```text
+^[a-z][a-z0-9_]*$
+```
+
+(same character class as contract public names). Tokens failing this grammar
+block `validate_generation_prerequisites/3` until the contract is revised and
+re-proposed. `validate_intent_name/2` alone is **not** sufficient for emission.
+
+#### Deterministic module namespace
+
+| `category` | Generated module prefix |
+| --- | --- |
+| `:section` | `LiveFrames.Components.Sections` |
+| `:component` | `LiveFrames.Components` |
+| `:pattern` | `LiveFrames.Components.Patterns` |
+| `:primitive` | `LiveFrames.Components.Primitives` |
+
+**Module suffix:** split `module_intent` on `_`, capitalize each segment with
+ASCII rules (`marketing_block` → `MarketingBlock`), concatenate without separators.
+
+**Full module name:**
+
+```text
+<prefix>.<ModuleSuffix>
+```
+
+Example: `category: :section`, `module_intent: "marketing_block"` →
+`LiveFrames.Components.Sections.MarketingBlock`.
+
+#### Function component name
+
+Emit `def <function_intent>(assigns)` using the validated token verbatim
+(`function_intent: "hero"` → `def hero(assigns)`).
+
+#### Artifact path (deterministic, not inferred from host project)
+
+```text
+lib/live_frames/components/<category_path>/<module_intent>.ex
+```
+
+where `category_path` is `sections`, `patterns`, `primitives`, or empty
+(component category maps to `lib/live_frames/components/<module_intent>.ex`).
+
+Same semantic intents always yield the same module, function, and relative path.
+The contract does **not** choose an arbitrary top-level namespace.
 
 ### 10.2 Phoenix attrs and slots
 
@@ -386,11 +481,37 @@ HEEx alone.
 - **Do not** expose source `globalClasses` or ACSS utility names as generated
   public API.
 
-**Authority sufficiency:** Design IR 2.0.0 style records, TokenSet `1.0.0`,
-`docs/11`, `docs/20`, and Hero/Fidelity mechanical evidence are sufficient to
-derive **deterministic** native styling **without semantic guessing**, provided
-styling generation maps IR/plan layout evidence to token-backed rules already
-used for Hero. C09D6-A does **not** STOP for styling authority.
+**Styling authority posture (candidate sufficient, not proven):** Hero and
+cross-cutting docs (`docs/11`, `docs/20`, TokenSet `1.0.0`) establish the
+**package-owned styling model**, but repository evidence (for example
+`docs/development/c07x_unsupported_surface_inventory.md`) still records
+incomplete ACSS class/selector reproduction. C09D6-A does **not** assert that
+every visually meaningful style for a future tracer already survives in
+normalized Design IR / TokenSet.
+
+### 10.9 C09D6-D style-coverage preflight (mandatory before styling implementation)
+
+Before C09D6-D implementation for a selected tracer (provisional: CTA Tango),
+owners **must** run a documented style-coverage preflight:
+
+```text
+for every visually meaningful style required by that tracer:
+  prove representation from approved Design IR, TokenSet, responsive IR,
+  and/or existing package styling authority (docs/11, docs/20, TokenBridge)
+
+if any required style depends on:
+  unsupported ACSS class semantics
+  unnormalized source globalClasses
+  source-only selector recipes
+  missing responsive/style semantics in IR
+  inference from screenshots or source names
+
+→ STOP (do not implement C09D6-D for that tracer)
+```
+
+C09D6-D may proceed **only** after this coverage proof passes. C09D6-D must
+**not** reconstruct unsupported ACSS behavior heuristically or guess semantics
+omitted from IR/TokenSet.
 
 `LiveFrames.Fidelity` is **not** the native styling generator; reuse shared
 low-level CSS serialization helpers only where semantics match (§12).
@@ -414,7 +535,8 @@ no javascript: URL fabrication
 
 Tag names and attribute names emitted from Design IR must come from closed
 allow-lists tied to normalized IR node kinds, not free-form source strings.
-`module_intent` / `function_intent` follow bounded validation (§10.1).
+`module_intent` / `function_intent` follow §10.1 emission naming (not
+`validate_intent_name/2` alone).
 
 ---
 
@@ -551,9 +673,13 @@ native generation requires Design IR, ComponentContract, or ComponentizationPlan
 a new RenderProjection role is required
 collection-item RenderProjection is required
 review approval requires inventing evidence-insufficient waiver semantics
+review approval and generator generation-eligibility cannot share the same
+  non-status prerequisite semantics without changing frozen schemas/authority
 generator requires semantic naming/classification/accessibility inference
-styling cannot be generated from docs/11 + docs/20 + TokenSet without guessing
+  beyond frozen §10.1 token grammar and category namespace mapping
+CTA Tango C09D6-D style-coverage preflight fails (unsupported semantics)
 CTA Tango componentization requires Behavior IR
+safe module/function source naming requires ComponentContract schema changes
 native generator and P10 ejection cannot be cleanly separated
 ```
 
