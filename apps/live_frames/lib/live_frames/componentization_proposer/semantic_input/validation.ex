@@ -411,23 +411,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
     binding_owner_conflicts =
       Enum.flat_map(i.assignments_by_target, fn
-        {{:attr, name}, [_ | _] = assignments} when length(assignments) > 1 ->
-          [
-            diagnostic(
-              :conflict,
-              "binding_assignments." <> name,
-              "Multiple bindings own the same public attr"
-            )
-          ]
-
-        {{:slot, name}, [_ | _] = assignments} when length(assignments) > 1 ->
-          [
-            diagnostic(
-              :conflict,
-              "binding_assignments." <> name,
-              "Multiple bindings own the same public slot"
-            )
-          ]
+        {target, assignments} when length(assignments) > 1 ->
+          [binding_target_conflict(target)]
 
         _ ->
           []
@@ -765,6 +750,39 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
   defp image_target(%{target_kind: :attr} = d), do: {:attr, d.target_name}
   defp image_target(d), do: {:item_field, d.source_collection_binding_id, d.target_name}
+
+  defp binding_target_conflict({:attr, name}),
+    do:
+      diagnostic(
+        :conflict,
+        "binding_assignments." <> name,
+        "Multiple bindings own the same public attr"
+      )
+
+  defp binding_target_conflict({:slot, name}),
+    do:
+      diagnostic(
+        :conflict,
+        "binding_assignments." <> name,
+        "Multiple bindings own the same public slot"
+      )
+
+  defp binding_target_conflict({:item_field, collection_id, field_name}),
+    do:
+      diagnostic(
+        :conflict,
+        "binding_assignments." <> collection_id <> "." <> field_name,
+        "Multiple bindings own the same collection item field"
+      )
+
+  defp binding_target_conflict(target),
+    do:
+      diagnostic(
+        :conflict,
+        "binding_assignments",
+        "Multiple bindings own the same public target #{inspect(target)}"
+      )
+
   defp member_type?(map, key, type), do: match?(%{type: ^type}, Map.get(map, key))
 
   defp exists(index, key, p, label),

@@ -1029,7 +1029,7 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
     end
   end
 
-  test "multiple explicit bindings cannot own the same top-level public attr or slot" do
+  test "multiple explicit bindings cannot own the same public target" do
     doc = %{
       document()
       | value_bindings: %{
@@ -1063,6 +1063,147 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
       doc,
       "conflict"
     )
+
+    {doc, decisions} = collections()
+
+    doc = %{
+      doc
+      | value_bindings: %{
+          "field_a" =>
+            value("field_a",
+              target_node_id: "node_000001_000001",
+              scope: :collection_item,
+              collection_binding_id: "outer"
+            ),
+          "field_b" =>
+            value("field_b",
+              target_node_id: "node_000001_000001_000001",
+              scope: :collection_item,
+              collection_binding_id: "outer"
+            )
+        }
+    }
+
+    error(
+      %{
+        decisions
+        | item_fields: decisions.item_fields ++ [field("outer", "label")],
+          binding_assignments: [
+            assignment("field_a", nil,
+              assignment_kind: :collection_item_field_value,
+              item_field_name: "label",
+              source_collection_binding_id: "outer"
+            ),
+            assignment("field_b", nil,
+              assignment_kind: :collection_item_field_value,
+              item_field_name: "label",
+              source_collection_binding_id: "outer"
+            )
+          ]
+      },
+      doc,
+      "conflict"
+    )
+
+    nested_admissions =
+      decisions.collection_admissions ++
+        [
+          %CollectionAdmissionDecision{
+            source_collection_binding_id: "inner_b",
+            parent_collection_binding_id: "outer",
+            parent_item_field_name: "children",
+            provenance: %{}
+          }
+        ]
+
+    doc = %{
+      doc
+      | collection_bindings:
+          Map.put(
+            doc.collection_bindings,
+            "inner_b",
+            %CollectionBinding{
+              collection_binding_id: "inner_b",
+              owner_node_id: "node_000001_000001",
+              repeat_root_node_id: "node_000001_000001_000002",
+              parent_collection_binding_id: "outer"
+            }
+          )
+    }
+
+    error(
+      %{
+        decisions
+        | collection_admissions: nested_admissions,
+          binding_assignments: [
+            assignment("inner", nil,
+              source_binding_kind: :collection,
+              assignment_kind: :collection_item_field_nested_collection,
+              source_collection_binding_id: "inner",
+              parent_item_field_name: "children"
+            ),
+            assignment("inner_b", nil,
+              source_binding_kind: :collection,
+              assignment_kind: :collection_item_field_nested_collection,
+              source_collection_binding_id: "inner_b",
+              parent_item_field_name: "children"
+            )
+          ]
+      },
+      doc,
+      "conflict"
+    )
+
+    doc = %{
+      doc
+      | value_bindings:
+          Map.merge(doc.value_bindings, %{
+            "nested_count" =>
+              value("nested_count",
+                target_node_id: "node_000001_000001",
+                value_kind: :collection_count,
+                scope: :collection,
+                collection_binding_id: "inner",
+                value_key: nil
+              ),
+            "nested_count_b" =>
+              value("nested_count_b",
+                target_node_id: "node_000001_000001",
+                value_kind: :collection_count,
+                scope: :collection,
+                collection_binding_id: "inner",
+                value_key: nil
+              )
+          })
+    }
+
+    decisions = %{
+      decisions
+      | item_fields:
+          decisions.item_fields ++
+            [field("outer", "total", type: :integer, validation: %{"min" => 0})],
+        collection_count_links: [
+          %CollectionCountLinkDecision{
+            source_collection_binding_id: "inner",
+            count_public_name: "total",
+            count_value_binding_id: "nested_count"
+          }
+        ],
+        binding_assignments: [
+          assignment("nested_count", nil,
+            assignment_kind: :collection_count_item_field,
+            source_collection_binding_id: "inner",
+            parent_item_field_name: "total"
+          ),
+          assignment("nested_count_b", nil,
+            assignment_kind: :collection_count_item_field,
+            source_collection_binding_id: "inner",
+            parent_item_field_name: "total"
+          )
+        ]
+    }
+
+    error(decisions, doc, "conflict")
   end
 
   test "many decisions use one node indexing pass, independent of decision count" do
