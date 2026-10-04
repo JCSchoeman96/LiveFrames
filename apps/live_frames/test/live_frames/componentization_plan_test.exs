@@ -44,6 +44,108 @@ defmodule LiveFrames.ComponentizationPlanTest do
     assert ComponentizationPlan.validate(valid_plan()) == :ok
   end
 
+  test "nested JSON surfaces reject invalid UTF-8 without raising" do
+    diagnostic = %Diagnostic{code: "componentization_plan.note", message: "Note"}
+
+    for value <- [
+          %{<<255>> => "v"},
+          %{"k" => <<255>>},
+          %{nested: [1 | :tail]},
+          %{nested: [[], %{key: [true | "tail"]}]},
+          %{:foo => 1, "foo" => 2}
+        ] do
+      for plan <- [
+            valid_plan(provenance: value),
+            valid_plan(diagnostics: [%{diagnostic | metadata: value}])
+          ] do
+        assert {:error, diagnostics} = ComponentizationPlan.validate(plan)
+        assert Enum.any?(diagnostics, &(&1.code == "componentization_plan.metadata.invalid"))
+        assert ComponentizationPlan.validate(plan) == {:error, diagnostics}
+        assert {:error, _} = ComponentizationPlan.encode(plan)
+      end
+    end
+  end
+
+  test "serialized ordinary plan strings require valid UTF-8" do
+    projection = %RenderProjection{
+      public_attr_name: "label",
+      target_node_id: "node",
+      render_role: :text_content
+    }
+
+    diagnostic = %Diagnostic{code: "componentization_plan.note", message: "Note"}
+
+    plans =
+      for field <- [
+            :plan_format_version,
+            :contract_id,
+            :design_document_sha256,
+            :boundary_node_id
+          ],
+          do: Map.put(valid_plan(), field, <<255>>)
+
+    projections =
+      for field <- [:public_attr_name, :public_slot_name, :target_node_id],
+          do: valid_plan(render_projections: [Map.put(projection, field, <<255>>)])
+
+    diagnostics =
+      for field <- [:message, :path, :suggested_action],
+          do: valid_plan(diagnostics: [Map.put(diagnostic, field, <<255>>)])
+
+    bad_code =
+      valid_plan(diagnostics: [%{diagnostic | code: "componentization_plan." <> <<255>>}])
+
+    for plan <- plans ++ projections ++ diagnostics ++ [bad_code] do
+      assert {:error, errors} = ComponentizationPlan.validate(plan)
+      assert ComponentizationPlan.validate(plan) == {:error, errors}
+      assert {:error, _} = ComponentizationPlan.encode(plan)
+    end
+  end
+
+  test "validated plans encode valid deterministic JSON across supported recursive values" do
+    values = [
+      nil,
+      false,
+      true,
+      0,
+      -123,
+      1.5,
+      1.0e308,
+      "héllo",
+      [],
+      [1, true, nil],
+      %{:foo => %{"bar" => [1, true, nil]}, "baz" => "ok"}
+    ]
+
+    projection = %RenderProjection{
+      public_attr_name: "label",
+      target_node_id: "node",
+      render_role: :text_content
+    }
+
+    for value <- values do
+      plan =
+        valid_plan(
+          provenance: %{payload: value},
+          render_projections: [projection],
+          diagnostics: [
+            %Diagnostic{
+              code: "componentization_plan.note",
+              message: "Note",
+              path: "páth",
+              suggested_action: "Réview",
+              metadata: %{payload: value}
+            }
+          ]
+        )
+
+      assert ComponentizationPlan.validate(plan) == :ok
+      assert {:ok, encoded} = ComponentizationPlan.encode(plan)
+      assert {:ok, _} = Jason.decode(encoded)
+      assert ComponentizationPlan.encode(plan) == {:ok, encoded}
+    end
+  end
+
   test "validates each closed render role" do
     for role <- ComponentizationPlan.render_roles() do
       projection = %RenderProjection{

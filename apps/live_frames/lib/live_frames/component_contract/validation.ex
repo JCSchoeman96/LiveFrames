@@ -174,7 +174,7 @@ defmodule LiveFrames.ComponentContract.Validation do
       version == ComponentContract.current_format_version() ->
         diagnostics
 
-      is_binary(version) ->
+      valid_string?(version) ->
         add(
           diagnostics,
           err(
@@ -191,13 +191,15 @@ defmodule LiveFrames.ComponentContract.Validation do
     end
   end
 
-  defp validate_contract_id(diagnostics, id) when is_binary(id) and id != "", do: diagnostics
-
-  defp validate_contract_id(diagnostics, _) do
-    add(
-      diagnostics,
-      err("component_contract.identity.invalid", "contract_id must be a non-empty string")
-    )
+  defp validate_contract_id(diagnostics, id) do
+    if non_empty_string?(id) do
+      diagnostics
+    else
+      add(
+        diagnostics,
+        err("component_contract.identity.invalid", "contract_id must be a non-empty string")
+      )
+    end
   end
 
   defp validate_category(diagnostics, category) when category in @categories, do: diagnostics
@@ -217,40 +219,44 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_attrs(attrs, base_path, diagnostics) when is_list(attrs) do
-    {by_name, diagnostics} =
-      Enum.reduce(attrs, {%{}, diagnostics}, fn attr, {by_name, diagnostics} ->
-        path = "#{base_path}[#{map_size(by_name)}]"
+    if proper_list?(attrs) do
+      {by_name, diagnostics} =
+        Enum.reduce(attrs, {%{}, diagnostics}, fn attr, {by_name, diagnostics} ->
+          path = "#{base_path}[#{map_size(by_name)}]"
 
-        case attr do
-          %Attr{} = a ->
-            diagnostics = validate_attr(a, path, diagnostics)
+          case attr do
+            %Attr{} = a ->
+              diagnostics = validate_attr(a, path, diagnostics)
 
-            case Map.fetch(by_name, a.name) do
-              {:ok, _} ->
-                {by_name,
-                 add(
-                   diagnostics,
-                   err_at(
-                     "component_contract.attr.name_duplicate",
-                     "public attr names must be unique",
-                     path: "#{path}.name"
-                   )
-                 )}
+              case Map.fetch(by_name, a.name) do
+                {:ok, _} ->
+                  {by_name,
+                   add(
+                     diagnostics,
+                     err_at(
+                       "component_contract.attr.name_duplicate",
+                       "public attr names must be unique",
+                       path: "#{path}.name"
+                     )
+                   )}
 
-              :error ->
-                {Map.put(by_name, a.name, a), diagnostics}
-            end
+                :error ->
+                  {Map.put(by_name, a.name, a), diagnostics}
+              end
 
-          _ ->
-            {by_name,
-             add(
-               diagnostics,
-               err_at("component_contract.attr.invalid", "expected Attr struct", path: path)
-             )}
-        end
-      end)
+            _ ->
+              {by_name,
+               add(
+                 diagnostics,
+                 err_at("component_contract.attr.invalid", "expected Attr struct", path: path)
+               )}
+          end
+        end)
 
-    {by_name, diagnostics}
+      {by_name, diagnostics}
+    else
+      validate_attrs(nil, base_path, diagnostics)
+    end
   end
 
   defp validate_attrs(_attrs, _base_path, diagnostics) do
@@ -285,40 +291,44 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_slots(slots, base_path, diagnostics) when is_list(slots) do
-    {by_name, diagnostics} =
-      Enum.reduce(slots, {%{}, diagnostics}, fn slot, {by_name, diagnostics} ->
-        path = "#{base_path}[#{map_size(by_name)}]"
+    if proper_list?(slots) do
+      {by_name, diagnostics} =
+        Enum.reduce(slots, {%{}, diagnostics}, fn slot, {by_name, diagnostics} ->
+          path = "#{base_path}[#{map_size(by_name)}]"
 
-        case slot do
-          %Slot{} = s ->
-            diagnostics = validate_slot(s, path, diagnostics)
+          case slot do
+            %Slot{} = s ->
+              diagnostics = validate_slot(s, path, diagnostics)
 
-            case Map.fetch(by_name, s.name) do
-              {:ok, _} ->
-                {by_name,
-                 add(
-                   diagnostics,
-                   err_at(
-                     "component_contract.slot.name_duplicate",
-                     "public slot names must be unique",
-                     path: "#{path}.name"
-                   )
-                 )}
+              case Map.fetch(by_name, s.name) do
+                {:ok, _} ->
+                  {by_name,
+                   add(
+                     diagnostics,
+                     err_at(
+                       "component_contract.slot.name_duplicate",
+                       "public slot names must be unique",
+                       path: "#{path}.name"
+                     )
+                   )}
 
-              :error ->
-                {Map.put(by_name, s.name, s), diagnostics}
-            end
+                :error ->
+                  {Map.put(by_name, s.name, s), diagnostics}
+              end
 
-          _ ->
-            {by_name,
-             add(
-               diagnostics,
-               err_at("component_contract.slot.invalid", "expected Slot struct", path: path)
-             )}
-        end
-      end)
+            _ ->
+              {by_name,
+               add(
+                 diagnostics,
+                 err_at("component_contract.slot.invalid", "expected Slot struct", path: path)
+               )}
+          end
+        end)
 
-    {by_name, diagnostics}
+      {by_name, diagnostics}
+    else
+      validate_slots(nil, base_path, diagnostics)
+    end
   end
 
   defp validate_slots(_slots, _base_path, diagnostics) do
@@ -330,7 +340,7 @@ defmodule LiveFrames.ComponentContract.Validation do
     |> validate_public_name(slot.name, path <> ".name")
     |> validate_boolean_required_flag(slot.required, path <> ".required")
     |> then(fn d ->
-      if is_binary(slot.cardinality) and slot.cardinality != "" do
+      if non_empty_string?(slot.cardinality) do
         if slot.cardinality == Slot.first_wave_cardinality() do
           d
         else
@@ -352,7 +362,7 @@ defmodule LiveFrames.ComponentContract.Validation do
     end)
     |> validate_semantic_purpose(slot.semantic_purpose, path)
     |> then(fn d ->
-      if is_binary(slot.consumer_responsibility) and slot.consumer_responsibility != "" do
+      if non_empty_string?(slot.consumer_responsibility) do
         d
       else
         add(
@@ -386,54 +396,62 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_collection_inputs(inputs, attrs_by_name, diagnostics) when is_list(inputs) do
-    {by_id, item_index, diagnostics} =
-      Enum.reduce(inputs, {%{}, %{}, diagnostics}, fn input, {by_id, item_index, diagnostics} ->
-        case input do
-          %CollectionInput{} = ci ->
-            idx = map_size(by_id)
-            path = "collection_inputs[#{idx}]"
-            diagnostics = validate_collection_input_shape(ci, path, diagnostics)
+    if proper_list?(inputs) do
+      {by_id, item_index, diagnostics} =
+        Enum.reduce(inputs, {%{}, %{}, diagnostics}, fn input, {by_id, item_index, diagnostics} ->
+          case input do
+            %CollectionInput{} = ci ->
+              idx = map_size(by_id)
+              path = "collection_inputs[#{idx}]"
+              diagnostics = validate_collection_input_shape(ci, path, diagnostics)
 
-            id = ci.source_collection_binding_id
+              id = ci.source_collection_binding_id
 
-            diagnostics =
-              if is_binary(id) and id != "" and Map.has_key?(by_id, id) do
-                add(
-                  diagnostics,
-                  err_at(
-                    "component_contract.collection.id_duplicate",
-                    "source_collection_binding_id must be unique",
-                    path: path <> ".source_collection_binding_id"
+              diagnostics =
+                if is_binary(id) and id != "" and Map.has_key?(by_id, id) do
+                  add(
+                    diagnostics,
+                    err_at(
+                      "component_contract.collection.id_duplicate",
+                      "source_collection_binding_id must be unique",
+                      path: path <> ".source_collection_binding_id"
+                    )
                   )
-                )
+                else
+                  diagnostics
+                end
+
+              {item_fields_by_name, diagnostics} =
+                validate_item_fields(ci.item_fields, path <> ".item_fields", diagnostics)
+
+              item_index =
+                Map.put(item_index, id, item_fields_by_name)
+
+              if non_empty_string?(id) do
+                {Map.put(by_id, id, ci), item_index, diagnostics}
               else
-                diagnostics
+                {by_id, item_index, diagnostics}
               end
 
-            {item_fields_by_name, diagnostics} =
-              validate_item_fields(ci.item_fields, path <> ".item_fields", diagnostics)
+            _ ->
+              {by_id, item_index,
+               add(
+                 diagnostics,
+                 err("component_contract.collection.invalid", "expected CollectionInput struct")
+               )}
+          end
+        end)
 
-            item_index =
-              Map.put(item_index, id, item_fields_by_name)
+      diagnostics = validate_collection_locations(by_id, attrs_by_name, item_index, diagnostics)
+      cyclic_ids = collection_cycle_ids(by_id)
 
-            {Map.put(by_id, id, ci), item_index, diagnostics}
+      diagnostics =
+        validate_collection_graph(by_id, attrs_by_name, item_index, cyclic_ids, diagnostics)
 
-          _ ->
-            {by_id, item_index,
-             add(
-               diagnostics,
-               err("component_contract.collection.invalid", "expected CollectionInput struct")
-             )}
-        end
-      end)
-
-    diagnostics = validate_collection_locations(by_id, attrs_by_name, item_index, diagnostics)
-    cyclic_ids = collection_cycle_ids(by_id)
-
-    diagnostics =
-      validate_collection_graph(by_id, attrs_by_name, item_index, cyclic_ids, diagnostics)
-
-    {by_id, item_index, diagnostics}
+      {by_id, item_index, diagnostics}
+    else
+      validate_collection_inputs(nil, attrs_by_name, diagnostics)
+    end
   end
 
   defp validate_collection_inputs(_inputs, _attrs, diagnostics) do
@@ -447,7 +465,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   defp validate_collection_input_shape(%CollectionInput{} = ci, path, diagnostics) do
     diagnostics
     |> then(fn d ->
-      if is_binary(ci.source_collection_binding_id) and ci.source_collection_binding_id != "" do
+      if non_empty_string?(ci.source_collection_binding_id) do
         d
       else
         add(
@@ -459,6 +477,26 @@ defmodule LiveFrames.ComponentContract.Validation do
           )
         )
       end
+    end)
+    |> then(fn d ->
+      Enum.reduce(
+        [
+          :public_attr_name,
+          :parent_collection_binding_id,
+          :parent_item_field_name,
+          :count_attr_name,
+          :count_item_field_name
+        ],
+        d,
+        fn field, acc ->
+          validate_optional_artifact_string(
+            acc,
+            Map.fetch!(ci, field),
+            "component_contract.collection.invalid",
+            path <> "." <> Atom.to_string(field)
+          )
+        end
+      )
     end)
     |> require_json_object(
       ci.provenance,
@@ -873,39 +911,43 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_item_fields(fields, path, diagnostics) when is_list(fields) do
-    Enum.reduce(fields, {%{}, diagnostics}, fn field, {by_name, diagnostics} ->
-      case field do
-        %ItemField{} = f ->
-          idx = map_size(by_name)
-          fpath = "#{path}[#{idx}]"
-          diagnostics = validate_item_field(f, fpath, diagnostics)
+    if proper_list?(fields) do
+      Enum.reduce(fields, {%{}, diagnostics}, fn field, {by_name, diagnostics} ->
+        case field do
+          %ItemField{} = f ->
+            idx = map_size(by_name)
+            fpath = "#{path}[#{idx}]"
+            diagnostics = validate_item_field(f, fpath, diagnostics)
 
-          case Map.fetch(by_name, f.name) do
-            {:ok, _} ->
-              {by_name,
-               add(
-                 diagnostics,
-                 err_at(
-                   "component_contract.item_field.name_duplicate",
-                   "item field names must be unique",
-                   path: fpath <> ".name"
-                 )
-               )}
+            case Map.fetch(by_name, f.name) do
+              {:ok, _} ->
+                {by_name,
+                 add(
+                   diagnostics,
+                   err_at(
+                     "component_contract.item_field.name_duplicate",
+                     "item field names must be unique",
+                     path: fpath <> ".name"
+                   )
+                 )}
 
-            :error ->
-              {Map.put(by_name, f.name, f), diagnostics}
-          end
+              :error ->
+                {Map.put(by_name, f.name, f), diagnostics}
+            end
 
-        _ ->
-          {by_name,
-           add(
-             diagnostics,
-             err_at("component_contract.item_field.invalid", "expected ItemField struct",
-               path: path
-             )
-           )}
-      end
-    end)
+          _ ->
+            {by_name,
+             add(
+               diagnostics,
+               err_at("component_contract.item_field.invalid", "expected ItemField struct",
+                 path: path
+               )
+             )}
+        end
+      end)
+    else
+      validate_item_fields(nil, path, diagnostics)
+    end
   end
 
   defp validate_item_fields(_, path, diagnostics) do
@@ -952,30 +994,41 @@ defmodule LiveFrames.ComponentContract.Validation do
          diagnostics
        )
        when is_list(projections) do
-    Enum.reduce(Enum.with_index(projections), diagnostics, fn {projection, idx}, diagnostics ->
-      path = "binding_projections[#{idx}]"
+    if proper_list?(projections) do
+      Enum.reduce(Enum.with_index(projections), diagnostics, fn {projection, idx}, diagnostics ->
+        path = "binding_projections[#{idx}]"
 
-      case projection do
-        %BindingProjection{} = p ->
-          validate_binding_projection(
-            p,
-            path,
-            attrs_by_name,
-            slots_by_name,
-            collection_by_id,
-            item_index,
-            diagnostics
-          )
-
-        _ ->
-          add(
-            diagnostics,
-            err_at("component_contract.projection.invalid", "expected BindingProjection struct",
-              path: path
+        case projection do
+          %BindingProjection{} = p ->
+            validate_binding_projection(
+              p,
+              path,
+              attrs_by_name,
+              slots_by_name,
+              collection_by_id,
+              item_index,
+              diagnostics
             )
-          )
-      end
-    end)
+
+          _ ->
+            add(
+              diagnostics,
+              err_at("component_contract.projection.invalid", "expected BindingProjection struct",
+                path: path
+              )
+            )
+        end
+      end)
+    else
+      validate_binding_projections(
+        nil,
+        attrs_by_name,
+        slots_by_name,
+        collection_by_id,
+        item_index,
+        diagnostics
+      )
+    end
   end
 
   defp validate_binding_projections(_, _, _, _, _, diagnostics) do
@@ -1037,8 +1090,28 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_projection_ids(diagnostics, p, path) do
-    if is_binary(p.source_binding_id) and p.source_binding_id != "" and
-         is_binary(p.target_node_id) and p.target_node_id != "" do
+    diagnostics =
+      Enum.reduce(
+        [
+          :public_attr_name,
+          :public_slot_name,
+          :source_collection_binding_id,
+          :parent_collection_binding_id,
+          :item_field_name,
+          :parent_item_field_name
+        ],
+        diagnostics,
+        fn field, acc ->
+          validate_optional_artifact_string(
+            acc,
+            Map.fetch!(p, field),
+            "component_contract.projection.binding_missing",
+            path <> "." <> Atom.to_string(field)
+          )
+        end
+      )
+
+    if non_empty_string?(p.source_binding_id) and non_empty_string?(p.target_node_id) do
       diagnostics
     else
       add(
@@ -1351,7 +1424,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_intent_name(diagnostics, name, field) do
-    if is_binary(name) and name != "" do
+    if non_empty_string?(name) do
       if source_specific_name?(name) do
         add(
           diagnostics,
@@ -1376,7 +1449,7 @@ defmodule LiveFrames.ComponentContract.Validation do
 
   defp validate_public_name(diagnostics, name, path) do
     cond do
-      not is_binary(name) or name == "" ->
+      not non_empty_string?(name) ->
         add(
           diagnostics,
           err_at("component_contract.attr.invalid", "name must be a non-empty string", path: path)
@@ -1450,7 +1523,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_semantic_purpose(diagnostics, purpose, path) do
-    if is_binary(purpose) and purpose != "",
+    if non_empty_string?(purpose),
       do: diagnostics,
       else:
         add(
@@ -1460,7 +1533,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_json_default(diagnostics, default, path) do
-    if json_value?(default),
+    if match?({:ok, _}, Json.normalize(default)),
       do: diagnostics,
       else:
         add(
@@ -1472,35 +1545,42 @@ defmodule LiveFrames.ComponentContract.Validation do
   end
 
   defp validate_stored_diagnostics(diagnostics, stored) when is_list(stored) do
-    Enum.reduce(stored, diagnostics, fn
-      %Diagnostic{} = d, acc ->
-        acc
-        |> validate_stored_diagnostic_code(d.code)
-        |> validate_stored_severity(d.severity)
-        |> validate_stored_message(d.message)
-        |> validate_optional_string(d.path)
-        |> validate_optional_string(d.suggested_action)
-        |> require_json_object(
-          d.metadata,
-          "component_contract.metadata.invalid",
-          "diagnostic metadata must be a JSON object"
-        )
-
-      _, acc ->
-        add(
-          acc,
-          err(
+    if proper_list?(stored) do
+      Enum.reduce(stored, diagnostics, fn
+        %Diagnostic{} = d, acc ->
+          acc
+          |> validate_stored_diagnostic_code(d.code)
+          |> validate_stored_severity(d.severity)
+          |> validate_stored_message(d.message)
+          |> validate_optional_string(d.path)
+          |> validate_optional_string(d.suggested_action)
+          |> require_json_object(
+            d.metadata,
             "component_contract.metadata.invalid",
-            "diagnostics must contain Diagnostic structs"
+            "diagnostic metadata must be a JSON object"
           )
-        )
-    end)
+
+        _, acc ->
+          add(
+            acc,
+            err(
+              "component_contract.metadata.invalid",
+              "diagnostics must contain Diagnostic structs"
+            )
+          )
+      end)
+    else
+      add(
+        diagnostics,
+        err("component_contract.metadata.invalid", "diagnostics must be a proper list")
+      )
+    end
   end
 
   defp validate_stored_diagnostics(diagnostics, _), do: diagnostics
 
   defp validate_stored_diagnostic_code(diagnostics, code) when is_binary(code) do
-    if String.starts_with?(code, "component_contract."),
+    if String.valid?(code) and String.starts_with?(code, "component_contract."),
       do: diagnostics,
       else:
         add(
@@ -1529,25 +1609,41 @@ defmodule LiveFrames.ComponentContract.Validation do
         err("component_contract.metadata.invalid", "diagnostic severity is invalid")
       )
 
-  defp validate_stored_message(diagnostics, message) when is_binary(message) and message != "",
-    do: diagnostics
-
-  defp validate_stored_message(diagnostics, _),
-    do:
-      add(
-        diagnostics,
-        err("component_contract.metadata.invalid", "diagnostic message is required")
-      )
+  defp validate_stored_message(diagnostics, message) do
+    if non_empty_string?(message),
+      do: diagnostics,
+      else:
+        add(
+          diagnostics,
+          err("component_contract.metadata.invalid", "diagnostic message is required")
+        )
+  end
 
   defp validate_optional_string(diagnostics, value) when is_nil(value), do: diagnostics
-  defp validate_optional_string(diagnostics, value) when is_binary(value), do: diagnostics
 
-  defp validate_optional_string(diagnostics, _),
-    do:
-      add(
-        diagnostics,
-        err("component_contract.metadata.invalid", "diagnostic path must be a string or nil")
-      )
+  defp validate_optional_string(diagnostics, value) do
+    if valid_string?(value),
+      do: diagnostics,
+      else:
+        add(
+          diagnostics,
+          err("component_contract.metadata.invalid", "diagnostic path must be a string or nil")
+        )
+  end
+
+  defp validate_optional_artifact_string(diagnostics, nil, _code, _path), do: diagnostics
+
+  defp validate_optional_artifact_string(diagnostics, value, code, path) do
+    if valid_string?(value),
+      do: diagnostics,
+      else: add(diagnostics, err_at(code, "value must be a UTF-8 string or nil", path: path))
+  end
+
+  defp valid_string?(value), do: is_binary(value) and String.valid?(value)
+  defp non_empty_string?(value), do: valid_string?(value) and value != ""
+  defp proper_list?([]), do: true
+  defp proper_list?([_head | tail]), do: proper_list?(tail)
+  defp proper_list?(_tail), do: false
 
   defp source_specific_name?(name) do
     name in @banned_exact or
@@ -1564,12 +1660,14 @@ defmodule LiveFrames.ComponentContract.Validation do
     end
   end
 
-  defp require_list(diagnostics, value, _code, _msg) when is_list(value), do: diagnostics
+  def non_negative_validation?(_validation), do: false
 
-  defp require_list(diagnostics, _, code, msg), do: add(diagnostics, err(code, msg))
+  defp require_list(diagnostics, value, code, msg) do
+    if proper_list?(value), do: diagnostics, else: add(diagnostics, err(code, msg))
+  end
 
   defp require_json_object(diagnostics, value, code, message, path \\ nil) do
-    if json_object?(value) do
+    if Json.object?(value) do
       diagnostics
     else
       if path,
@@ -1577,42 +1675,6 @@ defmodule LiveFrames.ComponentContract.Validation do
         else: add(diagnostics, err(code, message))
     end
   end
-
-  defp json_object?(value) when is_map(value) and not is_struct(value) do
-    case json_keys(Map.keys(value)) do
-      {:ok, keys} ->
-        length(keys) == length(Enum.uniq(keys)) and Enum.all?(Map.values(value), &json_value?/1)
-
-      :error ->
-        false
-    end
-  end
-
-  defp json_object?(_), do: false
-
-  defp json_keys(keys) do
-    Enum.reduce_while(keys, [], fn key, acc ->
-      case Json.key_string(key) do
-        {:ok, key} -> {:cont, [key | acc]}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> case do
-      :error -> :error
-      keys -> {:ok, keys}
-    end
-  end
-
-  defp json_value?(nil), do: true
-  defp json_value?(value) when is_binary(value) or is_boolean(value), do: true
-  defp json_value?(value) when is_integer(value) or is_float(value), do: true
-  defp json_value?(value) when is_list(value), do: Enum.all?(value, &json_value?/1)
-
-  defp json_value?(value) when is_map(value) and not is_struct(value) do
-    json_object?(value)
-  end
-
-  defp json_value?(_), do: false
 
   defp finish([]), do: :ok
 
