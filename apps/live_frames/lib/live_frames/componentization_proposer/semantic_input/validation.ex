@@ -96,11 +96,16 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
   end
 
   defp shape_errors(input) do
-    root = closed_shape(input, SemanticInput, "input")
+    case closed_shape(input, SemanticInput, "input") do
+      [] -> shape_errors_content(input)
+      errors -> errors
+    end
+  end
 
+  defp shape_errors_content(input) do
     singles =
       Enum.flat_map(@singletons, fn {family, module} ->
-        case Map.fetch!(input, family) do
+        case Map.get(input, family) do
           nil ->
             [
               diagnostic(
@@ -117,16 +122,26 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
     repeats =
       Enum.flat_map(@families, fn {family, module} ->
-        case Map.fetch!(input, family) do
+        case Map.get(input, family) do
           decisions when is_list(decisions) ->
-            Enum.flat_map(decisions, &record_errors(&1, module, family))
+            if proper_list?(decisions) do
+              Enum.flat_map(decisions, &record_errors(&1, module, family))
+            else
+              [
+                diagnostic(
+                  :invalid,
+                  Atom.to_string(family),
+                  "Decision family must be a proper list"
+                )
+              ]
+            end
 
           _ ->
             [diagnostic(:invalid, Atom.to_string(family), "Decision family must be a list")]
         end
       end)
 
-    root ++ singles ++ repeats
+    singles ++ repeats
   end
 
   # Modules here are fixed by compiled clauses, never supplied by input.
@@ -277,7 +292,11 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
   defp default(d, p),
     do:
-      require_valid(json_value?(d.default), p <> ".default", "Default must be JSON-compatible") ++
+      require_valid(
+        match?({:ok, _}, Json.normalize(d.default)),
+        p <> ".default",
+        "Default must be JSON-compatible"
+      ) ++
         require_valid(
           not (d.required == true and d.default != nil),
           p <> ".default",
@@ -390,9 +409,34 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
           else: []
       end)
 
+    binding_owner_conflicts =
+      Enum.flat_map(i.assignments_by_target, fn
+        {{:attr, name}, [_ | _] = assignments} when length(assignments) > 1 ->
+          [
+            diagnostic(
+              :conflict,
+              "binding_assignments." <> name,
+              "Multiple bindings own the same public attr"
+            )
+          ]
+
+        {{:slot, name}, [_ | _] = assignments} when length(assignments) > 1 ->
+          [
+            diagnostic(
+              :conflict,
+              "binding_assignments." <> name,
+              "Multiple bindings own the same public slot"
+            )
+          ]
+
+        _ ->
+          []
+      end)
+
     boundary ++
       identity ++
       collisions ++
+      binding_owner_conflicts ++
       Enum.flat_map(input.collection_admissions, &admission_errors(&1, i)) ++
       Enum.flat_map(
         input.item_fields,
@@ -743,65 +787,47 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
   defp absent(value, p),
     do: require_valid(value == nil, p, "Field must be absent for this decision kind")
 
-  defp intent(value, p),
-    do:
-      string(value, p) ++
+  defp intent(value, p) do
+    case string(value, p) do
+      [] ->
         require_valid(not source_specific?(value), p, "Intent uses source-specific vocabulary")
 
-  defp public_name(value, p),
-    do:
-      string(value, p) ++
+      errors ->
+        errors
+    end
+  end
+
+  defp public_name(value, p) do
+    case string(value, p) do
+      [] ->
         require_valid(
-          is_binary(value) and Regex.match?(~r/^[a-z][a-z0-9_]*$/, value) and
-            not source_specific?(value),
+          Regex.match?(~r/^[a-z][a-z0-9_]*$/, value) and not source_specific?(value),
           p,
           "Expected a source-independent public identifier"
         )
 
-  defp source_specific?(value) when is_binary(value),
-    do:
+      errors ->
+        errors
+    end
+  end
+
+  defp source_specific?(value) when is_binary(value) do
+    if String.valid?(value) do
       value in ~w(post_title featured_image query_results) or
         String.starts_with?(value, ["bricks_", "wp_", "element_"])
+    else
+      false
+    end
+  end
 
   defp source_specific?(_), do: false
 
   defp json_object(value, p),
-    do: require_valid(json_object?(value), p, "Expected a JSON-safe object")
+    do: require_valid(Json.object?(value), p, "Expected a JSON-safe object")
 
-  defp json_object?(value) when is_map(value) and not is_struct(value) do
-    case json_keys(Map.keys(value)) do
-      {:ok, keys} ->
-        length(keys) == length(Enum.uniq(keys)) and Enum.all?(Map.values(value), &json_value?/1)
-
-      :error ->
-        false
-    end
-  end
-
-  defp json_object?(_), do: false
-
-  defp json_keys(keys) do
-    Enum.reduce_while(keys, [], fn key, acc ->
-      case Json.key_string(key) do
-        {:ok, key} -> {:cont, [key | acc]}
-        :error -> {:halt, :error}
-      end
-    end)
-    |> case do
-      :error -> :error
-      keys -> {:ok, keys}
-    end
-  end
-
-  defp json_value?(nil), do: true
-  defp json_value?(value) when is_binary(value) or is_boolean(value), do: true
-  defp json_value?(value) when is_integer(value) or is_float(value), do: true
-  defp json_value?(value) when is_list(value), do: Enum.all?(value, &json_value?/1)
-
-  defp json_value?(value) when is_map(value) and not is_struct(value),
-    do: json_object?(value)
-
-  defp json_value?(_), do: false
+  defp proper_list?([]), do: true
+  defp proper_list?([_head | tail]), do: proper_list?(tail)
+  defp proper_list?(_tail), do: false
   defp require_valid(true, _, _, _code), do: []
   defp require_valid(false, p, message, code), do: [diagnostic(code, p, message)]
   defp require_valid(condition, p, message), do: require_valid(condition, p, message, :invalid)

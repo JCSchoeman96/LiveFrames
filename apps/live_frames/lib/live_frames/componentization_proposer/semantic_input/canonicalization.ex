@@ -7,39 +7,69 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Canonicalization do
   # all remaining identity components are UTF-8 binaries.
   def canonicalize(input) do
     Enum.reduce(SemanticInput.repeatable_families(), {:ok, input}, fn family, result ->
-      decisions = Map.fetch!(input, family)
+      case Map.get(input, family) do
+        decisions when is_list(decisions) ->
+          if proper_list?(decisions) do
+            canonicalize_family(family, decisions, result)
+          else
+            {:error,
+             [
+               %Diagnostic{
+                 code: "componentization_proposer.input.invalid",
+                 path: Atom.to_string(family),
+                 message: "Decision family must be a proper list"
+               }
+             ]}
+          end
 
-      {_, conflicts} =
-        Enum.reduce(decisions, {MapSet.new(), []}, fn decision, {seen, errors} ->
-          key = identity(family, decision)
-
-          errors =
-            if MapSet.member?(seen, key),
-              do: [
-                %Diagnostic{
-                  code: "componentization_proposer.input.conflict",
-                  path: Atom.to_string(family),
-                  message: "Duplicate canonical identity #{inspect(key)}"
-                }
-                | errors
-              ],
-              else: errors
-
-          {MapSet.put(seen, key), errors}
-        end)
-
-      case {result, conflicts} do
-        {{:ok, canonical}, []} ->
-          {:ok, Map.put(canonical, family, Enum.sort_by(decisions, &sort_key(family, &1)))}
-
-        {{:ok, _}, errors} ->
-          {:error, errors}
-
-        {{:error, errors}, more} ->
-          {:error, more ++ errors}
+        _ ->
+          {:error,
+           [
+             %Diagnostic{
+               code: "componentization_proposer.input.invalid",
+               path: Atom.to_string(family),
+               message: "Decision family must be a list"
+             }
+           ]}
       end
     end)
   end
+
+  defp canonicalize_family(family, decisions, result) do
+    {_, conflicts} =
+      Enum.reduce(decisions, {MapSet.new(), []}, fn decision, {seen, errors} ->
+        key = identity(family, decision)
+
+        errors =
+          if MapSet.member?(seen, key),
+            do: [
+              %Diagnostic{
+                code: "componentization_proposer.input.conflict",
+                path: Atom.to_string(family),
+                message: "Duplicate canonical identity #{inspect(key)}"
+              }
+              | errors
+            ],
+            else: errors
+
+        {MapSet.put(seen, key), errors}
+      end)
+
+    case {result, conflicts} do
+      {{:ok, canonical}, []} ->
+        {:ok, Map.put(canonical, family, Enum.sort_by(decisions, &sort_key(family, &1)))}
+
+      {{:ok, _}, errors} ->
+        {:error, errors}
+
+      {{:error, errors}, more} ->
+        {:error, more ++ errors}
+    end
+  end
+
+  defp proper_list?([]), do: true
+  defp proper_list?([_head | tail]), do: proper_list?(tail)
+  defp proper_list?(_tail), do: false
 
   def identity(:public_attrs, d), do: d.name
   def identity(:public_slots, d), do: d.name

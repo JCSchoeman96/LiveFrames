@@ -311,11 +311,16 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
           %{nested | parent_collection_binding_id: "inner"},
           %{nested | parent_item_field_name: "absent"},
           %{nested | public_attr_name: "entries"},
-          %{root | public_attr_name: nil},
           %{root | source_collection_binding_id: "missing"}
         ] do
       error(%{decisions | collection_admissions: [root, bad]}, doc)
     end
+
+    error(
+      %{decisions | collection_admissions: [root, %{root | public_attr_name: nil}]},
+      doc,
+      "missing_decision"
+    )
 
     error(%{decisions | item_fields: [field("missing", "label")]}, doc)
     error(%{decisions | item_fields: [field("outer", "children", type: :string)]}, doc)
@@ -949,6 +954,115 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
 
     error(input(public_attrs: [Map.delete(attr("label"), :default)]))
     error(%{input() | contract_identity: %ContractIdentityDecision{contract_id: "node_000001"}})
+  end
+
+  describe "totality and B0 JSON policy" do
+    test "uses ComponentContract.Json rather than local recursive JSON helpers" do
+      refute function_exported?(
+               LiveFrames.ComponentizationProposer.SemanticInput.Validation,
+               :json_value?,
+               1
+             )
+
+      assert function_exported?(LiveFrames.ComponentContract.Json, :normalize, 1)
+      assert function_exported?(LiveFrames.ComponentContract.Json, :object?, 1)
+    end
+
+    test "rejects malformed JSON defaults and objects without raising" do
+      invalid_utf8 = <<255>>
+
+      for bad_default <- [invalid_utf8, [1 | :tail], [1, [2 | :tail]]] do
+        error(input(public_attrs: [attr("label", default: bad_default)]))
+      end
+
+      for bad_provenance <- [
+            %{"x" => invalid_utf8},
+            %{invalid_utf8 => "x"},
+            %{:key => 1, "key" => 2}
+          ] do
+        error(input(public_attrs: [attr("label", provenance: bad_provenance)]))
+      end
+    end
+
+    test "rejects improper repeatable decision lists without raising" do
+      improper = [attr("label") | :tail]
+
+      for family <- Input.repeatable_families() do
+        error(Map.put(input(), family, improper))
+      end
+    end
+
+    test "rejects malformed aggregate missing expected fields without raising" do
+      malformed = Map.delete(input(), :boundary)
+      assert {:error, _} = Input.validate(malformed, document())
+    end
+
+    test "rejects invalid UTF-8 strings without raising" do
+      invalid_utf8 = <<255>>
+
+      error(%{input() | contract_identity: %ContractIdentityDecision{contract_id: invalid_utf8}})
+
+      error(%{
+        input()
+        | classification: %{
+            input().classification
+            | module_intent: invalid_utf8,
+              function_intent: invalid_utf8
+          }
+      })
+
+      error(input(public_attrs: [attr(invalid_utf8)]))
+      error(input(public_slots: [%{slot("body") | name: invalid_utf8}]))
+      error(input(public_attrs: [attr("label", semantic_purpose: invalid_utf8)]))
+
+      error(
+        input(
+          public_attrs: [attr("label")],
+          render_placements: [
+            %{
+              render("label")
+              | public_target_name: invalid_utf8
+            }
+          ]
+        )
+      )
+    end
+  end
+
+  test "multiple explicit bindings cannot own the same top-level public attr or slot" do
+    doc = %{
+      document()
+      | value_bindings: %{
+          "first" => value("first"),
+          "second" => value("second"),
+          "slot_a" => value("slot_a"),
+          "slot_b" => value("slot_b")
+        }
+    }
+
+    error(
+      input(
+        public_attrs: [attr("title"), attr("subtitle")],
+        binding_assignments: [
+          assignment("first", "title"),
+          assignment("second", "title")
+        ]
+      ),
+      doc,
+      "conflict"
+    )
+
+    error(
+      input(
+        public_slots: [slot("body"), slot("footer")],
+        binding_assignments: [
+          assignment("slot_a", nil, assignment_kind: :slot, public_slot_name: "body"),
+          assignment("slot_b", nil, assignment_kind: :slot, public_slot_name: "body")
+        ]
+      ),
+      doc,
+      "conflict"
+    )
   end
 
   test "many decisions use one node indexing pass, independent of decision count" do
