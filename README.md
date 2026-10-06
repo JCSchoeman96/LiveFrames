@@ -35,16 +35,18 @@ Completed foundations include:
   `max-width: 478px` and `tablet_portrait` at `max-width: 991px`; tablet
   remains active at mobile widths.
 
-The current pipeline is:
+The current pipelines split after Design IR + TokenSet:
 
 ```text
 source
 → source adapter
 → Design IR + TokenSet
-→ Fidelity
-→ HEEx/CSS
-→ preview
-→ later native componentization
+   ├→ Fidelity → HEEx/CSS → preview
+   └→ explicit semantic decisions
+      → ComponentizationProposer
+      → proposed/needs_review ComponentContract + ComponentizationPlan
+      → reviewer approval (not yet implemented)
+      → future native generator (not yet implemented)
 ```
 
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.
@@ -57,8 +59,14 @@ bridge is **merged** (PR #31). P6.4B2 browser verification is **verified**
 (`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`). P6.4 workstream =
 **verified**. P6.5 = **documented / owner accepted**; P6.6 =
 **storybook_verified / owner accepted** (`docs/22`). **Hero lifecycle =
-accepted**. **Phase 6 = CLOSED / accepted** (`docs/19` §31). Catalogue =
-**not authorized**. Generator/ejection = **not authorized**.
+accepted**. **Phase 6 = CLOSED / accepted** (`docs/19` §31). **C09D5**
+componentization proposer = **complete**. Catalogue **library infrastructure**
+(schema, Registry, lifecycle, discovery) = **implemented**; production
+`priv/catalogue/` tree = **absent**; Registry membership = **empty**. **Native
+component generator** and **P10 ejection** = **not implemented** (see
+[`docs/development/c09d6_native_generation_authority.md`](docs/development/c09d6_native_generation_authority.md)).
+Catalogue admission and generator/ejection **production** capabilities remain
+**not authorized** until later reviewed slices.
 
 ## Consumer quick start (native Hero)
 
