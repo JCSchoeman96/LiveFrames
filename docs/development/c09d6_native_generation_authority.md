@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v2
+**Plan version:** v3
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -36,6 +36,8 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
 - `v2` — PR #133 review: `validate_references/3`, shared
   `validate_generation_prerequisites`, module/function emission naming, C09D6-D
   style-coverage preflight (candidate sufficient)
+- `v3` — PR #133 final: `:proposed`-only approval source, artifact-visible
+  static internal content rule, package CSS class from `category` + `module_intent`
 
 ---
 
@@ -183,23 +185,26 @@ needs_review → rejected
 
 The **native generator must never** change `approval_status`.
 
-### 6.3 First-wave guard: `needs_review` → `approved`
+### 6.3 Forbidden: direct `needs_review` → `approved`
 
-First-wave human approval **must not** directly promote a blocker-bearing
-`needs_review` candidate to `:approved`. Blockers include any contract or plan
-diagnostic with severity `:error` or `:fatal`, and any failed
-`validate_generation_prerequisites/3` (§6.4).
+Human approval **must never** set `approval_status = :approved` while the
+contract remains `:needs_review`, **even when**
+`validate_generation_prerequisites/3` returns `:ok`. C09D5 mandatory review
+triggers (for example `STATIC_COLLECTION_ITEM_RULE`) can require
+`:needs_review` without a generation-prerequisite blocker; prerequisites do not
+“clear” that classification.
 
-Resolution path: revise upstream semantic input and/or IR, re-run proposer,
-then review the **new** pair.
+Only `:proposed` candidates may become `:approved` (§6.5). A `:needs_review`
+pair must be **revised and re-proposed** or **rejected** (§6.2).
 
 ### 6.4 Shared non-status generation prerequisites (frozen)
 
-**Invariant:** a reviewer may set `:approved` **if and only if** the same
-tuple would satisfy every generation prerequisite **except** the
-`approval_status == :approved` check itself. No candidate that would fail
-generation eligibility (for example `:any` public attrs or collection item
-fields) may be approved.
+**Invariant:** among candidates eligible for approval (`approval_status ==
+:proposed` only; §6.3), a reviewer may set `:approved` **if and only if** the
+same tuple satisfies every generation prerequisite **except** the
+`approval_status == :approved` check itself. No `:proposed` candidate that
+would fail generation eligibility (for example `:any` public attrs or collection
+item fields) may be approved.
 
 C09D6-B **must** introduce a single reusable, pure prerequisite boundary so
 review approval and generator entry cannot drift. Conceptual API (exact module
@@ -245,16 +250,21 @@ so pairing validation aligns with this strict prerequisite policy.
 
 ### 6.5 Review approval gate
 
-On a **proposed** or **needs_review** candidate (after §6.3 guards):
+Reviewer approval requires **both**:
 
 ```text
+contract.approval_status == :proposed
+AND
 validate_generation_prerequisites(contract, plan, design_document) == :ok
 → reviewer may set approval_status = :approved
 ```
 
-Otherwise approval is forbidden. Setting `:approved` does **not** call
-`validate_for_generation/2` or `/3` directly; prerequisites already cover every
-non-status generation check.
+If `approval_status == :needs_review`, approval is **forbidden** regardless of
+prerequisites (§6.3). Resolution: revise upstream semantic input and/or IR,
+re-run proposer, review the **new** pair, or reject.
+
+Setting `:approved` does **not** call `validate_for_generation/2` or `/3`
+directly; prerequisites already cover every non-status generation check.
 
 ### 6.6 Generation entry gate (post-approval)
 
@@ -442,7 +452,7 @@ Closed first-wave roles only (per C09D3):
 | `link_url` | `href` on link roots |
 | `heading_level` | Heading tag level from attr |
 | `root_id` | HTML `id` |
-| `root_class` | HTML `class` (package semantic classes plus reviewer-approved values only) |
+| `root_class` | Optional **consumer-supplied** additional `class` value(s) on the root, emitted **alongside** the always-present package semantic class (§10.8); never replaces it |
 | `root_global_attrs` | Allowed global attrs via Phoenix `global` typing |
 | `subtree_slot` | Slot invocation for subtree composition |
 
@@ -450,9 +460,31 @@ No collection-item `RenderProjection` in format 1.0.0.
 
 ### 10.6 Static internal content
 
-Nodes inside the boundary without a public binding may emit **static** structure
-from Design IR literal content where plan marks internal-only placement; no new
-public attrs.
+`ComponentizationPlan` format `1.0.0` does **not** serialize
+`StaticContentDispositionDecision` from C09D5 semantic input. The native
+generator tuple is **only** `(ComponentContract, ComponentizationPlan,
+DesignDocument)` — do **not** read semantic-input decisions at generation time
+and do **not** infer “internal-only placement” from nonexistent plan fields.
+
+**Artifact-visible first-wave rule:** a supported `DesignNode` inside the
+validated boundary may retain literal IR content as an **internal generated
+constant** only when **all** hold:
+
+- the node lies inside the validated boundary;
+- it is not replaced by a `subtree_slot` projection;
+- its relevant content/location is not owned by a public `BindingProjection` or
+  `RenderProjection` target;
+- retaining it does not violate D3 static-image, unsupported-node, placement,
+  accessibility, or other generation rules.
+
+This is mechanical derivation from the approved tuple, not semantic promotion.
+Static content must **never** become a new public attr or slot during generation.
+
+**STOP (tuple insufficiency):** if C09D6-C proves that two different valid
+`StaticContentDispositionDecision` sets can yield the same approved
+`ComponentContract` + `ComponentizationPlan` + `DesignDocument` tuple but
+require different native output, **STOP**. Do not silently add `SemanticInput`
+to the generator tuple and do not change Contract/Plan schemas inside C09D6-C.
 
 ### 10.7 Image accessibility
 
@@ -471,15 +503,44 @@ A reusable section is **end-to-end complete** only after **C09D6-C + C09D6-D +
 verification**. C09D6-A does not authorize claiming visual completeness from
 HEEx alone.
 
-**Package-owned semantic classes:**
+**Package-owned semantic classes (structural identity):**
 
-- Public structure/presentation classes use the `.lf-*` namespace per `docs/11`
-  (e.g. `.lf-cta` derived deterministically from `contract_id` / approved
-  `root_class` role — never from source Bricks/Frames/ACSS class strings).
-- Theme customization remains on public `--lf-*` only; component-private
-  `--lf-<component>-*` composition variables follow `docs/20` §8 pattern.
-- **Do not** expose source `globalClasses` or ACSS utility names as generated
-  public API.
+Derive the generated package semantic class **only** from validated `category`
+and `module_intent` (§10.1 token grammar). **Do not** derive CSS identity from
+`contract_id`, source classes, source IDs, or the public `root_class` attr.
+
+Transform `module_intent` underscores to hyphens; prefix with category to avoid
+cross-category collisions:
+
+| `category` | `module_intent` | Generated root class |
+| --- | --- | --- |
+| `:section` | `marketing_block` | `.lf-section-marketing-block` |
+| `:component` | `card` | `.lf-component-card` |
+| `:pattern` | `pricing_grid` | `.lf-pattern-pricing-grid` |
+| `:primitive` | `badge` | `.lf-primitive-badge` |
+
+General rule:
+
+```text
+.lf-<category>-<module_intent with "_" → "-">
+```
+
+where `<category>` is the atom name (`section`, `component`, `pattern`,
+`primitive`).
+
+**Root `class` behavior:**
+
+- the generated package semantic class is **always present** on the component
+  root;
+- `root_class` (RenderProjection / public attr) is an **optional**
+  consumer-supplied additional class layered alongside it;
+- the consumer `root_class` value must **never** replace the generated
+  structural class.
+
+Theme customization remains on public `--lf-*` only; component-private
+`--lf-<component>-*` composition variables follow `docs/20` §8 pattern. **Do
+not** expose source `globalClasses` or ACSS utility names as generated public
+API.
 
 **Styling authority posture (candidate sufficient, not proven):** Hero and
 cross-cutting docs (`docs/11`, `docs/20`, TokenSet `1.0.0`) establish the
@@ -680,6 +741,9 @@ generator requires semantic naming/classification/accessibility inference
 CTA Tango C09D6-D style-coverage preflight fails (unsupported semantics)
 CTA Tango componentization requires Behavior IR
 safe module/function source naming requires ComponentContract schema changes
+static internal content requires SemanticInput in the generator tuple, or
+  identical Contract+Plan+DesignDocument tuples would yield different native
+  output from different StaticContentDispositionDecision sets
 native generator and P10 ejection cannot be cleanly separated
 ```
 
