@@ -13,6 +13,7 @@ defmodule LiveFrames.ComponentContract.Validation do
 
   @banned_exact ~w(post_title featured_image query_results)
   @name_pattern ~r/^[a-z][a-z0-9_]*$/
+  @generation_token_pattern ~r/^[a-z][a-z0-9_]*$/
   @categories [:primitive, :component, :pattern, :section]
   @approval_statuses [:proposed, :approved, :needs_review, :rejected]
   @diagnostic_severities [:info, :warning, :error, :fatal]
@@ -64,34 +65,56 @@ defmodule LiveFrames.ComponentContract.Validation do
         err("component_contract.approval_blocked", "contract is not approved for generation")
       ])
     else
-      case validate(contract) do
-        {:error, diagnostics} ->
-          finish(diagnostics)
-
-        :ok ->
-          diagnostics =
-            case ReferenceValidation.validate(contract, design_document) do
-              :ok -> []
-              {:error, ds} -> ds
-            end
-
-          diagnostics =
-            Enum.reduce(contract.diagnostics, diagnostics, fn
-              %Diagnostic{severity: sev} = d, acc when sev in [:error, :fatal] -> [d | acc]
-              _, acc -> acc
-            end)
-
-          diagnostics = diagnostics ++ generation_capability_diagnostics(contract)
-
-          case finish(diagnostics) do
-            :ok -> :ok
-            {:error, ds} -> {:error, ds}
-          end
-      end
+      validate_generation_prerequisites(contract, design_document)
     end
   end
 
   def validate_for_generation(_contract, _document) do
+    finish([err("component_contract.contract.invalid", "expected a ComponentContract struct")])
+  end
+
+  @spec validate_generation_prerequisites(term(), term()) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites(%ComponentContract{} = contract, design_document) do
+    case validate(contract) do
+      {:error, diagnostics} ->
+        finish(diagnostics)
+
+      :ok ->
+        diagnostics =
+          case ReferenceValidation.validate(contract, design_document) do
+            :ok -> []
+            {:error, values} -> values
+          end
+
+        diagnostics =
+          Enum.reduce(contract.diagnostics, diagnostics, fn
+            %Diagnostic{severity: severity} = diagnostic, acc
+            when severity in [:error, :fatal] ->
+              [diagnostic | acc]
+
+            _, acc ->
+              acc
+          end)
+
+        diagnostics =
+          diagnostics ++
+            generation_capability_diagnostics(contract) ++ generation_intent_diagnostics(contract)
+
+        finish(diagnostics)
+    end
+  rescue
+    _error ->
+      finish([
+        err("component_contract.contract.invalid", "generation prerequisite inputs are malformed")
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        err("component_contract.contract.invalid", "generation prerequisite inputs are malformed")
+      ])
+  end
+
+  def validate_generation_prerequisites(_contract, _document) do
     finish([err("component_contract.contract.invalid", "expected a ComponentContract struct")])
   end
 
@@ -129,6 +152,26 @@ defmodule LiveFrames.ComponentContract.Validation do
       true ->
         []
     end
+  end
+
+  defp generation_intent_diagnostics(contract) do
+    [
+      {:module_intent, contract.module_intent},
+      {:function_intent, contract.function_intent}
+    ]
+    |> Enum.flat_map(fn {field, value} ->
+      if valid_string?(value) and Regex.match?(@generation_token_pattern, value) do
+        []
+      else
+        [
+          err_at(
+            "component_contract.generation.intent_invalid",
+            "intent must match the generation token grammar",
+            path: Atom.to_string(field)
+          )
+        ]
+      end
+    end)
   end
 
   defp validate_root(contract, diagnostics) do

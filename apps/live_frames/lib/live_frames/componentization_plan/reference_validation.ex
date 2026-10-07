@@ -5,6 +5,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   alias LiveFrames.ComponentContract.Attr
   alias LiveFrames.ComponentContract.BindingProjection
   alias LiveFrames.ComponentContract.CollectionInput
+  alias LiveFrames.ComponentContract.Diagnostic, as: ContractDiagnostic
   alias LiveFrames.ComponentContract.ItemField
   alias LiveFrames.ComponentContract.Slot
   alias LiveFrames.ComponentizationPlan
@@ -40,13 +41,11 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  @spec validate_for_generation(term(), term(), term()) :: :ok | {:error, [Diagnostic.t()]}
-  def validate_for_generation(plan, component_contract, design_document) do
-    case preflight(plan, component_contract, design_document) do
+  @spec validate_generation_prerequisites(term(), term(), term()) ::
+          :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites(plan, component_contract, design_document) do
+    case preflight_generation(plan, component_contract, design_document) do
       {:ok, plan, component_contract, design_document} ->
-        contract_gate =
-          ComponentContract.validate_for_generation(component_contract, design_document)
-
         reference_result = validate_indexed(plan, component_contract, design_document)
 
         stored_blockers =
@@ -54,26 +53,130 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
             diagnostic.severity in Diagnostic.blocking_severities()
           end)
 
-        diagnostics =
-          []
-          |> append_result(reference_result)
-          |> append_contract_gate(contract_gate)
-          |> Kernel.++(stored_blockers)
-
-        if diagnostics == [] do
-          :ok
-        else
-          finish([generation_blocked(diagnostics) | diagnostics])
-        end
+        diagnostics = [] |> append_result(reference_result) |> Kernel.++(stored_blockers)
+        finish(diagnostics)
 
       {:error, diagnostics} ->
-        finish([generation_blocked(diagnostics) | diagnostics])
+        finish(diagnostics)
     end
+  rescue
+    _error ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  end
+
+  @spec validate_for_generation(term(), term(), term()) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_for_generation(plan, component_contract, design_document) do
+    prerequisite_result =
+      validate_generation_prerequisites(plan, component_contract, design_document)
+
+    approval_result = contract_approval_result(component_contract)
+
+    diagnostics =
+      []
+      |> append_result(prerequisite_result)
+      |> append_contract_gate(approval_result)
+
+    if diagnostics == [], do: :ok, else: finish([generation_blocked(diagnostics) | diagnostics])
   rescue
     _error ->
       finish([
         error("componentization_plan.generation_blocked", "generation inputs are malformed")
       ])
+  catch
+    _kind, _reason ->
+      finish([
+        error("componentization_plan.generation_blocked", "generation inputs are malformed")
+      ])
+  end
+
+  defp preflight_generation(plan, component_contract, design_document) do
+    case Validation.validate(plan) do
+      :ok ->
+        preflight_generation_document(plan, component_contract, design_document)
+
+      {:error, diagnostics} ->
+        {:error, diagnostics}
+    end
+  rescue
+    _error ->
+      {:error, [error("componentization_plan.plan.invalid", "plan failed intrinsic validation")]}
+  end
+
+  defp preflight_generation_document(plan, component_contract, design_document) do
+    case LiveFrames.IR.validate(design_document) do
+      :ok ->
+        preflight_generation_fingerprint(plan, component_contract, design_document)
+
+      {:error, diagnostics} ->
+        {:error,
+         [
+           upstream_error(
+             "componentization_plan.design_document.fingerprint_invalid",
+             "DesignDocument failed IR validation",
+             diagnostics
+           )
+         ]}
+    end
+  end
+
+  defp preflight_generation_fingerprint(plan, component_contract, design_document) do
+    case ComponentizationPlan.design_document_sha256(design_document) do
+      {:ok, fingerprint} when fingerprint != plan.design_document_sha256 ->
+        {:error,
+         [
+           error_at(
+             "componentization_plan.design_document.mismatch",
+             "plan fingerprint does not match the supplied DesignDocument",
+             "design_document_sha256"
+           )
+         ]}
+
+      {:ok, _fingerprint} ->
+        preflight_generation_contract(plan, component_contract, design_document)
+
+      {:error, diagnostics} ->
+        {:error, diagnostics}
+    end
+  end
+
+  defp preflight_generation_contract(plan, component_contract, design_document) do
+    case ComponentContract.validate_generation_prerequisites(component_contract, design_document) do
+      :ok when plan.contract_id == component_contract.contract_id ->
+        {:ok, plan, component_contract, design_document}
+
+      :ok ->
+        {:error,
+         [
+           error_at(
+             "componentization_plan.contract.mismatch",
+             "plan contract_id does not match the supplied ComponentContract",
+             "contract_id"
+           )
+         ]}
+
+      {:error, diagnostics} ->
+        {:error,
+         [
+           upstream_error(
+             "componentization_plan.contract.mismatch",
+             "ComponentContract is not generation-eligible",
+             diagnostics
+           )
+         ]}
+    end
   end
 
   defp preflight(plan, component_contract, design_document) do
@@ -1327,6 +1430,21 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
   defp append_result(diagnostics, :ok), do: diagnostics
   defp append_result(diagnostics, {:error, values}), do: diagnostics ++ values
+
+  defp contract_approval_result(%ComponentContract{approval_status: :approved}), do: :ok
+
+  defp contract_approval_result(%ComponentContract{}) do
+    {:error,
+     [
+       %ContractDiagnostic{
+         code: "component_contract.approval_blocked",
+         severity: :error,
+         message: "contract is not approved for generation"
+       }
+     ]}
+  end
+
+  defp contract_approval_result(_contract), do: :ok
 
   defp append_contract_gate(diagnostics, :ok), do: diagnostics
 

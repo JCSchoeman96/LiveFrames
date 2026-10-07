@@ -671,4 +671,27 @@ defmodule LiveFrames.ComponentContractTest do
                ComponentContract.validate_for_generation(nested_item_fields, document)
     end
   end
+
+  test "generation prerequisites omit approval status and enforce generation intent tokens" do
+    document = LiveFrames.IR.DesignDocument.new()
+    proposed = base_contract()
+    needs_review = %{proposed | approval_status: :needs_review}
+
+    assert ComponentContract.validate_generation_prerequisites(proposed, document) == :ok
+    assert ComponentContract.validate_generation_prerequisites(needs_review, document) == :ok
+    assert ComponentContract.validate(proposed) == :ok
+
+    invalid_module = %{proposed | module_intent: "Marketing-Block"}
+    invalid_function = %{proposed | function_intent: "Hero!"}
+
+    assert ComponentContract.validate(invalid_module) == :ok
+    assert ComponentContract.validate(invalid_function) == :ok
+
+    for invalid <- [invalid_module, invalid_function] do
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(invalid, document)
+
+      assert Enum.any?(diagnostics, &(&1.code == "component_contract.generation.intent_invalid"))
+    end
+  end
 end

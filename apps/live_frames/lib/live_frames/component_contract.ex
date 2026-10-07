@@ -78,6 +78,10 @@ defmodule LiveFrames.ComponentContract do
   def validate_for_generation(contract, design_document),
     do: Validation.validate_for_generation(contract, design_document)
 
+  @spec validate_generation_prerequisites(term(), term()) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites(contract, design_document),
+    do: Validation.validate_generation_prerequisites(contract, design_document)
+
   @spec to_map(t()) :: map()
   def to_map(contract), do: Serializer.to_map(contract)
 
