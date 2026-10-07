@@ -2,9 +2,9 @@
 
 **Plan ID:** `c09d6-d0-cta-tango-style-coverage`
 
-**Version:** `v1`
+**Version:** `v2`
 
-**Status:** complete — **C09D6-D implementation NOT authorized**
+**Status:** complete — **C09D6-D implementation NOT authorized** (`C09D6_D_STYLE_COVERAGE=BLOCKED`)
 
 **Authority:** `docs/development/c09d6_native_generation_authority.md` §10.8, §10.9, §17, §19
 
@@ -15,6 +15,7 @@
 ### Revision log
 
 - `v1` — Initial preflight on current `main`; verdict **BLOCKED**.
+- `v2` — Review corrections: matrix count reconciliation, G-CUSTOM-CSS upstream boundary, primary-action proof, roadmap alignment.
 
 ## 1. Objective
 
@@ -94,15 +95,58 @@ is NOT authorized.**
 | Gap ID | Visual requirement | Layer | Smallest upstream slice |
 | --- | --- | --- | --- |
 | G-GRID-STRUCT | `grid-template-columns: var(--grid-3-2)` / `var(--grid-2)` / responsive `var(--grid-1)` on inner / image group | Structural variable + TokenSet / `--lf-*` bridge | Extend `AutomaticCSS.StructuralVariables` (and native token mapping policy) for `--grid-2`, `--grid-3-2`, or replace with approved literal/`--lf-*` grid recipes without ACSS names |
-| G-CUSTOM-CSS | Image-group min-height, per-child width/column/aspect-ratio rules | Design IR `complex_css` → native styling authority | New **native** (non-Fidelity) `complex_css` emission contract: rewrite to package semantic selectors (`docs/20` §8); cannot paste `.image-group-tango` rules |
+| G-CUSTOM-CSS | Image-group min-height; first-child span/full-width; second/third child aspect and layout | Source-only `_cssCustom` / `:nth-child(...)` recipes today — **not** generator authority | **Bounded upstream normalization** (separately authorized): source `complex_css` → **source-independent** semantic layout representation in Design IR / approved styling representation → **then** mechanical C09D6-D CSS emission. See §6.2. **C09D6-D must not** parse raw `_cssCustom`, rewrite arbitrary source selectors, or treat `.image-group-tango` / `:nth-child(...)` recipes as inputs. |
 | G-TEXT-S | Accent heading `font-size: var(--text-s)` | TokenSet → `--lf-*` | Typography scale path for `text-s` (or explicit `token_ref` in IR) + TokenBridge mapping beyond `native_hero_v1` |
 | G-RADIUS-ACSS | Image corners `var(--radius)` on all images | TokenSet → `--lf-*` | Public or component-private radius bridge (`radius.base` exists in TokenSet; not in `native_hero_v1.json` today) — required unless literals are authorized per-node |
 | G-GRID-GAP-CALC | Inner gap `calc(var(--grid-gap) * 2)` | TokenSet / calculation | `spacing.grid_gap` → `--lf-*` bridge + documented calc policy for native CSS generator |
 
-Non-blocking but noted: `heading` / `rich_text` / `button` nodes carry **zero**
-base styles in normalized IR (presentation from empty global classes or class
-hints only). Primary button **can** follow Hero action CSS + `--lf-action-primary-*`
-(`hero.css`, `native_hero_v1.json`) without `btn--primary` in public CSS.
+Non-blocking but noted: `heading` / `rich_text` nodes carry **zero** base styles
+in normalized IR (empty global classes). The primary button has **no** styles in
+IR (class hint only); required fill/hover/focus semantics are **PROVEN** from
+reusable public `--lf-action-primary-*` tokens and ordinary package-owned CSS
+capability (§8 rows CTA-D0-026/027) — **not** by reusing `.lf-hero__action--primary`
+selectors.
+
+### 6.2 G-CUSTOM-CSS — required upstream boundary (not C09D6-D)
+
+Frozen C09D6 §10.9: preflight **STOP** when required styling depends on
+source-only selector recipes or semantics omitted from IR/TokenSet; C09D6-D must
+not reconstruct unsupported ACSS/source behavior heuristically.
+
+**Required repair path:**
+
+```text
+source _cssCustom / complex_css (trace only)
+        ↓
+bounded, separately-authorized normalization
+        ↓
+source-independent semantic layout representation
+        ↓
+Design IR / approved styling representation
+        ↓
+C09D6-D mechanical CSS emission (package semantic selectors only)
+```
+
+**Forbidden in C09D6-D (and in this preflight as a “fix”):**
+
+```text
+complex_css → C09D6-D parses/rewrites selectors → committed CSS
+```
+
+For CTA Tango image-group layout, upstream work must make explicit and
+source-independent (without preserving `.image-group-tango` or `:nth-child(...)`
+as authority):
+
+- group min-height (`675px` in source evidence);
+- first-child full-width / column-span semantics;
+- second-child `16/9` layout semantics (not only uniform per-image IR);
+- third-child `5/3.5` aspect/layout semantics;
+- any other child-specific rule currently only in `_cssCustom`.
+
+Until that representation exists in approved IR/styling authority, rows
+CTA-D0-010–013 remain **BLOCKED**. This preflight does **not** choose a new
+Design IR schema; if schema or authority amendment is required, that is a
+separate upstream slice before D0 re-run.
 
 ## 7. Responsive breakpoints used by CTA Tango
 
@@ -143,13 +187,19 @@ Legend: **Status** = `PROVEN` | `BLOCKED` | `NOT_REQUIRED`.
 | CTA-D0-023 | Accent heading uppercase small type | `fr-accent-heading` typography map | `font-size: var(--text-s)`, weight, tracking, etc. | Design IR on paragraph node | Normalized | Component CSS | YES (`--text-s`) | NO | **BLOCKED** | G-TEXT-S |
 | CTA-D0-024 | Accent heading order -1 | `_order: -1` | `order: -1` | Design IR | Paragraph node | Component CSS | NO | NO | PROVEN | — |
 | CTA-D0-025 | Body rich text typography | `cta-section-tango__text` empty | No IR styles | — | — | Inherited body tokens | NO | NO | NOT_REQUIRED | — |
-| CTA-D0-026 | Primary button fill/text/border/radius/padding | `btn--primary` class hint; `style: primary` | **No** button styles in IR | Hero action pattern | `hero.css` + `native_hero_v1` action tokens | `.lf-*-__action--primary` slotted pattern | NO | NO | PROVEN | — |
-| CTA-D0-027 | Primary button hover/focus | ACSS btn family (not in fragment settings) | Hero CSS pseudo rules | `docs/11`, `hero.css` | Existing package CSS | `:hover` / `:focus-visible` on slotted control | NO | NO | PROVEN | — |
-| CTA-D0-028 | Button responsive width | No responsive button settings | — | Hero actions pattern | `hero.css` breakpoints | Internal media queries | NO | NO | NOT_REQUIRED | — |
+| CTA-D0-026 | Primary button fill/text/border/radius/padding | `btn--primary` class hint; `style: primary` | **No** button styles in IR; primary intent from `style: primary` | `docs/11` §7 action tokens; `native_hero_v1.json` `--lf-action-primary-*`; `docs/20` package-owned semantic CSS | `TokenBridge` + committed theme; Hero demonstrates slotted primary styling only as **precedent**, not CTA selector reuse | Future CTA sheet: generated package semantic selector (e.g. `.lf-section-*__action--primary`) + public `--lf-action-primary-*` on slotted `a`/`button` | NO | NO | PROVEN | — |
+| CTA-D0-027 | Primary button hover/focus | ACSS btn family (not in fragment settings) | Not in IR; ordinary CSS pseudo capability | `docs/11` §3 (`:hover`, `:focus-visible` first-class); `--lf-action-primary-background-hover`, `--lf-action-primary-focus` in `native_hero_v1.json` | Theme tokens + Hero **example** of pseudo rules on slotted controls — CTA uses its own semantic selector at D time | Component CSS `:hover` / `:focus-visible` on slotted root | NO | NO | PROVEN | — |
+| CTA-D0-028 | Button responsive width | No responsive button settings | — | — | — | Optional internal media in future CTA CSS | NO | NO | NOT_REQUIRED | — |
 | CTA-D0-029 | Image assets sizing / src | Bricks `image` settings | Asset refs in IR (when resolved) | Design IR assets | Asset pipeline | HEEx `src` / placements | NO | NO | PROVEN | — |
 | CTA-D0-030 | Flex wrap nowrap on image group | `_flexWrap: nowrap` | `flex-wrap: nowrap` | Design IR | Image-group node | Component CSS | NO | NO | PROVEN | — |
 
-**Counts:** 30 requirements — **PROVEN:** 16, **BLOCKED:** 11, **NOT_REQUIRED:** 3.
+**Counts:** 30 requirements — **PROVEN:** 14, **BLOCKED:** 10, **NOT_REQUIRED:** 6.
+
+| Status | Row IDs |
+| --- | --- |
+| PROVEN | 001, 005, 007, 014, 015, 016, 017, 019, 021, 024, 026, 027, 029, 030 |
+| BLOCKED | 003, 004, 006, 009, 010, 011, 012, 013, 020, 023 |
+| NOT_REQUIRED | 002, 008, 018, 022, 025, 028 |
 
 ## 9. Category checklist
 
@@ -160,7 +210,7 @@ Legend: **Status** = `PROVEN` | `BLOCKED` | `NOT_REQUIRED`.
 | Typography | **BLOCKED** — `var(--text-s)`; main/rich text NOT_REQUIRED in IR |
 | Colour / theme | NOT_REQUIRED at section level in source |
 | Image / media | **BLOCKED** — `complex_css` composition + `var(--radius)` |
-| Buttons / CTA | **PROVEN** via Hero action + TokenBridge pattern |
+| Buttons / CTA | **PROVEN** — reusable `--lf-action-primary-*` + package CSS; CTA-specific semantic selector at D (not Hero selector reuse) |
 | Responsive | **PROVEN** for 991 + 767 where not BLOCKED by variable/CSS gaps |
 | Pseudo / selectors | **BLOCKED** for image-group rules unless G-CUSTOM-CSS resolved |
 | Tokens / variables | **BLOCKED** for ACSS grid + text-s + radius public surface |
@@ -178,7 +228,9 @@ Until gaps G-* are closed with new authority and implementation:
 - **Inputs:** NOT authorized — do not implement generator.
 - **Outputs:** NOT authorized.
 - **Forbidden:** Fidelity as generator; public `btn--primary`, `image-group-tango`,
-  or other source class names; pasting `_cssCustom` rules verbatim.
+  or other source class names; pasting `_cssCustom` rules verbatim; C09D6-D
+  parsing/rewriting raw `complex_css` or source `:nth-child(...)` selector recipes;
+  reusing `.lf-hero__*` selectors for CTA Tango.
 
 When unblocked, expected outputs remain per §10.8: `assets/css/components/...`,
 `live_frames.css` import graph, `--lf-*` via `TokenBridge`.
