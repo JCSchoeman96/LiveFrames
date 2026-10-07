@@ -1,10 +1,10 @@
 # C09D6-A — Native generation and review authority
 
-**Status:** authority/documentation only (C09D6-A)
+**Status:** active authority (C09D6-A + C09D6-C0 emission-surface freeze)
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v3
+**Plan version:** v6
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -22,11 +22,11 @@ delivery. `docs/23_CATALOGUE_ARCHITECTURE.md` and
 `docs/24_CATALOGUE_VERSIONING_POLICY.md` remain G1 architecture history;
 current **runtime** Catalogue posture is summarized in §2 and §15.
 
-**Accepted base:** `98c464b4ba92d0a14e7a95b397496717c15b4835`
+**Accepted base:** `a3efdafe3d8bcb7d04aa1c4ad9660f0858f86bc3`
 
-**Accepted tree:** `04f02998067e4db1442e22a735f800f8d25add1d`
+**Accepted tree:** `4626a0348538979e933d955e1e67c21236536b57`
 
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-07
 
 ### Revision log
 
@@ -38,6 +38,20 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   style-coverage preflight (candidate sufficient)
 - `v3` — PR #133 final: `:proposed`-only approval source, artifact-visible
   static internal content rule, package CSS class from `category` + `module_intent`
+- `v4` — C09D6-C0 (PR #135 review): freeze native element emission, icon
+  generation eligibility, optional/no-default attr omission, validation emission,
+  slot runtime, collection runtime, generator totality; record PR #135 defect
+  classes as prohibited implementation patterns
+- `v5` — PR #136 review: binding-native emission XOR (no paired RenderProjection),
+  normalized-tag precedence, Plan/Contract prerequisite ownership, image/figure
+  structure, conditional image alt runtime, static navigation retention,
+  heading-level STATIC_DEFAULT_RULE, collection omission/type rules, count
+  validation alignment, roadmap reconciliation
+- `v6` — PR #136 final pass: correct `ValueBinding` enums in binding emission,
+  count text locus, Plan diagnostic namespace, image/link tag layers, button
+  static navigation, boundary-root Plan blockers, repository-truth reconciliation;
+  static navigation emission via `LiveFrames.StaticNavigation.validate_navigation_map/1`
+  (not `StaticMarkupContract` for `href`/`target`/`rel`)
 
 ---
 
@@ -86,18 +100,21 @@ routing native generation through LiveFrames.Fidelity
 
 ## 2. Repository truth (current checkpoint)
 
-Reconciled against accepted base `98c464b4ba92d0a14e7a95b397496717c15b4835`.
-Short pointers: `docs/17_ROADMAP.md`, `README.md`.
+Reconciled against accepted base `a3efdafe3d8bcb7d04aa1c4ad9660f0858f86bc3`
+(C09D6-B merged PR #134; C09D6-C0 authority in flight PR #136; C09D6-C
+implementation PR #135 on hold). Short pointers: `docs/17_ROADMAP.md`,
+`README.md`.
 
 | Area | State |
 | --- | --- |
 | C09D5-A / B0 / B1 / B2 | **complete** — proposer authority and implementation |
 | `ComponentizationProposer` | **implemented** |
 | `ComponentContract` / `ComponentizationPlan` models and validators | **implemented** |
+| C09D6-B `ComponentReview` + shared `validate_generation_prerequisites/3` | **implemented** on `main` (PR #134) |
 | Catalogue schema, manifest, lifecycle, Registry, fingerprint, versioning, discovery | **implemented** in library code |
 | Production Catalogue root `apps/live_frames/priv/catalogue/` | **absent** (no committed manifests) |
 | Production Registry at compile time | **empty** membership (no canonical Hero Catalogue manifest) |
-| Native component generator | **not implemented** |
+| Native component generator | **not on `main`** (PR #135 evidence only; blocked on C09D6-C0) |
 | P10 Catalogue ejection generator | **not implemented** |
 | Phase 6 Hero native section | **accepted** (hand-authored; not proposer/generator pipeline) |
 
@@ -229,6 +246,24 @@ validate_generation_prerequisites(contract, plan, design_document) :: :ok | {:er
 | Generation capability | Same rules as `ComponentContract` generation-capability diagnostics today (for example rejection of `:any` public attrs and collection `ItemField` types, first-wave slot cardinality) |
 | Plan generation reference index | Same indexed reference rules invoked by `ComponentizationPlan.validate_for_generation/3` after preflight |
 | Intent emission eligibility | §10.1 generation token grammar |
+
+**C09D6-C0 emission capability (v6):** the same prerequisite boundary must
+include every rule in §10.10–§10.17 that gates whether a tuple is
+**generation-representable**. Split ownership:
+
+| Gate | API | Owns (in addition to rows above where applicable) |
+| --- | --- | --- |
+| Contract-only | `ComponentContract.validate_generation_prerequisites/2` | Contract intrinsic validity; strict `validate_ir_references/2`; stored contract blockers; generation-capable attr/item **types**; **supported** attr/item **validation** shapes (§10.13); default-literal representability (§10.16); §10.1 intent grammar; contract-only capability diagnostics (`:any`, slot cardinality, …) |
+| Plan + tuple | `ComponentizationPlan.validate_generation_prerequisites/3` | **All Contract `/2` prerequisites**; plan intrinsic validity; `validate_references/3`; tuple linkage; stored plan blockers; indexed plan generation rules; **boundary-scoped** native emission eligibility (§10.10–§10.12); `BINDING_NATIVE_EMISSION_RULE` admissibility (§10.4.1); in-boundary `icon` (§10.11); boundary-root package-class rules (§10.10.5); artifact-visible internal static navigation revalidation (§10.10.4); placement-dependent optional-input compatibility. Plan-owned diagnostics use `componentization_plan.*` only (D3). |
+
+`ComponentReview.validate_generation_prerequisites/3` delegates to the Plan
+`/3` gate and therefore inherits every Plan-owned blocker.
+
+**Must not** move generation-only C0 rules into ordinary
+`ComponentContract.validate_ir_references/2` or
+`ComponentizationPlan.validate_references/3` unless D1/D3 already require the
+same invariant for non-generation validation. C09D5 proposer /
+`:needs_review` construction must remain unchanged.
 
 **Must not** require `approval_status == :approved`.
 
@@ -435,10 +470,72 @@ The contract does **not** choose an arbitrary top-level namespace.
 
 ### 10.4 BindingProjection rendering
 
-- Map each `BindingProjection` to HEEx attribute or slot wiring on
-  `target_node_id` within the boundary subtree.
-- Types and requiredness come from the contract attr/slot/item field referenced
-  by the projection.
+D3 freezes **placement XOR** on each public target location:
+
+```text
+exactly one BindingProjection
+OR
+exactly one RenderProjection
+```
+
+A binding-backed public target **never** receives a duplicate
+`RenderProjection` on the same placement. The generator must not require or
+assume a “paired” render projection.
+
+Map **every** admitted first-wave `BindingProjection` to exactly one native
+output locus derived only from the frozen tuple (§10.4.1). Any combination
+without exactly one mechanical interpretation blocks **Plan**
+`validate_generation_prerequisites/3` (§6.4).
+
+| `projection_kind` | Summary |
+| --- | --- |
+| `scalar_attr` | Site-scoped `ValueBinding` → native locus from `target_kind` + target node `semantic_type` + referenced `Attr` (§10.4.1). |
+| `collection_attr` | Repeat `repeat_root_node_id` subtree with top-level `:list` public attr (§10.15). |
+| `collection_item_field` | Collection-item `ValueBinding` → native locus from `target_kind` + node + `ItemField` (§10.4.1). |
+| `collection_count_attr` | Bind `ValueBinding.value_kind = collection_count` to approved count public attr; expose `@count` (and nested count item fields per D1). **Never** `length/1`. |
+| `slot` | Generation-blocked upstream; not implemented in C09D6-C. |
+
+`RenderProjection` and `scalar_attr` are **alternate** sources for the same
+**native roles** (for example `link_url` on `link` nodes); both paths must be
+implemented. Omitting either is invalid.
+
+#### 10.4.1 `BINDING_NATIVE_EMISSION_RULE` (frozen)
+
+`ValueBinding` enums (format `1.0.0`):
+
+```text
+target_kind = :text | :asset | :link_url
+value_kind  = :field | :collection_count
+scope       = :site | :collection_item | :collection
+```
+
+Derive emission from `BindingProjection` + referenced bindings + target node +
+contract surfaces. **Do not** infer `root_id`, `root_class`, `root_global_attrs`,
+or `heading_level` from ordinary `ValueBinding` rows (RenderProjection-owned).
+
+**Top-level informative image `alt` asymmetry (D3):** consumer-supplied top-level
+`alt` is **`asset_alt` `RenderProjection` only** (including when `asset_src` is
+`scalar_attr` binding-backed). **No** top-level `scalar_attr` binding row defines
+`asset_alt`. Collection-item informative `alt` remains the sibling
+`collection_item_field` binding with `value_kind: field`, `target_kind: text` on
+the same `image` node (D3).
+
+| Admission pattern | Native output locus |
+| --- | --- |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: text` + node `heading` \| `paragraph` \| `rich_text` | Escaped text at `text_content` locus from `@public_attr` / safe assign (§10.12). |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: asset` + node `image` | `src` at `asset_src` locus on resolved `img`. |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: link_url` + node `link` | `href` at `link_url` locus on `a`. |
+| `collection_attr` + top-level `CollectionInput` | `for lf_ci_n <- @public_list_attr` over `repeat_root_node_id` subtree (§10.15). |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: text` + text-capable node | Escaped text at `text_content` locus via `lf_item_field/2`. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: asset` + node `image` | `src` at `asset_src` locus. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: text` + node `image` + approved consumer-supplied collection image policy | `alt` at `asset_alt` locus; runtime §10.12.1. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: link_url` + node `link` | `href` at `link_url` locus when D1/D3 admit the binding. |
+| `collection_item_field` + nested `:list` `ItemField` + child `CollectionBinding` | Nested `for` (§10.15). |
+| `collection_count_attr` + `value_kind: collection_count` + `scope: collection` + `target_kind: text` + count `Attr` + target node `heading` \| `paragraph` \| `rich_text` | Escaped count text at `BindingProjection.target_node_id` from `@count` / safe assign. **No** second `RenderProjection`. Never `length/1`. |
+| `collection_item_field` + `value_kind: collection_count` + `scope: collection` + `target_kind: text` + approved count item field + text-capable target node | Escaped count text at target via item accessor. Never `length/1`. |
+
+Any row not listed → Plan prerequisite blocked with
+`componentization_plan.native_generation.binding_emission_unsupported`.
 
 ### 10.5 RenderProjection rendering
 
@@ -577,6 +674,367 @@ omitted from IR/TokenSet.
 `LiveFrames.Fidelity` is **not** the native styling generator; reuse shared
 low-level CSS serialization helpers only where semantics match (§12).
 
+### 10.10 Native element emission (C09D6-C0 freeze)
+
+PR #135 (`feat/c09d6-c-native-generator`) is **evidence only**. It must not be
+treated as authority. This section freezes the mechanical emitter.
+
+#### 10.10.1 Native tag resolution (two layers)
+
+**A. Source-normalized tag evidence** — `DesignNode.attributes["tag"]` when it is
+a binary, `StaticMarkupContract.native_tag?/1` is true, **and** the tag is in
+the per-`semantic_type` compatibility set (§10.10.2). Normalized source tags
+**win** over generator defaults when compatible.
+
+**B. Generator-owned `DEFAULT_TAG`** — used only when layer A does not apply.
+Tags such as `a` and `img` are **native-generator defaults** authorized by C0;
+they are **not** claims that Bricks `StaticSemantics` currently admits `a`/`img`
+through `StaticMarkupContract`.
+
+Resolution order:
+
+```text
+1. If attributes["tag"] present:
+     allowlisted AND semantically compatible → emit that tag
+     allowlisted but incompatible → Plan prerequisite blocked
+     not allowlisted → Plan prerequisite blocked
+2. Else if DEFAULT_TAG exists for semantic_type → emit DEFAULT_TAG
+3. Else → Plan prerequisite blocked
+```
+
+Safe static attributes (except `href` / placement-owned attrs) are only those
+accepted by `StaticMarkupContract.safe_attribute?/3` for the resolved tag.
+**Never** emit source classes, source IDs, or arbitrary attributes.
+
+`paragraph` and `rich_text` remain **distinct** IR meanings.
+
+**Package root class (§10.8)** and root `root_id` / `root_class` /
+`root_global_attrs` projections apply on the **outermost emitted element** for
+`plan.boundary_node_id` (including `img`, `figure` wrapper, or dynamic
+`heading_level` branches).
+
+**Static literal text** on `button` and `link` nodes must be emitted when not
+superseded by a public placement on that node.
+
+#### 10.10.2 Semantic tag compatibility and defaults
+
+| `semantic_type` | `SEMANTIC_TAG_COMPATIBILITY` (normalized `attributes["tag"]`) | `DEFAULT_TAG` | Static `content` | Children | Block |
+| --- | --- | --- | --- | --- | --- |
+| `section` | `section`, `div` | `section` | escaped UTF-8 when artifact-visible | yes† | — |
+| `container`, `wrapper`, `stack`, `grid`, `generic`, `background`, `overlay` | `div` only | `div` | escaped UTF-8 when artifact-visible | yes† | other allowlisted tags (e.g. `nav`) → blocked |
+| `paragraph` | `p` only | `p` | escaped UTF-8 string only | no‡ | non-string `content` |
+| `rich_text` | `div`, `p`, `span` only | **none** | escaped UTF-8 when tag resolved | no‡ | missing/incompatible tag; structured HTML |
+| `heading` | `h1`–`h6` only when **no** public `heading_level` placement owns the node | **none** | escaped UTF-8 when artifact-visible | no‡ | see §10.12 `heading_level` |
+| `image` | see §10.10.3 (`figure` only; never normalized `img`) | `img` | none (placements) | no | static image without `asset_src` policy (D3) |
+| `button` | `button` only (when §10.10.4 does not emit `<a>`) | `button` | escaped UTF-8 + static child text | yes† | — |
+| `link` | **none** (no source-normalized compatible tag today) | `a` | escaped UTF-8 + static child text | yes† | — |
+| `actions` | `div` only | `div` | none | yes† / `subtree_slot` | — |
+| `icon` | — | — | — | — | §10.11 |
+
+†Children render when not replaced by `subtree_slot` and not owned by a binding/
+projection target. ‡No static child subtree except literal text on the node
+itself.
+
+#### 10.10.3 `image` and `figure` (frozen structure)
+
+```text
+attributes["tag"] absent     → DEFAULT_TAG <img> (generator-owned; not layer A)
+attributes["tag"] == figure → <figure> wrapper + inner <img> (layer A)
+any other present tag        → Plan prerequisite blocked
+```
+
+Do **not** treat normalized `"img"` as layer-A evidence; `StaticMarkupContract`
+does not admit `img` today.
+
+When tag is absent, emit a single `<img>`. Boundary package/root projections
+attach to that `<img>` when the image node is the boundary root.
+
+When normalized `attributes["tag"] == "figure"`:
+
+```text
+<figure …boundary/root attrs when boundary…>
+  <img src=… alt=… />
+</figure>
+```
+
+- Outer `<figure>`: boundary `root_id` / `root_class` / `root_global_attrs` /
+  package class when applicable.
+- Inner `<img>`: `asset_src` / `asset_alt` placements only.
+- No other `figure` shapes are generation-eligible.
+
+Optional `asset_src` omission (§10.12) removes the **entire** emitted image
+semantic unit (`<img>` or `<figure><img/></figure>`), not an empty wrapper.
+
+#### 10.10.4 `STATIC_NAVIGATION_GENERATION_RULE` (frozen)
+
+`IR.validate/1` proves only that `DesignNode.attributes` is a JSON object; it
+does **not** prove navigation safety. Generation accepts arbitrary intrinsically
+valid `DesignDocument` tuples. Plan generation prerequisites must revalidate any
+artifact-visible internal static navigation before native generation.
+
+**Safety boundary (source-neutral, shared with Fidelity):**
+
+```text
+LiveFrames.StaticNavigation.validate_navigation_map/1
+```
+
+Do **not** route navigation-owned `href`, `target`, or `rel` through
+`StaticMarkupContract.safe_attribute?/3`. `StaticMarkupContract` does not
+authorize `<a>`, `target`, or `rel` today; it remains applicable to ordinary
+static source attributes elsewhere (§10.10.2).
+
+When **no** public `link_url` `BindingProjection` or `RenderProjection` owns
+the URL on that node, for each artifact-visible `link` or `button` node whose
+native emission uses internal static navigation:
+
+```text
+nav = node.attributes["navigation"]
+
+Plan prerequisite (before generation):
+  LiveFrames.StaticNavigation.validate_navigation_map(nav)
+  == {:ok, navigation_attrs}
+  else → componentization_plan.native_generation.static_navigation_invalid
+         → generation_blocked
+
+Generator (after prerequisites pass):
+  emit <a> with navigation_attrs exactly (deterministic order: href, target, rel)
+```
+
+| `semantic_type` | Emission |
+| --- | --- |
+| `link` | `<a>` + `navigation_attrs` from `validate_navigation_map/1` |
+| `button` + static navigation | `<a>` + same `navigation_attrs`; **do not** emit `<button>` while dropping the destination; do not emit `type="button"` on the anchor |
+
+For `navigation["target"] == "_blank"`, frozen output includes:
+
+```text
+target="_blank"
+rel="noopener noreferrer"
+```
+
+as returned by `LiveFrames.StaticNavigation` (do not invent another `rel` policy in
+NativeGenerator).
+
+**Prohibited:** silent omission of `href`/`target`/`rel`; `generation_failed` for
+this case; unsafe href emission; Fidelity fallback.
+
+When a public `link_url` placement **does** own the URL location:
+
+```text
+ignore static navigation href, target, and rel for that URL location
+bind href only from public attr / safe assign access (§10.12)
+optional public link_url absent → MUST NOT fall back to static navigation
+  (STATIC_DEFAULT_RULE; D3)
+```
+
+#### 10.10.5 Boundary root package class (Plan blockers)
+
+The package semantic class and boundary root projections require a
+generator-owned outermost element at `plan.boundary_node_id`. First-wave Plan
+prerequisites **block** when:
+
+```text
+BOUNDARY_OPTIONAL_IMAGE_RULE =
+  boundary_node semantic_type = image
+  AND asset_src public input is optional with no explicit Contract default
+  → componentization_plan.native_generation.boundary_optional_image
+
+BOUNDARY_SUBTREE_SLOT_RULE =
+  subtree_slot.target_node_id == plan.boundary_node_id
+  → componentization_plan.native_generation.boundary_subtree_slot
+```
+
+Do not invent wrapper elements in C09D6-C to bypass these rules.
+
+### 10.11 Icon generation eligibility (C08B1 alignment)
+
+`icon` is a valid Design IR `semantic_type`, but C08B1 records **no trusted
+native glyph renderer** and forbids admitting `svg` / `i` / font-icon markup in
+the static allowlist.
+
+First-wave native generation **must not** emit icon visuals and **must not**
+classify icon-bearing tuples as `generation_failed` generator defects.
+
+```text
+ICON_NATIVE_GENERATION_RULE =
+  any DesignNode with semantic_type = icon inside plan.boundary_node_id subtree
+  → Plan validate_generation_prerequisites/3 diagnostic (severity :error)
+  → generation_blocked (ordinary prerequisite; NOT implementer STOP)
+```
+
+Diagnostic code (frozen): `componentization_plan.native_generation.icon_unsupported`.
+
+Contract `/2` **must not** scan the whole `DesignDocument` for icons outside the
+selected boundary. Reviewers must not approve pairs that violate this rule.
+
+### 10.12 Optional public attrs (`default: nil` means no default)
+
+Per C09D1, contract `default: nil` means **no default was declared**, not an
+explicit Elixir `nil` default. The generator **must not** emit `attr(...,
+default: nil)` to “fix” omission.
+
+For each placement role, when the referenced public attr has `required: false`
+and **no** explicit default in the contract:
+
+| Render / binding role | Mechanical omission behavior |
+| --- | --- |
+| `text_content` | Read with safe assign access (`Map.get(assigns, :name)` / `assigns[:name]`). If absent at render time, omit the text segment; do not raise solely for omission. |
+| `asset_src` | If absent, **omit the entire image semantic unit** (`<img>` or `<figure><img/></figure>`) for that placement; see §10.10.5 when boundary is `image`. |
+| `asset_alt` | See §10.12.1 (never omit required informative alt when `src` present). |
+| `link_url` | If absent, emit `<a>` without `href` only when static link content or §10.10.4 internal navigation remains; **never** fall back from optional public attr to static `href`. |
+| `heading_level` | If optional with **no** explicit contract default: **do not** use static `h1`–`h6` tag as hidden default (STATIC_DEFAULT_RULE). Tuple must be Plan-blocked unless omission behavior is explicitly frozen elsewhere. Static heading tags apply only when **no** public `heading_level` placement owns the node. |
+| `root_id` | If absent, omit `id`. |
+| `root_class` | If absent, emit package class only. |
+| `root_global_attrs` | If absent, omit global spread. |
+
+If two or more rows would require contradictory omission choices for the same
+tuple, **STOP** (§19) — the tuple is not generation-representable without new
+authority.
+
+Required public attrs may use `@name` after gates prove requiredness.
+
+#### 10.12.1 Conditional image `alt` (runtime)
+
+For consumer-supplied image policies with
+`required_when_source_present = true` (D3):
+
+```text
+source absent (optional placement)
+  → omit image element
+
+source present + decorative policy
+  → alt=""
+
+source present + consumer_supplied + alt present
+  → emit supplied alt
+
+source present + consumer_supplied + alt absent
+  → deterministic contract/accessibility ArgumentError
+```
+
+Apply to top-level image attrs and collection item image/alt field pairs.
+**Never** emit an informative `<img>` with `src` present without satisfying the
+approved alt requirement. `nil` does not mean decorative (D1).
+
+### 10.13 Validation emission (attrs and item fields)
+
+Inventory for format `1.0.0` (fail-closed):
+
+| Contract validation shape | Phoenix `attr/3` | Generated runtime enforcement |
+| --- | --- | --- |
+| `%{"values" => [1,2,3,4,5,6]}` on `:integer` (heading level) | `values: 1..6` | none additional |
+| `%{"min" => n}` on count attrs / count item fields where `n` is numeric and `n >= 0` and map has **no other keys** | **forbidden** (`:min` is not a Phoenix attr option) | generated runtime check: value `>= n` (matches `ComponentContract.Validation.non_negative_validation?/1`) |
+| any other non-empty validation map | only if this table gains a row | otherwise **block Contract generation prerequisites** |
+
+Never silently drop validation metadata. Never emit unsupported Phoenix attr
+options.
+
+**Item fields — types (every present value):** before field-specific
+validation, enforce approved `ItemField.type`:
+
+| `ItemField.type` | Present-value rule |
+| --- | --- |
+| `:string` | `is_binary/1` |
+| `:integer` | `is_integer/1` |
+| `:boolean` | `is_boolean/1` |
+| `:list` | `is_list/1` |
+| `:map` | `is_map/1` |
+| `:global` | **generation-blocked** for first-wave collection items (no valid item-field meaning) |
+| `:any` | already generation-blocked at Contract prerequisites |
+
+Invalid present values → clear contract/access error (D1). Then apply supported
+`ItemField.validation` per the table above.
+
+### 10.14 Slot runtime semantics (first-wave `0..1`)
+
+| Contract slot | Generated declaration | Runtime |
+| --- | --- | --- |
+| `required: false` | `slot :name` | `render_slot(@name)` allowed to render zero entries |
+| `required: true` | `slot :name, required: true` | zero entries → `ArgumentError` with deterministic message |
+| cardinality `0..1` | (no repeated slot API) | more than one entry → `ArgumentError` with deterministic message |
+
+“Generation-eligible `0..1`” **requires** enforcing `0..1` at runtime in the
+generated function component.
+
+### 10.15 Collection runtime (generator reconfirmation)
+
+- Item semantics are scoped per `CollectionInput`; field names are unique **only
+  within** their owning collection input.
+- **Never** collapse same-named fields across collections into one helper.
+- **Never** expose `source_collection_binding_id` (or other source IDs) in
+  generated public names, module paths, or consumer-visible strings.
+- Internal loop variables use deterministic **ordinal identities** derived from
+  `CollectionInput` order in the contract (`lf_ci_1`, nested `lf_ci_2`, …), not
+  sanitized binding IDs.
+
+**Optional top-level collection** (`required: false`, no explicit default):
+
+```text
+public list attr absent at runtime → omit repeat subtree (no iterations)
+explicit contract default []       → zero iterations via declared default
+present list value                 → iterate approved subtree
+```
+
+Do not synthesize `[]` for “no default”.
+
+**Nested optional list fields:** absent field with no explicit default → omit
+nested repeat subtree; explicit default `[]` → zero iterations; present
+non-list → item field type error. Never `|| []`.
+
+- Item accessor: exact string key, then existing atom key with matching
+  `Atom.to_string/1`; never `String.to_atom/1` or `String.to_existing_atom/1`.
+- `collection_count_attr` uses the approved count attr / count item field only.
+
+### 10.16 Generator totality and default literals
+
+```text
+GENERATOR_TOTALITY_RULE =
+  for every tuple that passes both generation gates,
+  NativeGenerator.generate/3 returns exactly one frozen result tuple
+  and never raises, throws, or exits due to emitter input shape.
+```
+
+Default literal emission for `attr` / `ItemField` defaults:
+
+- Use `ComponentContract` canonical JSON normalization semantics (same as
+  serializer), not a second conflicting map-key policy.
+- Preserve JSON/Elixir numeric meaning exactly (`inspect/1` on numbers is
+  acceptable only when it round-trips the stored value).
+- Do not impose arbitrary float decimal formatting.
+- Atom keys in stored maps must be normalized to string keys before emission.
+
+Gate-valid defaults that cannot be expressed under these rules block generation
+prerequisites.
+
+### 10.17 Prohibited implementation patterns (PR #135 review)
+
+The following classes are **explicitly forbidden** in C09D6-C implementers:
+
+```text
+scalar_attr or collection_count_attr binding omitted
+“paired RenderProjection” assumed for binding-backed targets
+bound link_url omitted
+button/link static IR text or static navigation.href dropped
+static navigation href/target/rel dropped without Plan `static_navigation_invalid`
+optional public link_url falling back to static navigation.href
+using StaticMarkupContract for navigation-owned href/target/rel
+package root class omitted on image or dynamic-heading boundary roots
+normalized tag used when semantically incompatible (e.g. container + nav)
+allowlisted normalized tag ignored or overwritten by semantic_type guesses
+rich_text → unconditional <p>
+heading_level optional attr falling back to static h1–h6 tag
+icon → generation_failed instead of Plan prerequisite block
+informative img with src present but required alt absent
+unknown validation silently dropped
+Phoenix attr options invented (e.g. min: 0)
+ItemField validation ignored
+same-named fields across collections collapsed
+source_collection_binding_id embedded in generated locals
+optional nested collection coerced with || []
+gate-valid literal/default causing throw/crash in emitter
+outer-source parse substituting for compile-safe generated helpers
+```
+
 ---
 
 ## 11. HEEx and security rules (frozen)
@@ -710,8 +1168,9 @@ that tracer and escalate; do not stretch C09D6.
 
 ```text
 C09D6-A  authority + repository truth          ← this slice
-C09D6-B  reviewer approval implementation
-C09D6-C  native generator core (HEEx)
+C09D6-B  reviewer approval implementation    ← implemented on main (PR #134)
+C09D6-C0 native emission surface authority    ← v6 §10.4.1, §10.10–§10.17 (this amendment)
+C09D6-C  native generator core (HEEx)         ← blocked until C0 merged; PR #135 hold
 C09D6-D  native styling generation
 C09D7-A  CTA Tango componentization tracer
 C09D7-B  CTA Tango generation + Storybook/browser verification
@@ -745,9 +1204,15 @@ static internal content requires SemanticInput in the generator tuple, or
   identical Contract+Plan+DesignDocument tuples would yield different native
   output from different StaticContentDispositionDecision sets
 native generator and P10 ejection cannot be cleanly separated
+rich_text or heading emission requires a tag/level guess outside §10.10.2
+optional/no-default public attr placement requires a guess outside §10.12
+approved validation metadata has no frozen emitter/runtime mapping (§10.13)
+Behavior IR or raw HTML execution would be required for fidelity
 ```
 
-C09D6-A completed without triggering STOP.
+C09D6-A completed without triggering STOP. C09D6-C0 documents emission-surface
+STOP triggers for C09D6-C; **no Contract/Plan/IR schema change** is authorized
+by C0.
 
 ---
 
@@ -755,7 +1220,6 @@ C09D6-A completed without triggering STOP.
 
 | Deliverable | Status |
 | --- | --- |
-| `docs/development/c09d6_native_generation_authority.md` | this file |
-| `docs/17_ROADMAP.md` current-status reconciliation | updated in slice PR |
-| `README.md` current-status reconciliation | updated in slice PR |
-| Generator production code | **out of scope** |
+| `docs/development/c09d6_native_generation_authority.md` | this file (v6 includes C09D6-C0) |
+| `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
+| Generator production code | **out of scope** (PR #135 remains on hold) |
