@@ -12,7 +12,7 @@
 - **Catalogue library infrastructure:** implemented (schema, manifest, lifecycle, Registry, fingerprint, versioning, discovery in `LiveFrames.Catalogue`)
 - **Production Catalogue:** `apps/live_frames/priv/catalogue/` **absent**; compile-time Registry membership **empty**; canonical Hero Catalogue manifest **absent**
 - **G1 architecture/spec (docs/23–24):** approved written architecture; historical “implementation NOT AUTHORIZED” language refers to the pre-#48 programme gate, not denial that library Catalogue code exists today
-- **Native component generator:** in progress (PR #135 on hold); emission surface frozen in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) **v5 / C09D6-C0** (§10.4.1, §10.10–§10.17)
+- **Native component generator:** in progress (PR #135 on hold); emission surface frozen in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) **v6 / C09D6-C0** (§10.4.1, §10.10–§10.17)
 - **Reviewer approval (C09D6-B):** implemented / accepted on `main` (PR #134 — `ComponentReview`, shared `validate_generation_prerequisites/3`)
 - **P10 consumer ejection:** **not implemented** / not authorized
 - **Next static native tracer (provisional):** CTA Tango — componentization/generation **not authorized** until C09D6-B+ slices land

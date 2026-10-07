@@ -45,8 +45,8 @@ source
    └→ explicit semantic decisions
       → ComponentizationProposer
       → proposed/needs_review ComponentContract + ComponentizationPlan
-      → reviewer approval (not yet implemented)
-      → future native generator (not yet implemented)
+      → reviewer approval (C09D6-B / ComponentReview on main)
+      → native generator (C09D6-C; not on main — PR #135 on hold pending C09D6-C0)
 ```
 
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.

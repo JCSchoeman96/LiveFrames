@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v5
+**Plan version:** v6
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -47,6 +47,9 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   structure, conditional image alt runtime, static navigation retention,
   heading-level STATIC_DEFAULT_RULE, collection omission/type rules, count
   validation alignment, roadmap reconciliation
+- `v6` — PR #136 final pass: correct `ValueBinding` enums in binding emission,
+  count text locus, Plan diagnostic namespace, image/link tag layers, button
+  static navigation, boundary-root Plan blockers, repository-truth reconciliation
 
 ---
 
@@ -95,18 +98,21 @@ routing native generation through LiveFrames.Fidelity
 
 ## 2. Repository truth (current checkpoint)
 
-Reconciled against accepted base `98c464b4ba92d0a14e7a95b397496717c15b4835`.
-Short pointers: `docs/17_ROADMAP.md`, `README.md`.
+Reconciled against accepted base `a3efdafe3d8bcb7d04aa1c4ad9660f0858f86bc3`
+(C09D6-B merged PR #134; C09D6-C0 authority in flight PR #136; C09D6-C
+implementation PR #135 on hold). Short pointers: `docs/17_ROADMAP.md`,
+`README.md`.
 
 | Area | State |
 | --- | --- |
 | C09D5-A / B0 / B1 / B2 | **complete** — proposer authority and implementation |
 | `ComponentizationProposer` | **implemented** |
 | `ComponentContract` / `ComponentizationPlan` models and validators | **implemented** |
+| C09D6-B `ComponentReview` + shared `validate_generation_prerequisites/3` | **implemented** on `main` (PR #134) |
 | Catalogue schema, manifest, lifecycle, Registry, fingerprint, versioning, discovery | **implemented** in library code |
 | Production Catalogue root `apps/live_frames/priv/catalogue/` | **absent** (no committed manifests) |
 | Production Registry at compile time | **empty** membership (no canonical Hero Catalogue manifest) |
-| Native component generator | **not implemented** |
+| Native component generator | **not on `main`** (PR #135 evidence only; blocked on C09D6-C0) |
 | P10 Catalogue ejection generator | **not implemented** |
 | Phase 6 Hero native section | **accepted** (hand-authored; not proposer/generator pipeline) |
 
@@ -246,7 +252,7 @@ include every rule in §10.10–§10.17 that gates whether a tuple is
 | Gate | API | Owns (in addition to rows above where applicable) |
 | --- | --- | --- |
 | Contract-only | `ComponentContract.validate_generation_prerequisites/2` | Contract intrinsic validity; strict `validate_ir_references/2`; stored contract blockers; generation-capable attr/item **types**; **supported** attr/item **validation** shapes (§10.13); default-literal representability (§10.16); §10.1 intent grammar; contract-only capability diagnostics (`:any`, slot cardinality, …) |
-| Plan + tuple | `ComponentizationPlan.validate_generation_prerequisites/3` | **All Contract `/2` prerequisites**; plan intrinsic validity; `validate_references/3`; tuple linkage; stored plan blockers; indexed plan generation rules; **boundary-scoped** native emission eligibility (§10.10–§10.12); `BINDING_NATIVE_EMISSION_RULE` admissibility (§10.4.1); in-boundary `icon` (§10.11); placement-dependent optional-input compatibility |
+| Plan + tuple | `ComponentizationPlan.validate_generation_prerequisites/3` | **All Contract `/2` prerequisites**; plan intrinsic validity; `validate_references/3`; tuple linkage; stored plan blockers; indexed plan generation rules; **boundary-scoped** native emission eligibility (§10.10–§10.12); `BINDING_NATIVE_EMISSION_RULE` admissibility (§10.4.1); in-boundary `icon` (§10.11); boundary-root package-class rules (§10.10.5); placement-dependent optional-input compatibility. Plan-owned diagnostics use `componentization_plan.*` only (D3). |
 
 `ComponentReview.validate_generation_prerequisites/3` delegates to the Plan
 `/3` gate and therefore inherits every Plan-owned blocker.
@@ -493,41 +499,41 @@ implemented. Omitting either is invalid.
 
 #### 10.4.1 `BINDING_NATIVE_EMISSION_RULE` (frozen)
 
-Derive emission from:
+`ValueBinding` enums (format `1.0.0`):
 
 ```text
-BindingProjection.projection_kind
-referenced ValueBinding / CollectionBinding (when applicable)
-ValueBinding.value_kind
-ValueBinding.target_kind
-ValueBinding.scope
-target DesignNode.semantic_type
-referenced Attr or ItemField (type, validation, accessibility)
-approved image accessibility metadata (when applicable)
+target_kind = :text | :asset | :link_url
+value_kind  = :field | :collection_count
+scope       = :site | :collection_item | :collection
 ```
 
-**Do not** infer `root_id`, `root_class`, `root_global_attrs`, or
-`heading_level` from an ordinary site `ValueBinding` unless the tuple also
-contains the matching `RenderProjection` on that node (root/heading roles are
-RenderProjection-owned in format `1.0.0`).
+Derive emission from `BindingProjection` + referenced bindings + target node +
+contract surfaces. **Do not** infer `root_id`, `root_class`, `root_global_attrs`,
+or `heading_level` from ordinary `ValueBinding` rows (RenderProjection-owned).
+
+**Top-level informative image `alt` asymmetry (D3):** consumer-supplied top-level
+`alt` is **`asset_alt` `RenderProjection` only** (including when `asset_src` is
+`scalar_attr` binding-backed). **No** top-level `scalar_attr` binding row defines
+`asset_alt`. Collection-item informative `alt` remains the sibling
+`collection_item_field` binding with `value_kind: field`, `target_kind: text` on
+the same `image` node (D3).
 
 | Admission pattern | Native output locus |
 | --- | --- |
-| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: text` + node `heading` \| `paragraph` \| `rich_text` | Escaped text body on that node (`text_content` locus) from `@public_attr` / safe assign access (§10.12). |
-| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: asset` + node `image` | `src` on resolved `img` (`asset_src` locus). |
-| `scalar_attr` + `scope: site` + `value_kind: text` + node `image` + consumer-supplied image policy | `alt` on resolved `img` (`asset_alt` locus); runtime §10.12.1. |
-| `scalar_attr` + `scope: site` + `value_kind: link_url` + node `link` | `href` on `a` (`link_url` locus). |
-| `collection_attr` + top-level `CollectionInput` | `for lf_ci_n <- @public_list_attr` wrapping `repeat_root_node_id` subtree (§10.15). |
-| `collection_item_field` + `scope: collection_item` + `target_kind: text` + node `heading` \| `paragraph` \| `rich_text` | Escaped text from `lf_item_field(item, "field")` at `text_content` locus. |
-| `collection_item_field` + `scope: collection_item` + `target_kind: asset` + node `image` | `src` from item field at `asset_src` locus. |
-| `collection_item_field` + `scope: collection_item` + `target_kind: text` + node `image` + approved alt sibling policy | `alt` from item field at `asset_alt` locus; runtime §10.12.1. |
-| `collection_item_field` + `scope: collection_item` + `target_kind: link_url` + node `link` | `href` from item field at `link_url` locus (only when D1/D3 already admit this binding). |
-| `collection_item_field` + nested list `ItemField` + child `CollectionBinding` | Nested `for` over parent item field list (§10.15); no top-level attr invention. |
-| `collection_count_attr` + top-level count `Attr` + `value_kind: collection_count` | Public `@count` assign; **no** visual substitution at `target_node_id` unless a separate text placement exists. |
-| Nested count `collection_item_field` + `value_kind: collection_count` | Item-field count value via accessor; same non-`length/1` rule. |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: text` + node `heading` \| `paragraph` \| `rich_text` | Escaped text at `text_content` locus from `@public_attr` / safe assign (§10.12). |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: asset` + node `image` | `src` at `asset_src` locus on resolved `img`. |
+| `scalar_attr` + `scope: site` + `value_kind: field` + `target_kind: link_url` + node `link` | `href` at `link_url` locus on `a`. |
+| `collection_attr` + top-level `CollectionInput` | `for lf_ci_n <- @public_list_attr` over `repeat_root_node_id` subtree (§10.15). |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: text` + text-capable node | Escaped text at `text_content` locus via `lf_item_field/2`. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: asset` + node `image` | `src` at `asset_src` locus. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: text` + node `image` + approved consumer-supplied collection image policy | `alt` at `asset_alt` locus; runtime §10.12.1. |
+| `collection_item_field` + `scope: collection_item` + `value_kind: field` + `target_kind: link_url` + node `link` | `href` at `link_url` locus when D1/D3 admit the binding. |
+| `collection_item_field` + nested `:list` `ItemField` + child `CollectionBinding` | Nested `for` (§10.15). |
+| `collection_count_attr` + `value_kind: collection_count` + `scope: collection` + `target_kind: text` + count `Attr` + target node `heading` \| `paragraph` \| `rich_text` | Escaped count text at `BindingProjection.target_node_id` from `@count` / safe assign. **No** second `RenderProjection`. Never `length/1`. |
+| `collection_item_field` + `value_kind: collection_count` + `scope: collection` + `target_kind: text` + approved count item field + text-capable target node | Escaped count text at target via item accessor. Never `length/1`. |
 
-Any row not listed → Plan generation prerequisite blocked
-(`native_generation.binding_emission_unsupported`).
+Any row not listed → Plan prerequisite blocked with
+`componentization_plan.native_generation.binding_emission_unsupported`.
 
 ### 10.5 RenderProjection rendering
 
@@ -717,9 +723,9 @@ superseded by a public placement on that node.
 | `paragraph` | `p` only | `p` | escaped UTF-8 string only | no‡ | non-string `content` |
 | `rich_text` | `div`, `p`, `span` only | **none** | escaped UTF-8 when tag resolved | no‡ | missing/incompatible tag; structured HTML |
 | `heading` | `h1`–`h6` only when **no** public `heading_level` placement owns the node | **none** | escaped UTF-8 when artifact-visible | no‡ | see §10.12 `heading_level` |
-| `image` | see §10.10.3 | `img` | none (placements) | no | static image without `asset_src` policy (D3) |
-| `button` | `button` only | `button` | escaped UTF-8 + static child text | yes† | — |
-| `link` | `a` only (generator default; not source-normalized today) | `a` | escaped UTF-8 + static child text | yes† | — |
+| `image` | see §10.10.3 (`figure` only; never normalized `img`) | `img` | none (placements) | no | static image without `asset_src` policy (D3) |
+| `button` | `button` only (when §10.10.4 does not emit `<a>`) | `button` | escaped UTF-8 + static child text | yes† | — |
+| `link` | **none** (no source-normalized compatible tag today) | `a` | escaped UTF-8 + static child text | yes† | — |
 | `actions` | `div` only | `div` | none | yes† / `subtree_slot` | — |
 | `icon` | — | — | — | — | §10.11 |
 
@@ -729,9 +735,17 @@ itself.
 
 #### 10.10.3 `image` and `figure` (frozen structure)
 
-When `attributes["tag"]` is absent or `img`, emit a single `<img>` element.
-Boundary package/root projections attach to that `<img>` when the image node is
-the boundary root.
+```text
+attributes["tag"] absent     → DEFAULT_TAG <img> (generator-owned; not layer A)
+attributes["tag"] == figure → <figure> wrapper + inner <img> (layer A)
+any other present tag        → Plan prerequisite blocked
+```
+
+Do **not** treat normalized `"img"` as layer-A evidence; `StaticMarkupContract`
+does not admit `img` today.
+
+When tag is absent, emit a single `<img>`. Boundary package/root projections
+attach to that `<img>` when the image node is the boundary root.
 
 When normalized `attributes["tag"] == "figure"`:
 
@@ -746,28 +760,53 @@ When normalized `attributes["tag"] == "figure"`:
 - Inner `<img>`: `asset_src` / `asset_alt` placements only.
 - No other `figure` shapes are generation-eligible.
 
-#### 10.10.4 Static navigation retention (links)
+Optional `asset_src` omission (§10.12) removes the **entire** emitted image
+semantic unit (`<img>` or `<figure><img/></figure>`), not an empty wrapper.
 
-Normalized IR may carry safe static navigation:
+#### 10.10.4 Static navigation retention (normalized IR)
 
-```text
-attributes["navigation"] == %{"href" => safe_href}
-```
-
-(per adapter static-navigation authority; no URL inference in the generator).
+Normalized IR may carry safe static navigation (adapter authority only; no URL
+inference in the generator):
 
 ```text
-STATIC_NAVIGATION_RULE =
-  no public link_url BindingProjection or RenderProjection owns the link URL
-  AND normalized safe navigation.href exists
-  → emit href as internal literal on <a>
-
-  public link_url placement owns the URL location
-  → ignore static navigation literal for href
-  → bind href only from public attr / safe assign access (§10.12)
-  → optional public link_url absent MUST NOT fall back to static href
-    (STATIC_DEFAULT_RULE; D3)
+attributes["navigation"] == %{"href" => safe_href, ...}
 ```
+
+When **no** public `link_url` `BindingProjection` or `RenderProjection` owns the
+URL on that node:
+
+| `semantic_type` | Emission |
+| --- | --- |
+| `link` | `<a href={literal safe_href}>` (+ optional `target="_blank"` when `navigation["target"] == "_blank"` and `StaticMarkupContract` allows it on `a`) |
+| `button` + safe `navigation.href` | `<a href={literal safe_href}>` (same `target` rule); **do not** emit `<button>` while dropping the destination; do not emit `type="button"` on the anchor |
+
+When a public `link_url` placement **does** own the URL location:
+
+```text
+ignore normalized navigation.href and navigation.target for href/target
+bind href only from public attr / safe assign access (§10.12)
+optional public link_url absent → MUST NOT fall back to static navigation
+  (STATIC_DEFAULT_RULE; D3)
+```
+
+#### 10.10.5 Boundary root package class (Plan blockers)
+
+The package semantic class and boundary root projections require a
+generator-owned outermost element at `plan.boundary_node_id`. First-wave Plan
+prerequisites **block** when:
+
+```text
+BOUNDARY_OPTIONAL_IMAGE_RULE =
+  boundary_node semantic_type = image
+  AND asset_src public input is optional with no explicit Contract default
+  → componentization_plan.native_generation.boundary_optional_image
+
+BOUNDARY_SUBTREE_SLOT_RULE =
+  subtree_slot.target_node_id == plan.boundary_node_id
+  → componentization_plan.native_generation.boundary_subtree_slot
+```
+
+Do not invent wrapper elements in C09D6-C to bypass these rules.
 
 ### 10.11 Icon generation eligibility (C08B1 alignment)
 
@@ -785,7 +824,7 @@ ICON_NATIVE_GENERATION_RULE =
   → generation_blocked (ordinary prerequisite; NOT implementer STOP)
 ```
 
-Diagnostic code (frozen): `native_generation.icon_unsupported`.
+Diagnostic code (frozen): `componentization_plan.native_generation.icon_unsupported`.
 
 Contract `/2` **must not** scan the whole `DesignDocument` for icons outside the
 selected boundary. Reviewers must not approve pairs that violate this rule.
@@ -802,7 +841,7 @@ and **no** explicit default in the contract:
 | Render / binding role | Mechanical omission behavior |
 | --- | --- |
 | `text_content` | Read with safe assign access (`Map.get(assigns, :name)` / `assigns[:name]`). If absent at render time, omit the text segment; do not raise solely for omission. |
-| `asset_src` | If absent, **omit the entire `image` element** for that placement. |
+| `asset_src` | If absent, **omit the entire image semantic unit** (`<img>` or `<figure><img/></figure>`) for that placement; see §10.10.5 when boundary is `image`. |
 | `asset_alt` | See §10.12.1 (never omit required informative alt when `src` present). |
 | `link_url` | If absent, emit `<a>` without `href` only when static link content or §10.10.4 internal navigation remains; **never** fall back from optional public attr to static `href`. |
 | `heading_level` | If optional with **no** explicit contract default: **do not** use static `h1`–`h6` tag as hidden default (STATIC_DEFAULT_RULE). Tuple must be Plan-blocked unless omission behavior is explicitly frozen elsewhere. Static heading tags apply only when **no** public `heading_level` placement owns the node. |
@@ -1089,8 +1128,8 @@ that tracer and escalate; do not stretch C09D6.
 
 ```text
 C09D6-A  authority + repository truth          ← this slice
-C09D6-B  reviewer approval implementation
-C09D6-C0 native emission surface authority    ← v4 §10.10–§10.17 (this amendment)
+C09D6-B  reviewer approval implementation    ← implemented on main (PR #134)
+C09D6-C0 native emission surface authority    ← v6 §10.4.1, §10.10–§10.17 (this amendment)
 C09D6-C  native generator core (HEEx)         ← blocked until C0 merged; PR #135 hold
 C09D6-D  native styling generation
 C09D7-A  CTA Tango componentization tracer
@@ -1141,6 +1180,6 @@ by C0.
 
 | Deliverable | Status |
 | --- | --- |
-| `docs/development/c09d6_native_generation_authority.md` | this file (v5 includes C09D6-C0) |
+| `docs/development/c09d6_native_generation_authority.md` | this file (v6 includes C09D6-C0) |
 | `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
 | Generator production code | **out of scope** (PR #135 remains on hold) |
