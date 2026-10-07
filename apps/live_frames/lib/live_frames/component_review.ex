@@ -20,8 +20,7 @@ defmodule LiveFrames.ComponentReview do
     with :ok <- total_shape_guard(contract, plan, design_document),
          :ok <- require_proposed(contract),
          :ok <- validate_generation_prerequisites(contract, plan, design_document) do
-      approved = %{contract | approval_status: :approved}
-      verify_approved(plan, design_document, approved)
+      {:ok, %{contract | approval_status: :approved}}
     end
   rescue
     _error ->
@@ -126,52 +125,6 @@ defmodule LiveFrames.ComponentReview do
             {:error, diagnostics}
         end
     end
-  end
-
-  defp verify_approved(plan, design_document, approved) do
-    contract_gate =
-      safe_generation_gate(fn ->
-        ComponentContract.validate_for_generation(approved, design_document)
-      end)
-
-    plan_gate =
-      safe_generation_gate(fn ->
-        ComponentizationPlan.validate_for_generation(plan, approved, design_document)
-      end)
-
-    if contract_gate == :ok and plan_gate == :ok do
-      {:ok, approved}
-    else
-      failed_gates =
-        []
-        |> maybe_add_gate(contract_gate, "component_contract")
-        |> maybe_add_gate(plan_gate, "componentization_plan")
-
-      {:error,
-       [
-         %ContractDiagnostic{
-           code: "component_review.validator_drift",
-           severity: :error,
-           message: "generation gates failed after approval prerequisites passed",
-           metadata: %{"failed_gates" => failed_gates}
-         }
-       ]}
-    end
-  end
-
-  defp maybe_add_gate(gates, :ok, _name), do: gates
-  defp maybe_add_gate(gates, {:error, _diagnostics}, name), do: gates ++ [name]
-
-  defp safe_generation_gate(gate) do
-    case gate.() do
-      :ok -> :ok
-      {:error, _diagnostics} = result -> result
-      _unexpected -> {:error, :unexpected_result}
-    end
-  rescue
-    _error -> {:error, :raised}
-  catch
-    _kind, _reason -> {:error, :raised}
   end
 
   defp transition_error(message) do
