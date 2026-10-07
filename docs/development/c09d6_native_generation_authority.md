@@ -49,7 +49,9 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   validation alignment, roadmap reconciliation
 - `v6` — PR #136 final pass: correct `ValueBinding` enums in binding emission,
   count text locus, Plan diagnostic namespace, image/link tag layers, button
-  static navigation, boundary-root Plan blockers, repository-truth reconciliation
+  static navigation, boundary-root Plan blockers, repository-truth reconciliation;
+  static navigation emission via `LiveFrames.StaticNavigation.validate_navigation_map/1`
+  (not `StaticMarkupContract` for `href`/`target`/`rel`)
 
 ---
 
@@ -245,14 +247,14 @@ validate_generation_prerequisites(contract, plan, design_document) :: :ok | {:er
 | Plan generation reference index | Same indexed reference rules invoked by `ComponentizationPlan.validate_for_generation/3` after preflight |
 | Intent emission eligibility | §10.1 generation token grammar |
 
-**C09D6-C0 emission capability (v5):** the same prerequisite boundary must
+**C09D6-C0 emission capability (v6):** the same prerequisite boundary must
 include every rule in §10.10–§10.17 that gates whether a tuple is
 **generation-representable**. Split ownership:
 
 | Gate | API | Owns (in addition to rows above where applicable) |
 | --- | --- | --- |
 | Contract-only | `ComponentContract.validate_generation_prerequisites/2` | Contract intrinsic validity; strict `validate_ir_references/2`; stored contract blockers; generation-capable attr/item **types**; **supported** attr/item **validation** shapes (§10.13); default-literal representability (§10.16); §10.1 intent grammar; contract-only capability diagnostics (`:any`, slot cardinality, …) |
-| Plan + tuple | `ComponentizationPlan.validate_generation_prerequisites/3` | **All Contract `/2` prerequisites**; plan intrinsic validity; `validate_references/3`; tuple linkage; stored plan blockers; indexed plan generation rules; **boundary-scoped** native emission eligibility (§10.10–§10.12); `BINDING_NATIVE_EMISSION_RULE` admissibility (§10.4.1); in-boundary `icon` (§10.11); boundary-root package-class rules (§10.10.5); placement-dependent optional-input compatibility. Plan-owned diagnostics use `componentization_plan.*` only (D3). |
+| Plan + tuple | `ComponentizationPlan.validate_generation_prerequisites/3` | **All Contract `/2` prerequisites**; plan intrinsic validity; `validate_references/3`; tuple linkage; stored plan blockers; indexed plan generation rules; **boundary-scoped** native emission eligibility (§10.10–§10.12); `BINDING_NATIVE_EMISSION_RULE` admissibility (§10.4.1); in-boundary `icon` (§10.11); boundary-root package-class rules (§10.10.5); artifact-visible internal static navigation revalidation (§10.10.4); placement-dependent optional-input compatibility. Plan-owned diagnostics use `componentization_plan.*` only (D3). |
 
 `ComponentReview.validate_generation_prerequisites/3` delegates to the Plan
 `/3` gate and therefore inherits every Plan-owned blocker.
@@ -763,27 +765,63 @@ When normalized `attributes["tag"] == "figure"`:
 Optional `asset_src` omission (§10.12) removes the **entire** emitted image
 semantic unit (`<img>` or `<figure><img/></figure>`), not an empty wrapper.
 
-#### 10.10.4 Static navigation retention (normalized IR)
+#### 10.10.4 `STATIC_NAVIGATION_GENERATION_RULE` (frozen)
 
-Normalized IR may carry safe static navigation (adapter authority only; no URL
-inference in the generator):
+`IR.validate/1` proves only that `DesignNode.attributes` is a JSON object; it
+does **not** prove navigation safety. Generation accepts arbitrary intrinsically
+valid `DesignDocument` tuples. Plan generation prerequisites must revalidate any
+artifact-visible internal static navigation before native generation.
+
+**Safety boundary (source-neutral, shared with Fidelity):**
 
 ```text
-attributes["navigation"] == %{"href" => safe_href, ...}
+LiveFrames.StaticNavigation.validate_navigation_map/1
 ```
 
-When **no** public `link_url` `BindingProjection` or `RenderProjection` owns the
-URL on that node:
+Do **not** route navigation-owned `href`, `target`, or `rel` through
+`StaticMarkupContract.safe_attribute?/3`. `StaticMarkupContract` does not
+authorize `<a>`, `target`, or `rel` today; it remains applicable to ordinary
+static source attributes elsewhere (§10.10.2).
+
+When **no** public `link_url` `BindingProjection` or `RenderProjection` owns
+the URL on that node, for each artifact-visible `link` or `button` node whose
+native emission uses internal static navigation:
+
+```text
+nav = node.attributes["navigation"]
+
+Plan prerequisite (before generation):
+  LiveFrames.StaticNavigation.validate_navigation_map(nav)
+  == {:ok, navigation_attrs}
+  else → componentization_plan.native_generation.static_navigation_invalid
+         → generation_blocked
+
+Generator (after prerequisites pass):
+  emit <a> with navigation_attrs exactly (deterministic order: href, target, rel)
+```
 
 | `semantic_type` | Emission |
 | --- | --- |
-| `link` | `<a href={literal safe_href}>` (+ optional `target="_blank"` when `navigation["target"] == "_blank"` and `StaticMarkupContract` allows it on `a`) |
-| `button` + safe `navigation.href` | `<a href={literal safe_href}>` (same `target` rule); **do not** emit `<button>` while dropping the destination; do not emit `type="button"` on the anchor |
+| `link` | `<a>` + `navigation_attrs` from `validate_navigation_map/1` |
+| `button` + static navigation | `<a>` + same `navigation_attrs`; **do not** emit `<button>` while dropping the destination; do not emit `type="button"` on the anchor |
+
+For `navigation["target"] == "_blank"`, frozen output includes:
+
+```text
+target="_blank"
+rel="noopener noreferrer"
+```
+
+as returned by `LiveFrames.StaticNavigation` (do not invent another `rel` policy in
+NativeGenerator).
+
+**Prohibited:** silent omission of `href`/`target`/`rel`; `generation_failed` for
+this case; unsafe href emission; Fidelity fallback.
 
 When a public `link_url` placement **does** own the URL location:
 
 ```text
-ignore normalized navigation.href and navigation.target for href/target
+ignore static navigation href, target, and rel for that URL location
 bind href only from public attr / safe assign access (§10.12)
 optional public link_url absent → MUST NOT fall back to static navigation
   (STATIC_DEFAULT_RULE; D3)
@@ -977,7 +1015,9 @@ scalar_attr or collection_count_attr binding omitted
 “paired RenderProjection” assumed for binding-backed targets
 bound link_url omitted
 button/link static IR text or static navigation.href dropped
+static navigation href/target/rel dropped without Plan `static_navigation_invalid`
 optional public link_url falling back to static navigation.href
+using StaticMarkupContract for navigation-owned href/target/rel
 package root class omitted on image or dynamic-heading boundary roots
 normalized tag used when semantically incompatible (e.g. container + nav)
 allowlisted normalized tag ignored or overwritten by semantic_type guesses
