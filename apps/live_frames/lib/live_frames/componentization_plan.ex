@@ -55,6 +55,16 @@ defmodule LiveFrames.ComponentizationPlan do
   def validate_for_generation(plan, component_contract, design_document),
     do: ReferenceValidation.validate_for_generation(plan, component_contract, design_document)
 
+  @spec validate_generation_prerequisites(term(), term(), term()) ::
+          :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites(plan, component_contract, design_document),
+    do:
+      ReferenceValidation.validate_generation_prerequisites(
+        plan,
+        component_contract,
+        design_document
+      )
+
   @spec design_document_sha256(term()) :: {:ok, String.t()} | {:error, [Diagnostic.t()]}
   def design_document_sha256(design_document) do
     try do
