@@ -2,7 +2,7 @@
 
 **Authoritative architecture roadmap:** [`00_LIVEFRAMES_MASTER_SPEC.md`](00_LIVEFRAMES_MASTER_SPEC.md)
 
-**Current repository checkpoint:** `c09e6fd721e003ce65ffd46c359adc027cf70efb`
+**Current repository checkpoint:** `b58e9bc9b561c9367c27fd479323b6ea290fbea2`
 
 ## Execution status (post–Phase 6, C09 programme)
 
@@ -14,8 +14,13 @@
 - **G1 architecture/spec (docs/23–24):** approved written architecture; historical “implementation NOT AUTHORIZED” language refers to the pre-#48 programme gate, not denial that library Catalogue code exists today
 - **Native Phoenix/HEEx generator (C09D6-C):** implemented / merged on `main` (PR #135 — `c09e6fd721e003ce65ffd46c359adc027cf70efb`); emission surface frozen in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) **v6 / C09D6-C0** (§10.4.1, §10.10–§10.17)
 - **Reviewer approval (C09D6-B):** implemented / accepted on `main` (PR #134 — `ComponentReview`, shared `validate_generation_prerequisites/3`)
-- **C09D6-D0 (CTA Tango style-coverage preflight):** **complete / BLOCKED** — [`docs/development/c09d6d_cta_tango_style_coverage_preflight.md`](development/c09d6d_cta_tango_style_coverage_preflight.md) (`C09D6_D_STYLE_COVERAGE=BLOCKED`); **D0 must be rerun** after upstream G-* gaps close
-- **Native styling generator (C09D6-D / D1):** **not authorized** — current prerequisite is upstream closure of G-GRID-STRUCT, G-CUSTOM-CSS, G-TEXT-S, G-RADIUS-ACSS, G-GRID-GAP-CALC (see preflight §6.1)
+- **C09D6-D0 (CTA Tango style-coverage preflight):** **complete / BLOCKED** — [`docs/development/c09d6d_cta_tango_style_coverage_preflight.md`](development/c09d6d_cta_tango_style_coverage_preflight.md) (`C09D6_D_STYLE_COVERAGE=BLOCKED`); **D0 must be rerun** after upstream G-* gaps close (R5)
+- **D0E1 (ACSS 4.0.1 structural grid evidence):** **complete / merged** — [`docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md`](evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md)
+- **D0E2 (ACSS 4.0.1 text-scale evidence):** **complete / merged** — [`docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md`](evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md)
+- **C09D6-D0R1 (upstream styling gap authority):** **in review / not yet accepted on `main`** — [`docs/development/c09d6d_upstream_style_gap_resolution_authority.md`](development/c09d6d_upstream_style_gap_resolution_authority.md); freezes G-* architecture for R2–R5
+- **C09D6-D0R2A (structured semantic calculation IR):** **not implemented** — required before R3 for G-GRID-GAP-CALC (see D0R1 §8)
+- **R2 / R3 / R4 / R5 (upstream implementation):** **not implemented**
+- **Native styling generator (C09D6-D / D1):** **not authorized** — blocked until R5 D0 rerun passes; see D0R1 dependency graph
 - **P10 consumer ejection:** **not implemented** / not authorized
 - **Next static native tracer (provisional):** CTA Tango — **provisional**; componentization (C09D7-A) **not authorized** until C09D6-D succeeds (sequence remains C → D → D7-A)
 
