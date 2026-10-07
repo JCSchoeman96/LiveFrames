@@ -1520,12 +1520,33 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end)
   end
 
+  @native_string_or_nil_content ~w(
+    section container wrapper stack grid generic background overlay
+    paragraph rich_text heading button link
+  )
+
+  @native_nil_content_only ~w(image actions)
+
   defp validate_native_node_surface(diagnostics, %DesignNode{} = node) do
+    diagnostics =
+      cond do
+        node.semantic_type in @native_string_or_nil_content ->
+          validate_string_or_nil_content(
+            diagnostics,
+            node,
+            "#{node.semantic_type}_content_invalid"
+          )
+
+        node.semantic_type in @native_nil_content_only ->
+          validate_content_absent(diagnostics, node, "#{node.semantic_type}_content_forbidden")
+
+        true ->
+          diagnostics
+      end
+
     case node.semantic_type do
       "paragraph" ->
-        diagnostics
-        |> validate_string_or_nil_content(node, "paragraph_content_invalid")
-        |> validate_no_child_subtree(node, "paragraph_children_forbidden")
+        validate_no_child_subtree(diagnostics, node, "paragraph_children_forbidden")
 
       "rich_text" ->
         diagnostics
@@ -1541,6 +1562,12 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       _ ->
         diagnostics
     end
+  end
+
+  defp validate_content_absent(diagnostics, %DesignNode{content: nil}, _code), do: diagnostics
+
+  defp validate_content_absent(diagnostics, %DesignNode{node_id: id}, code) do
+    native_error(diagnostics, code, "node must not carry static content", id)
   end
 
   defp validate_string_or_nil_content(

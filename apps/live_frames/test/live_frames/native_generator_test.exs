@@ -294,7 +294,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "href={Map.get(assigns, :href)}"
     assert source =~ "id={Map.get(assigns, :id)}"
     assert source =~ ~s/class={["lf-section-marketing-block", Map.get(assigns, :class)]}/
-    assert source =~ "{Map.get(assigns, :rest)}"
+    assert source =~ "lf_optional_global_attrs(Map.get(assigns, :rest))"
     assert source =~ "lf_validate_first_wave_slots!"
     assert source =~ "lf_src = Map.get(assigns, :src)"
     assert source =~ ~s/alt=""/

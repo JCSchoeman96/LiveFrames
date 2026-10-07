@@ -264,9 +264,24 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   end
 
   defp runtime_helper_lines(indexes) do
-    item_field_helpers(indexes) ++
+    global_attrs_runtime_helpers() ++
+      item_field_helpers(indexes) ++
       slot_runtime_helpers(indexes.contract.public_slots) ++
       count_runtime_helpers(indexes)
+  end
+
+  defp global_attrs_runtime_helpers do
+    [
+      "",
+      "defp lf_optional_global_attrs(value) do",
+      "  case value do",
+      "    nil -> %{}",
+      "    attrs when is_map(attrs) -> attrs",
+      "    attrs when is_list(attrs) -> Enum.into(attrs, %{})",
+      "    _ -> raise ArgumentError, \"root global attrs must be a map or keyword list\"",
+      "  end",
+      "end"
+    ]
   end
 
   defp build_attr_lines(contract) do
@@ -409,12 +424,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     else
       [
         "",
-        "defp lf_validate_count!(value, min) when is_integer(min) and min >= 0 do",
+        "defp lf_validate_count!(value, min) when is_number(min) and min >= 0 do",
         "  cond do",
         "    is_nil(value) -> nil",
         "    is_integer(value) and value >= min -> Integer.to_string(value)",
         "    true ->",
-        "      raise ArgumentError, \"collection count must be an integer >= \" <> Integer.to_string(min)",
+        "      raise ArgumentError, \"collection count must be an integer >= \" <> inspect(min)",
         "  end",
         "end"
       ]
@@ -449,19 +464,19 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp item_accessor_helpers(indexes, specs) do
     [
       "defp lf_item_field(item, collection_ordinal, field) when is_map(item) do",
-      "  raw =",
+      "  fetched =",
       "    case Map.fetch(item, field) do",
-      "      {:ok, found} -> found",
+      "      {:ok, found} -> {:present, found}",
       "      :error ->",
       "        case Enum.find(item, fn {key, _} -> is_atom(key) and Atom.to_string(key) == field end) do",
-      "          {_, found} -> found",
-      "          nil -> :__lf_missing__",
+      "          {_, found} -> {:present, found}",
+      "          nil -> :missing",
       "        end",
       "    end",
       "",
-      "  case raw do",
-      "    :__lf_missing__ -> lf_item_field_missing(collection_ordinal, field)",
-      "    other -> lf_item_field_validate(collection_ordinal, field, other)",
+      "  case fetched do",
+      "    :missing -> lf_item_field_missing(collection_ordinal, field)",
+      "    {:present, value} -> lf_item_field_validate(collection_ordinal, field, value)",
       "  end",
       "end",
       "",
@@ -502,12 +517,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp validate_cases(specs) do
     Enum.flat_map(specs, fn {ordinal, field} ->
       type_guard = item_field_type_guard(field.type, "value")
-      count_guard = item_field_count_guard(field)
+      value_guard = item_field_value_guard(field)
 
       [
         "    {#{ordinal}, #{inspect(field.name)}} ->",
         "      if #{type_guard} do",
-        "        if #{count_guard} do",
+        "        if #{value_guard} do",
         "          value",
         "        else",
         "          raise ArgumentError, \"collection item field #{field.name} failed validation\"",
@@ -526,10 +541,17 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp item_field_type_guard(:map, var), do: "is_map(#{var})"
   defp item_field_type_guard(_type, var), do: "is_nil(#{var}) and false"
 
-  defp item_field_count_guard(%{validation: %{"min" => min}}) when is_number(min) and min >= 0,
-    do: "is_integer(value) and value >= #{min}"
+  defp item_field_value_guard(%{
+         type: :integer,
+         validation: %{"values" => [1, 2, 3, 4, 5, 6]}
+       }),
+       do: "is_integer(value) and value in 1..6"
 
-  defp item_field_count_guard(_field), do: "true"
+  defp item_field_value_guard(%{validation: %{"min" => min}})
+       when is_number(min) and min >= 0,
+       do: "is_integer(value) and value >= #{min}"
+
+  defp item_field_value_guard(_field), do: "true"
 
   defp render_boundary(indexes, collection_stack) do
     render_node(indexes, indexes.boundary_id, collection_stack, true)
@@ -665,11 +687,11 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   end
 
   defp check_emit_surface(%DesignNode{semantic_type: "rich_text", content: content})
-       when not is_binary(content) do
+       when is_map(content) or is_list(content) do
     {:error,
      Diagnostic.error(
        "native_generator.content_unsupported",
-       "rich_text structured content cannot be emitted without raw HTML interpretation"
+       "rich_text structured content should have been blocked at generation prerequisites"
      )}
   end
 
@@ -725,7 +747,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       {:optional, src_expr} ->
         {:ok,
          """
-         <%= if (lf_src = #{src_expr}) not in [nil, ""] do %>
+         <%= if (lf_src = #{src_expr}) != nil do %>
          #{indent(image_unit_heex(indexes, node, collection_stack, is_root?, figure?, "lf_src", required_src?: true), 2)}
          <% end %>
          """
@@ -737,7 +759,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     policy = image_alt_policy(indexes, node.node_id, collection_stack)
 
     img_attrs =
-      if figure?, do: "", else: root_attrs(indexes, node, collection_stack, is_root?, "img")
+      if figure?, do: "", else: tag_attrs(indexes, node, collection_stack, is_root?, "img")
 
     img_inner =
       case policy do
@@ -762,7 +784,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       end
 
     if figure? do
-      figure_attrs = root_attrs(indexes, node, collection_stack, is_root?, "figure")
+      figure_attrs = tag_attrs(indexes, node, collection_stack, is_root?, "figure")
       "<figure#{figure_attrs}>#{img_inner}</figure>"
     else
       img_inner
@@ -865,6 +887,23 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       %RenderProjection{public_attr_name: name} ->
         attr_source_spec(indexes, name)
 
+      %BindingProjection{projection_kind: :scalar_attr, public_attr_name: name} ->
+        attr_source_spec(indexes, name)
+
+      %BindingProjection{
+        projection_kind: :collection_item_field,
+        source_collection_binding_id: cb_id,
+        item_field_name: field_name
+      } = projection ->
+        field = Map.fetch!(Map.fetch!(indexes.item_fields_by_collection, cb_id), field_name)
+        expr = binding_collection_expr(indexes, projection, collection_stack)
+
+        if field.required or field.default != nil do
+          {:required, expr}
+        else
+          {:optional, expr}
+        end
+
       %BindingProjection{} = projection ->
         {:required, binding_collection_expr(indexes, projection, collection_stack)}
 
@@ -905,7 +944,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     else
       case ReferenceValidation.native_tag(node, false) do
         {:ok, tag} when is_binary(tag) ->
-          attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
+          attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
 
           with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
             {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
@@ -924,7 +963,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp dynamic_heading_markup(indexes, node, collection_stack, is_root?, level_expr, body) do
     branches =
       for level <- 1..6, tag <- ["h#{level}"] do
-        attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
+        attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
         "    <% #{level} -> %><#{tag}#{attrs}>#{body}</#{tag}>"
       end
 
@@ -964,11 +1003,10 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       render_anchor(indexes, node, collection_stack, is_root?)
     else
       tag = "button"
-      attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
-      static = safe_static_attribute_fragment(node, tag)
+      attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
 
       with {:ok, body} <- interactive_body(indexes, node, collection_stack, is_root?) do
-        {:ok, "<button#{attrs}#{static}>#{body}</button>"}
+        {:ok, "<button#{attrs}>#{body}</button>"}
       end
     end
   end
@@ -976,13 +1014,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp render_anchor(indexes, node, collection_stack, is_root?) do
     node_id = node.node_id
     href = role_expr(indexes, node_id, :link_url, collection_stack)
-    attrs = root_attrs(indexes, node, collection_stack, is_root?, "a")
+    attrs = tag_attrs(indexes, node, collection_stack, is_root?, "a")
     nav_attrs = static_navigation_attrs(indexes, node)
     href_attr = if href, do: " href={#{href}}", else: ""
-    static = safe_static_attribute_fragment(node, "a")
 
     with {:ok, body} <- interactive_body(indexes, node, collection_stack, is_root?) do
-      {:ok, "<a#{attrs}#{static}#{nav_attrs}#{href_attr}>#{body}</a>"}
+      {:ok, "<a#{attrs}#{nav_attrs}#{href_attr}>#{body}</a>"}
     end
   end
 
@@ -1032,7 +1069,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          )}
 
       {:ok, tag} when is_binary(tag) ->
-        attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
+        attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
 
         body =
           static_or_expr_body(
@@ -1053,7 +1090,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp root_attrs(indexes, node, collection_stack, is_root?, _tag) do
+  defp tag_attrs(indexes, node, collection_stack, is_root?, tag) do
+    root_attrs(indexes, node, collection_stack, is_root?) <>
+      safe_static_attribute_fragment(node, tag)
+  end
+
+  defp root_attrs(indexes, node, collection_stack, is_root?) do
     node_id = node.node_id
     roles = Map.get(indexes.effective_roles_by_node, node_id, %{})
 
@@ -1092,9 +1134,9 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     attr = Map.fetch!(indexes.attrs_by_name, name)
 
     if attr.required or attr.default != nil do
-      " {@#{name}}"
+      " {lf_optional_global_attrs(@#{name})}"
     else
-      " {Map.get(assigns, :#{name})}"
+      " {lf_optional_global_attrs(Map.get(assigns, :#{name}))}"
     end
   end
 

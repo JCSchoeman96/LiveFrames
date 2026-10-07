@@ -124,13 +124,14 @@ defmodule LiveFrames.ComponentizationPlanTest do
         ],
         tag <- tags do
       attributes = if is_nil(tag), do: %{}, else: %{"tag" => tag}
+      content = if semantic == "actions", do: nil, else: "Text"
 
       assert native_result(
                native_tuple(%DesignNode{
                  node_id: "node_000001",
                  semantic_type: semantic,
                  attributes: attributes,
-                 content: "Text"
+                 content: content
                })
              ) == :ok
     end
@@ -632,6 +633,45 @@ defmodule LiveFrames.ComponentizationPlanTest do
 
     assert_raise ValidationError, fn -> ComponentizationPlan.validate!(invalid) end
     assert_raise ValidationError, fn -> ComponentizationPlan.encode!(invalid) end
+  end
+
+  test "C0 blocks non-string content on heading button image and actions" do
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "heading",
+        attributes: %{"tag" => "h2"},
+        content: %{"x" => 1}
+      }),
+      "heading_content_invalid"
+    )
+
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "button",
+        attributes: %{"tag" => "button"},
+        content: %{"x" => 1}
+      }),
+      "button_content_invalid"
+    )
+
+    assert_native_block(
+      native_image_tuple(
+        %DesignNode{node_id: "node_000001", semantic_type: "image", content: %{"x" => 1}},
+        true
+      ),
+      "image_content_forbidden"
+    )
+
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "actions",
+        content: %{"x" => 1}
+      }),
+      "actions_content_forbidden"
+    )
   end
 
   test "C0 blocks paragraph child subtrees and structured rich_text content" do
