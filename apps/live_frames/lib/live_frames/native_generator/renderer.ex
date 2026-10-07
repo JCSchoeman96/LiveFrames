@@ -210,6 +210,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
           })
 
         %BindingProjection{
+          source_binding_kind: :collection,
           projection_kind: :collection_item_field,
           source_collection_binding_id: cb_id,
           parent_collection_binding_id: parent_cb_id,

@@ -1,6 +1,8 @@
 defmodule LiveFrames.NativeGeneratorV6ProofsTest do
   use ExUnit.Case, async: true
 
+  import Phoenix.LiveViewTest
+
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentContract.Attr
   alias LiveFrames.ComponentContract.BindingProjection
@@ -395,7 +397,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
     assert source =~ ~s(rel="noopener noreferrer")
   end
 
-  test "nested collection count reads parent item field via lf_ci_1 ordinal" do
+  defp nested_collection_count_fixture do
     paragraph_id = DesignNode.deterministic_id([1, 1])
     container_id = DesignNode.deterministic_id([1, 2])
 
@@ -494,14 +496,38 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
         }
     }
 
+    {c, document}
+  end
+
+  test "nested collection count reads parent item field via lf_ci_1 ordinal" do
+    {c, document} = nested_collection_count_fixture()
     assert :ok = IR.validate(document)
     source = generate_source(c, plan_for(c, document), document)
     assert source =~ "for lf_ci_1 <- Map.get(assigns, :items)"
     assert source =~ ~s/lf_item_field(lf_ci_1, 1, "child_count")/
     assert source =~ "case lf_item_field(lf_ci_1, 1, \"kids\") do"
     assert source =~ "for lf_ci_2 <- nested_list"
+    refute source =~ "case lf_item_field(lf_ci_1, 1, \"child_count\") do"
+    refute source =~ "collection item field child_count must be a list"
     refute source =~ "lf_item_field(nil, 1,"
     refute source =~ "__lf_missing__"
+
+    module_name = "LiveFrames.NestedCountRuntime#{System.unique_integer([:positive])}"
+
+    compiled =
+      String.replace(source, "LiveFrames.Components.Sections.Proof", module_name)
+
+    [{module, _binary}] = Code.compile_string(compiled)
+    proof = Function.capture(module, :proof, 1)
+
+    html =
+      render_component(proof, %{
+        items: [%{"kids" => [%{}], "child_count" => 2}]
+      })
+
+    assert html =~ "2"
+    refute html =~ "collection item field child_count must be a list"
+    :code.delete(module)
   end
 
   defp nested_kids_document(kids_field, inner_content \\ "inner") do
@@ -717,55 +743,35 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
     assert source =~ "{2, \"code\"} -> \"guest\""
   end
 
-  test "float item field default is emitted in generated collection accessor" do
+  test "float attr default is emitted in generated attr declaration" do
     document = %DesignDocument{root_nodes: [section_node()]}
 
     c =
       approved_contract(
         public_attrs: [
-          %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
-        ],
-        collection_inputs: [
-          %CollectionInput{
-            source_collection_binding_id: "cb",
-            public_attr_name: "items",
-            item_fields: [
-              %ItemField{
-                name: "weight",
-                type: :integer,
-                semantic_purpose: "weight",
-                required: false,
-                default: 1.25
-              }
-            ]
+          %Attr{
+            name: "rest",
+            type: :global,
+            semantic_purpose: "rest",
+            required: false,
+            default: %{"factor" => 1.25}
           }
-        ],
-        binding_projections: [
-          %BindingProjection{
-            source_binding_kind: :collection,
-            source_binding_id: "cb",
-            projection_kind: :collection_attr,
-            public_attr_name: "items",
-            source_collection_binding_id: "cb",
+        ]
+      )
+
+    p =
+      plan_for(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_attr_name: "rest",
+            render_role: :root_global_attrs,
             target_node_id: @boundary_id
           }
         ]
       )
 
-    document = %{
-      document
-      | collection_bindings: %{
-          "cb" => %CollectionBinding{
-            collection_binding_id: "cb",
-            owner_node_id: @boundary_id,
-            repeat_root_node_id: @boundary_id
-          }
-        }
-    }
-
-    assert :ok = IR.validate(document)
-    source = generate_source(c, plan_for(c, document), document)
-    assert source =~ "{1, \"weight\"} -> 1.25"
+    source = generate_source(c, p, document)
+    assert source =~ "attr(:rest, :global, default: %{\"factor\" => 1.25})"
   end
 
   test "optional collection item image source omits image unit before alt evaluation" do
