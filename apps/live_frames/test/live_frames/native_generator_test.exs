@@ -544,14 +544,15 @@ defmodule LiveFrames.NativeGeneratorTest do
     c =
       contract(
         public_attrs: [
-          attr("src", :string, required: true, accessibility: %{"image_alt_policy" => "decorative"})
+          attr("src", :string,
+            required: true,
+            accessibility: %{"image_alt_policy" => "decorative"}
+          )
         ]
       )
 
     p =
-      plan(c, document,
-        render_projections: [render_attr("src", :asset_src, image_id)]
-      )
+      plan(c, document, render_projections: [render_attr("src", :asset_src, image_id)])
 
     source = hd(generate!(c, p, document).artifacts).content
     assert source =~ "<figure"
