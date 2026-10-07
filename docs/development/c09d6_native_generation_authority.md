@@ -1,10 +1,10 @@
 # C09D6-A — Native generation and review authority
 
-**Status:** authority/documentation only (C09D6-A)
+**Status:** active authority (C09D6-A + C09D6-C0 emission-surface freeze)
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v3
+**Plan version:** v4
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -22,11 +22,11 @@ delivery. `docs/23_CATALOGUE_ARCHITECTURE.md` and
 `docs/24_CATALOGUE_VERSIONING_POLICY.md` remain G1 architecture history;
 current **runtime** Catalogue posture is summarized in §2 and §15.
 
-**Accepted base:** `98c464b4ba92d0a14e7a95b397496717c15b4835`
+**Accepted base:** `a3efdafe3d8bcb7d04aa1c4ad9660f0858f86bc3`
 
-**Accepted tree:** `04f02998067e4db1442e22a735f800f8d25add1d`
+**Accepted tree:** `4626a0348538979e933d955e1e67c21236536b57`
 
-**Last updated:** 2026-10-04
+**Last updated:** 2026-10-07
 
 ### Revision log
 
@@ -38,6 +38,10 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   style-coverage preflight (candidate sufficient)
 - `v3` — PR #133 final: `:proposed`-only approval source, artifact-visible
   static internal content rule, package CSS class from `category` + `module_intent`
+- `v4` — C09D6-C0 (PR #135 review): freeze native element emission, icon
+  generation eligibility, optional/no-default attr omission, validation emission,
+  slot runtime, collection runtime, generator totality; record PR #135 defect
+  classes as prohibited implementation patterns
 
 ---
 
@@ -435,10 +439,21 @@ The contract does **not** choose an arbitrary top-level namespace.
 
 ### 10.4 BindingProjection rendering
 
-- Map each `BindingProjection` to HEEx attribute or slot wiring on
-  `target_node_id` within the boundary subtree.
-- Types and requiredness come from the contract attr/slot/item field referenced
-  by the projection.
+Map **every** admitted first-wave `BindingProjection.projection_kind` on
+`target_node_id` within the boundary subtree. A gate-valid tuple with a binding
+projection that has no frozen emitter mapping is **not generation-eligible**
+(§10.13).
+
+| `projection_kind` | Mechanical emission |
+| --- | --- |
+| `scalar_attr` | Same public surface as the paired `RenderProjection` on that node (escaped text, `src`, `alt`, `href`, heading level integer, `id`, `class`, global spread). `BindingProjection` chooses the **public attr name**; it does not invent a second semantics path. |
+| `collection_attr` | Repeat the `repeat_root_node_id` subtree with the top-level `:list` public attr (`for item <- @attr`). |
+| `collection_item_field` | Read the approved item field through the frozen item accessor (§10.15). |
+| `collection_count_attr` | Expose the approved count through the top-level count public attr (`@count`). **Never** substitute `length/1` on the collection list. |
+| `slot` | First-wave generation-blocked upstream; native generator does not implement binding-backed slots. |
+
+`link_url` placement must accept both `RenderProjection` and `scalar_attr`
+`BindingProjection` sources. Omitting either path is invalid.
 
 ### 10.5 RenderProjection rendering
 
@@ -577,6 +592,212 @@ omitted from IR/TokenSet.
 `LiveFrames.Fidelity` is **not** the native styling generator; reuse shared
 low-level CSS serialization helpers only where semantics match (§12).
 
+### 10.10 Native element emission (C09D6-C0 freeze)
+
+PR #135 (`feat/c09d6-c-native-generator`) is **evidence only**. It must not be
+treated as authority. This section freezes the mechanical emitter.
+
+#### 10.10.1 Evidence order (no parallel tag policy)
+
+Native tags and static attributes come **only** from this order:
+
+```text
+1. Approved RenderProjection / BindingProjection placement on the node
+2. DesignNode.attributes produced by adapter normalization
+   (Bricks: LiveFrames.Adapters.Bricks.StaticSemantics + Design IR normalizer)
+3. Frozen semantic_type row in §10.10.2 (DEFAULT_TAG only where marked)
+4. Otherwise → generation prerequisite blocked (§10.11, §19)
+```
+
+Rules:
+
+- `DesignNode.attributes["tag"]` is used **only** when it is a binary and
+  `LiveFrames.StaticMarkupContract.native_tag?/1` is true.
+- Safe static attributes are only those accepted by
+  `StaticMarkupContract.safe_attribute?/3` for the resolved native tag.
+- **Never** emit source classes, source IDs, `onclick`, arbitrary `data-*`
+  outside the contract, or any attribute not proven by steps 1–3.
+- **Never** copy `LiveFrames.Fidelity` tag choices.
+- `paragraph` and `rich_text` are **distinct** IR meanings (see
+  `docs/03_DESIGN_IR_SPEC.md` and Bricks `design_ir_normalizer.ex`).
+
+**Package root class (§10.8)** must appear on the **outermost emitted element**
+for `plan.boundary_node_id`, including when that node is an `image`, a dynamic
+`heading_level` branch, or any other boundary semantic type. Root
+`root_id` / `root_class` / `root_global_attrs` projections apply on that same
+outermost element.
+
+**Static literal text** on `button` and `link` nodes (IR `content` and safe
+child text nodes) must be emitted as escaped HEEx when not superseded by a
+public placement projection on that node.
+
+#### 10.10.2 Generation-admissible semantic types → native HTML
+
+“DEFAULT_TAG” may be used only when `attributes["tag"]` is absent. If
+`attributes["tag"]` is present but not allowlisted, block at generation
+prerequisites.
+
+| `semantic_type` | Normalized IR evidence | Allowed native tag(s) | DEFAULT_TAG when `tag` absent | Static `content` | Static normalized attrs | Children | Unsupported / block |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `section` | structural | `section` | `section` | escaped text when artifact-visible (§10.6) | allowlisted only | yes | — |
+| `container` | structural | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `wrapper` | structural | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `stack` | structural | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `grid` | structural | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `generic` | structural | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `background` | intent / layer | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `overlay` | intent / layer | `div` | `div` | escaped text when artifact-visible | allowlisted only | yes | — |
+| `paragraph` | content; Bricks proves `p` when `text-basic` + native `p` | `p` | `p` | escaped UTF-8 string only | allowlisted only | no* | structured/non-string `content` → blocked |
+| `rich_text` | content; paragraph semantics **not** proven | allowlisted tag from `attributes["tag"]` only | **none** | escaped UTF-8 string only when tag resolved | allowlisted only | no* | no allowlisted `tag` → blocked; structured HTML → blocked (no `raw/1`) |
+| `heading` | content | `h1`–`h6` from `heading_level` projection **or** allowlisted `attributes["tag"]` in `h1`–`h6` | **none** | escaped UTF-8 string when artifact-visible | allowlisted only | no* | no `heading_level` and no allowlisted heading `tag` → blocked |
+| `image` | content / assets | `img` (or `figure` only when allowlisted `tag` is `figure`) | `img` | none (use placements) | allowlisted only | no | static image without authorized `asset_src` policy → blocked (D3) |
+| `button` | content / action | `button` | `button` | escaped UTF-8 string + static children | `type` ∈ `button\|submit\|reset` only when tag is `button` | yes | — |
+| `link` | content / navigation | `a` | `a` | escaped UTF-8 string + static children | `href` only via `link_url` placement; other attrs allowlisted | yes | — |
+| `actions` | intent group | `div` | `div` | none | allowlisted only | yes; or `subtree_slot` replacement | — |
+| `icon` | C08B1 preserved evidence | — | — | — | — | — | **§10.11 — generation prerequisite blocked** |
+
+\*Children still render when not replaced by `subtree_slot` and not owned by a
+binding/projection target.
+
+### 10.11 Icon generation eligibility (C08B1 alignment)
+
+`icon` is a valid Design IR `semantic_type`, but C08B1 records **no trusted
+native glyph renderer** and forbids admitting `svg` / `i` / font-icon markup in
+the static allowlist.
+
+First-wave native generation **must not** emit icon visuals and **must not**
+classify icon-bearing tuples as `generation_failed` generator defects.
+
+```text
+ICON_NATIVE_GENERATION_RULE =
+  any in-boundary DesignNode with semantic_type = icon
+  → shared generation prerequisite diagnostic (severity :error)
+  → validate_generation_prerequisites/3 fails on Contract and/or Plan
+  → NativeGenerator returns {:error, :generation_blocked, diagnostics}
+```
+
+Diagnostic code (frozen): `native_generation.icon_unsupported`.
+
+Reviewers must not approve a contract/plan pair that violates this rule.
+Fidelity’s empty structural fallback for icons is **not** native-generator
+authority.
+
+### 10.12 Optional public attrs (`default: nil` means no default)
+
+Per C09D1, contract `default: nil` means **no default was declared**, not an
+explicit Elixir `nil` default. The generator **must not** emit `attr(...,
+default: nil)` to “fix” omission.
+
+For each placement role, when the referenced public attr has `required: false`
+and **no** explicit default in the contract:
+
+| Render / binding role | Mechanical omission behavior |
+| --- | --- |
+| `text_content` | Read with safe assign access (`Map.get(assigns, :name)` / `assigns[:name]`). If absent at render time, omit the text segment; do not raise solely for omission. |
+| `asset_src` | If absent, **omit the entire `image` element** for that placement. |
+| `asset_alt` | If absent, omit `alt` unless decorative policy fixes `alt=""`. |
+| `link_url` | If absent, emit `<a>` without `href` only when static link content remains artifact-visible; never fabricate URLs. |
+| `heading_level` | If absent, **do not** invent a level; tuple must have been blocked at prerequisites unless static heading tag evidence exists (§10.10.2). |
+| `root_id` | If absent, omit `id`. |
+| `root_class` | If absent, emit package class only. |
+| `root_global_attrs` | If absent, omit global spread. |
+
+If two or more rows would require contradictory omission choices for the same
+tuple, **STOP** (§19) — the tuple is not generation-representable without new
+authority.
+
+Required public attrs may use `@name` after gates prove requiredness.
+
+### 10.13 Validation emission (attrs and item fields)
+
+Inventory for format `1.0.0` (fail-closed):
+
+| Contract validation shape | Phoenix `attr/3` | Generated runtime enforcement |
+| --- | --- | --- |
+| `%{"values" => [1,2,3,4,5,6]}` on `:integer` (heading level) | `values: 1..6` | none additional |
+| `%{"min" => 0}` on count attrs / count item fields | **forbidden** (`:min` is not a Phoenix attr option) | emit private validation in function body or accessor path |
+| any other non-empty validation map | only if this table gains a row | otherwise **block generation prerequisites** |
+
+Never silently drop validation metadata. Never emit unsupported Phoenix attr
+options.
+
+**Item fields:** when `ItemField.validation` is non-empty, the generated
+component must enforce it when the field is **present** on the item value;
+invalid present values must raise a clear contract/access error (C09D1). Fields
+with validation but no frozen emitter mapping block generation prerequisites.
+
+### 10.14 Slot runtime semantics (first-wave `0..1`)
+
+| Contract slot | Generated declaration | Runtime |
+| --- | --- | --- |
+| `required: false` | `slot :name` | `render_slot(@name)` allowed to render zero entries |
+| `required: true` | `slot :name, required: true` | zero entries → `ArgumentError` with deterministic message |
+| cardinality `0..1` | (no repeated slot API) | more than one entry → `ArgumentError` with deterministic message |
+
+“Generation-eligible `0..1`” **requires** enforcing `0..1` at runtime in the
+generated function component.
+
+### 10.15 Collection runtime (generator reconfirmation)
+
+- Item semantics are scoped per `CollectionInput`; field names are unique **only
+  within** their owning collection input.
+- **Never** collapse same-named fields across collections into one helper.
+- **Never** expose `source_collection_binding_id` (or other source IDs) in
+  generated public names, module paths, or consumer-visible strings.
+- Internal loop variables use deterministic **ordinal identities** derived from
+  `CollectionInput` order in the contract (`lf_ci_1`, nested `lf_ci_2`, …), not
+  sanitized binding IDs.
+- Nested collections: iterate only when the parent item field is present; **do
+  not** invent `[]` with `|| []` for optional nested lists without an explicit
+  contract default of `[]`.
+- Item accessor: exact string key, then existing atom key with matching
+  `Atom.to_string/1`; never `String.to_atom/1` or `String.to_existing_atom/1`.
+- `collection_count_attr` uses the approved count attr only.
+
+### 10.16 Generator totality and default literals
+
+```text
+GENERATOR_TOTALITY_RULE =
+  for every tuple that passes both generation gates,
+  NativeGenerator.generate/3 returns exactly one frozen result tuple
+  and never raises, throws, or exits due to emitter input shape.
+```
+
+Default literal emission for `attr` / `ItemField` defaults:
+
+- Use `ComponentContract` canonical JSON normalization semantics (same as
+  serializer), not a second conflicting map-key policy.
+- Preserve JSON/Elixir numeric meaning exactly (`inspect/1` on numbers is
+  acceptable only when it round-trips the stored value).
+- Do not impose arbitrary float decimal formatting.
+- Atom keys in stored maps must be normalized to string keys before emission.
+
+Gate-valid defaults that cannot be expressed under these rules block generation
+prerequisites.
+
+### 10.17 Prohibited implementation patterns (PR #135 review)
+
+The following classes are **explicitly forbidden** in C09D6-C implementers:
+
+```text
+scalar_attr or collection_count_attr binding omitted
+bound link_url omitted
+button/link static IR text dropped
+package root class omitted on image or dynamic-heading boundary roots
+allowlisted normalized tag ignored or overwritten by semantic_type guesses
+rich_text → unconditional <p>
+heading without level/tag evidence → default h2
+icon → generation_failed instead of prerequisite block
+unknown validation silently dropped
+Phoenix attr options invented (e.g. min: 0)
+ItemField validation ignored
+same-named fields across collections collapsed
+source_collection_binding_id embedded in generated locals
+optional nested collection coerced with || []
+gate-valid literal/default causing throw/crash in emitter
+outer-source parse substituting for compile-safe generated helpers
+```
+
 ---
 
 ## 11. HEEx and security rules (frozen)
@@ -711,7 +932,8 @@ that tracer and escalate; do not stretch C09D6.
 ```text
 C09D6-A  authority + repository truth          ← this slice
 C09D6-B  reviewer approval implementation
-C09D6-C  native generator core (HEEx)
+C09D6-C0 native emission surface authority    ← v4 §10.10–§10.17 (this amendment)
+C09D6-C  native generator core (HEEx)         ← blocked until C0 merged; PR #135 hold
 C09D6-D  native styling generation
 C09D7-A  CTA Tango componentization tracer
 C09D7-B  CTA Tango generation + Storybook/browser verification
@@ -745,9 +967,17 @@ static internal content requires SemanticInput in the generator tuple, or
   identical Contract+Plan+DesignDocument tuples would yield different native
   output from different StaticContentDispositionDecision sets
 native generator and P10 ejection cannot be cleanly separated
+in-boundary icon nodes appear in an otherwise generation-eligible tuple
+  (§10.11 — use prerequisite block, not generator defect)
+rich_text or heading emission requires a tag/level guess outside §10.10.2
+optional/no-default public attr placement requires a guess outside §10.12
+approved validation metadata has no frozen emitter/runtime mapping (§10.13)
+Behavior IR or raw HTML execution would be required for fidelity
 ```
 
-C09D6-A completed without triggering STOP.
+C09D6-A completed without triggering STOP. C09D6-C0 documents emission-surface
+STOP triggers for C09D6-C; **no Contract/Plan/IR schema change** is authorized
+by C0.
 
 ---
 
@@ -755,7 +985,6 @@ C09D6-A completed without triggering STOP.
 
 | Deliverable | Status |
 | --- | --- |
-| `docs/development/c09d6_native_generation_authority.md` | this file |
-| `docs/17_ROADMAP.md` current-status reconciliation | updated in slice PR |
-| `README.md` current-status reconciliation | updated in slice PR |
-| Generator production code | **out of scope** |
+| `docs/development/c09d6_native_generation_authority.md` | this file (v4 includes C09D6-C0) |
+| `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
+| Generator production code | **out of scope** (PR #135 remains on hold) |

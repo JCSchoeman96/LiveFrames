@@ -12,7 +12,7 @@
 - **Catalogue library infrastructure:** implemented (schema, manifest, lifecycle, Registry, fingerprint, versioning, discovery in `LiveFrames.Catalogue`)
 - **Production Catalogue:** `apps/live_frames/priv/catalogue/` **absent**; compile-time Registry membership **empty**; canonical Hero Catalogue manifest **absent**
 - **G1 architecture/spec (docs/23–24):** approved written architecture; historical “implementation NOT AUTHORIZED” language refers to the pre-#48 programme gate, not denial that library Catalogue code exists today
-- **Native component generator:** **not implemented**; authority in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) (C09D6-A)
+- **Native component generator:** in progress (PR #135 on hold); emission surface frozen in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) **v4 / C09D6-C0** (§10.10–§10.17)
 - **Reviewer approval (C09D6-B):** not implemented
 - **P10 consumer ejection:** **not implemented** / not authorized
 - **Next static native tracer (provisional):** CTA Tango — componentization/generation **not authorized** until C09D6-B+ slices land
@@ -20,7 +20,7 @@
 ### Near-term sequence (pointer)
 
 ```text
-C09D6-A → C09D6-B → C09D6-C → C09D6-D → C09D7-A → C09D7-B → C09D7-C → P9 → P10
+C09D6-A → C09D6-B → C09D6-C0 → C09D6-C → C09D6-D → C09D7-A → C09D7-B → C09D7-C → P9 → P10
 ```
 
 Details: C09D6-A authority §18.
