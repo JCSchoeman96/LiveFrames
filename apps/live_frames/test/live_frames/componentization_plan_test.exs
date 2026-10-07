@@ -10,10 +10,14 @@ defmodule LiveFrames.ComponentizationPlanTest do
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentContract.Attr
   alias LiveFrames.ComponentContract.BindingProjection
+  alias LiveFrames.ComponentContract.CollectionInput
+  alias LiveFrames.ComponentContract.ItemField
   alias LiveFrames.ComponentContract.Slot
+  alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR
 
   defp native_tuple(node, attrs \\ [], projections \\ [], bindings \\ []) do
     document = %DesignDocument{root_nodes: [node]}
@@ -178,6 +182,105 @@ defmodule LiveFrames.ComponentizationPlanTest do
              {%{plan | boundary_node_id: "node_000001", design_document_sha256: fingerprint},
               contract, document}
            ) == :ok
+  end
+
+  defp boundary_collection_image_tuple(photo_opts) do
+    image_id = "node_000001"
+    image = %DesignNode{node_id: image_id, semantic_type: "image"}
+
+    document = %DesignDocument{
+      root_nodes: [image],
+      collection_bindings: %{
+        "cb_items" => %CollectionBinding{
+          collection_binding_id: "cb_items",
+          owner_node_id: image_id,
+          repeat_root_node_id: image_id
+        }
+      },
+      value_bindings: %{
+        "vb_photo" => %ValueBinding{
+          value_binding_id: "vb_photo",
+          target_node_id: image_id,
+          target_kind: :asset,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_items",
+          value_key: "photo",
+          normalization_status: :normalized,
+          modifier_status: :none
+        }
+      }
+    }
+
+    photo_field =
+      struct!(
+        %ItemField{
+          name: "photo",
+          type: :string,
+          semantic_purpose: "photo",
+          accessibility: %{"image_alt_policy" => "decorative"}
+        },
+        photo_opts
+      )
+
+    contract = %ComponentContract{
+      contract_id: "native",
+      module_intent: "native",
+      function_intent: "native",
+      public_attrs: [
+        %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
+      ],
+      collection_inputs: [
+        %CollectionInput{
+          source_collection_binding_id: "cb_items",
+          public_attr_name: "items",
+          item_fields: [photo_field]
+        }
+      ],
+      binding_projections: [
+        %BindingProjection{
+          source_binding_kind: :collection,
+          source_binding_id: "cb_items",
+          projection_kind: :collection_attr,
+          public_attr_name: "items",
+          source_collection_binding_id: "cb_items",
+          target_node_id: image_id
+        },
+        %BindingProjection{
+          source_binding_kind: :value,
+          source_binding_id: "vb_photo",
+          projection_kind: :collection_item_field,
+          source_collection_binding_id: "cb_items",
+          item_field_name: "photo",
+          target_node_id: image_id
+        }
+      ]
+    }
+
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: image_id,
+      render_projections: []
+    }
+
+    {plan, contract, document}
+  end
+
+  test "C0 blocks optional boundary image for collection item field asset_src" do
+    assert :ok = IR.validate(elem(boundary_collection_image_tuple(required: false), 2))
+
+    assert_native_block(
+      boundary_collection_image_tuple(required: false),
+      "boundary_optional_image"
+    )
+
+    assert native_result(boundary_collection_image_tuple(required: true)) == :ok
+
+    assert native_result(boundary_collection_image_tuple(required: false, default: "/photo.jpg")) ==
+             :ok
   end
 
   test "C0 blocks a slot replacing the component boundary" do

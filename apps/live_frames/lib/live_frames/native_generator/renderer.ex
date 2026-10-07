@@ -215,7 +215,8 @@ defmodule LiveFrames.NativeGenerator.Renderer do
           parent_collection_binding_id: parent_cb_id,
           parent_item_field_name: parent_field,
           target_node_id: repeat_root
-        } ->
+        }
+        when is_binary(parent_cb_id) and is_binary(parent_field) ->
           merge_repeat_root(acc, repeat_root, %{
             collection_binding_id: cb_id,
             kind: :nested,
@@ -285,12 +286,17 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   end
 
   defp build_attr_lines(contract) do
-    Enum.reduce_while(contract.public_attrs, {:ok, []}, fn attr, {:ok, acc} ->
+    contract.public_attrs
+    |> Enum.reduce_while({:ok, []}, fn attr, {:ok, acc} ->
       case attr_line(attr) do
-        {:ok, line} -> {:cont, {:ok, acc ++ [line]}}
+        {:ok, line} -> {:cont, {:ok, [line | acc]}}
         {:error, diagnostic} -> {:halt, {:error, diagnostic}}
       end
     end)
+    |> case do
+      {:ok, lines} -> {:ok, Enum.reverse(lines)}
+      other -> other
+    end
   end
 
   defp assemble_module_source(indexes, heex_body, attr_lines, slot_lines, helper_lines) do
@@ -480,10 +486,16 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       "  end",
       "end",
       "",
-      "defp lf_item_field_missing(collection_ordinal, field) do"
+      "defp lf_item_field(_item, _collection_ordinal, _field) do",
+      "  raise ArgumentError, \"collection item must be a map\"",
+      "end",
+      "",
+      "defp lf_item_field_missing(collection_ordinal, field) do",
+      "  case {collection_ordinal, field} do"
     ] ++
       missing_cases(indexes, specs) ++
       [
+        "  end",
         "end",
         "",
         "defp lf_item_field_validate(collection_ordinal, field, value) do",
@@ -638,29 +650,32 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     <% end %>
     """
 
+    list_branch = indent(nested_loop, 2)
     omit_on_nil? = field_spec != nil and not field_spec.required and field_spec.default == nil
 
-    clauses =
-      if omit_on_nil? do
-        """
-            <% nil -> %>
-            <% nested_list when is_list(nested_list) -> %>
-        """
-      else
-        """
-            <% nested_list when is_list(nested_list) -> %>
-            <% nil -> %>
-        """
-      end
-
-    """
-    <%= case #{fetch} do %>
-    #{clauses}#{indent(nested_loop, 2)}
-        <% _ -> %>
-          <% raise ArgumentError, "collection item field #{field} must be a list" %>
-    <% end %>
-    """
-    |> String.trim_trailing()
+    if omit_on_nil? do
+      """
+      <%= case #{fetch} do %>
+          <% nil -> %>
+          <% nested_list when is_list(nested_list) -> %>
+      #{list_branch}
+          <% _ -> %>
+            <% raise ArgumentError, "collection item field #{field} must be a list" %>
+      <% end %>
+      """
+      |> String.trim_trailing()
+    else
+      """
+      <%= case #{fetch} do %>
+          <% nested_list when is_list(nested_list) -> %>
+      #{list_branch}
+          <% nil -> %>
+          <% _ -> %>
+            <% raise ArgumentError, "collection item field #{field} must be a list" %>
+      <% end %>
+      """
+      |> String.trim_trailing()
+    end
   end
 
   defp field_spec(indexes, collection_id, field_name) do
@@ -1172,12 +1187,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     children
     |> Enum.reduce_while({:ok, []}, fn child, {:ok, acc} ->
       case render_node(indexes, child.node_id, collection_stack, false) do
-        {:ok, lines} -> {:cont, {:ok, acc ++ [lines]}}
+        {:ok, lines} -> {:cont, {:ok, [lines | acc]}}
         {:error, diagnostic} -> {:halt, {:error, diagnostic}}
       end
     end)
     |> case do
-      {:ok, parts} -> {:ok, Enum.join(parts, "\n")}
+      {:ok, parts} -> {:ok, Enum.join(Enum.reverse(parts), "\n")}
       {:error, diagnostic} -> {:error, diagnostic}
     end
   end

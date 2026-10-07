@@ -1690,19 +1690,14 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
   defp validate_native_boundary_image(diagnostics, node, roles, plan, indexes) do
     if node.node_id == plan.boundary_node_id and node.semantic_type == "image" do
-      case Map.get(roles, :asset_src) do
-        %{public_attr_name: name} when is_binary(name) ->
-          attr = Map.fetch!(indexes.attrs_by_name, name)
-
-          if not attr.required and attr.default == nil,
-            do:
-              native_error(
-                diagnostics,
-                "boundary_optional_image",
-                "optional image source would remove the component root",
-                node.node_id
-              ),
-            else: diagnostics
+      case boundary_asset_src_input(Map.get(roles, :asset_src), indexes) do
+        {:optional, :no_default} ->
+          native_error(
+            diagnostics,
+            "boundary_optional_image",
+            "optional image source would remove the component root",
+            node.node_id
+          )
 
         _ ->
           diagnostics
@@ -1711,6 +1706,50 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       diagnostics
     end
   end
+
+  defp boundary_asset_src_input(%RenderProjection{public_attr_name: name}, indexes)
+       when is_binary(name) do
+    boundary_attr_src_input(Map.fetch!(indexes.attrs_by_name, name))
+  end
+
+  defp boundary_asset_src_input(
+         %BindingProjection{projection_kind: :scalar_attr, public_attr_name: name},
+         indexes
+       )
+       when is_binary(name) do
+    boundary_attr_src_input(Map.fetch!(indexes.attrs_by_name, name))
+  end
+
+  defp boundary_asset_src_input(
+         %BindingProjection{
+           projection_kind: :collection_item_field,
+           source_collection_binding_id: cb_id,
+           item_field_name: field_name
+         },
+         indexes
+       )
+       when is_binary(cb_id) and is_binary(field_name) do
+    case get_in(indexes.item_fields_by_collection, [cb_id, field_name]) do
+      %ItemField{} = field -> boundary_item_field_src_input(field)
+      _ -> :unknown
+    end
+  end
+
+  defp boundary_asset_src_input(_role, _indexes), do: :unknown
+
+  defp boundary_attr_src_input(%Attr{required: true}), do: {:required, :_}
+
+  defp boundary_attr_src_input(%Attr{default: default}) when not is_nil(default),
+    do: {:default, :_}
+
+  defp boundary_attr_src_input(%Attr{}), do: {:optional, :no_default}
+
+  defp boundary_item_field_src_input(%ItemField{required: true}), do: {:required, :_}
+
+  defp boundary_item_field_src_input(%ItemField{default: default}) when not is_nil(default),
+    do: {:default, :_}
+
+  defp boundary_item_field_src_input(%ItemField{}), do: {:optional, :no_default}
 
   defp validate_native_navigation(diagnostics, node, roles) do
     if node.semantic_type in ["link", "button"] and

@@ -25,12 +25,12 @@ defmodule LiveFrames.NativeGenerator.Literal do
     values
     |> Enum.reduce_while({:ok, []}, fn item, {:ok, acc} ->
       case render_normalized(item) do
-        {:ok, lit} -> {:cont, {:ok, acc ++ [lit]}}
+        {:ok, lit} -> {:cont, {:ok, [lit | acc]}}
         {:error, _} -> {:halt, {:error, :unsupported}}
       end
     end)
     |> case do
-      {:ok, parts} -> {:ok, "[" <> Enum.join(parts, ", ") <> "]"}
+      {:ok, parts} -> {:ok, "[" <> Enum.join(Enum.reverse(parts), ", ") <> "]"}
       {:error, _} -> {:error, :unsupported}
     end
   end
@@ -42,13 +42,13 @@ defmodule LiveFrames.NativeGenerator.Literal do
     |> Enum.reduce_while({:ok, []}, fn key, {:ok, acc} ->
       with {:ok, key_lit} <- render_normalized(key),
            {:ok, val_lit} <- render_normalized(Map.get(value, key)) do
-        {:cont, {:ok, acc ++ ["#{key_lit} => #{val_lit}"]}}
+        {:cont, {:ok, ["#{key_lit} => #{val_lit}" | acc]}}
       else
         {:error, _} -> {:halt, {:error, :unsupported}}
       end
     end)
     |> case do
-      {:ok, pairs} -> {:ok, "%{" <> Enum.join(pairs, ", ") <> "}"}
+      {:ok, pairs} -> {:ok, "%{" <> Enum.join(Enum.reverse(pairs), ", ") <> "}"}
       {:error, _} -> {:error, :unsupported}
     end
   end

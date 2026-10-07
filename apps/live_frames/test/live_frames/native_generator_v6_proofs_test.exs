@@ -503,4 +503,353 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
     refute source =~ "lf_item_field(nil, 1,"
     refute source =~ "__lf_missing__"
   end
+
+  defp nested_kids_document(kids_field, inner_content \\ "inner") do
+    paragraph_id = DesignNode.deterministic_id([1, 1])
+    container_id = DesignNode.deterministic_id([1, 2])
+
+    node =
+      section_node([
+        %DesignNode{
+          node_id: paragraph_id,
+          semantic_type: "paragraph",
+          attributes: %{"tag" => "p"}
+        },
+        %DesignNode{
+          node_id: container_id,
+          semantic_type: "container",
+          content: inner_content
+        }
+      ])
+
+    document = %DesignDocument{root_nodes: [node]}
+
+    c =
+      approved_contract(
+        public_attrs: [
+          %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_root",
+            public_attr_name: "items",
+            item_fields: [kids_field]
+          },
+          %CollectionInput{
+            source_collection_binding_id: "cb_child",
+            parent_collection_binding_id: "cb_root",
+            parent_item_field_name: "kids"
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_root",
+            projection_kind: :collection_attr,
+            public_attr_name: "items",
+            source_collection_binding_id: "cb_root",
+            target_node_id: @boundary_id
+          },
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_child",
+            projection_kind: :collection_item_field,
+            source_collection_binding_id: "cb_child",
+            parent_collection_binding_id: "cb_root",
+            parent_item_field_name: "kids",
+            target_node_id: container_id
+          }
+        ]
+      )
+
+    document = %{
+      document
+      | collection_bindings: %{
+          "cb_root" => %CollectionBinding{
+            collection_binding_id: "cb_root",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @boundary_id
+          },
+          "cb_child" => %CollectionBinding{
+            collection_binding_id: "cb_child",
+            owner_node_id: container_id,
+            repeat_root_node_id: container_id,
+            parent_collection_binding_id: "cb_root"
+          }
+        }
+    }
+
+    {c, document, container_id}
+  end
+
+  test "required nested collection attaches repeat loop to the list case branch" do
+    kids = %ItemField{name: "kids", type: :list, semantic_purpose: "kids", required: true}
+    {c, document, _container_id} = nested_kids_document(kids)
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+
+    {list_pos, _} = :binary.match(source, "nested_list when is_list(nested_list)")
+    {for_pos, _} = :binary.match(source, "for lf_ci_2 <- nested_list")
+    {nil_pos, _} = :binary.match(source, "<% nil -> %>")
+    assert list_pos < for_pos
+    assert for_pos < nil_pos
+  end
+
+  test "optional nested collection omits subtree when kids field is missing" do
+    kids = %ItemField{name: "kids", type: :list, semantic_purpose: "kids", required: false}
+    {c, document, _container_id} = nested_kids_document(kids)
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+    {nil_pos, _} = :binary.match(source, "<% nil -> %>")
+    {list_pos, _} = :binary.match(source, "nested_list when is_list(nested_list)")
+    {for_pos, _} = :binary.match(source, "for lf_ci_2 <- nested_list")
+    assert nil_pos < list_pos
+    assert for_pos > list_pos
+  end
+
+  test "nested collection with explicit default empty list uses list branch" do
+    kids = %ItemField{
+      name: "kids",
+      type: :list,
+      semantic_purpose: "kids",
+      required: false,
+      default: []
+    }
+
+    {c, document, _container_id} = nested_kids_document(kids)
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+    assert source =~ "{1, \"kids\"} -> []"
+    {list_pos, _} = :binary.match(source, "nested_list when is_list(nested_list)")
+    {for_pos, _} = :binary.match(source, "for lf_ci_2 <- nested_list")
+    assert list_pos < for_pos
+  end
+
+  test "nested collection non-list kids value raises deterministic list error" do
+    kids = %ItemField{name: "kids", type: :list, semantic_purpose: "kids", required: true}
+    {c, document, _container_id} = nested_kids_document(kids)
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+    assert source =~ ~s(raise ArgumentError, "collection item field kids must be a list")
+  end
+
+  test "generated lf_item_field rejects non-map items with ArgumentError" do
+    kids = %ItemField{name: "kids", type: :list, semantic_purpose: "kids", required: true}
+    {c, document, _} = nested_kids_document(kids)
+    source = generate_source(c, plan_for(c, document), document)
+    assert source =~ "defp lf_item_field(_item, _collection_ordinal, _field) do"
+    assert source =~ ~s(raise ArgumentError, "collection item must be a map")
+  end
+
+  test "same item field name stays scoped by collection ordinal in generated validators" do
+    document = %DesignDocument{root_nodes: [section_node()]}
+
+    c =
+      approved_contract(
+        public_attrs: [
+          %Attr{name: "left", type: :list, semantic_purpose: "left", required: true},
+          %Attr{name: "right", type: :list, semantic_purpose: "right", required: true}
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_a",
+            public_attr_name: "left",
+            item_fields: [
+              %ItemField{name: "code", type: :string, semantic_purpose: "code", required: true}
+            ]
+          },
+          %CollectionInput{
+            source_collection_binding_id: "cb_b",
+            public_attr_name: "right",
+            item_fields: [
+              %ItemField{
+                name: "code",
+                type: :string,
+                semantic_purpose: "code",
+                required: false,
+                default: "guest"
+              }
+            ]
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_a",
+            projection_kind: :collection_attr,
+            public_attr_name: "left",
+            source_collection_binding_id: "cb_a",
+            target_node_id: @boundary_id
+          },
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_b",
+            projection_kind: :collection_attr,
+            public_attr_name: "right",
+            source_collection_binding_id: "cb_b",
+            target_node_id: @boundary_id
+          }
+        ]
+      )
+
+    document = %{
+      document
+      | collection_bindings: %{
+          "cb_a" => %CollectionBinding{
+            collection_binding_id: "cb_a",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @boundary_id
+          },
+          "cb_b" => %CollectionBinding{
+            collection_binding_id: "cb_b",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @boundary_id
+          }
+        }
+    }
+
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+
+    assert source =~
+             "{1, \"code\"} -> raise ArgumentError, \"missing required collection item field code\""
+
+    assert source =~ "{2, \"code\"} -> \"guest\""
+  end
+
+  test "float item field default is emitted in generated collection accessor" do
+    document = %DesignDocument{root_nodes: [section_node()]}
+
+    c =
+      approved_contract(
+        public_attrs: [
+          %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb",
+            public_attr_name: "items",
+            item_fields: [
+              %ItemField{
+                name: "weight",
+                type: :integer,
+                semantic_purpose: "weight",
+                required: false,
+                default: 1.25
+              }
+            ]
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb",
+            projection_kind: :collection_attr,
+            public_attr_name: "items",
+            source_collection_binding_id: "cb",
+            target_node_id: @boundary_id
+          }
+        ]
+      )
+
+    document = %{
+      document
+      | collection_bindings: %{
+          "cb" => %CollectionBinding{
+            collection_binding_id: "cb",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @boundary_id
+          }
+        }
+    }
+
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+    assert source =~ "{1, \"weight\"} -> 1.25"
+  end
+
+  test "optional collection item image source omits image unit before alt evaluation" do
+    image_id = DesignNode.deterministic_id([1, 1])
+    node = section_node([%DesignNode{node_id: image_id, semantic_type: "image"}])
+    document = %DesignDocument{root_nodes: [node]}
+
+    c =
+      approved_contract(
+        public_attrs: [
+          %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb",
+            public_attr_name: "items",
+            item_fields: [
+              %ItemField{
+                name: "photo",
+                type: :string,
+                semantic_purpose: "photo",
+                required: false,
+                accessibility: %{"image_alt_policy" => "decorative"}
+              }
+            ]
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb",
+            projection_kind: :collection_attr,
+            public_attr_name: "items",
+            source_collection_binding_id: "cb",
+            target_node_id: @boundary_id
+          },
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: "vb_photo",
+            projection_kind: :collection_item_field,
+            source_collection_binding_id: "cb",
+            item_field_name: "photo",
+            target_node_id: image_id
+          }
+        ]
+      )
+
+    document = %{
+      document
+      | collection_bindings: %{
+          "cb" => %CollectionBinding{
+            collection_binding_id: "cb",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @boundary_id
+          }
+        },
+        value_bindings: %{
+          "vb_photo" => %ValueBinding{
+            value_binding_id: "vb_photo",
+            target_node_id: image_id,
+            target_kind: :asset,
+            value_kind: :field,
+            scope: :collection_item,
+            collection_binding_id: "cb",
+            value_key: "photo",
+            normalization_status: :normalized,
+            modifier_status: :none
+          }
+        }
+    }
+
+    assert :ok = IR.validate(document)
+    source = generate_source(c, plan_for(c, document), document)
+    assert source =~ "if (lf_src = lf_item_field(lf_ci_1, 1, \"photo\")) != nil"
+  end
+
+  test "required nested collection module source compiles as a Phoenix component" do
+    kids = %ItemField{name: "kids", type: :list, semantic_purpose: "kids", required: true}
+    {c, document, _} = nested_kids_document(kids)
+    source = generate_source(c, plan_for(c, document), document)
+    uniq = System.unique_integer([:positive])
+    module_name = "LiveFrames.GeneratedNestedProof#{uniq}"
+    compiled = String.replace(source, "LiveFrames.Components.Sections.Proof", module_name)
+    assert [{module, _binary}] = Code.compile_string(compiled)
+    :code.delete(module)
+  end
 end
