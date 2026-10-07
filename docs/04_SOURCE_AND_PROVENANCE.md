@@ -202,6 +202,7 @@ license, ownership, or general legal redistribution outcome.
 | Automatic.css settings export | `fixtures/automatic_css/SOURCE.md` records identity, version, internal origin, and internal-use status approved for internal conversion only; broader project use is unknown. | License and allowed redistribution are unknown; no explicit public-clearance evidence is recorded. | `internal_use_approved`, scoped to internal conversion; not `public_safe`. | `fixtures/automatic_css/` and `acss/acss.json` | Yes — existing public material requires an explicit governance decision. |
 | Automatic.css 4.0.1 research set | `acss/README.md` and `private_reference/REFERENCE_MANIFEST.md` identify a research-only, immutable reference set; no explicit internal-use authority is recorded for the checked-in notes. | No license or redistribution clearance is recorded; status is unknown. | `classified`; not `public_safe`. | `acss/4.0.1/` | Yes — reconcile its public location, reference path, hash, and permitted use. |
 | Automatic.css 4.0.1 structural-grid interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the resolved values of `--grid-1`, `--grid-2`, and `--grid-3-2`, plus minimum verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
+| Automatic.css 4.0.1 text-scale interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the three-variable text-scale semantic facts, active `text-s` endpoint overrides, minimum generated controls, and verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
 | Standalone HTML/CSS/JS experiments | Named groups under `sources/` are present, but no group-level provenance record, internal-use authority, or origin is recorded. | No redistribution evidence is recorded; status is unknown. | `discovered`; not `public_safe`. | `sources/GSAP-*`, `sources/card-carousel`, `sources/css-tooltips`, `sources/elastic-accordion`, `sources/enlarge-gallery`, `sources/infinite-scroll`, `sources/swipe-reveal`, `sources/ux-animations` | Yes — classify each group or establish verified shared provenance. |
 | Derived Hero India conversion artifacts | `sources/work/hero_india/` contains deterministic Stage A, IR, fidelity, manifest, and breakpoint artifacts that retain upstream source identifiers/hashes. | Upstream Bricks/Automatic.css redistribution remains unresolved; derivation does not provide independent clearance. | Inherits upstream unresolved status; not `public_safe`. | `sources/work/hero_india/` | Yes — decide whether these are distributable derived evidence or review-only artifacts. |
 
@@ -209,12 +210,14 @@ The register does not move, delete, sanitize, or replace any existing payload.
 It records the human decision boundary so future work does not mistake current
 public location for public-redistribution approval.
 
-The scoped `public_safe` state applies only to the three named structural-grid
-values and minimum verification metadata. `scoped_public_safe` does not mean
-Automatic.css is globally `public_safe`. The existing Automatic.css settings
-export and research-set rows retain their current states. Plugin source,
-generated stylesheets, configuration exports, unrelated variables, and the
-wider research set remain private/reference material, with broader
+Each scoped interoperability evidence row has its own explicit `public_safe`
+boundary. The scoped states apply only to the named structural-grid or
+text-scale facts, their approved minimum controls, and verification metadata
+recorded in the corresponding evidence documents. `scoped_public_safe` does
+not mean Automatic.css is globally `public_safe`. The existing Automatic.css
+settings export and research-set rows retain their current states. Plugin
+source, generated stylesheets, configuration exports, unrelated variables,
+and the wider research set remain private/reference material, with broader
 redistribution unresolved.
 
 ## Human governance boundary
