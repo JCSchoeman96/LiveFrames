@@ -25,7 +25,13 @@ defmodule LiveFrames.ComponentReviewTest do
         %DesignNode{
           node_id: @boundary_id,
           semantic_type: "section",
-          children: [%DesignNode{node_id: @heading_id, semantic_type: "heading"}]
+          children: [
+            %DesignNode{
+              node_id: @heading_id,
+              semantic_type: "heading",
+              attributes: %{"tag" => "h2"}
+            }
+          ]
         },
         %DesignNode{node_id: @outside_id, semantic_type: "paragraph"}
       ]
@@ -68,6 +74,55 @@ defmodule LiveFrames.ComponentReviewTest do
   end
 
   defp codes({:error, diagnostics}), do: Enum.map(diagnostics, & &1.code)
+
+  test "Contract C0 validation blockers propagate through review approval" do
+    {contract, plan, document} =
+      candidate(
+        [public_attrs: [attr("title", :string, validation: %{"pattern" => "text"})]],
+        render_projections: [text_projection("title")]
+      )
+
+    assert ComponentizationPlan.validate_references(plan, contract, document) == :ok
+
+    assert {:error, contract_errors} =
+             ComponentContract.validate_generation_prerequisites(contract, document)
+
+    assert {:error, errors} = ComponentReview.approve(contract, plan, document)
+
+    assert Enum.any?(errors, fn diagnostic ->
+             Enum.any?(
+               contract_errors,
+               &(&1.code in Map.get(diagnostic.metadata, "upstream_codes", []))
+             )
+           end)
+
+    assert {:ok, rejected} = ComponentReview.reject(contract, plan, document)
+    assert rejected.approval_status == :rejected
+  end
+
+  test "Plan C0 icon blocker prevents approval while ordinary references remain valid" do
+    document = document()
+    [root, outside] = document.root_nodes
+    [heading] = root.children
+
+    document = %{
+      document
+      | root_nodes: [
+          %{root | children: [%{heading | semantic_type: "icon", attributes: %{}}]},
+          outside
+        ]
+    }
+
+    {contract, plan, document} = candidate([], [], document)
+    assert ComponentContract.validate_generation_prerequisites(contract, document) == :ok
+    assert ComponentizationPlan.validate_references(plan, contract, document) == :ok
+
+    assert "componentization_plan.native_generation.icon_unsupported" in codes(
+             ComponentReview.approve(contract, plan, document)
+           )
+
+    assert {:ok, _} = ComponentReview.reject(contract, plan, document)
+  end
 
   test "proposed candidate approval passes both generation gates without changing inputs" do
     {contract, plan, design_document} = candidate()

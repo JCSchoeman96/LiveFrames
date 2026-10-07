@@ -28,7 +28,11 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
         node_id: @boundary_id,
         semantic_type: "section",
         children: [
-          %DesignNode{node_id: @heading_id, semantic_type: "heading"},
+          %DesignNode{
+            node_id: @heading_id,
+            semantic_type: "heading",
+            attributes: %{"tag" => "h2"}
+          },
           %DesignNode{node_id: @image_id, semantic_type: "paragraph"},
           %DesignNode{
             node_id: @actions_id,

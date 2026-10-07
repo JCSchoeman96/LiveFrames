@@ -7,6 +7,413 @@ defmodule LiveFrames.ComponentizationPlanTest do
   alias LiveFrames.ComponentizationPlan.Serializer
   alias LiveFrames.ComponentizationPlan.ValidationError
 
+  alias LiveFrames.ComponentContract
+  alias LiveFrames.ComponentContract.Attr
+  alias LiveFrames.ComponentContract.BindingProjection
+  alias LiveFrames.ComponentContract.CollectionInput
+  alias LiveFrames.ComponentContract.ItemField
+  alias LiveFrames.ComponentContract.Slot
+  alias LiveFrames.IR.CollectionBinding
+  alias LiveFrames.IR.DesignDocument
+  alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR
+
+  defp native_tuple(node, attrs \\ [], projections \\ [], bindings \\ []) do
+    document = %DesignDocument{root_nodes: [node]}
+
+    contract = %ComponentContract{
+      contract_id: "native",
+      module_intent: "native",
+      function_intent: "native",
+      public_attrs: attrs,
+      binding_projections: bindings
+    }
+
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: node.node_id,
+      render_projections: projections
+    }
+
+    {plan, contract, document}
+  end
+
+  defp native_result({plan, contract, document}),
+    do: ComponentizationPlan.validate_generation_prerequisites(plan, contract, document)
+
+  defp assert_native_block(tuple, suffix) do
+    {plan, contract, document} = tuple
+    assert ComponentizationPlan.validate_references(plan, contract, document) == :ok
+    assert {:error, diagnostics} = native_result(tuple)
+
+    assert Enum.any?(
+             diagnostics,
+             &(&1.code == "componentization_plan.native_generation." <> suffix)
+           )
+
+    assert Enum.all?(diagnostics, &String.starts_with?(&1.code, "componentization_plan."))
+  end
+
+  test "C0 blocks icons only inside the selected boundary, including slot descendants" do
+    icon = %DesignNode{node_id: "node_000001_000001", semantic_type: "icon"}
+    root = %DesignNode{node_id: "node_000001", semantic_type: "section", children: [icon]}
+    assert_native_block(native_tuple(root), "icon_unsupported")
+
+    {plan, contract, document} = native_tuple(%{root | children: []})
+    document = %{document | root_nodes: document.root_nodes ++ [%{icon | node_id: "node_000002"}]}
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    assert native_result({%{plan | design_document_sha256: fingerprint}, contract, document}) ==
+             :ok
+
+    actions = %{
+      root
+      | children: [
+          %DesignNode{
+            node_id: "node_000001_000001",
+            semantic_type: "actions",
+            children: [%{icon | node_id: "node_000001_000001_000001"}]
+          }
+        ]
+    }
+
+    slot = %Slot{name: "actions", semantic_purpose: "actions", consumer_responsibility: "markup"}
+
+    projection = %RenderProjection{
+      public_slot_name: "actions",
+      target_node_id: "node_000001_000001",
+      render_role: :subtree_slot
+    }
+
+    {plan, contract, document} = native_tuple(actions, [], [projection])
+    assert_native_block({plan, %{contract | public_slots: [slot]}, document}, "icon_unsupported")
+  end
+
+  test "C0 rejects incompatible, malformed and missing native tags without changing references" do
+    for {semantic, tag} <- [
+          {"container", "nav"},
+          {"paragraph", "div"},
+          {"link", "a"},
+          {"image", "img"},
+          {"rich_text", nil},
+          {"rich_text", "section"},
+          {"section", false}
+        ] do
+      attributes = if is_nil(tag), do: %{}, else: %{"tag" => tag}
+      node = %DesignNode{node_id: "node_000001", semantic_type: semantic, attributes: attributes}
+      tuple = if semantic == "image", do: native_image_tuple(node, true), else: native_tuple(node)
+      assert_native_block(tuple, "tag_unsupported")
+    end
+  end
+
+  test "C0 accepts every frozen structural and rich text tag" do
+    for {semantic, tags} <- [
+          {"section", [nil, "section", "div"]},
+          {"container", [nil, "div"]},
+          {"wrapper", [nil, "div"]},
+          {"stack", [nil, "div"]},
+          {"grid", [nil, "div"]},
+          {"generic", [nil, "div"]},
+          {"background", [nil, "div"]},
+          {"overlay", [nil, "div"]},
+          {"actions", [nil, "div"]},
+          {"paragraph", [nil, "p"]},
+          {"rich_text", ["div", "p", "span"]},
+          {"button", [nil, "button"]},
+          {"link", [nil]}
+        ],
+        tag <- tags do
+      attributes = if is_nil(tag), do: %{}, else: %{"tag" => tag}
+      content = if semantic == "actions", do: nil, else: "Text"
+
+      assert native_result(
+               native_tuple(%DesignNode{
+                 node_id: "node_000001",
+                 semantic_type: semantic,
+                 attributes: attributes,
+                 content: content
+               })
+             ) == :ok
+    end
+  end
+
+  defp native_image_tuple(node, required, default \\ nil) do
+    source = %Attr{
+      name: "image",
+      type: :string,
+      semantic_purpose: "image",
+      required: required,
+      default: default,
+      accessibility: %{"image_alt_policy" => "decorative"}
+    }
+
+    projection = %RenderProjection{
+      public_attr_name: "image",
+      target_node_id: node.node_id,
+      render_role: :asset_src
+    }
+
+    native_tuple(node, [source], [projection])
+  end
+
+  test "C0 blocks an optional boundary image but admits explicit defaults and optional child images" do
+    image = %DesignNode{node_id: "node_000001", semantic_type: "image"}
+    assert_native_block(native_image_tuple(image, false), "boundary_optional_image")
+    assert native_result(native_image_tuple(image, true)) == :ok
+    assert native_result(native_image_tuple(image, false, "/image.jpg")) == :ok
+    {plan, contract, document} = native_image_tuple(image, false)
+
+    root = %DesignNode{
+      node_id: "node_000001",
+      semantic_type: "section",
+      children: [%{image | node_id: "node_000001_000001"}]
+    }
+
+    document = %{document | root_nodes: [root]}
+    [projection] = plan.render_projections
+    plan = %{plan | render_projections: [%{projection | target_node_id: "node_000001_000001"}]}
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    assert native_result(
+             {%{plan | boundary_node_id: "node_000001", design_document_sha256: fingerprint},
+              contract, document}
+           ) == :ok
+  end
+
+  defp boundary_collection_image_tuple(photo_opts) do
+    image_id = "node_000001"
+    image = %DesignNode{node_id: image_id, semantic_type: "image"}
+
+    document = %DesignDocument{
+      root_nodes: [image],
+      collection_bindings: %{
+        "cb_items" => %CollectionBinding{
+          collection_binding_id: "cb_items",
+          owner_node_id: image_id,
+          repeat_root_node_id: image_id
+        }
+      },
+      value_bindings: %{
+        "vb_photo" => %ValueBinding{
+          value_binding_id: "vb_photo",
+          target_node_id: image_id,
+          target_kind: :asset,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_items",
+          value_key: "photo",
+          normalization_status: :normalized,
+          modifier_status: :none
+        }
+      }
+    }
+
+    photo_field =
+      struct!(
+        %ItemField{
+          name: "photo",
+          type: :string,
+          semantic_purpose: "photo",
+          accessibility: %{"image_alt_policy" => "decorative"}
+        },
+        photo_opts
+      )
+
+    contract = %ComponentContract{
+      contract_id: "native",
+      module_intent: "native",
+      function_intent: "native",
+      public_attrs: [
+        %Attr{name: "items", type: :list, semantic_purpose: "items", required: true}
+      ],
+      collection_inputs: [
+        %CollectionInput{
+          source_collection_binding_id: "cb_items",
+          public_attr_name: "items",
+          item_fields: [photo_field]
+        }
+      ],
+      binding_projections: [
+        %BindingProjection{
+          source_binding_kind: :collection,
+          source_binding_id: "cb_items",
+          projection_kind: :collection_attr,
+          public_attr_name: "items",
+          source_collection_binding_id: "cb_items",
+          target_node_id: image_id
+        },
+        %BindingProjection{
+          source_binding_kind: :value,
+          source_binding_id: "vb_photo",
+          projection_kind: :collection_item_field,
+          source_collection_binding_id: "cb_items",
+          item_field_name: "photo",
+          target_node_id: image_id
+        }
+      ]
+    }
+
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: image_id,
+      render_projections: []
+    }
+
+    {plan, contract, document}
+  end
+
+  test "C0 blocks optional boundary image for collection item field asset_src" do
+    assert :ok = IR.validate(elem(boundary_collection_image_tuple(required: false), 2))
+
+    assert_native_block(
+      boundary_collection_image_tuple(required: false),
+      "boundary_optional_image"
+    )
+
+    assert native_result(boundary_collection_image_tuple(required: true)) == :ok
+
+    assert native_result(boundary_collection_image_tuple(required: false, default: "/photo.jpg")) ==
+             :ok
+  end
+
+  test "C0 blocks a slot replacing the component boundary" do
+    node = %DesignNode{node_id: "node_000001", semantic_type: "actions"}
+
+    projection = %RenderProjection{
+      public_slot_name: "actions",
+      target_node_id: "node_000001",
+      render_role: :subtree_slot
+    }
+
+    {plan, contract, document} = native_tuple(node, [], [projection])
+    slot = %Slot{name: "actions", semantic_purpose: "actions", consumer_responsibility: "markup"}
+
+    assert_native_block(
+      {plan, %{contract | public_slots: [slot]}, document},
+      "boundary_subtree_slot"
+    )
+  end
+
+  test "C0 static navigation uses shared safety validation for links and buttons" do
+    for semantic <- ["link", "button"],
+        navigation <- [
+          nil,
+          false,
+          %{},
+          %{"href" => "javascript:alert(1)"},
+          %{"href" => "bad host"}
+        ] do
+      node = %DesignNode{
+        node_id: "node_000001",
+        semantic_type: semantic,
+        content: "Go",
+        attributes: %{"navigation" => navigation}
+      }
+
+      assert_native_block(native_tuple(node), "static_navigation_invalid")
+    end
+
+    for semantic <- ["link", "button"], href <- ["#", "/path", "https://example.com/path"] do
+      node = %DesignNode{
+        node_id: "node_000001",
+        semantic_type: semantic,
+        content: "Go",
+        attributes: %{"navigation" => %{"href" => href, "target" => "_blank"}}
+      }
+
+      assert native_result(native_tuple(node)) == :ok
+    end
+  end
+
+  test "C0 public link URL suppresses internal navigation validation" do
+    node = %DesignNode{
+      node_id: "node_000001",
+      semantic_type: "link",
+      content: "Go",
+      attributes: %{"navigation" => %{"href" => "javascript:ignored"}}
+    }
+
+    attr = %Attr{name: "destination", type: :string, semantic_purpose: "destination"}
+
+    projection = %RenderProjection{
+      public_attr_name: "destination",
+      target_node_id: "node_000001",
+      render_role: :link_url
+    }
+
+    assert native_result(native_tuple(node, [attr], [projection])) == :ok
+  end
+
+  test "C0 public heading level cannot borrow the static tag as a default" do
+    node = %DesignNode{
+      node_id: "node_000001",
+      semantic_type: "heading",
+      attributes: %{"tag" => "h2"}
+    }
+
+    attr = %Attr{
+      name: "level",
+      type: :integer,
+      semantic_purpose: "level",
+      validation: %{"values" => [1, 2, 3, 4, 5, 6]}
+    }
+
+    projection = %RenderProjection{
+      public_attr_name: "level",
+      target_node_id: "node_000001",
+      render_role: :heading_level
+    }
+
+    assert_native_block(native_tuple(node, [attr], [projection]), "heading_level_optional")
+    assert native_result(native_tuple(node)) == :ok
+
+    for accepted <- [%{attr | required: true}, %{attr | default: 3}] do
+      assert native_result(native_tuple(node, [accepted], [projection])) == :ok
+
+      assert native_result(native_tuple(%{node | attributes: %{}}, [accepted], [projection])) ==
+               :ok
+    end
+  end
+
+  test "C0 rejects a binding without a frozen native emission row" do
+    node = %DesignNode{node_id: "node_000001", semantic_type: "button", content: "Static"}
+    attr = %Attr{name: "label", type: :string, semantic_purpose: "label"}
+
+    projection = %BindingProjection{
+      source_binding_kind: :value,
+      source_binding_id: "value",
+      projection_kind: :scalar_attr,
+      public_attr_name: "label",
+      target_node_id: "node_000001"
+    }
+
+    {plan, contract, document} = native_tuple(node, [attr], [], [projection])
+
+    binding = %ValueBinding{
+      value_binding_id: "value",
+      target_node_id: "node_000001",
+      target_kind: :text,
+      value_kind: :field,
+      scope: :site,
+      value_key: "text"
+    }
+
+    document = %{document | value_bindings: %{"value" => binding}}
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    assert_native_block(
+      {%{plan | design_document_sha256: fingerprint}, contract, document},
+      "binding_emission_unsupported"
+    )
+  end
+
   defp valid_plan(attrs \\ []) do
     struct!(
       %ComponentizationPlan{
@@ -329,6 +736,66 @@ defmodule LiveFrames.ComponentizationPlanTest do
 
     assert_raise ValidationError, fn -> ComponentizationPlan.validate!(invalid) end
     assert_raise ValidationError, fn -> ComponentizationPlan.encode!(invalid) end
+  end
+
+  test "C0 blocks non-string content on heading button image and actions" do
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "heading",
+        attributes: %{"tag" => "h2"},
+        content: %{"x" => 1}
+      }),
+      "heading_content_invalid"
+    )
+
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "button",
+        attributes: %{"tag" => "button"},
+        content: %{"x" => 1}
+      }),
+      "button_content_invalid"
+    )
+
+    assert_native_block(
+      native_image_tuple(
+        %DesignNode{node_id: "node_000001", semantic_type: "image", content: %{"x" => 1}},
+        true
+      ),
+      "image_content_forbidden"
+    )
+
+    assert_native_block(
+      native_tuple(%DesignNode{
+        node_id: "node_000001",
+        semantic_type: "actions",
+        content: %{"x" => 1}
+      }),
+      "actions_content_forbidden"
+    )
+  end
+
+  test "C0 blocks paragraph child subtrees and structured rich_text content" do
+    paragraph =
+      %DesignNode{
+        node_id: "node_000001",
+        semantic_type: "paragraph",
+        children: [%DesignNode{node_id: "node_000001_000001", semantic_type: "generic"}]
+      }
+
+    assert_native_block(native_tuple(paragraph), "paragraph_children_forbidden")
+
+    rich_text =
+      %DesignNode{
+        node_id: "node_000001",
+        semantic_type: "rich_text",
+        attributes: %{"tag" => "div"},
+        content: %{"blocks" => []}
+      }
+
+    assert_native_block(native_tuple(rich_text), "rich_text_structured_content")
   end
 
   test "the serializer to_map API returns diagnostics for malformed plans" do

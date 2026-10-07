@@ -46,7 +46,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   def validate_generation_prerequisites(plan, component_contract, design_document) do
     case preflight_generation(plan, component_contract, design_document) do
       {:ok, plan, component_contract, design_document} ->
-        reference_result = validate_indexed(plan, component_contract, design_document)
+        reference_result = validate_indexed(plan, component_contract, design_document, true)
 
         stored_blockers =
           Enum.filter(plan.diagnostics, fn diagnostic ->
@@ -279,7 +279,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  defp validate_indexed(plan, contract, document) do
+  defp validate_indexed(plan, contract, document, generation? \\ false) do
     indexes = build_indexes(plan, contract, document)
 
     case Map.fetch(indexes.nodes_by_id, plan.boundary_node_id) do
@@ -310,6 +310,11 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         diagnostics = validate_static_images(indexes, image_sources, diagnostics)
 
         diagnostics = validate_unsupported_nodes(indexes, diagnostics)
+
+        diagnostics =
+          if generation?,
+            do: validate_native_generation(plan, contract, indexes, diagnostics),
+            else: diagnostics
 
         finish(diagnostics)
     end
@@ -1407,6 +1412,370 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         )
       )
     end)
+  end
+
+  @native_tags %{
+    "section" => {~w(section div), "section"},
+    "container" => {~w(div), "div"},
+    "wrapper" => {~w(div), "div"},
+    "stack" => {~w(div), "div"},
+    "grid" => {~w(div), "div"},
+    "generic" => {~w(div), "div"},
+    "background" => {~w(div), "div"},
+    "overlay" => {~w(div), "div"},
+    "actions" => {~w(div), "div"},
+    "paragraph" => {~w(p), "p"},
+    "rich_text" => {~w(div p span), nil},
+    "heading" => {~w(h1 h2 h3 h4 h5 h6), nil},
+    "image" => {~w(figure), "img"},
+    "button" => {~w(button), "button"},
+    "link" => {[], "a"}
+  }
+
+  @doc false
+  def native_tag(%DesignNode{semantic_type: semantic, attributes: attrs}, public_heading?) do
+    case Map.fetch(@native_tags, semantic) do
+      {:ok, {compatible, default}} ->
+        case Map.fetch(attrs, "tag") do
+          {:ok, tag} ->
+            if LiveFrames.StaticMarkupContract.native_tag?(tag) and tag in compatible,
+              do:
+                {:ok,
+                 if(semantic == "heading" and public_heading?, do: :dynamic_heading, else: tag)},
+              else: :error
+
+          :error ->
+            cond do
+              semantic == "heading" and public_heading? -> {:ok, :dynamic_heading}
+              default != nil -> {:ok, default}
+              true -> :error
+            end
+        end
+
+      :error ->
+        :error
+    end
+  end
+
+  defp validate_native_generation(plan, contract, indexes, diagnostics) do
+    {roles, diagnostics} =
+      Enum.reduce(contract.binding_projections, {%{}, diagnostics}, fn projection, {roles, acc} ->
+        node = Map.get(indexes.nodes_by_id, projection.target_node_id)
+        role = native_binding_role(projection, node, indexes)
+
+        if role == :unsupported do
+          {roles,
+           native_error(
+             acc,
+             "binding_emission_unsupported",
+             "binding has no frozen native emission",
+             projection.target_node_id
+           )}
+        else
+          {Map.update(
+             roles,
+             projection.target_node_id,
+             %{role => projection},
+             &Map.put(&1, role, projection)
+           ), acc}
+        end
+      end)
+
+    roles =
+      Enum.reduce(plan.render_projections, roles, fn projection, acc ->
+        Map.update(
+          acc,
+          projection.target_node_id,
+          %{projection.render_role => projection},
+          &Map.put(&1, projection.render_role, projection)
+        )
+      end)
+
+    Enum.reduce(indexes.boundary_ids, diagnostics, fn id, acc ->
+      node = Map.fetch!(indexes.nodes_by_id, id)
+      node_roles = Map.get(roles, id, %{})
+
+      cond do
+        node.semantic_type == "icon" ->
+          native_error(acc, "icon_unsupported", "icons have no first-wave native renderer", id)
+
+        id == plan.boundary_node_id and Map.has_key?(node_roles, :subtree_slot) ->
+          native_error(
+            acc,
+            "boundary_subtree_slot",
+            "slot replacement would remove the component root",
+            id
+          )
+
+        Map.has_key?(indexes.slot_owners, id) ->
+          acc
+
+        true ->
+          acc
+          |> validate_native_tag(node, node_roles, indexes)
+          |> validate_native_node_surface(node)
+          |> validate_native_boundary_image(node, node_roles, plan, indexes)
+          |> validate_native_navigation(node, node_roles)
+      end
+    end)
+  end
+
+  @native_string_or_nil_content ~w(
+    section container wrapper stack grid generic background overlay
+    paragraph rich_text heading button link
+  )
+
+  @native_nil_content_only ~w(image actions)
+
+  defp validate_native_node_surface(diagnostics, %DesignNode{} = node) do
+    diagnostics =
+      cond do
+        node.semantic_type in @native_string_or_nil_content ->
+          validate_string_or_nil_content(
+            diagnostics,
+            node,
+            "#{node.semantic_type}_content_invalid"
+          )
+
+        node.semantic_type in @native_nil_content_only ->
+          validate_content_absent(diagnostics, node, "#{node.semantic_type}_content_forbidden")
+
+        true ->
+          diagnostics
+      end
+
+    case node.semantic_type do
+      "paragraph" ->
+        validate_no_child_subtree(diagnostics, node, "paragraph_children_forbidden")
+
+      "rich_text" ->
+        diagnostics
+        |> validate_rich_text_content(node)
+        |> validate_no_child_subtree(node, "rich_text_children_forbidden")
+
+      "heading" ->
+        validate_no_child_subtree(diagnostics, node, "heading_children_forbidden")
+
+      "image" ->
+        validate_no_child_subtree(diagnostics, node, "image_children_forbidden")
+
+      _ ->
+        diagnostics
+    end
+  end
+
+  defp validate_content_absent(diagnostics, %DesignNode{content: nil}, _code), do: diagnostics
+
+  defp validate_content_absent(diagnostics, %DesignNode{node_id: id}, code) do
+    native_error(diagnostics, code, "node must not carry static content", id)
+  end
+
+  defp validate_string_or_nil_content(
+         diagnostics,
+         %DesignNode{node_id: id, content: content},
+         code
+       ) do
+    if content == nil or is_binary(content) do
+      diagnostics
+    else
+      native_error(diagnostics, code, "node content must be absent or a UTF-8 string", id)
+    end
+  end
+
+  defp validate_rich_text_content(diagnostics, %DesignNode{node_id: id, content: content}) do
+    if content != nil and not is_binary(content) do
+      native_error(
+        diagnostics,
+        "rich_text_structured_content",
+        "structured rich_text content is not generation-eligible",
+        id
+      )
+    else
+      diagnostics
+    end
+  end
+
+  defp validate_no_child_subtree(diagnostics, %DesignNode{node_id: id, children: children}, code) do
+    if children == [] do
+      diagnostics
+    else
+      native_error(diagnostics, code, "node must not have child subtrees", id)
+    end
+  end
+
+  @doc false
+  def native_binding_role(
+        %BindingProjection{source_binding_kind: :collection, projection_kind: kind},
+        _node,
+        _indexes
+      )
+      when kind in [:collection_attr, :collection_item_field], do: :repeat
+
+  @doc false
+  def native_binding_role(
+        %BindingProjection{source_binding_kind: :value} = projection,
+        %DesignNode{semantic_type: semantic},
+        indexes
+      ) do
+    binding = Map.fetch!(indexes.value_bindings, projection.source_binding_id)
+
+    case {projection.projection_kind, binding.scope, binding.value_kind, binding.target_kind,
+          semantic} do
+      {:scalar_attr, :site, :field, :text, kind} when kind in ~w(heading paragraph rich_text) ->
+        :text_content
+
+      {:scalar_attr, :site, :field, :asset, "image"} ->
+        :asset_src
+
+      {:scalar_attr, :site, :field, :link_url, "link"} ->
+        :link_url
+
+      {:collection_item_field, :collection_item, :field, :text, kind}
+      when kind in ~w(heading paragraph rich_text) ->
+        :text_content
+
+      {:collection_item_field, :collection_item, :field, :asset, "image"} ->
+        :asset_src
+
+      {:collection_item_field, :collection_item, :field, :text, "image"} ->
+        :asset_alt
+
+      {:collection_item_field, :collection_item, :field, :link_url, "link"} ->
+        :link_url
+
+      {kind, :collection, :collection_count, :text, node_kind}
+      when kind in [:collection_count_attr, :collection_item_field] and
+             node_kind in ~w(heading paragraph rich_text) ->
+        :text_content
+
+      _ ->
+        :unsupported
+    end
+  end
+
+  @doc false
+  def native_binding_role(_projection, _node, _indexes), do: :unsupported
+
+  defp validate_native_tag(diagnostics, node, roles, indexes) do
+    heading = Map.get(roles, :heading_level)
+
+    diagnostics =
+      if native_tag(node, heading != nil) == :error do
+        native_error(
+          diagnostics,
+          "tag_unsupported",
+          "node has no compatible native tag",
+          node.node_id
+        )
+      else
+        diagnostics
+      end
+
+    if heading != nil do
+      attr = Map.fetch!(indexes.attrs_by_name, heading.public_attr_name)
+
+      if not attr.required and attr.default == nil,
+        do:
+          native_error(
+            diagnostics,
+            "heading_level_optional",
+            "public heading level requires requiredness or an explicit default",
+            node.node_id
+          ),
+        else: diagnostics
+    else
+      diagnostics
+    end
+  end
+
+  defp validate_native_boundary_image(diagnostics, node, roles, plan, indexes) do
+    if node.node_id == plan.boundary_node_id and node.semantic_type == "image" do
+      case boundary_asset_src_input(Map.get(roles, :asset_src), indexes) do
+        {:optional, :no_default} ->
+          native_error(
+            diagnostics,
+            "boundary_optional_image",
+            "optional image source would remove the component root",
+            node.node_id
+          )
+
+        _ ->
+          diagnostics
+      end
+    else
+      diagnostics
+    end
+  end
+
+  defp boundary_asset_src_input(%RenderProjection{public_attr_name: name}, indexes)
+       when is_binary(name) do
+    boundary_attr_src_input(Map.fetch!(indexes.attrs_by_name, name))
+  end
+
+  defp boundary_asset_src_input(
+         %BindingProjection{projection_kind: :scalar_attr, public_attr_name: name},
+         indexes
+       )
+       when is_binary(name) do
+    boundary_attr_src_input(Map.fetch!(indexes.attrs_by_name, name))
+  end
+
+  defp boundary_asset_src_input(
+         %BindingProjection{
+           projection_kind: :collection_item_field,
+           source_collection_binding_id: cb_id,
+           item_field_name: field_name
+         },
+         indexes
+       )
+       when is_binary(cb_id) and is_binary(field_name) do
+    case get_in(indexes.item_fields_by_collection, [cb_id, field_name]) do
+      %ItemField{} = field -> boundary_item_field_src_input(field)
+      _ -> :unknown
+    end
+  end
+
+  defp boundary_asset_src_input(_role, _indexes), do: :unknown
+
+  defp boundary_attr_src_input(%Attr{required: true}), do: {:required, :_}
+
+  defp boundary_attr_src_input(%Attr{default: default}) when not is_nil(default),
+    do: {:default, :_}
+
+  defp boundary_attr_src_input(%Attr{}), do: {:optional, :no_default}
+
+  defp boundary_item_field_src_input(%ItemField{required: true}), do: {:required, :_}
+
+  defp boundary_item_field_src_input(%ItemField{default: default}) when not is_nil(default),
+    do: {:default, :_}
+
+  defp boundary_item_field_src_input(%ItemField{}), do: {:optional, :no_default}
+
+  defp validate_native_navigation(diagnostics, node, roles) do
+    if node.semantic_type in ["link", "button"] and
+         Map.has_key?(node.attributes, "navigation") and not Map.has_key?(roles, :link_url) do
+      case LiveFrames.StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
+        {:ok, _attrs} ->
+          diagnostics
+
+        {:error, _reason} ->
+          native_error(
+            diagnostics,
+            "static_navigation_invalid",
+            "internal static navigation is invalid",
+            node.node_id
+          )
+      end
+    else
+      diagnostics
+    end
+  end
+
+  defp native_error(diagnostics, code, message, id) do
+    add(
+      diagnostics,
+      error_at("componentization_plan.native_generation." <> code, message, "nodes[#{id}]")
+    )
   end
 
   defp normalized_registry(registry) when is_map(registry) and not is_struct(registry),
