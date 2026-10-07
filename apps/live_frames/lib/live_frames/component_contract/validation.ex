@@ -12,6 +12,7 @@ defmodule LiveFrames.ComponentContract.Validation do
   alias LiveFrames.ComponentContract.Slot
 
   @banned_exact ~w(post_title featured_image query_results)
+  @heading_values [1, 2, 3, 4, 5, 6]
   @name_pattern ~r/^[a-z][a-z0-9_]*$/
   @generation_token_pattern ~r/^[a-z][a-z0-9_]*$/
   @categories [:primitive, :component, :pattern, :section]
@@ -132,25 +133,218 @@ defmodule LiveFrames.ComponentContract.Validation do
         c != Slot.first_wave_cardinality()
       end)
 
-    cond do
-      attrs_any or fields_any ->
-        [
-          err(
-            "component_contract.attr.type_invalid",
-            ":any is not generation-eligible in format 1.0.0"
-          )
-        ]
+    type_diagnostics =
+      cond do
+        attrs_any or fields_any ->
+          [
+            err(
+              "component_contract.attr.type_invalid",
+              ":any is not generation-eligible in format 1.0.0"
+            )
+          ]
 
-      bad_slots ->
+        bad_slots ->
+          [
+            err(
+              "component_contract.slot.cardinality_invalid",
+              "only first-wave slot cardinality is generation-eligible"
+            )
+          ]
+
+        true ->
+          []
+      end
+
+    type_diagnostics ++
+      generation_item_field_type_diagnostics(contract) ++
+      generation_validation_diagnostics(contract) ++
+      generation_default_diagnostics(contract)
+  end
+
+  defp generation_item_field_type_diagnostics(contract) do
+    contract.collection_inputs
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {%CollectionInput{item_fields: fields}, collection_index} ->
+      fields
+      |> Enum.with_index()
+      |> Enum.flat_map(fn
+        {%ItemField{type: :global}, field_index} ->
+          [
+            err_at(
+              "component_contract.item_field.type_invalid",
+              ":global is not generation-eligible for collection item fields",
+              path: "collection_inputs[#{collection_index}].item_fields[#{field_index}].type"
+            )
+          ]
+
+        _ ->
+          []
+      end)
+    end)
+  end
+
+  defp generation_validation_diagnostics(contract) do
+    count_attr_names = generation_count_attr_names(contract)
+    count_item_fields = generation_count_item_fields(contract)
+
+    attr_diagnostics =
+      contract.public_attrs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {%Attr{name: name, type: type, validation: validation}, index} ->
+        generation_validation_diagnostic(
+          validation,
+          type,
+          MapSet.member?(count_attr_names, name),
+          "public_attrs[#{index}].validation"
+        )
+      end)
+
+    item_field_diagnostics =
+      contract.collection_inputs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {%CollectionInput{
+                             source_collection_binding_id: collection_id,
+                             item_fields: fields
+                           }, collection_index} ->
+        fields
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {%ItemField{name: name, type: type, validation: validation},
+                             field_index} ->
+          generation_validation_diagnostic(
+            validation,
+            type,
+            MapSet.member?(count_item_fields, {collection_id, name}),
+            "collection_inputs[#{collection_index}].item_fields[#{field_index}].validation"
+          )
+        end)
+      end)
+
+    attr_diagnostics ++ item_field_diagnostics
+  end
+
+  defp generation_validation_diagnostic(validation, type, count?, path) do
+    case Json.normalize(validation) do
+      {:ok, normalized} ->
+        if supported_generation_validation?(normalized, type, count?) do
+          []
+        else
+          [
+            err_at(
+              "component_contract.generation.validation_unsupported",
+              "validation metadata is not supported for native generation",
+              path: path
+            )
+          ]
+        end
+
+      :error ->
         [
-          err(
-            "component_contract.slot.cardinality_invalid",
-            "only first-wave slot cardinality is generation-eligible"
+          err_at(
+            "component_contract.generation.validation_unsupported",
+            "validation metadata is not supported for native generation",
+            path: path
           )
         ]
+    end
+  end
+
+  defp supported_generation_validation?(%{} = validation, type, count?) do
+    cond do
+      map_size(validation) == 0 ->
+        true
+
+      count? ->
+        count_validation_supported?(validation)
+
+      type == :integer ->
+        validation == %{"values" => @heading_values}
 
       true ->
+        false
+    end
+  end
+
+  defp count_validation_supported?(%{"min" => min} = validation)
+       when map_size(validation) == 1 and is_number(min),
+       do: min >= 0
+
+  defp count_validation_supported?(_validation), do: false
+
+  defp generation_count_attr_names(contract) do
+    contract.collection_inputs
+    |> Enum.map(& &1.count_attr_name)
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
+  end
+
+  defp generation_count_item_fields(contract) do
+    contract.collection_inputs
+    |> Enum.flat_map(fn
+      %CollectionInput{
+        parent_collection_binding_id: parent_id,
+        count_item_field_name: field_name
+      }
+      when is_binary(parent_id) and is_binary(field_name) ->
+        [{parent_id, field_name}]
+
+      _ ->
         []
+    end)
+    |> MapSet.new()
+  end
+
+  defp generation_default_diagnostics(contract) do
+    attr_diagnostics =
+      contract.public_attrs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {%Attr{default: default}, index} ->
+        generation_default_diagnostic(default, "public_attrs[#{index}].default")
+      end)
+
+    item_field_diagnostics =
+      contract.collection_inputs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {%CollectionInput{item_fields: fields}, collection_index} ->
+        fields
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {%ItemField{default: default}, field_index} ->
+          generation_default_diagnostic(
+            default,
+            "collection_inputs[#{collection_index}].item_fields[#{field_index}].default"
+          )
+        end)
+      end)
+
+    attr_diagnostics ++ item_field_diagnostics
+  end
+
+  defp generation_default_diagnostic(nil, _path), do: []
+
+  defp generation_default_diagnostic(default, path) do
+    case Json.normalize(default) do
+      {:ok, normalized} ->
+        case LiveFrames.NativeGenerator.Literal.render(normalized) do
+          {:ok, _} ->
+            []
+
+          {:error, _} ->
+            [
+              err_at(
+                "component_contract.generation.default_unrepresentable",
+                "default cannot be represented as a canonical JSON literal",
+                path: path
+              )
+            ]
+        end
+
+      :error ->
+        [
+          err_at(
+            "component_contract.generation.default_unrepresentable",
+            "default cannot be represented as a canonical JSON literal",
+            path: path
+          )
+        ]
     end
   end
 

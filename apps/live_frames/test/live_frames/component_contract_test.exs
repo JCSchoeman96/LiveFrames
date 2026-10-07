@@ -694,4 +694,198 @@ defmodule LiveFrames.ComponentContractTest do
       assert Enum.any?(diagnostics, &(&1.code == "component_contract.generation.intent_invalid"))
     end
   end
+
+  describe "generation capability prerequisites" do
+    test "reject unsupported Attr validation metadata" do
+      contract =
+        base_contract(
+          public_attrs: [attr("heading_level", type: :integer, validation: %{"min" => 0})]
+        )
+
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               )
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "component_contract.generation.validation_unsupported" and
+                 diagnostic.path == "public_attrs[0].validation"
+             end)
+    end
+
+    test "reject unsupported ItemField validation metadata" do
+      contract =
+        base_contract(
+          public_attrs: [attr("items", type: :list)],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "items",
+              public_attr_name: "items",
+              item_fields: [
+                item_field("heading_level", type: :integer, validation: %{"min" => 0})
+              ]
+            }
+          ]
+        )
+
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               )
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "component_contract.generation.validation_unsupported" and
+                 diagnostic.path == "collection_inputs[0].item_fields[0].validation"
+             end)
+    end
+
+    test "reject ItemField global and any types for generation" do
+      for type <- [:global, :any] do
+        contract =
+          base_contract(
+            public_attrs: [attr("items", type: :list)],
+            collection_inputs: [
+              %CollectionInput{
+                source_collection_binding_id: "items",
+                public_attr_name: "items",
+                item_fields: [item_field("value", type: type)]
+              }
+            ]
+          )
+
+        assert {:error, diagnostics} =
+                 ComponentContract.validate_generation_prerequisites(
+                   contract,
+                   LiveFrames.IR.DesignDocument.new()
+                 )
+
+        assert Enum.any?(diagnostics, fn diagnostic ->
+                 diagnostic.code ==
+                   if(type == :global,
+                     do: "component_contract.item_field.type_invalid",
+                     else: "component_contract.attr.type_invalid"
+                   )
+               end)
+      end
+    end
+
+    test "reject Attr any type for generation" do
+      contract = base_contract(public_attrs: [attr("value", type: :any)])
+
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               )
+
+      assert Enum.any?(diagnostics, &(&1.code == "component_contract.attr.type_invalid"))
+    end
+
+    test "reject defaults that are not representable JSON literals" do
+      contract =
+        base_contract(
+          public_attrs: [attr("value", default: {:unsupported, 1})],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "items",
+              public_attr_name: "items",
+              item_fields: [item_field("value", default: {:unsupported, 2})]
+            }
+          ]
+        )
+
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               )
+
+      assert Enum.count(diagnostics, &(&1.code == "component_contract.metadata.invalid")) >= 2
+    end
+
+    test "accept non-negative count minimums including float values" do
+      for min <- [0, 0.5, 2.0] do
+        contract =
+          base_contract(
+            public_attrs: [
+              attr("items", type: :list),
+              attr("count", type: :integer, validation: %{"min" => min})
+            ],
+            collection_inputs: [
+              %CollectionInput{
+                source_collection_binding_id: "items",
+                public_attr_name: "items",
+                count_attr_name: "count"
+              }
+            ]
+          )
+
+        assert ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               ) == :ok
+      end
+    end
+
+    test "reject extra count validation keys" do
+      contract =
+        base_contract(
+          public_attrs: [
+            attr("items", type: :list),
+            attr("count", type: :integer, validation: %{"min" => 0, "values" => [0]})
+          ],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "items",
+              public_attr_name: "items",
+              count_attr_name: "count"
+            }
+          ]
+        )
+
+      assert {:error, diagnostics} =
+               ComponentContract.validate_generation_prerequisites(
+                 contract,
+                 LiveFrames.IR.DesignDocument.new()
+               )
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "component_contract.generation.validation_unsupported" and
+                 diagnostic.path == "public_attrs[1].validation"
+             end)
+    end
+
+    test "normalizes atom keys in Attr and ItemField defaults" do
+      contract =
+        base_contract(
+          public_attrs: [
+            attr("items", type: :list, default: [%{label: "item"}])
+          ],
+          collection_inputs: [
+            %CollectionInput{
+              source_collection_binding_id: "items",
+              public_attr_name: "items",
+              item_fields: [item_field("metadata", type: :map, default: %{label: "item"})]
+            }
+          ]
+        )
+
+      assert ComponentContract.validate_generation_prerequisites(
+               contract,
+               LiveFrames.IR.DesignDocument.new()
+             ) == :ok
+
+      serialized = ComponentContract.to_map(contract)
+      assert [%{"label" => "item"}] = Enum.at(serialized["public_attrs"], 0)["default"]
+
+      assert %{"label" => "item"} =
+               serialized["collection_inputs"]
+               |> Enum.at(0)
+               |> Map.fetch!("item_fields")
+               |> Enum.at(0)
+               |> Map.fetch!("default")
+    end
+  end
 end
