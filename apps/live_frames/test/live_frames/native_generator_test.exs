@@ -294,9 +294,12 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "href={Map.get(assigns, :href)}"
     assert source =~ "id={Map.get(assigns, :id)}"
     assert source =~ ~s/class={["lf-section-marketing-block", Map.get(assigns, :class)]}/
-    assert source =~ "{@rest}"
+    assert source =~ "{Map.get(assigns, :rest)}"
+    assert source =~ "lf_validate_first_wave_slots!"
+    assert source =~ "lf_src = Map.get(assigns, :src)"
     assert source =~ ~s/alt=""/
-    assert source =~ "alt={Map.get(assigns, :alt)}"
+    assert source =~ "image alt is required when source is present"
+    assert source =~ "case Map.get(assigns, :alt)"
     assert source =~ "render_slot(@actions)"
     refute source =~ "node_"
     refute source =~ "LiveFrames.Fidelity"
@@ -559,6 +562,229 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "lf-section-marketing-block"
     assert source =~ "<img src={@src}"
     assert source =~ ~s(alt="")
+  end
+
+  test "scalar BindingProjection link_url suppresses static navigation href" do
+    link_id = @link_id
+    %DesignNode{} = boundary = hd(rich_document().root_nodes)
+
+    document = %{
+      rich_document()
+      | root_nodes: [
+          %DesignNode{
+            boundary
+            | children:
+                Enum.map(boundary.children, fn
+                  %DesignNode{node_id: @link_id} = link ->
+                    %DesignNode{
+                      link
+                      | attributes: %{"navigation" => %{"href" => "/static"}}
+                    }
+
+                  other ->
+                    other
+                end)
+          }
+        ]
+    }
+
+    assert :ok = IR.validate(document)
+
+    c =
+      contract(
+        public_attrs: [attr("url")],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: "vb_url",
+            projection_kind: :scalar_attr,
+            public_attr_name: "url",
+            target_node_id: link_id
+          }
+        ]
+      )
+
+    document = %{
+      document
+      | value_bindings: %{
+          "vb_url" => %ValueBinding{
+            value_binding_id: "vb_url",
+            target_node_id: link_id,
+            target_kind: :link_url,
+            value_kind: :field,
+            scope: :site,
+            value_key: "url",
+            normalization_status: :normalized,
+            modifier_status: :none
+          }
+        }
+    }
+
+    p = plan(c, document)
+    source = hd(generate!(c, p, document).artifacts).content
+
+    assert source =~ "href={Map.get(assigns, :url)}"
+    refute source =~ ~s(href="/static")
+    refute source =~ "target="
+  end
+
+  test "top-level collection count emits runtime min validation helper" do
+    count_id = @paragraph_id
+    %DesignNode{} = boundary = hd(document().root_nodes)
+
+    c =
+      contract(
+        public_attrs: [
+          attr("items", :list),
+          attr("total", :integer, validation: %{"min" => 2})
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_x",
+            public_attr_name: "items",
+            count_attr_name: "total"
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_x",
+            projection_kind: :collection_attr,
+            public_attr_name: "items",
+            source_collection_binding_id: "cb_x",
+            target_node_id: count_id
+          },
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: "vb_count",
+            projection_kind: :collection_count_attr,
+            public_attr_name: "total",
+            source_collection_binding_id: "cb_x",
+            target_node_id: count_id
+          }
+        ]
+      )
+
+    document = %{
+      document()
+      | collection_bindings: %{
+          "cb_x" => %CollectionBinding{
+            collection_binding_id: "cb_x",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: count_id
+          }
+        },
+        value_bindings: %{
+          "vb_count" => %ValueBinding{
+            value_binding_id: "vb_count",
+            target_node_id: count_id,
+            target_kind: :text,
+            value_kind: :collection_count,
+            scope: :collection,
+            collection_binding_id: "cb_x",
+            normalization_status: :normalized,
+            modifier_status: :none
+          }
+        }
+    }
+
+    assert :ok = IR.validate(document)
+    p = plan(c, document)
+    source = hd(generate!(c, p, document).artifacts).content
+    assert source =~ "lf_validate_count!"
+    assert source =~ "lf_validate_count!(Map.get(assigns, :total), 2)"
+    refute source =~ "min:"
+  end
+
+  test "slot runtime guard rejects more than one entry" do
+    c =
+      contract(
+        public_attrs: [attr("title")],
+        public_slots: [
+          %Slot{name: "actions", semantic_purpose: "actions", consumer_responsibility: "caller"}
+        ]
+      )
+
+    rich_doc = rich_document()
+
+    p =
+      plan(c, rich_doc,
+        render_projections: [
+          render_attr("title", :text_content, @heading_id),
+          %RenderProjection{
+            public_slot_name: "actions",
+            target_node_id: @actions_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    source = hd(generate!(c, p, rich_doc).artifacts).content
+    assert source =~ "slot actions allows at most one entry"
+  end
+
+  test "Literal normalizes atom map keys without throwing" do
+    assert {:ok, literal} = LiveFrames.NativeGenerator.Literal.render(%{foo: "bar"})
+    assert literal =~ "\"foo\" => \"bar\""
+  end
+
+  test "button preserves safe normalized type submit attribute" do
+    %DesignNode{} = boundary = hd(rich_document().root_nodes)
+
+    document = %{
+      rich_document()
+      | root_nodes: [
+          %DesignNode{
+            boundary
+            | children:
+                Enum.map(boundary.children, fn
+                  %DesignNode{node_id: @actions_id} = actions ->
+                    %DesignNode{
+                      actions
+                      | children: [
+                          %DesignNode{
+                            node_id: DesignNode.deterministic_id([1, 4, 1]),
+                            semantic_type: "button",
+                            attributes: %{"type" => "submit"},
+                            content: "Go"
+                          }
+                        ]
+                    }
+
+                  other ->
+                    other
+                end)
+          }
+        ]
+    }
+
+    assert :ok = IR.validate(document)
+
+    c = contract(public_attrs: [attr("title")])
+    p = plan(c, document, render_projections: [render_attr("title", :text_content, @heading_id)])
+    source = hd(generate!(c, p, document).artifacts).content
+    assert source =~ ~s(type="submit")
+    refute source =~ "type=\"button\""
+  end
+
+  test "structured rich_text is generation_blocked before renderer" do
+    node =
+      %DesignNode{
+        node_id: @boundary_id,
+        semantic_type: "rich_text",
+        attributes: %{"tag" => "div"},
+        content: %{"blocks" => []}
+      }
+
+    document = %DesignDocument{root_nodes: [node]}
+    c = contract(public_attrs: [attr("title")])
+    p = plan(c, document)
+
+    assert {:error, :generation_blocked, diagnostics} = NativeGenerator.generate(c, p, document)
+
+    assert Enum.any?(diagnostics, fn d ->
+             d.code == "componentization_plan.native_generation.rich_text_structured_content"
+           end)
   end
 
   test "module naming helpers" do

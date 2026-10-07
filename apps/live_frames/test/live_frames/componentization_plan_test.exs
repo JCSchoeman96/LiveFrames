@@ -634,6 +634,27 @@ defmodule LiveFrames.ComponentizationPlanTest do
     assert_raise ValidationError, fn -> ComponentizationPlan.encode!(invalid) end
   end
 
+  test "C0 blocks paragraph child subtrees and structured rich_text content" do
+    paragraph =
+      %DesignNode{
+        node_id: "node_000001",
+        semantic_type: "paragraph",
+        children: [%DesignNode{node_id: "node_000001_000001", semantic_type: "generic"}]
+      }
+
+    assert_native_block(native_tuple(paragraph), "paragraph_children_forbidden")
+
+    rich_text =
+      %DesignNode{
+        node_id: "node_000001",
+        semantic_type: "rich_text",
+        attributes: %{"tag" => "div"},
+        content: %{"blocks" => []}
+      }
+
+    assert_native_block(native_tuple(rich_text), "rich_text_structured_content")
+  end
+
   test "the serializer to_map API returns diagnostics for malformed plans" do
     malformed = valid_plan(render_projections: [%{}])
     assert {:error, diagnostics} = Serializer.to_map(malformed)

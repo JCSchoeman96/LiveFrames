@@ -9,6 +9,8 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   alias LiveFrames.ComponentizationPlan.ReferenceValidation
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.IR.DesignNode
+  alias LiveFrames.ComponentContract.Json
+  alias LiveFrames.StaticMarkupContract
   alias LiveFrames.StaticNavigation
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.NativeGenerator.Diagnostic
@@ -43,7 +45,11 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               plan: nil,
               value_bindings: %{},
               collection_ordinals: %{},
-              attrs_by_name: %{}
+              attrs_by_name: %{},
+              binding_roles_by_node: %{},
+              binding_projection_by_node_role: %{},
+              effective_roles_by_node: %{},
+              count_attr_names: MapSet.new()
   end
 
   @spec build_indexes(ComponentContract.t(), ComponentizationPlan.t(), map(), map()) ::
@@ -99,6 +105,14 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
       attrs_by_name = Map.new(contract.public_attrs, &{&1.name, &1})
 
+      {binding_roles_by_node, binding_projection_by_node_role} =
+        build_binding_role_indexes(contract, nodes_by_id, value_bindings)
+
+      effective_roles_by_node =
+        merge_effective_roles(render_roles_by_node, binding_roles_by_node)
+
+      count_attr_names = count_public_attr_names(contract)
+
       {:ok,
        %Indexes{
          nodes_by_id: nodes_by_id,
@@ -119,9 +133,64 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          plan: plan,
          value_bindings: value_bindings,
          collection_ordinals: collection_ordinals,
-         attrs_by_name: attrs_by_name
+         attrs_by_name: attrs_by_name,
+         binding_roles_by_node: binding_roles_by_node,
+         binding_projection_by_node_role: binding_projection_by_node_role,
+         effective_roles_by_node: effective_roles_by_node,
+         count_attr_names: count_attr_names
        }}
     end
+  end
+
+  defp build_binding_role_indexes(contract, nodes_by_id, value_bindings) do
+    mini = %{value_bindings: value_bindings}
+
+    Enum.reduce(contract.binding_projections, {%{}, %{}}, fn projection, {by_node, by_key} ->
+      node = Map.get(nodes_by_id, projection.target_node_id)
+
+      role =
+        if node,
+          do: ReferenceValidation.native_binding_role(projection, node, mini),
+          else: :unsupported
+
+      if role in [:unsupported, :repeat] do
+        {by_node, by_key}
+      else
+        node_id = projection.target_node_id
+
+        by_node =
+          Map.update(by_node, node_id, %{role => projection}, &Map.put(&1, role, projection))
+
+        by_key = Map.put(by_key, {node_id, role}, projection)
+        {by_node, by_key}
+      end
+    end)
+  end
+
+  defp merge_effective_roles(render_roles_by_node, binding_roles_by_node) do
+    ids =
+      MapSet.union(
+        MapSet.new(Map.keys(render_roles_by_node)),
+        MapSet.new(Map.keys(binding_roles_by_node))
+      )
+
+    Map.new(ids, fn id ->
+      roles =
+        Map.merge(
+          Map.get(render_roles_by_node, id, %{}),
+          Map.get(binding_roles_by_node, id, %{})
+        )
+
+      {id, roles}
+    end)
+  end
+
+  defp count_public_attr_names(contract) do
+    contract.binding_projections
+    |> Enum.filter(&(&1.projection_kind == :collection_count_attr))
+    |> Enum.map(& &1.public_attr_name)
+    |> Enum.reject(&is_nil/1)
+    |> MapSet.new()
   end
 
   defp build_collection_repeat_index(contract, collection_ordinals) do
@@ -189,9 +258,15 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
     with {:ok, attr_lines} <- build_attr_lines(contract),
          slot_lines <- Enum.map(contract.public_slots, &slot_line/1),
-         helper_lines <- item_field_helpers(indexes) do
+         helper_lines <- runtime_helper_lines(indexes) do
       assemble_module_source(indexes, heex_body, attr_lines, slot_lines, helper_lines)
     end
+  end
+
+  defp runtime_helper_lines(indexes) do
+    item_field_helpers(indexes) ++
+      slot_runtime_helpers(indexes.contract.public_slots) ++
+      count_runtime_helpers(indexes)
   end
 
   defp build_attr_lines(contract) do
@@ -212,6 +287,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     #{indent_lines(slot_lines, 2)}
 
       def #{indexes.function_name}(assigns) do
+        lf_validate_first_wave_slots!(assigns)
         ~H\"\"\"
     #{indent(heex_body, 4)}
         \"\"\"
@@ -270,9 +346,78 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp default_literal(nil), do: :omit
 
   defp default_literal(value) do
-    case LiveFrames.NativeGenerator.Literal.render(value) do
-      {:ok, literal} -> {:ok, literal}
-      {:error, _} -> {:error, :unrepresentable}
+    case Json.normalize(value) do
+      {:ok, normalized} ->
+        case LiveFrames.NativeGenerator.Literal.render(normalized) do
+          {:ok, literal} -> {:ok, literal}
+          {:error, _} -> {:error, :unrepresentable}
+        end
+
+      :error ->
+        {:error, :unrepresentable}
+    end
+  end
+
+  defp slot_runtime_helpers([]) do
+    ["", "defp lf_validate_first_wave_slots!(_assigns), do: :ok"]
+  end
+
+  defp slot_runtime_helpers(slots) do
+    [
+      "",
+      "defp lf_validate_first_wave_slots!(assigns) do"
+    ] ++
+      Enum.flat_map(slots, &slot_guard_lines/1) ++
+      ["  :ok", "end"]
+  end
+
+  defp slot_guard_lines(%Slot{name: name, required: required?}) do
+    [
+      "  case Map.get(assigns, :#{name}) do",
+      "    nil ->",
+      if(required?,
+        do: "      raise ArgumentError, \"required slot #{name} is missing\"",
+        else: "      :ok"
+      ),
+      "    [] ->",
+      if(required?,
+        do: "      raise ArgumentError, \"required slot #{name} is missing\"",
+        else: "      :ok"
+      ),
+      "    [_] -> :ok",
+      "    _ -> raise ArgumentError, \"slot #{name} allows at most one entry\"",
+      "  end"
+    ]
+  end
+
+  defp count_runtime_helpers(indexes) do
+    count_specs =
+      indexes.contract.public_attrs
+      |> Enum.filter(fn attr -> MapSet.member?(indexes.count_attr_names, attr.name) end)
+      |> Enum.map(fn attr ->
+        min =
+          case attr.validation do
+            %{"min" => n} when is_number(n) -> n
+            _ -> 0
+          end
+
+        {attr.name, min}
+      end)
+
+    if count_specs == [] do
+      []
+    else
+      [
+        "",
+        "defp lf_validate_count!(value, min) when is_integer(min) and min >= 0 do",
+        "  cond do",
+        "    is_nil(value) -> nil",
+        "    is_integer(value) and value >= min -> Integer.to_string(value)",
+        "    true ->",
+        "      raise ArgumentError, \"collection count must be an integer >= \" <> Integer.to_string(min)",
+        "  end",
+        "end"
+      ]
     end
   end
 
@@ -549,99 +694,142 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp render_image(indexes, node, roles, collection_stack, is_root?) do
-    src = role_expr(indexes, node, roles, :asset_src, collection_stack)
+  defp render_image(indexes, node, _roles, collection_stack, is_root?) do
+    node_id = node.node_id
     figure? = Map.get(node.attributes, "tag") == "figure"
 
-    if src == nil do
-      if node.node_id == indexes.boundary_id do
-        {:error,
-         Diagnostic.error(
-           "native_generator.projection_missing",
-           "boundary image is missing asset_src placement"
+    case asset_src_source_spec(indexes, node_id, collection_stack) do
+      nil ->
+        if node_id == indexes.boundary_id do
+          {:error,
+           Diagnostic.error(
+             "native_generator.projection_missing",
+             "boundary image is missing asset_src placement"
+           )}
+        else
+          {:ok, ""}
+        end
+
+      {:required, src_expr} ->
+        {:ok,
+         image_unit_heex(
+           indexes,
+           node,
+           collection_stack,
+           is_root?,
+           figure?,
+           src_expr,
+           required_src?: true
          )}
-      else
-        {:ok, ""}
+
+      {:optional, src_expr} ->
+        {:ok,
+         """
+         <%= if (lf_src = #{src_expr}) not in [nil, ""] do %>
+         #{indent(image_unit_heex(indexes, node, collection_stack, is_root?, figure?, "lf_src", required_src?: true), 2)}
+         <% end %>
+         """
+         |> String.trim_trailing()}
+    end
+  end
+
+  defp image_unit_heex(indexes, node, collection_stack, is_root?, figure?, src_var, _opts) do
+    policy = image_alt_policy(indexes, node.node_id, collection_stack)
+
+    img_attrs =
+      if figure?, do: "", else: root_attrs(indexes, node, collection_stack, is_root?, "img")
+
+    img_inner =
+      case policy do
+        :decorative ->
+          "<img#{img_attrs} src={#{src_var}} alt=\"\" />"
+
+        :consumer ->
+          alt_expr = consumer_alt_expr(indexes, node.node_id, collection_stack)
+
+          """
+          <%= case #{alt_expr} do %>
+            <% lf_alt when lf_alt in [nil, ""] -> %>
+              <% raise ArgumentError, "image alt is required when source is present" %>
+            <% lf_alt -> %>
+              <img#{img_attrs} src={#{src_var}} alt={lf_alt} />
+          <% end %>
+          """
+          |> String.trim_trailing()
+
+        :none ->
+          "<img#{img_attrs} src={#{src_var}} />"
       end
+
+    if figure? do
+      figure_attrs = root_attrs(indexes, node, collection_stack, is_root?, "figure")
+      "<figure#{figure_attrs}>#{img_inner}</figure>"
     else
-      alt = image_alt_expr(indexes, node, roles, collection_stack)
-      img = "<img src={#{src}}#{alt} />"
-
-      if figure? do
-        attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, "figure")
-        {:ok, "<figure#{attrs}>#{img}</figure>"}
-      else
-        attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, "img")
-        {:ok, "<img#{attrs} src={#{src}}#{alt} />"}
-      end
+      img_inner
     end
   end
 
-  defp image_alt_expr(indexes, node, roles, collection_stack) do
-    policy = image_alt_policy(indexes, node, roles, collection_stack)
+  defp consumer_alt_expr(indexes, node_id, collection_stack) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(:asset_alt) do
+      %RenderProjection{public_attr_name: name} ->
+        attr_expr(indexes, name)
 
-    case policy do
-      :decorative ->
-        ~s( alt="")
+      %BindingProjection{} = projection ->
+        binding_collection_expr(indexes, projection, collection_stack)
 
-      :consumer ->
-        expr =
-          role_expr(indexes, node, roles, :asset_alt, collection_stack) ||
-            collection_alt_field_expr(indexes, node.node_id, collection_stack)
+      nil ->
+        case collection_alt_binding(indexes, node_id) do
+          %BindingProjection{} = projection ->
+            binding_collection_expr(indexes, projection, collection_stack)
 
-        if expr, do: " alt={#{expr}}", else: ""
-
-      :none ->
-        ""
+          nil ->
+            "nil"
+        end
     end
   end
 
-  defp collection_alt_field_expr(indexes, node_id, collection_stack) do
-    with policy when policy == "consumer_supplied" <-
-           collection_item_image_policy(indexes, node_id, collection_stack),
-         alt_field <- collection_alt_field_name(indexes, node_id),
-         %BindingProjection{source_collection_binding_id: cb_id} <-
-           Enum.find(indexes.contract.binding_projections, fn projection ->
-             projection.projection_kind == :collection_item_field and
-               projection.target_node_id == node_id and projection.item_field_name == alt_field
-           end) do
-      {var, ord} = collection_item_ref(cb_id, collection_stack, indexes)
-      "lf_item_field(#{var}, #{ord}, #{inspect(alt_field)})"
-    else
-      _ -> nil
-    end
-  end
-
-  defp collection_alt_field_name(indexes, node_id) do
-    indexes.contract.binding_projections
-    |> Enum.find_value(fn
+  defp collection_alt_binding(indexes, node_id) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(:asset_src) do
       %BindingProjection{
         projection_kind: :collection_item_field,
         target_node_id: ^node_id,
-        item_field_name: field_name,
-        source_collection_binding_id: cb_id
-      } = projection ->
-        value_binding = Map.get(indexes.value_bindings, projection.source_binding_id)
+        source_collection_binding_id: cb_id,
+        item_field_name: field_name
+      } ->
+        alt_field = collection_alt_field_name(indexes, cb_id, field_name)
 
-        if match?(%ValueBinding{target_kind: :asset}, value_binding) do
-          fields = Map.get(indexes.item_fields_by_collection, cb_id, %{})
-          accessibility = get_in(fields, [field_name, Access.key(:accessibility)]) || %{}
-          Map.get(accessibility, "alt_item_field_name") || "alt"
-        end
+        Map.get(indexes.binding_projection_by_node_role, {node_id, :asset_alt}) ||
+          find_alt_field_projection(indexes, node_id, alt_field)
 
       _ ->
         nil
-    end)
+    end
   end
 
-  defp image_alt_policy(indexes, node, roles, collection_stack) do
-    cond do
-      Map.has_key?(roles, :asset_alt) ->
+  defp find_alt_field_projection(indexes, node_id, _alt_field) do
+    Map.get(indexes.binding_projection_by_node_role, {node_id, :asset_alt}) ||
+      case Map.get(indexes.binding_roles_by_node, node_id, %{}) |> Map.get(:asset_alt) do
+        %BindingProjection{} = p -> p
+        _ -> nil
+      end
+  end
+
+  defp collection_alt_field_name(indexes, cb_id, field_name) do
+    fields = Map.get(indexes.item_fields_by_collection, cb_id, %{})
+    accessibility = get_in(fields, [field_name, Access.key(:accessibility)]) || %{}
+    Map.get(accessibility, "alt_item_field_name") || "alt"
+  end
+
+  defp image_alt_policy(indexes, node_id, _collection_stack) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(:asset_alt) do
+      %RenderProjection{} ->
         :consumer
 
-      true ->
-        case static_image_attr_policy(indexes, roles, collection_stack) ||
-               collection_item_image_policy(indexes, node.node_id, collection_stack) do
+      %BindingProjection{} ->
+        :consumer
+
+      nil ->
+        case asset_src_accessibility_policy(indexes, node_id) do
           "decorative" -> :decorative
           "consumer_supplied" -> :consumer
           _ -> :none
@@ -649,44 +837,61 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp static_image_attr_policy(indexes, roles, collection_stack) do
-    with {:attr, name} <- role_binding_target(roles, :asset_src),
-         %Attr{accessibility: accessibility} <-
-           Map.get(indexes.contract.public_attrs |> Enum.map(&{&1.name, &1}) |> Map.new(), name) do
-      Map.get(accessibility, "image_alt_policy")
-    else
-      _ -> collection_item_image_policy(indexes, roles, collection_stack)
-    end
-  end
+  defp asset_src_accessibility_policy(indexes, node_id) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(:asset_src) do
+      %RenderProjection{public_attr_name: name} ->
+        Map.get(Map.fetch!(indexes.attrs_by_name, name), :accessibility, %{})
+        |> Map.get("image_alt_policy")
 
-  defp collection_item_image_policy(indexes, node_id, _collection_stack) do
-    indexes.contract.binding_projections
-    |> Enum.find_value(fn
       %BindingProjection{
         projection_kind: :collection_item_field,
-        target_node_id: ^node_id,
-        item_field_name: field_name,
-        source_collection_binding_id: cb_id
-      } = projection ->
-        value_binding = Map.get(indexes.value_bindings, projection.source_binding_id)
+        source_collection_binding_id: cb_id,
+        item_field_name: field_name
+      } ->
+        fields = Map.get(indexes.item_fields_by_collection, cb_id, %{})
+        get_in(fields, [field_name, Access.key(:accessibility), "image_alt_policy"])
 
-        if match?(%ValueBinding{target_kind: :asset}, value_binding) do
-          fields = Map.get(indexes.item_fields_by_collection, cb_id, %{})
-          accessibility = get_in(fields, [field_name, Access.key(:accessibility)]) || %{}
-          Map.get(accessibility, "image_alt_policy")
-        end
+      %BindingProjection{projection_kind: :scalar_attr, public_attr_name: name} ->
+        Map.get(Map.fetch!(indexes.attrs_by_name, name), :accessibility, %{})
+        |> Map.get("image_alt_policy")
 
       _ ->
         nil
-    end)
+    end
   end
 
-  defp render_heading(indexes, node, roles, collection_stack, is_root?) do
-    text = role_expr(indexes, node, roles, :text_content, collection_stack)
+  defp asset_src_source_spec(indexes, node_id, collection_stack) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(:asset_src) do
+      %RenderProjection{public_attr_name: name} ->
+        attr_source_spec(indexes, name)
+
+      %BindingProjection{} = projection ->
+        {:required, binding_collection_expr(indexes, projection, collection_stack)}
+
+      nil ->
+        nil
+    end
+  end
+
+  defp attr_source_spec(indexes, name) do
+    attr = Map.fetch!(indexes.attrs_by_name, name)
+    expr = attr_expr(indexes, name)
+
+    if attr.required or attr.default != nil do
+      {:required, expr}
+    else
+      {:optional, expr}
+    end
+  end
+
+  defp render_heading(indexes, node, _roles, collection_stack, is_root?) do
+    text = role_expr(indexes, node.node_id, :text_content, collection_stack)
     body = static_or_expr_body(node, text)
 
+    roles = Map.get(indexes.effective_roles_by_node, node.node_id, %{})
+
     if Map.has_key?(roles, :heading_level) do
-      level_expr = role_expr(indexes, node, roles, :heading_level, collection_stack)
+      level_expr = role_expr(indexes, node.node_id, :heading_level, collection_stack)
 
       if level_expr == nil do
         {:error,
@@ -695,12 +900,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
            "heading_level placement could not be resolved"
          )}
       else
-        dynamic_heading_markup(indexes, node, roles, collection_stack, is_root?, level_expr, body)
+        dynamic_heading_markup(indexes, node, collection_stack, is_root?, level_expr, body)
       end
     else
       case ReferenceValidation.native_tag(node, false) do
         {:ok, tag} when is_binary(tag) ->
-          attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, tag)
+          attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
 
           with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
             {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
@@ -716,10 +921,10 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp dynamic_heading_markup(indexes, node, roles, collection_stack, is_root?, level_expr, body) do
+  defp dynamic_heading_markup(indexes, node, collection_stack, is_root?, level_expr, body) do
     branches =
       for level <- 1..6, tag <- ["h#{level}"] do
-        attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, tag)
+        attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
         "    <% #{level} -> %><#{tag}#{attrs}>#{body}</#{tag}>"
       end
 
@@ -732,40 +937,62 @@ defmodule LiveFrames.NativeGenerator.Renderer do
      |> String.trim_trailing()}
   end
 
-  defp render_link(indexes, node, roles, collection_stack, is_root?) do
-    render_anchor(indexes, node, roles, collection_stack, is_root?)
+  defp render_link(indexes, node, _roles, collection_stack, is_root?) do
+    render_anchor(indexes, node, collection_stack, is_root?)
   end
 
-  defp render_button(indexes, node, roles, collection_stack, is_root?) do
-    if static_navigation?(node, roles) do
-      render_anchor(indexes, node, roles, collection_stack, is_root?)
-    else
-      attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, "button")
+  defp node_owns_role?(indexes, node_id, role) do
+    Map.has_key?(Map.get(indexes.effective_roles_by_node, node_id, %{}), role)
+  end
 
-      with {:ok, body} <- interactive_body(indexes, node, roles, collection_stack, is_root?) do
-        {:ok, "<button#{attrs} type=\"button\">#{body}</button>"}
+  defp safe_static_attribute_fragment(%DesignNode{attributes: attrs}, tag) when is_map(attrs) do
+    attrs
+    |> Map.drop(["tag", "navigation", "class", "id"])
+    |> Enum.filter(fn {name, value} ->
+      StaticMarkupContract.safe_attribute?(name, value, tag)
+    end)
+    |> Enum.sort_by(fn {name, _} -> name end)
+    |> Enum.map_join("", fn {name, value} ->
+      " #{name}=\"#{html_escape_attr(value)}\""
+    end)
+  end
+
+  defp safe_static_attribute_fragment(_node, _tag), do: ""
+
+  defp render_button(indexes, node, _roles, collection_stack, is_root?) do
+    if static_navigation?(indexes, node) do
+      render_anchor(indexes, node, collection_stack, is_root?)
+    else
+      tag = "button"
+      attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
+      static = safe_static_attribute_fragment(node, tag)
+
+      with {:ok, body} <- interactive_body(indexes, node, collection_stack, is_root?) do
+        {:ok, "<button#{attrs}#{static}>#{body}</button>"}
       end
     end
   end
 
-  defp render_anchor(indexes, node, roles, collection_stack, is_root?) do
-    href = role_expr(indexes, node, roles, :link_url, collection_stack)
-    attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, "a")
-    nav_attrs = static_navigation_attrs(node, roles)
+  defp render_anchor(indexes, node, collection_stack, is_root?) do
+    node_id = node.node_id
+    href = role_expr(indexes, node_id, :link_url, collection_stack)
+    attrs = root_attrs(indexes, node, collection_stack, is_root?, "a")
+    nav_attrs = static_navigation_attrs(indexes, node)
     href_attr = if href, do: " href={#{href}}", else: ""
+    static = safe_static_attribute_fragment(node, "a")
 
-    with {:ok, body} <- interactive_body(indexes, node, roles, collection_stack, is_root?) do
-      {:ok, "<a#{attrs}#{nav_attrs}#{href_attr}>#{body}</a>"}
+    with {:ok, body} <- interactive_body(indexes, node, collection_stack, is_root?) do
+      {:ok, "<a#{attrs}#{static}#{nav_attrs}#{href_attr}>#{body}</a>"}
     end
   end
 
-  defp static_navigation?(node, roles) do
+  defp static_navigation?(indexes, node) do
     node.semantic_type in ["link", "button"] and Map.has_key?(node.attributes, "navigation") and
-      not Map.has_key?(roles, :link_url)
+      not node_owns_role?(indexes, node.node_id, :link_url)
   end
 
-  defp static_navigation_attrs(node, roles) do
-    if static_navigation?(node, roles) do
+  defp static_navigation_attrs(indexes, node) do
+    if static_navigation?(indexes, node) do
       case StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
         {:ok, attrs} ->
           Enum.map_join(attrs, "", fn {name, value} ->
@@ -786,8 +1013,8 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     |> String.replace("\"", "&quot;")
   end
 
-  defp interactive_body(indexes, node, roles, collection_stack, is_root?) do
-    text = role_expr(indexes, node, roles, :text_content, collection_stack)
+  defp interactive_body(indexes, node, collection_stack, is_root?) do
+    text = role_expr(indexes, node.node_id, :text_content, collection_stack)
     prefix = static_or_expr_body(node, text)
 
     with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
@@ -795,7 +1022,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp render_generic(indexes, node, type, roles, collection_stack, is_root?) do
+  defp render_generic(indexes, node, type, _roles, collection_stack, is_root?) do
     case ReferenceValidation.native_tag(node, false) do
       {:ok, :dynamic_heading} ->
         {:error,
@@ -805,12 +1032,12 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          )}
 
       {:ok, tag} when is_binary(tag) ->
-        attrs = root_attrs(indexes, node, roles, collection_stack, is_root?, tag)
+        attrs = root_attrs(indexes, node, collection_stack, is_root?, tag)
 
         body =
           static_or_expr_body(
             node,
-            role_expr(indexes, node, roles, :text_content, collection_stack)
+            role_expr(indexes, node.node_id, :text_content, collection_stack)
           )
 
         with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
@@ -826,26 +1053,49 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp root_attrs(indexes, node, roles, collection_stack, is_root?, tag) do
+  defp root_attrs(indexes, node, collection_stack, is_root?, _tag) do
+    node_id = node.node_id
+    roles = Map.get(indexes.effective_roles_by_node, node_id, %{})
+
     id_part =
       if is_root? and Map.has_key?(roles, :root_id) do
-        expr = role_expr(indexes, node, roles, :root_id, collection_stack)
+        expr = role_expr(indexes, node_id, :root_id, collection_stack)
         if expr, do: " id={#{expr}}", else: ""
       else
         ""
       end
 
     class_part = class_attr(indexes, node, roles, collection_stack, is_root?)
+    global_part = root_global_attrs_fragment(indexes, node_id, roles, collection_stack, is_root?)
 
-    global_part =
-      if is_root? and Map.has_key?(roles, :root_global_attrs) do
-        name = projection_attr_name(roles, :root_global_attrs)
-        " {@#{name}}"
-      else
-        ""
+    id_part <> class_part <> global_part
+  end
+
+  defp root_global_attrs_fragment(indexes, _node_id, roles, _collection_stack, is_root?) do
+    if is_root? and Map.has_key?(roles, :root_global_attrs) do
+      case Map.get(roles, :root_global_attrs) do
+        %RenderProjection{public_attr_name: name} ->
+          spread_optional_global(indexes, name)
+
+        %BindingProjection{public_attr_name: name} ->
+          spread_optional_global(indexes, name)
+
+        _ ->
+          ""
       end
+    else
+      ""
+    end
+  end
 
-    if tag == "img", do: id_part <> class_part, else: id_part <> class_part <> global_part
+  defp spread_optional_global(indexes, name) do
+    attr = Map.fetch!(indexes.attrs_by_name, name)
+
+    if attr.required or attr.default != nil do
+      " {@#{name}}"
+    else
+      " {Map.get(assigns, :#{name})}"
+    end
   end
 
   defp class_attr(indexes, node, roles, collection_stack, is_root?) do
@@ -854,14 +1104,14 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
     cond do
       package? and consumer? ->
-        expr = role_expr(indexes, node, roles, :root_class, collection_stack)
+        expr = role_expr(indexes, node.node_id, :root_class, collection_stack)
         " class={[#{inspect(indexes.package_root_class)}, #{expr || "nil"}]}"
 
       package? ->
         " class={#{inspect(indexes.package_root_class)}}"
 
       consumer? ->
-        expr = role_expr(indexes, node, roles, :root_class, collection_stack)
+        expr = role_expr(indexes, node.node_id, :root_class, collection_stack)
         if expr, do: " class={#{expr}}", else: ""
 
       true ->
@@ -890,51 +1140,62 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     end
   end
 
-  defp role_expr(indexes, node, roles, role, collection_stack) do
-    case Map.get(roles, role) do
+  defp role_expr(indexes, node_id, role, collection_stack) do
+    case Map.get(indexes.effective_roles_by_node, node_id, %{}) |> Map.get(role) do
       %RenderProjection{public_attr_name: name} ->
-        attr_expr(indexes, name)
+        public_role_expr(indexes, name, role)
+
+      %BindingProjection{} = projection ->
+        binding_role_value_expr(indexes, projection, role, collection_stack)
 
       nil ->
-        binding_expr(indexes, node.node_id, role, collection_stack)
+        nil
     end
   end
 
-  defp binding_expr(indexes, node_id, role, collection_stack) do
-    indexes.contract.binding_projections
-    |> Enum.find_value(fn projection ->
-      if projection.target_node_id != node_id do
-        nil
-      else
-        binding_role_expr(indexes, projection, role, collection_stack)
-      end
-    end)
+  defp public_role_expr(indexes, name, role) do
+    expr = attr_expr(indexes, name)
+
+    if role == :text_content and MapSet.member?(indexes.count_attr_names, name) do
+      attr = Map.fetch!(indexes.attrs_by_name, name)
+      min = count_min(attr)
+      "lf_validate_count!(#{expr}, #{min})"
+    else
+      expr
+    end
   end
 
-  defp binding_role_expr(indexes, projection, role, collection_stack) do
-    node = Map.fetch!(indexes.nodes_by_id, projection.target_node_id)
-    mini = %{value_bindings: indexes.value_bindings}
+  defp count_min(%Attr{validation: %{"min" => min}}) when is_number(min) and min >= 0, do: min
+  defp count_min(_attr), do: 0
 
-    if ReferenceValidation.native_binding_role(projection, node, mini) != role do
-      nil
+  defp binding_role_value_expr(indexes, projection, role, collection_stack) do
+    case projection.projection_kind do
+      kind when kind in [:scalar_attr, :collection_count_attr] ->
+        public_role_expr(indexes, projection.public_attr_name, role)
+
+      :collection_item_field ->
+        binding_collection_expr(indexes, projection, collection_stack)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp binding_collection_expr(indexes, projection, collection_stack) do
+    value_binding = Map.get(indexes.value_bindings, projection.source_binding_id)
+
+    if match?(%ValueBinding{value_kind: :collection_count}, value_binding) do
+      parent_cb = projection.parent_collection_binding_id
+      parent_field = projection.parent_item_field_name
+      {var, ord} = collection_item_ref(parent_cb, collection_stack, indexes)
+      "lf_item_field(#{var}, #{ord}, #{inspect(parent_field)})"
     else
-      case projection.projection_kind do
-        kind when kind in [:scalar_attr, :collection_count_attr] ->
-          attr_expr(indexes, projection.public_attr_name)
+      field_name = projection.item_field_name
 
-        :collection_item_field ->
-          {var, ord} =
-            collection_item_ref(
-              projection.source_collection_binding_id,
-              collection_stack,
-              indexes
-            )
+      {var, ord} =
+        collection_item_ref(projection.source_collection_binding_id, collection_stack, indexes)
 
-          "lf_item_field(#{var}, #{ord}, #{inspect(projection.item_field_name)})"
-
-        _ ->
-          nil
-      end
+      "lf_item_field(#{var}, #{ord}, #{inspect(field_name)})"
     end
   end
 
@@ -956,17 +1217,6 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       end
 
     {var, Map.fetch!(indexes.collection_ordinals, cb_id)}
-  end
-
-  defp projection_attr_name(roles, role) do
-    roles |> Map.fetch!(role) |> Map.fetch!(:public_attr_name)
-  end
-
-  defp role_binding_target(roles, role) do
-    case Map.get(roles, role) do
-      %RenderProjection{public_attr_name: name} -> {:attr, name}
-      _ -> nil
-    end
   end
 
   defp format_source(source) do
@@ -1089,52 +1339,4 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     |> Enum.reject(&(&1 == ""))
     |> Enum.map_join("\n", &indent(&1, spaces))
   end
-end
-
-defmodule LiveFrames.NativeGenerator.Literal do
-  @moduledoc false
-
-  @spec render(term()) :: {:ok, String.t()} | {:error, :unsupported}
-  def render(nil), do: {:ok, "nil"}
-  def render(true), do: {:ok, "true"}
-  def render(false), do: {:ok, "false"}
-  def render(value) when is_integer(value), do: {:ok, Integer.to_string(value)}
-  def render(value) when is_float(value), do: {:ok, inspect(value)}
-
-  def render(value) when is_binary(value) do
-    if String.valid?(value), do: {:ok, inspect(value)}, else: {:error, :unsupported}
-  end
-
-  def render(values) when is_list(values) do
-    parts = Enum.map(values, fn item -> render!(item) end)
-    {:ok, "[" <> Enum.join(parts, ", ") <> "]"}
-  end
-
-  def render(value) when is_map(value) do
-    keys = value |> Map.keys() |> Enum.sort()
-
-    if Enum.all?(keys, &valid_key?/1) do
-      pairs =
-        Enum.map(keys, fn key ->
-          {render!(key), render!(Map.get(value, key))}
-        end)
-
-      {:ok, "%{" <> Enum.map_join(pairs, ", ", fn {k, v} -> "#{k} => #{v}" end) <> "}"}
-    else
-      {:error, :unsupported}
-    end
-  end
-
-  def render(_), do: {:error, :unsupported}
-
-  defp render!(term) do
-    case render(term) do
-      {:ok, literal} -> literal
-      {:error, _} -> throw(:unsupported)
-    end
-  end
-
-  defp valid_key?(key) when is_binary(key), do: String.valid?(key)
-  defp valid_key?(key) when is_atom(key), do: true
-  defp valid_key?(_), do: false
 end

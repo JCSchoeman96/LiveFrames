@@ -1513,10 +1513,67 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         true ->
           acc
           |> validate_native_tag(node, node_roles, indexes)
+          |> validate_native_node_surface(node)
           |> validate_native_boundary_image(node, node_roles, plan, indexes)
           |> validate_native_navigation(node, node_roles)
       end
     end)
+  end
+
+  defp validate_native_node_surface(diagnostics, %DesignNode{} = node) do
+    case node.semantic_type do
+      "paragraph" ->
+        diagnostics
+        |> validate_string_or_nil_content(node, "paragraph_content_invalid")
+        |> validate_no_child_subtree(node, "paragraph_children_forbidden")
+
+      "rich_text" ->
+        diagnostics
+        |> validate_rich_text_content(node)
+        |> validate_no_child_subtree(node, "rich_text_children_forbidden")
+
+      "heading" ->
+        validate_no_child_subtree(diagnostics, node, "heading_children_forbidden")
+
+      "image" ->
+        validate_no_child_subtree(diagnostics, node, "image_children_forbidden")
+
+      _ ->
+        diagnostics
+    end
+  end
+
+  defp validate_string_or_nil_content(
+         diagnostics,
+         %DesignNode{node_id: id, content: content},
+         code
+       ) do
+    if content == nil or is_binary(content) do
+      diagnostics
+    else
+      native_error(diagnostics, code, "node content must be absent or a UTF-8 string", id)
+    end
+  end
+
+  defp validate_rich_text_content(diagnostics, %DesignNode{node_id: id, content: content}) do
+    if content != nil and not is_binary(content) do
+      native_error(
+        diagnostics,
+        "rich_text_structured_content",
+        "structured rich_text content is not generation-eligible",
+        id
+      )
+    else
+      diagnostics
+    end
+  end
+
+  defp validate_no_child_subtree(diagnostics, %DesignNode{node_id: id, children: children}, code) do
+    if children == [] do
+      diagnostics
+    else
+      native_error(diagnostics, code, "node must not have child subtrees", id)
+    end
   end
 
   @doc false
