@@ -2,7 +2,7 @@
 
 **Plan ID:** `c09d6-d0r1-upstream-style-gap-authority`
 
-**Plan version:** `v3`
+**Plan version:** `v4`
 
 **Status:** `PENDING_ACCEPTED_MERGE` (candidate R1 authority in PR #140 — architecture only;
 **not implemented**, **not verified**, **does not close D0**)
@@ -32,6 +32,7 @@ D0 preflight matrix remains historical identification only:
 - `v2` — Review corrections: Design IR 3.0.0 migration freeze, CCS direct-child targets,
   D0E PR attribution, serial implementation authorization, issue #129 text.
 - `v3` — R3 vs C09D6-D1 boundary: upstream IR/mapping only in R3; frozen future D1 emission contract.
+- `v4` — D0R2A must update canonical `docs/03_DESIGN_IR_SPEC.md` in the same implementation slice.
 
 ---
 
@@ -540,14 +541,47 @@ R5_D1_IMPLEMENTATION=NONE
 ```
 
 **C09D6-D0R2A** (after R2 merge, before R3): implement IR **3.0.0** version bump,
-migrations, validation, serializer/loader alignment, and tests below. D0R2A does **not**
-re-decide versioning, legacy string preservation, or migration shape — those are frozen here.
-Do not implement D0R2A in PR #140.
+migrations, validation, serializer/loader alignment, **canonical spec update**, and tests
+below. D0R2A does **not** re-decide versioning, legacy string preservation, migration
+shape, or spec content frozen here. Do not implement D0R2A in PR #140.
+
+#### D0R2A canonical Design IR spec (same PR as code)
+
+`docs/03_DESIGN_IR_SPEC.md` IR version policy requires the canonical spec transition in
+the **same implementation slice** as schema, validator, serializer, loader, and migration.
+
+```text
+D0R2A_CANONICAL_SPEC_UPDATE_REQUIRED=YES
+```
+
+D0R2A must update `docs/03_DESIGN_IR_SPEC.md` in the **same PR** that implements:
+
+```text
+- DesignDocument.current_ir_version = 3.0.0
+- 1 → 2 → 3 and 2 → 3 migrations
+- StyleValue calculation union contract (string | structured map)
+- validation
+- serializer
+- loader
+```
+
+`docs/03` must freeze (aligned with §8 above):
+
+```text
+- current version = 3.0.0
+- legacy calculation strings remain valid opaque/preserved values
+- structured multiply calculation object contract (operation, operands)
+- supported migration routes (1→2→3 chained; 2→3; 3 identity)
+- writers emit ir_version 3.0.0 only for new normalized output at this contract
+- reads of ir_version 1.0.0 / 2.0.0 occur only through the frozen migration chain
+```
+
+PR #140 does **not** edit `docs/03`; D0R2A owns that update.
 
 ### Implementation slices
 
 ```text
-C09D6-D0R2A → Design IR 3.0.0 + structured semantic calculation contract + migrations
+C09D6-D0R2A → Design IR 3.0.0 + docs/03 update + structured semantic calculation + migrations
 R3 → Bricks pattern rewrite + spacing.grid_gap structured IR + shared mapping (--lf-space-grid-gap)
 ```
 
@@ -574,6 +608,7 @@ Do **not** introduce a temporary CSS generator to assert future D output in R3.
 DesignDocument.current_ir_version → 3.0.0
 Migration.to_current: 1 → 2 → 3, 2 → 3, 3 → identity
 StyleValue / validation / serializer / loader alignment
+docs/03_DESIGN_IR_SPEC.md updated in same PR (CANONICAL_DESIGN_IR_SPEC_ALIGNED=PASS)
 migration provenance tests
 legacy calculation-string preservation (no inference)
 structured calculation round-trip
@@ -806,7 +841,7 @@ IMPLEMENTATION_ORDER=R1 → R2 → C09D6-D0R2A → R3 → R4 → R5
 | Slice | Obligation |
 | --- | --- |
 | R2 | Grid authority records, Bricks literals, no `--grid-*` in D inputs |
-| D0R2A | IR 3.0.0 bump, 1→2→3 / 2→3 migrations, legacy calc strings preserved, structured multiply validation |
+| D0R2A | IR 3.0.0 bump, `docs/03` canonical spec aligned, 1→2→3 / 2→3 migrations, legacy calc strings, structured multiply validation |
 | R3 | text-s overrides, 14/15 control, radius + grid_gap mapping, grid-gap structured IR + shared theme mapping (no component CSS) |
 | R4 | CCS-01–04 node attachment, aspect ratio differentiation (no component CSS / no D) |
 | R5 | Full CTA-D0 matrix rerun; only R5 updates preflight verdict; **no C09D6-D1 implementation** |
