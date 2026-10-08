@@ -1219,6 +1219,59 @@ defmodule LiveFrames.BricksDesignIRTest do
     refute bundle.css =~ "var(--grid-1)"
   end
 
+  test "resolves desktop inner grid var(--grid-3-2) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-3-2)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    style = node_by_source_id(document, "root").styles["grid-template-columns"]
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "minmax(0, 3fr) minmax(0, 2fr)",
+             source_expression: "var(--grid-3-2)",
+             metadata: %{
+               "source_variable" => "--grid-3-2",
+               "structural_authority_state" => "unique_candidate",
+               "structural_authority_id" => "automatic-css-4.0.1:structural-grid:grid-3-2",
+               "structural_resolved_value" => "minmax(0, 3fr) minmax(0, 2fr)"
+             }
+           } = style
+
+    refute style.value =~ "--grid-3-2"
+  end
+
+  test "resolves image-group desktop grid var(--grid-2) through structural authority" do
+    document =
+      style_document(
+        "_gridTemplateColumns",
+        "var(--grid-2)",
+        nil,
+        structural_variable_authority: structural_authority()
+      )
+
+    style = node_by_source_id(document, "root").styles["grid-template-columns"]
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "repeat(2, minmax(0, 1fr))",
+             source_expression: "var(--grid-2)",
+             metadata: %{
+               "source_variable" => "--grid-2",
+               "structural_authority_state" => "unique_candidate",
+               "structural_authority_id" => "automatic-css-4.0.1:structural-grid:grid-2",
+               "structural_resolved_value" => "repeat(2, minmax(0, 1fr))"
+             }
+           } = style
+
+    refute style.value =~ "--grid-2"
+    refute style.value =~ "var("
+  end
+
   test "keeps an unproven exact direct variable unresolved" do
     document = style_document("_width", "var(--unknown)")
 

@@ -2,27 +2,25 @@
 
 **Plan ID:** `c09d6-d0r1-upstream-style-gap-authority`
 
-**Plan version:** `v4`
+**Plan version:** `v5`
 
-**Status:** `PENDING_ACCEPTED_MERGE` (candidate R1 authority in PR #140 — architecture only;
-**not implemented**, **not verified**, **does not close D0**)
+**Status:** `ACCEPTED / MERGED` (R1 authority — PR **#140**, merge
+`fa5a6f3991427d5af4ffa0d1bb66313f920a8660`; architecture only, **does not close D0**)
 
 **Scope:** Freeze source-independent architecture for CTA Tango native-styling blockers
 `G-GRID-STRUCT`, `G-TEXT-S`, `G-RADIUS-ACSS`, `G-GRID-GAP-CALC`, and `G-CUSTOM-CSS`.
 No production code in this slice.
 
-**Authority (pre-merge):** This document is the **candidate** contract for R2–R5 once
-merged. It becomes active authority only after owner approval and merge to `main`.
-Until then, **no R2 / D0R2A / R3 / R4 implementation is authorized by this document**.
-After accepted merge, on conflict with historical D0 preflight architecture prose where
-this file explicitly specifies gap resolution, **this file wins**.
+**Authority:** This document is the **active** contract for R2–R5 after merge to `main`
+(PR #140). On conflict with historical D0 preflight architecture prose where this file
+explicitly specifies gap resolution, **this file wins**.
 Evidence remains authoritative for facts: `docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md`,
 `docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md`.
 D0 preflight matrix remains historical identification only:
 `docs/development/c09d6d_cta_tango_style_coverage_preflight.md`.
 
-**Repository base (R1):** `b58e9bc9b561c9367c27fd479323b6ea290fbea2` (tree
-`661b1f8f5d0659cdf3276ffa4b38c27f3958ac70`)
+**Repository base (R1 merge):** `fa5a6f3991427d5af4ffa0d1bb66313f920a8660` (tree
+`2fd7f84f4626327070f8dc42a5332404e3475f06`)
 
 **Last updated:** 2026-10-08
 
@@ -33,6 +31,7 @@ D0 preflight matrix remains historical identification only:
   D0E PR attribution, serial implementation authorization, issue #129 text.
 - `v3` — R3 vs C09D6-D1 boundary: upstream IR/mapping only in R3; frozen future D1 emission contract.
 - `v4` — D0R2A must update canonical `docs/03_DESIGN_IR_SPEC.md` in the same implementation slice.
+- `v5` — Post-merge status reconciliation only (PR #140 merged); no architecture change.
 
 ---
 
@@ -81,7 +80,7 @@ Do **not** rediscover D0E1 grid values or D0E2 text-scale semantics from proprie
 | C09D6-D0 preflight | **COMPLETE / BLOCKED** (`C09D6_D_STYLE_COVERAGE=BLOCKED`) |
 | D0E1 structural grid evidence | **COMPLETE / MERGED** — PR **#138**, merge `3b3b1f07a5362550642d2b7770494ecbb4710487` |
 | D0E2 text-scale evidence | **COMPLETE / MERGED** — PR **#139**, merge `b58e9bc9b561c9367c27fd479323b6ea290fbea2` |
-| D0R1 (this document) | **PENDING_ACCEPTED_MERGE** (PR #140); `authority_frozen` only after merge |
+| D0R1 (this document) | **ACCEPTED / MERGED** — PR **#140**, merge `fa5a6f3991427d5af4ffa0d1bb66313f920a8660` |
 | D0 rerun (R5) | **REQUIRED** after R2–R4; only R5 may advance gaps toward **closed** |
 
 ---
@@ -820,7 +819,7 @@ GAP_LIFECYCLE_FROZEN=PASS
 D0          COMPLETE / BLOCKED
 D0E1        COMPLETE / MERGED
 D0E2        COMPLETE / MERGED
-R1          THIS SLICE (authority)
+R1          COMPLETE / MERGED / ACCEPTED
 R2          G-GRID-STRUCT
 D0R2A       Design IR 3.0.0 + structured semantic calculation (G-GRID-GAP-CALC)
 R3          G-TEXT-S, G-RADIUS-ACSS, G-GRID-GAP-CALC implementation

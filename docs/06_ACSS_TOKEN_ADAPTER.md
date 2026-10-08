@@ -131,9 +131,11 @@ Structural framework variables such as Automatic.css grid recipes are **not**
 TokenSet tokens. They are recorded separately through
 `LiveFrames.Adapters.AutomaticCSS.StructuralVariables` and consumed by Bricks
 through `structural_variable_authority`. For the proven ACSS 4.0.1 contract,
-`--grid-1` resolves structurally to `repeat(1, minmax(0, 1fr))` from
-project/source-environment generated CSS evidence. TokenSet paths such as
-`layout.grid.one` are intentionally not introduced for these variables.
+structural grid authority records `--grid-1`, `--grid-2`, and `--grid-3-2`
+with resolved values `repeat(1, minmax(0, 1fr))`, `repeat(2, minmax(0, 1fr))`,
+and `minmax(0, 3fr) minmax(0, 2fr)` from project/source-environment generated
+CSS evidence. TokenSet paths such as `layout.grid.one` are intentionally not
+introduced for these variables.
 
 Structural authority is fail-closed. `StructuralVariableAuthority.build/1`
 rejects malformed records instead of silently dropping them. A variable is a

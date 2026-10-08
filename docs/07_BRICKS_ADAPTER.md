@@ -175,8 +175,9 @@ For an exact direct expression `var(--x)`, resolution order is:
    unresolved behavior and does **not** consult structural authority.
 4. When token authority is `no_authority`, structural authority may resolve a
    proven structural literal (for example ACSS 4.0.1 `--grid-1` →
-   `repeat(1, minmax(0, 1fr))` on `grid-template-columns` /
-   `grid-template-rows`).
+   `repeat(1, minmax(0, 1fr))`, `--grid-2` → `repeat(2, minmax(0, 1fr))`,
+   or `--grid-3-2` → `minmax(0, 3fr) minmax(0, 2fr)` on
+   `grid-template-columns` / `grid-template-rows`).
 5. Missing, ambiguous, or invalid structural authority keeps the existing
    fail-closed unresolved behavior.
 

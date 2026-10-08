@@ -124,6 +124,72 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert occurrence["resolution_status"] == "resolved_structural"
   end
 
+  test "valid grid-template-columns var(--grid-2) resolves structurally in extract" do
+    document =
+      to_ir!(%{"_gridTemplateColumns" => "var(--grid-2)"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--grid-2")
+
+    assert variable["status"] == "resolved_structural"
+    assert variable["structural_authority_id"] == "automatic-css-4.0.1:structural-grid:grid-2"
+    assert variable["structural_resolved_value"] == "repeat(2, minmax(0, 1fr))"
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["property"] == "grid-template-columns"
+    assert occurrence["resolution_status"] == "resolved_structural"
+  end
+
+  test "valid grid-template-columns var(--grid-3-2) resolves structurally in extract" do
+    document =
+      to_ir!(%{"_gridTemplateColumns" => "var(--grid-3-2)"},
+        structural_variable_authority: structural_index()
+      )
+
+    variable = dependency_variable(document, "--grid-3-2")
+
+    assert variable["status"] == "resolved_structural"
+    assert variable["structural_authority_id"] == "automatic-css-4.0.1:structural-grid:grid-3-2"
+    assert variable["structural_resolved_value"] == "minmax(0, 3fr) minmax(0, 2fr)"
+
+    [occurrence] = variable["occurrences"]
+    assert occurrence["property"] == "grid-template-columns"
+    assert occurrence["resolution_status"] == "resolved_structural"
+  end
+
+  test "ambiguous structural authority for --grid-2 fails closed in extract" do
+    assert {:ok, ambiguous_index} =
+             StructuralVariableAuthority.build([
+               %{
+                 "variable" => "--grid-2",
+                 "resolved_value" => "repeat(2, minmax(0, 1fr))",
+                 "authority_id" => "authority-a",
+                 "source_system" => "automatic_css",
+                 "source_version" => "4.0.1",
+                 "authority_type" => "PROJECT_SOURCE_ENVIRONMENT_GENERATED_CSS"
+               },
+               %{
+                 "variable" => "--grid-2",
+                 "resolved_value" => "repeat(2, minmax(0, 1fr))",
+                 "authority_id" => "authority-b",
+                 "source_system" => "automatic_css",
+                 "source_version" => "4.0.1",
+                 "authority_type" => "PROJECT_SOURCE_ENVIRONMENT_GENERATED_CSS"
+               }
+             ])
+
+    document =
+      to_ir!(%{"_gridTemplateColumns" => "var(--grid-2)"},
+        structural_variable_authority: ambiguous_index
+      )
+
+    variable = dependency_variable(document, "--grid-2")
+    assert variable["status"] == "ambiguous_structural"
+    assert variable["resolution_reason"] == "structural_ambiguous"
+    assert hd(variable["occurrences"])["resolution_status"] == "ambiguous_structural"
+  end
+
   test "unsafe structural candidate does not resolve structurally in extract" do
     assert {:ok, unsafe_index} =
              StructuralVariableAuthority.build([
