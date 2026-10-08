@@ -2,16 +2,20 @@
 
 **Plan ID:** `c09d6-d0r1-upstream-style-gap-authority`
 
-**Plan version:** `v1`
+**Plan version:** `v2`
 
-**Status:** active authority slice (architecture only — **not implemented**, **not verified**, **does not close D0**)
+**Status:** `PENDING_ACCEPTED_MERGE` (candidate R1 authority in PR #140 — architecture only;
+**not implemented**, **not verified**, **does not close D0**)
 
 **Scope:** Freeze source-independent architecture for CTA Tango native-styling blockers
 `G-GRID-STRUCT`, `G-TEXT-S`, `G-RADIUS-ACSS`, `G-GRID-GAP-CALC`, and `G-CUSTOM-CSS`.
 No production code in this slice.
 
-**Authority:** This document is the active contract for R2–R5 implementation prompts.
-On conflict with historical preflight prose, this file wins for gap architecture after merge.
+**Authority (pre-merge):** This document is the **candidate** contract for R2–R5 once
+merged. It becomes active authority only after owner approval and merge to `main`.
+Until then, **no R2 / D0R2A / R3 / R4 implementation is authorized by this document**.
+After accepted merge, on conflict with historical D0 preflight architecture prose where
+this file explicitly specifies gap resolution, **this file wins**.
 Evidence remains authoritative for facts: `docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md`,
 `docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md`.
 D0 preflight matrix remains historical identification only:
@@ -20,11 +24,13 @@ D0 preflight matrix remains historical identification only:
 **Repository base (R1):** `b58e9bc9b561c9367c27fd479323b6ea290fbea2` (tree
 `661b1f8f5d0659cdf3276ffa4b38c27f3958ac70`)
 
-**Last updated:** 2026-10-07
+**Last updated:** 2026-10-08
 
 ### Revision log
 
 - `v1` — Initial R1 freeze after D0E1/D0E2 merge; downstream implementation not authorized.
+- `v2` — Review corrections: Design IR 3.0.0 migration freeze, CCS direct-child targets,
+  D0E PR attribution, serial implementation authorization, issue #129 text.
 
 ---
 
@@ -71,9 +77,9 @@ Do **not** rediscover D0E1 grid values or D0E2 text-scale semantics from proprie
 | Slice | Status |
 | --- | --- |
 | C09D6-D0 preflight | **COMPLETE / BLOCKED** (`C09D6_D_STYLE_COVERAGE=BLOCKED`) |
-| D0E1 structural grid evidence | **COMPLETE / MERGED** (PR #139 programme) |
-| D0E2 text-scale evidence | **COMPLETE / MERGED** (PR #139 programme) |
-| D0R1 (this document) | **authority frozen** when merged; not implementation |
+| D0E1 structural grid evidence | **COMPLETE / MERGED** — PR **#138**, merge `3b3b1f07a5362550642d2b7770494ecbb4710487` |
+| D0E2 text-scale evidence | **COMPLETE / MERGED** — PR **#139**, merge `b58e9bc9b561c9367c27fd479323b6ea290fbea2` |
+| D0R1 (this document) | **PENDING_ACCEPTED_MERGE** (PR #140); `authority_frozen` only after merge |
 | D0 rerun (R5) | **REQUIRED** after R2–R4; only R5 may advance gaps toward **closed** |
 
 ---
@@ -361,10 +367,60 @@ calc(var(--grid-gap) * <positive-rational-literal>)
 when `--grid-gap` resolves to `spacing.grid_gap`, and emit a **source-independent**
 structured calculation in Design IR.
 
-### Representation (frozen contract)
+### Design IR version and migration (frozen in R1 — not delegated to D0R2A)
 
-Introduce a documented structured calculation payload carried by `StyleValue` kind
-`:calculation` whose `value` is a **map** (not a CSS string):
+`docs/03_DESIGN_IR_SPEC.md` requires a new IR version when validation rules or serialized
+shape change. Current contract is **2.0.0**; validation requires `:calculation` `value` to
+be a non-empty **string**. Structured semantic calculations require **3.0.0**.
+
+```text
+CURRENT_DESIGN_IR_VERSION=2.0.0
+STRUCTURED_CALCULATION_IR_VERSION=3.0.0
+
+DESIGN_IR_SCHEMA_CHANGE_REQUIRED=YES
+DESIGN_IR_VERSION_BUMP_REQUIRED=YES
+DESIGN_IR_TARGET_VERSION=3.0.0
+DEDICATED_SCHEMA_SLICE_REQUIRED=YES
+DEDICATED_SCHEMA_SLICE_NAME=C09D6-D0R2A
+```
+
+#### 2.0.0 → 3.0.0 migration (structural, non-inferential)
+
+```text
+- Existing 2.0.0 StyleValue values are preserved exactly.
+- Existing calculation strings remain calculation strings.
+- No semantic token references are inferred from old calculation strings.
+- ir_version becomes 3.0.0.
+- Migration provenance is appended using the existing liveframes_ir_migrations model.
+- frontend_semantics_recovered = false.
+```
+
+#### 1.0.0 input chain
+
+```text
+1.0.0 → existing 2.0.0 migration → 3.0.0 migration
+```
+
+Do **not** create a separate 1.0.0 → 3.0.0 interpretation path.
+
+`Migration.to_current/1` obligations for D0R2A:
+
+```text
+1 → 2 → 3
+2 → 3
+3 → identity
+```
+
+#### 3.0.0 `StyleValue.kind = :calculation` value contract
+
+`value` may be **either**:
+
+1. a non-empty **string** — opaque/preserved calculations (legacy 2.0.0 behavior); or
+2. a bounded **structured map** — approved semantic calculations only.
+
+Introducing structured maps does **not** invalidate existing opaque calculation strings.
+
+**First structured contract (frozen):**
 
 ```json
 {
@@ -376,49 +432,71 @@ Introduce a documented structured calculation payload carried by `StyleValue` ki
 }
 ```
 
-Rules:
+**General validation (3.0.0):**
 
-- `operation` initially only `multiply` (CTA Tango needs factor `2` only).
-- Operand `token_ref.path` must be a validated TokenSet path.
-- Operand `literal` must be a JSON number (not a string) for deterministic emission.
-- `source_expression` may retain the original Bricks string for traceability only;
-  **consumers for native generation must ignore** `source_expression` and use `value`.
-- Do **not** manufacture `spacing.grid_gap.double`.
-- Do **not** embed `calc(var(--lf-...)*…)` in IR.
+```text
+operation:
+  exactly "multiply" in this first version
 
-C09D6-D emission (R3/R4 programme): resolve `token_ref` via approved mapping to
-`var(--lf-space-grid-gap)` at CSS generation time →
-`calc(var(--lf-space-grid-gap) * 2)` in committed component CSS only.
+operands:
+  exactly two
 
-### Schema impact
+operand 1:
+  kind = "token_ref"
+  path = non-empty validated semantic token path
 
-`docs/03_DESIGN_IR_SPEC.md` currently describes `calculation` as a preserved CSS string;
-`LiveFrames.IR.Validation` enforces non-empty string `value`. Both require amendment.
+operand 2:
+  kind = "literal"
+  value = finite JSON number
+```
+
+Constraints: no nested calculations; no arbitrary operators; no CSS variable strings
+inside the structured value; no `--lf-*` names in Design IR. `source_expression` may
+retain original source text for traceability only and is **never** semantic authority.
+
+For CTA source normalization admitted in R3, operand 2 must additionally satisfy the
+bounded Bricks source pattern `calc(var(--grid-gap) * <positive-rational-literal>)` with
+factor `2` when rewriting from `calc(var(--grid-gap) * 2)`.
 
 ```text
 G_GRID_GAP_SCHEMA_CHANGE_REQUIRED=YES
-G_GRID_GAP_CALC_REPRESENTATION=StyleValue.calculation with structured map value (multiply token_ref × numeric literal)
-DESIGN_IR_SCHEMA_CHANGE_REQUIRED=YES
-DEDICATED_SCHEMA_SLICE_REQUIRED=YES
-DEDICATED_SCHEMA_SLICE_NAME=C09D6-D0R2A
+G_GRID_GAP_CALC_REPRESENTATION=StyleValue.calculation value = structured map (multiply token_ref × numeric literal) under IR 3.0.0
 ```
 
-**C09D6-D0R2A** (before R3): authority + spec/validation alignment + tests for structured
-calculation only. Do not bury this inside R3.
+C09D6-D emission (R3): resolve `token_ref` via approved mapping to
+`var(--lf-space-grid-gap)` at CSS generation time →
+`calc(var(--lf-space-grid-gap) * 2)` in committed component CSS only.
+
+**C09D6-D0R2A** (after R2 merge, before R3): implement IR **3.0.0** version bump,
+migrations, validation, serializer/loader alignment, and tests below. D0R2A does **not**
+re-decide versioning, legacy string preservation, or migration shape — those are frozen here.
+Do not implement D0R2A in PR #140.
 
 ### Implementation slices
 
 ```text
-C09D6-D0R2A → structured semantic calculation contract
+C09D6-D0R2A → Design IR 3.0.0 + structured semantic calculation contract + migrations
 R3 → Bricks pattern rewrite + TokenBridge spacing.grid_gap public variable + D emission rules
 ```
 
-### Tests required
+### Tests required (R3)
 
 - `calc(var(--grid-gap) * 2)` → structured IR; no `--grid-gap` in `value`.
 - Token ref survives serialization round-trip.
 - D/CSS generator emits `calc(var(--lf-space-grid-gap) * 2)` with mapping from R3.
 - Unrecognized calc shapes → unresolved/diagnostic (no guessing).
+
+### Tests required (D0R2A)
+
+```text
+DesignDocument.current_ir_version → 3.0.0
+Migration.to_current: 1 → 2 → 3, 2 → 3, 3 → identity
+StyleValue / validation / serializer / loader alignment
+migration provenance tests
+legacy calculation-string preservation (no inference)
+structured calculation round-trip
+invalid structured calculation rejection
+```
 
 ---
 
@@ -489,20 +567,34 @@ G_CUSTOM_CSS_NORMALIZATION_OWNER=LiveFrames.Adapters.Bricks.DesignIRNormalizer
 ### Supported CTA Tango subset (frozen)
 
 All rules originate on global class **`image-group-tango`** (Bricks global class id
-`cIqHGvqlwpj`, element id **`0531fc`**). Resolver prefers **stable Bricks element id**
-over positional guessing when attaching styles.
+`cIqHGvqlwpj`, owner element id **`0531fc`**). Direct children of `0531fc` in source
+tree order (verified against private CTA Tango reference): **`1171e1`**, **`806d86`**,
+**`fc5f68`** (wrapper `div` nodes). Child combinator selectors (`> *:…`) select those
+**direct-child** DesignNodes only — not descendant `image` nodes.
 
-| Rule ID | Source selector (evidence) | Bounded operation | Target | Normalized properties |
+```text
+SOURCE_SELECTOR_TARGET_PRESERVED=YES
+PROPERTY_RELOCATION_BY_HEURISTIC=NO
+```
+
+| Rule ID | Source selector pattern | Bounded operation | Bricks element id (target) | Normalized properties |
 | --- | --- | --- | --- | --- |
-| CCS-01 | `.image-group-tango { min-height: 675px }` | owner element `0531fc` | image-group DesignNode | `min-height: 675px` literal |
-| CCS-02 | `.image-group-tango > *:first-child` | owner `0531fc`, **direct child index 1** (element `1171e1` wrapper) | that child DesignNode | `grid-column: 1 / -1`, `width: 90%` |
-| CCS-03 | `.image-group-tango > *:nth-child(2)` | owner `0531fc`, **direct child index 2** (image `b3b3c9` via wrapper `806d86`) | second image DesignNode | `width: 100%`, `aspect-ratio: 16/9` |
-| CCS-04 | `.image-group-tango > *:nth-child(3)` | owner `0531fc`, **direct child index 3** (third image subtree `fc5f68` chain) | third image DesignNode | `width: 100%`, `aspect-ratio: 5/3.5` |
+| CCS-01 | owner block rule on `.image-group-tango` | owner `0531fc` | `0531fc` | `min-height: 675px` literal |
+| CCS-02 | `> *:first-child` | direct child index 1 under `0531fc` | **`1171e1`** | `grid-column: 1 / -1`, `width: 90%` |
+| CCS-03 | `> *:nth-child(2)` | direct child index 2 under `0531fc` | **`806d86`** | `width: 100%`, `aspect-ratio: 16/9` |
+| CCS-04 | `> *:nth-child(3)` | direct child index 3 under `0531fc` | **`fc5f68`** | `width: 100%`, `aspect-ratio: 5/3.5` |
 
-R4 must resolve child indices using the Bricks children array under `0531fc`
-(`1171e1`, `806d86`, `fc5f68`), attaching wrapper vs image per existing IR node roles
-(image styles belong on **image** DesignNodes for aspect-ratio; span/width on wrapper
-or image per row above).
+R4 resolves targets by Bricks children array under `0531fc` → `1171e1`, `806d86`,
+`fc5f68`. **Do not** move `width` or `aspect-ratio` from these wrapper-selected rules
+onto inner image nodes (`0a0447`, `b3b3c9`, etc.) based on node role heuristics. Per-image
+`_aspectRatio` on image settings is a separate normalization path (D0 row CTA-D0-012);
+CCS-03/04 remain wrapper-local until a separate bounded rule is proven in source.
+
+```text
+CCS_02_TARGET=1171e1
+CCS_03_TARGET=806d86
+CCS_04_TARGET=fc5f68
+```
 
 ### Output representation
 
@@ -536,8 +628,8 @@ No generic cascade/specificity/browser matcher/runtime class resolver.
 
 ### Tests required (R4)
 
-- Each CCS rule maps to expected DesignNode ids for CTA Tango fixture.
-- Per-image aspect ratios differ (16/9 vs 5/3.5) on correct nodes.
+- Each CCS rule maps to expected DesignNode ids (`0531fc`, `1171e1`, `806d86`, `fc5f68`).
+- Wrapper `806d86` vs `fc5f68` carry distinct `aspect-ratio` values from CCS-03/04.
 - No `complex_css` required for CTA-D0-010–013 after normalization.
 - Unsupported selector in same blob → diagnostic; no silent drop.
 
@@ -613,7 +705,7 @@ D0E1        COMPLETE / MERGED
 D0E2        COMPLETE / MERGED
 R1          THIS SLICE (authority)
 R2          G-GRID-STRUCT
-D0R2A       structured semantic calculation (G-GRID-GAP-CALC IR contract)
+D0R2A       Design IR 3.0.0 + structured semantic calculation (G-GRID-GAP-CALC)
 R3          G-TEXT-S, G-RADIUS-ACSS, G-GRID-GAP-CALC implementation
 R4          G-CUSTOM-CSS
 R5          exact CTA Tango D0 rerun
@@ -632,7 +724,7 @@ IMPLEMENTATION_ORDER=R1 → R2 → C09D6-D0R2A → R3 → R4 → R5
 | Slice | Obligation |
 | --- | --- |
 | R2 | Grid authority records, Bricks literals, no `--grid-*` in D inputs |
-| D0R2A | Structured calculation validation, serialization, rejection of string-only contract for semantic multiply |
+| D0R2A | IR 3.0.0 bump, 1→2→3 / 2→3 migrations, legacy calc strings preserved, structured multiply validation |
 | R3 | text-s overrides, 14/15 control, radius + grid_gap mapping, grid-gap structured calc + theme vars |
 | R4 | CCS-01–04 node attachment, aspect ratio differentiation |
 | R5 | Full CTA-D0 matrix rerun; only R5 updates preflight verdict |
@@ -665,17 +757,28 @@ If implementation discovers selectors beyond CCS-01–04 → `G_CUSTOM_CSS_BOUND
 
 ## 17. Downstream authorization
 
-| Slice | Authorized after R1 merge? |
+Serial integration only (fresh-`main` review between slices). No parallel/stacked path.
+
+```text
+R1 → R2 → C09D6-D0R2A → R3 → R4 → R5
+
+R2_AUTHORIZED_AFTER_R1_MERGE=YES
+D0R2A_AUTHORIZED_AFTER_R2_MERGE=YES
+R3_AUTHORIZED_AFTER_D0R2A_MERGE=YES
+R4_AUTHORIZED_AFTER_R3_MERGE=YES
+R5_AUTHORIZED_AFTER_R4_MERGE=YES
+PARALLEL_R4_AUTHORIZED=NO
+```
+
+| Slice | Authorized when |
 | --- | --- |
-| R2 | YES (G-GRID-STRUCT) |
-| C09D6-D0R2A | YES (schema contract before R3 grid-gap) |
-| R3 | YES after D0R2A merge |
-| R4 | YES (parallel after R3 only if no R3 dependency — **R4 may start after R2**; custom CSS does not depend on D0R2A) |
-| R5 | YES after R2 + D0R2A + R3 + R4 complete |
+| R2 | R1 merged to `main` |
+| C09D6-D0R2A | R2 merged to `main` |
+| R3 | D0R2A merged to `main` |
+| R4 | R3 merged to `main` |
+| R5 | R4 merged to `main` |
 | C09D6-D1 | **NO** until R5 PASS |
 | C09D7-A | **NO** until C09D6-D programme authorizes |
-
-Clarification: **R4** does not require R3, but **R5** requires all upstream gaps implemented.
 
 ```text
 D0_RERUN_REQUIRED=YES
@@ -697,8 +800,8 @@ Evidence gates D0E1 and D0E2 are complete.
 Current dependency chain:
 R1 → R2 → C09D6-D0R2A → R3 → R4 → R5.
 
-If R1 requires a dedicated Design IR calculation-contract slice, that slice
-must complete before R3.
+C09D6-D0R2A is required to introduce the versioned structured semantic
+calculation contract (Design IR 3.0.0) before R3.
 
 C09D6-D1 may begin only after R5 passes.
 ```
