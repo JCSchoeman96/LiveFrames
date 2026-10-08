@@ -864,9 +864,9 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert precedence_diagnostics(document) == []
   end
 
-  test "keeps Design IR version 2.0.0" do
+  test "emits Design IR version 3.0.0" do
     document = document([], [], %{"_width" => "100px"})
-    assert document.ir_version == "2.0.0"
+    assert document.ir_version == "3.0.0"
   end
 
   test "contributor metadata survives the Design IR serializer" do

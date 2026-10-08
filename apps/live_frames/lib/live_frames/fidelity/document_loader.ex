@@ -17,7 +17,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
     ValueBinding
   }
 
-  @required_v2_root_fields ~w(
+  @required_current_root_fields ~w(
     ir_version
     source_metadata
     token_set
@@ -36,7 +36,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
 
   def from_map(map) when is_map(map) do
     with {:ok, migrated} <- Migration.to_current(map),
-         :ok <- validate_v2_root_shapes(migrated),
+         :ok <- validate_current_root_shapes(migrated),
          {:ok, document} <- decode_document(migrated),
          :ok <- IR.validate(document) do
       {:ok, document}
@@ -48,9 +48,9 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
   def from_map(_),
     do: {:error, [loader_error("fidelity.loader.invalid", "expected a JSON object")]}
 
-  defp validate_v2_root_shapes(map) do
+  defp validate_current_root_shapes(map) do
     missing =
-      Enum.reject(@required_v2_root_fields, fn field ->
+      Enum.reject(@required_current_root_fields, fn field ->
         Map.has_key?(map, field)
       end)
 
@@ -59,7 +59,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
        [
          loader_error(
            "ir.document.required_root_missing",
-           "serialized Design IR 2.0.0 is missing required root fields: #{Enum.join(missing, ", ")}"
+           "serialized current Design IR is missing required root fields: #{Enum.join(missing, ", ")}"
          )
        ]}
     else

@@ -20,7 +20,7 @@ defmodule LiveFrames.BricksAssetPipelineTest do
       [asset] = Map.values(document.assets)
       [image_node] = document.root_nodes
 
-      assert document.ir_version == "2.0.0"
+      assert document.ir_version == "3.0.0"
       assert asset.status == :resolved
       assert asset.kind == "image"
       assert asset.uri == image_fields["url"]

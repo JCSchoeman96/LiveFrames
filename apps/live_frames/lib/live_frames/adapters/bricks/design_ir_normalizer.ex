@@ -1,6 +1,6 @@
 defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   @moduledoc """
-  Converts the validated structured Bricks model into Design IR `2.0.0`.
+  Converts the validated structured Bricks model into the current Design IR contract.
 
   This module consumes the source adapter's structured stages directly. It does
   not read Stage A HTML, CSS, or report artifacts, and it never evaluates source

@@ -13,7 +13,7 @@ source plugin.
 
 ## Version
 
-The current supported contract version is `2.0.0`. `DesignDocument` owns this
+The current supported contract version is `3.0.0`. `DesignDocument` owns this
 authoritative version and exposes it through `current_ir_version/0`; the public
 `LiveFrames.IR.current_ir_version/0` helper delegates to it. Every
 `DesignDocument` carries its `ir_version`, and serialization includes that
@@ -21,50 +21,71 @@ explicit value. A change to required fields, field meaning, validation rules,
 or serialized shape requires a new IR version and an explicit migration
 decision.
 
-Readers accept `2.0.0` documents directly. Serialized `1.0.0` artifacts are
-read only through an explicit `1.0.0` → `2.0.0` structural migration before
-decoding and validation. Writers emit `2.0.0` only. Any other non-empty
-`ir_version` is rejected as unsupported. Missing, empty, or non-string versions
-produce distinct diagnostics from unsupported versions.
+Writers emit `3.0.0`. Readers accept `3.0.0` directly, migrate `2.0.0` only
+through `2.0.0` → `3.0.0`, and migrate `1.0.0` only through the chained
+`1.0.0` → `2.0.0` → `3.0.0` route. Any other non-empty `ir_version` is
+rejected as unsupported. Missing, empty, or non-string versions produce
+distinct diagnostics from unsupported versions.
 
-### Structural migration from 1.0.0
+### Structural migrations
 
-`LiveFrames.IR.Migration.to_current/1` performs the only supported major
-migration route:
+`LiveFrames.IR.Migration.to_current/1` performs the supported routes:
 
 - `1.0.0` → `2.0.0` adds empty `collection_bindings` and `value_bindings`
-  registries, sets `ir_version` to `2.0.0`, preserves every other root field,
-  and records migration evidence without inferring bindings or repetition from
-  `SourceTrace`. The source map must already include a JSON `provenance`
-  object and must not already contain `collection_bindings` or
-  `value_bindings`. Missing or malformed legacy roots are not repaired.
-- `2.0.0` → `2.0.0` is identity.
+  registries, preserves every other root field, and records migration evidence
+  without inferring bindings or repetition from `SourceTrace`. The source map
+  must include a JSON `provenance` object and must not contain either binding
+  registry. Missing or malformed legacy roots are not repaired.
+- `2.0.0` → `3.0.0` preserves existing fields and values, sets `ir_version`
+  to `3.0.0`, and records structural migration evidence. It does not infer
+  semantics from legacy calculation strings. A legacy calculation must remain
+  a non-empty string during this transition.
+- `3.0.0` → `3.0.0` is identity.
 - All other versions fail closed.
 
-Migration evidence is stored under the namespaced provenance key
+Each transition appends evidence under the namespaced provenance key
 `liveframes_ir_migrations` as a JSON array of objects:
 
 | Field | Value |
 | --- | --- |
-| `source_version` | `1.0.0` |
-| `target_version` | `2.0.0` |
+| `source_version` | Transition source, `1.0.0` or `2.0.0` |
+| `target_version` | Transition target, `2.0.0` or `3.0.0` |
 | `kind` | `structural` |
 | `frontend_semantics_recovered` | `false` |
 
-Existing provenance keys are never overwritten. If `liveframes_ir_migrations`
-already exists, migration appends an identical entry or fails closed when the
-existing value is not a list or records an incompatible migration.
+The 1.0.0 route records 1→2 before 2→3. Existing provenance keys are never
+overwritten. Identical migration entries do not duplicate. A non-list
+`liveframes_ir_migrations` value or a conflicting entry for the same transition
+fails closed.
 
-The fidelity loader runs: decode JSON → classify version → migrate or pass
-through → require every `2.0.0` root field to be present in the serialized map
-→ verify each root field has the expected JSON container type → decode structs
-→ validate. Missing required root keys, wrong container types (for example an
-array where an object registry is required), and malformed registry entries
-return diagnostics and are not coerced or repaired with defaults.
+The exact records for the chained route are:
+
+```json
+[
+  {
+    "source_version": "1.0.0",
+    "target_version": "2.0.0",
+    "kind": "structural",
+    "frontend_semantics_recovered": false
+  },
+  {
+    "source_version": "2.0.0",
+    "target_version": "3.0.0",
+    "kind": "structural",
+    "frontend_semantics_recovered": false
+  }
+]
+```
+
+The fidelity loader runs: decode JSON → migrate to current → require every
+current root field in the serialized map → verify JSON container types → decode
+structs → validate. Missing required root keys, wrong container types, and
+malformed registry entries return diagnostics and are not coerced or repaired
+with defaults.
 
 ### Generator limitation
 
-The current static Fidelity generator accepts `2.0.0` documents only when both
+The current static Fidelity generator accepts `3.0.0` documents only when both
 `collection_bindings` and `value_bindings` are empty. Non-empty registries fail
 closed with a stable diagnostic until a binding-aware generator ships.
 
@@ -146,7 +167,7 @@ metadata. The allowed kinds are:
 | --- | --- |
 | `literal` | A literal CSS value or JSON-compatible primitive. |
 | `token_ref` | A semantic token path, such as `color.brand.primary`. |
-| `calculation` | A preserved CSS calculation or expression. |
+| `calculation` | An opaque legacy calculation string or a supported structured calculation. |
 | `keyword` | A CSS keyword such as `flex` or `auto`. |
 | `responsive` | A nested responsive value that cannot be represented as a simple base declaration. |
 | `complex_css` | Structured selector/rule data that needs a CSS renderer. |
@@ -154,6 +175,29 @@ metadata. The allowed kinds are:
 
 `unresolved` is a valid preservation state. Unsupported styles must remain
 inspectable and must carry a diagnostic rather than disappearing.
+
+Legacy non-empty calculation strings remain valid in 3.0.0 and stay opaque.
+Migration never infers semantic token references from them. The structured
+calculation contract supports exactly this form:
+
+```json
+{
+  "operation": "multiply",
+  "operands": [
+    {"kind": "token_ref", "path": "spacing.grid_gap"},
+    {"kind": "literal", "value": 2}
+  ]
+}
+```
+
+The root has exactly `operation: "multiply"` and two ordered operands. The
+first operand has exactly `kind: "token_ref"` and a non-empty semantic token
+`path`. The second has exactly `kind: "literal"` and a finite JSON number in
+`value`. The number is not restricted to positive values by IR validation.
+Nested calculations and arbitrary operators are invalid. CSS variable syntax
+and `--lf-*` names are invalid inside the structured semantic value.
+`source_expression` is separate trace data and does not define calculation
+semantics.
 
 Responsive overrides are represented separately from base styles by
 `LiveFrames.IR.ResponsiveOverride`:

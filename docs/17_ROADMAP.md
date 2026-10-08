@@ -2,7 +2,7 @@
 
 **Authoritative architecture roadmap:** [`00_LIVEFRAMES_MASTER_SPEC.md`](00_LIVEFRAMES_MASTER_SPEC.md)
 
-**Current repository checkpoint:** `fa5a6f3991427d5af4ffa0d1bb66313f920a8660`
+**Current repository checkpoint:** `0c4b80ed4d4204b2cfc69ea9db76a9a1ebc6b09c`
 
 ## Execution status (post–Phase 6, C09 programme)
 
@@ -18,8 +18,13 @@
 - **D0E1 (ACSS 4.0.1 structural grid evidence):** **complete / merged** (PR #138) — [`docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md`](evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md)
 - **D0E2 (ACSS 4.0.1 text-scale evidence):** **complete / merged** (PR #139) — [`docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md`](evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md)
 - **C09D6-D0R1 (upstream styling gap authority):** **complete / merged / accepted** (PR #140 — `fa5a6f3991427d5af4ffa0d1bb66313f920a8660`) — [`docs/development/c09d6d_upstream_style_gap_resolution_authority.md`](development/c09d6d_upstream_style_gap_resolution_authority.md); freezes G-* architecture for R2–R5
-- **R2 (G-GRID-STRUCT):** **in review / not yet accepted on `main`**
-- **C09D6-D0R2A (Design IR 3.0.0 + `docs/03` + structured semantic calculation):** **not implemented / not authorized until R2 accepted+merged** — required after R2 and before R3 for G-GRID-GAP-CALC (see D0R1 §8)
+- **R1:** complete / merged / accepted (PR #140)
+- **R2 (G-GRID-STRUCT):** complete / merged / accepted (PR #141)
+- **C09D6-D0R2A (Design IR 3.0.0 + `docs/03` + structured semantic calculation):** in review / not accepted on `main`
+- **R3:** not authorized until D0R2A is accepted and merged
+- **R4 / R5:** not authorized
+- **D1:** not authorized
+- **C09D7-A:** not authorized
 - **R3 / R4 / R5 (upstream implementation):** **not authorized**
 - **Native styling generator (C09D6-D / D1):** **not authorized** — blocked until R5 D0 rerun passes; see D0R1 dependency graph
 - **P10 consumer ejection:** **not implemented** / not authorized
