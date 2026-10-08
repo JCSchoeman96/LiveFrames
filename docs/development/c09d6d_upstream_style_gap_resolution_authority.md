@@ -2,7 +2,7 @@
 
 **Plan ID:** `c09d6-d0r1-upstream-style-gap-authority`
 
-**Plan version:** `v2`
+**Plan version:** `v3`
 
 **Status:** `PENDING_ACCEPTED_MERGE` (candidate R1 authority in PR #140 — architecture only;
 **not implemented**, **not verified**, **does not close D0**)
@@ -31,6 +31,7 @@ D0 preflight matrix remains historical identification only:
 - `v1` — Initial R1 freeze after D0E1/D0E2 merge; downstream implementation not authorized.
 - `v2` — Review corrections: Design IR 3.0.0 migration freeze, CCS direct-child targets,
   D0E PR attribution, serial implementation authorization, issue #129 text.
+- `v3` — R3 vs C09D6-D1 boundary: upstream IR/mapping only in R3; frozen future D1 emission contract.
 
 ---
 
@@ -313,9 +314,11 @@ source var(--radius)
   → Bricks token authority (existing)
   → TokenSet radius.base
   → TokenBridge mapping metadata
-  → public --lf-radius-base
-  → C09D6-D emits component CSS using var(--lf-radius-base) or resolved equivalent
+  → public --lf-radius-base (R3: mapping + theme availability only)
+  → future C09D6-D1 (after R5): may emit component CSS using var(--lf-radius-base)
 ```
+
+R3 does **not** generate component CSS or implement C09D6-D.
 
 Do **not** create a second radius value authority.
 
@@ -463,9 +466,78 @@ G_GRID_GAP_SCHEMA_CHANGE_REQUIRED=YES
 G_GRID_GAP_CALC_REPRESENTATION=StyleValue.calculation value = structured map (multiply token_ref × numeric literal) under IR 3.0.0
 ```
 
-C09D6-D emission (R3): resolve `token_ref` via approved mapping to
-`var(--lf-space-grid-gap)` at CSS generation time →
-`calc(var(--lf-space-grid-gap) * 2)` in committed component CSS only.
+#### R3 ownership (upstream only)
+
+```text
+R3 owns:
+- Bricks bounded source-pattern recognition
+- source-independent structured calculation production
+- spacing.grid_gap TokenSet reference inside structured calculation
+- native_shared_v1 mapping metadata
+- public --lf-space-grid-gap availability via TokenBridge/theme build
+- no ACSS/source variable leakage in IR calculation value
+
+R3 does NOT own:
+- component CSS generation
+- C09D6-D / C09D6-D1 implementation
+- rendering structured calculation to final component CSS
+- committed component stylesheet emission
+
+R3_COMPONENT_CSS_GENERATION=NONE
+R3_C09D6_D_IMPLEMENTATION=NONE
+```
+
+#### `FUTURE_C09D6_D_EMISSION_CONTRACT` (frozen now; implemented only when D1 authorized)
+
+When C09D6-D1 is authorized (after R5), given:
+
+```text
+StyleValue.calculation {
+  operation = multiply
+  operands = [
+    token_ref("spacing.grid_gap"),
+    literal(2)
+  ]
+}
+
++ approved TokenBridge mapping:
+  spacing.grid_gap → --lf-space-grid-gap
+```
+
+C09D6-D must deterministically emit:
+
+```text
+calc(var(--lf-space-grid-gap) * 2)
+```
+
+without reading `--grid-gap`, Automatic.css semantics, or `source_expression`.
+
+```text
+D1_EMISSION_CONTRACT_FROZEN=YES
+D1_EXPECTED_GRID_GAP_CSS=calc(var(--lf-space-grid-gap) * 2)
+D1_IMPLEMENTATION_AUTHORIZED=NO
+```
+
+#### `FUTURE_D1_TEST_OBLIGATION` (not executed until D1 authorized)
+
+```text
+Given the approved structured calculation and approved token mapping,
+C09D6-D must deterministically emit:
+
+calc(var(--lf-space-grid-gap) * 2)
+
+without reading:
+- --grid-gap
+- Automatic.css semantics
+- source_expression
+```
+
+R5 may verify upstream representation sufficiency for D0 coverage; R5 must **not**
+implement C09D6-D1.
+
+```text
+R5_D1_IMPLEMENTATION=NONE
+```
 
 **C09D6-D0R2A** (after R2 merge, before R3): implement IR **3.0.0** version bump,
 migrations, validation, serializer/loader alignment, and tests below. D0R2A does **not**
@@ -476,15 +548,25 @@ Do not implement D0R2A in PR #140.
 
 ```text
 C09D6-D0R2A → Design IR 3.0.0 + structured semantic calculation contract + migrations
-R3 → Bricks pattern rewrite + TokenBridge spacing.grid_gap public variable + D emission rules
+R3 → Bricks pattern rewrite + spacing.grid_gap structured IR + shared mapping (--lf-space-grid-gap)
 ```
 
 ### Tests required (R3)
 
-- `calc(var(--grid-gap) * 2)` → structured IR; no `--grid-gap` in `value`.
-- Token ref survives serialization round-trip.
-- D/CSS generator emits `calc(var(--lf-space-grid-gap) * 2)` with mapping from R3.
-- Unrecognized calc shapes → unresolved/diagnostic (no guessing).
+```text
+R3_GRID_GAP_IR_TESTS_FROZEN=YES
+R3_SHARED_MAPPING_TEST_FROZEN=YES
+```
+
+1. `calc(var(--grid-gap) * 2)` → structured semantic calculation (IR 3.0.0).
+2. Structured `value` contains `token_ref` `spacing.grid_gap` × numeric literal `2`.
+3. No `--grid-gap` in semantic calculation `value`.
+4. `spacing.grid_gap` present in approved `native_shared_v1` mapping as `--lf-space-grid-gap`.
+5. Structured calculation survives serialization and validation under IR 3.0.0.
+6. Unsupported source calculation shapes → fail closed / diagnostic (no guessing).
+7. R3 produces **no** component CSS and starts **no** C09D6-D implementation (no temporary renderer).
+
+Do **not** introduce a temporary CSS generator to assert future D output in R3.
 
 ### Tests required (D0R2A)
 
@@ -672,7 +754,7 @@ Failure states: `blocked_authority`, `blocked_evidence`, `blocked_schema`, `bloc
 
 | Transition | Guard | Owner | Evidence | Side effect | On failure |
 | --- | --- | --- | --- | --- | --- |
-| → `authority_frozen` | D0 row + upstream evidence or R1 freeze | R1 doc merge | This file + D0E* | R2–R4 authorized to plan | `blocked_authority` |
+| → `authority_frozen` | D0 row + upstream evidence + R1 merge | R1 doc merge | This file + D0E* | R2 authorized (serial chain §17) | `blocked_authority` |
 | → `implemented` | Slice PR merged | R2/R3/R4 | Unit/integration tests | IR/TokenSet/code change | remain prior state |
 | → `verified` | Slice tests + review | same | CI green on slice | — | `blocked_scope` |
 | → `d0_retested` | R5 D0 rerun | R5 only | Updated preflight verdict | May unblock D1 planning | stay `verified` |
@@ -708,7 +790,7 @@ R2          G-GRID-STRUCT
 D0R2A       Design IR 3.0.0 + structured semantic calculation (G-GRID-GAP-CALC)
 R3          G-TEXT-S, G-RADIUS-ACSS, G-GRID-GAP-CALC implementation
 R4          G-CUSTOM-CSS
-R5          exact CTA Tango D0 rerun
+R5          exact CTA Tango D0 rerun (no D1 generator)
 PASS        → D1 planning may be authorized
 BLOCKED     → return to smallest unresolved upstream slice
 ```
@@ -725,9 +807,9 @@ IMPLEMENTATION_ORDER=R1 → R2 → C09D6-D0R2A → R3 → R4 → R5
 | --- | --- |
 | R2 | Grid authority records, Bricks literals, no `--grid-*` in D inputs |
 | D0R2A | IR 3.0.0 bump, 1→2→3 / 2→3 migrations, legacy calc strings preserved, structured multiply validation |
-| R3 | text-s overrides, 14/15 control, radius + grid_gap mapping, grid-gap structured calc + theme vars |
-| R4 | CCS-01–04 node attachment, aspect ratio differentiation |
-| R5 | Full CTA-D0 matrix rerun; only R5 updates preflight verdict |
+| R3 | text-s overrides, 14/15 control, radius + grid_gap mapping, grid-gap structured IR + shared theme mapping (no component CSS) |
+| R4 | CCS-01–04 node attachment, aspect ratio differentiation (no component CSS / no D) |
+| R5 | Full CTA-D0 matrix rerun; only R5 updates preflight verdict; **no C09D6-D1 implementation** |
 
 ---
 
