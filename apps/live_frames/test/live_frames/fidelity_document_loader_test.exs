@@ -52,10 +52,10 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     |> Map.put("ir_version", "1.0.0")
   end
 
-  test "migrates valid v1 maps to 2.0.0 with empty binding registries" do
+  test "migrates valid v1 maps through 2.0.0 to 3.0.0" do
     assert {:ok, migrated} = Migration.to_current(minimal_v1_map())
 
-    assert migrated["ir_version"] == "2.0.0"
+    assert migrated["ir_version"] == "3.0.0"
     assert migrated["collection_bindings"] == %{}
     assert migrated["value_bindings"] == %{}
     refute migrated["provenance"] == %{}
@@ -66,8 +66,181 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
                "target_version" => "2.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "2.0.0",
+               "target_version" => "3.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
              }
            ]
+  end
+
+  test "migrates v2 values without inference and appends provenance" do
+    legacy_calculation = "calc(100% - 1rem)"
+
+    v2 =
+      minimal_v2_map()
+      |> put_in(["root_nodes", Access.at(0), "styles"], %{
+        "gap" => %{"kind" => "calculation", "value" => legacy_calculation}
+      })
+      |> put_in(["provenance", "existing"], "kept")
+
+    assert {:ok, migrated} = Migration.to_current(v2)
+    assert migrated["ir_version"] == "3.0.0"
+
+    assert get_in(migrated, ["root_nodes", Access.at(0), "styles", "gap", "value"]) ==
+             legacy_calculation
+
+    assert migrated["provenance"]["existing"] == "kept"
+
+    assert List.last(migrated["provenance"]["liveframes_ir_migrations"]) == %{
+             "source_version" => "2.0.0",
+             "target_version" => "3.0.0",
+             "kind" => "structural",
+             "frontend_semantics_recovered" => false
+           }
+  end
+
+  test "v3 migration is identity" do
+    v3 = minimal_v2_map() |> Map.put("ir_version", "3.0.0")
+    assert Migration.to_current(v3) == {:ok, v3}
+  end
+
+  test "structured calculation survives serialization and loader round-trip" do
+    calculation = %{
+      "operation" => "multiply",
+      "operands" => [
+        %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+        %{"kind" => "literal", "value" => 2}
+      ]
+    }
+
+    style = %{
+      "kind" => "calculation",
+      "value" => calculation,
+      "source_expression" => "calc(var(--grid-gap) * 2)",
+      "source_trace" => nil,
+      "metadata" => %{}
+    }
+
+    map =
+      put_in(
+        minimal_v2_map() |> Map.put("ir_version", "3.0.0"),
+        ["root_nodes", Access.at(0), "styles"],
+        %{"gap" => style}
+      )
+
+    assert {:ok, document} = DocumentLoader.from_map(map)
+    assert document.ir_version == "3.0.0"
+
+    assert {:ok, round_trip} = document |> IR.to_map() |> DocumentLoader.from_map()
+    loaded_style = hd(round_trip.root_nodes).styles["gap"]
+    assert loaded_style.value == calculation
+    assert loaded_style.source_expression == "calc(var(--grid-gap) * 2)"
+    assert IR.validate(round_trip) == :ok
+  end
+
+  test "migration rejects structured calculations in legacy versions" do
+    structured = %{
+      "kind" => "calculation",
+      "value" => %{
+        "operation" => "multiply",
+        "operands" => [
+          %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+          %{"kind" => "literal", "value" => 2}
+        ]
+      }
+    }
+
+    for legacy <- [minimal_v2_map(), minimal_v1_map()] do
+      legacy = put_in(legacy, ["root_nodes", Access.at(0), "styles"], %{"gap" => structured})
+      assert {:error, diagnostics} = Migration.to_current(legacy)
+      assert Enum.any?(diagnostics, &(&1.code == "ir.migration.legacy_calculation_invalid"))
+    end
+  end
+
+  test "migration provenance keeps prior entries and rejects conflicts" do
+    record = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    with_existing =
+      minimal_v2_map()
+      |> put_in(["provenance", "other"], true)
+      |> put_in(["provenance", "liveframes_ir_migrations"], [record])
+
+    assert {:ok, migrated} = Migration.to_current(with_existing)
+    assert migrated["provenance"]["other"]
+    assert migrated["provenance"]["liveframes_ir_migrations"] == [record]
+
+    conflict =
+      put_in(
+        with_existing,
+        ["provenance", "liveframes_ir_migrations", Access.at(0), "kind"],
+        "inferred"
+      )
+
+    assert {:error, collision} = Migration.to_current(conflict)
+    assert Enum.any?(collision, &(&1.code == "ir.migration.provenance_collision"))
+
+    malformed = put_in(minimal_v2_map(), ["provenance", "liveframes_ir_migrations"], %{})
+    assert {:error, invalid} = Migration.to_current(malformed)
+    assert Enum.any?(invalid, &(&1.code == "ir.migration.provenance_collision"))
+
+    malformed_entry =
+      put_in(minimal_v2_map(), ["provenance", "liveframes_ir_migrations"], ["bad"])
+
+    assert {:error, invalid_entry} = Migration.to_current(malformed_entry)
+    assert Enum.any?(invalid_entry, &(&1.code == "ir.migration.provenance_collision"))
+  end
+
+  test "existing migration record stays in place relative to unrelated history" do
+    current_record = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    unrelated_record = %{
+      "source_version" => "8.0.0",
+      "target_version" => "9.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    history = [current_record, unrelated_record]
+
+    v2 =
+      put_in(
+        minimal_v2_map(),
+        ["provenance", "liveframes_ir_migrations"],
+        history
+      )
+
+    assert {:ok, migrated} = Migration.to_current(v2)
+    assert migrated["provenance"]["liveframes_ir_migrations"] == history
+  end
+
+  test "v1 migration orders existing migration records by transition" do
+    v2_to_v3 = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v1 = put_in(minimal_v1_map(), ["provenance", "liveframes_ir_migrations"], [v2_to_v3])
+
+    assert {:ok, migrated} = Migration.to_current(v1)
+
+    assert Enum.map(migrated["provenance"]["liveframes_ir_migrations"], fn entry ->
+             {entry["source_version"], entry["target_version"]}
+           end) == [{"1.0.0", "2.0.0"}, {"2.0.0", "3.0.0"}]
   end
 
   test "migration provenance does not overwrite existing provenance keys" do
@@ -123,17 +296,19 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert {:error, invalid} = Migration.to_current(%{"ir_version" => 2})
     assert Enum.any?(invalid, &(&1.code == "ir.document.version_invalid"))
 
-    assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "3.0.0"})
+    assert {:ok, v3} = Migration.to_current(minimal_v2_map() |> Map.put("ir_version", "3.0.0"))
+    assert v3["ir_version"] == "3.0.0"
+    assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "4.0.0"})
     assert Enum.any?(unsupported, &(&1.code == "ir.document.version_unsupported"))
   end
 
-  test "loader rejects serialized v2 maps missing required root fields" do
+  test "loader rejects serialized current maps missing required root fields" do
     v2 = minimal_v2_map() |> Map.delete("collection_bindings")
     assert {:error, diagnostics} = DocumentLoader.from_map(v2)
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.required_root_missing"))
   end
 
-  test "loader rejects wrong v2 root container types without raising" do
+  test "loader rejects wrong current root container types without raising" do
     for {field, invalid} <- [
           {"root_nodes", nil},
           {"root_nodes", %{}},
@@ -311,7 +486,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     v1 = minimal_v1_map() |> put_in(["provenance", "source_hash"], "fixture")
 
     assert {:ok, document} = DocumentLoader.from_map(v1)
-    assert document.ir_version == "2.0.0"
+    assert document.ir_version == "3.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert document.provenance["source_hash"] == "fixture"
@@ -338,7 +513,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
   test "hero india v1 fixture migrates and fidelity drift inputs stay controlled" do
     assert {:ok, document} = DocumentLoader.from_file(@hero_input)
-    assert document.ir_version == "2.0.0"
+    assert document.ir_version == "3.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert Jason.decode!(File.read!(@hero_input))["ir_version"] == "1.0.0"

@@ -791,7 +791,7 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     refute get_in(node.source_trace.metadata, ["static_navigation"])
   end
 
-  test "Design IR version remains 2.0.0" do
+  test "Design IR version is 3.0.0" do
     assert {:ok, document} =
              to_ir([
                source_element("root", "block", 0, %{}, ["nav"]),
@@ -801,7 +801,7 @@ defmodule LiveFrames.BricksStaticNavigationTest do
                })
              ])
 
-    assert document.ir_version == "2.0.0"
+    assert document.ir_version == "3.0.0"
     assert IR.validate(document) == :ok
   end
 end

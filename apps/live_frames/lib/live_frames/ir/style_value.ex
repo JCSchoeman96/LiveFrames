@@ -33,8 +33,10 @@ defmodule LiveFrames.IR.StyleValue do
   @spec token_ref(String.t(), keyword()) :: t()
   def token_ref(path, opts \\ []), do: new(:token_ref, path, opts)
 
-  @spec calculation(String.t(), keyword()) :: t()
-  def calculation(expression, opts \\ []), do: new(:calculation, expression, opts)
+  @type calculation_value :: String.t() | %{optional(String.t()) => term()}
+
+  @spec calculation(calculation_value(), keyword()) :: t()
+  def calculation(value, opts \\ []), do: new(:calculation, value, opts)
 
   @spec keyword(String.t(), keyword()) :: t()
   def keyword(value, opts \\ []), do: new(:keyword, value, opts)

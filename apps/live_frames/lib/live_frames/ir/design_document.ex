@@ -3,7 +3,7 @@ defmodule LiveFrames.IR.DesignDocument do
   Root container for a validated, source-independent Design IR document.
   """
 
-  @current_ir_version "2.0.0"
+  @current_ir_version "3.0.0"
 
   @type t :: %__MODULE__{
           ir_version: String.t(),

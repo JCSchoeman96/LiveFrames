@@ -517,7 +517,7 @@ defmodule LiveFrames.FidelityTest do
     assert bundle.heex =~ "<%= #{inspect(malicious.content)} %>"
     refute bundle.heex =~ "Phoenix.HTML.raw"
 
-    assert {:error, diagnostics} = Fidelity.generate(%{document | ir_version: "3.0.0"})
+    assert {:error, diagnostics} = Fidelity.generate(%{document | ir_version: "4.0.0"})
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.version_unsupported"))
   end
 

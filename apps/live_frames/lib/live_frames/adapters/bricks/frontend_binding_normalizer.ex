@@ -3,7 +3,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
   Normalizes Bricks collection boundaries and closed frontend value forms.
 
   Source expressions stay inert. This module records only frontend semantics
-  established by the Bricks export and Design IR 2.0.0 contract.
+  established by the Bricks export and current Design IR contract.
   """
 
   alias LiveFrames.Adapters.Bricks.Diagnostic

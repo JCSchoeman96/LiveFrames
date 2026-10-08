@@ -95,7 +95,7 @@ defmodule LiveFrames.IRTest do
   end
 
   test "exposes the current supported IR version and uses it by default" do
-    assert DesignDocument.current_ir_version() == "2.0.0"
+    assert DesignDocument.current_ir_version() == "3.0.0"
     assert IR.current_ir_version() == DesignDocument.current_ir_version()
     assert DesignDocument.new().ir_version == IR.current_ir_version()
     assert DesignDocument.new().collection_bindings == %{}
@@ -104,7 +104,7 @@ defmodule LiveFrames.IRTest do
 
   test "validation rejects non-empty unsupported IR versions" do
     assert {:error, diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "3.0.0"})
+             IR.validate(%{valid_document() | ir_version: "4.0.0"})
 
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.version_unsupported"))
     refute Enum.any?(diagnostics, &(&1.code == "ir.document.version_missing"))
@@ -120,7 +120,7 @@ defmodule LiveFrames.IRTest do
     assert Enum.any?(malformed_diagnostics, &(&1.code == "ir.document.version_invalid"))
 
     assert {:error, unsupported_diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "3.0.0"})
+             IR.validate(%{valid_document() | ir_version: "4.0.0"})
 
     assert Enum.any?(unsupported_diagnostics, &(&1.code == "ir.document.version_unsupported"))
   end
@@ -344,7 +344,7 @@ defmodule LiveFrames.IRTest do
     assert first == second
 
     decoded = Jason.decode!(first)
-    assert decoded["ir_version"] == "2.0.0"
+    assert decoded["ir_version"] == "3.0.0"
     assert decoded["collection_bindings"] == %{}
     assert decoded["value_bindings"] == %{}
 
@@ -355,6 +355,96 @@ defmodule LiveFrames.IRTest do
     assert decoded["root_nodes"] |> hd() |> get_in(["styles", "unknown", "kind"]) == "unresolved"
     assert hd(decoded["diagnostics"])["severity"] == "warning"
     refute first =~ "__struct__"
+  end
+
+  test "validates and deterministically serializes structured calculations" do
+    calculation = %{
+      "operation" => "multiply",
+      "operands" => [
+        %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+        %{"kind" => "literal", "value" => 2}
+      ]
+    }
+
+    node = hd(valid_document().root_nodes)
+    style = StyleValue.calculation(calculation, source_expression: "calc(var(--grid-gap) * 2)")
+    document = %{valid_document() | root_nodes: [%{node | styles: %{"gap" => style}}]}
+
+    assert IR.validate(document) == :ok
+    assert IR.encode!(document) == IR.encode!(document)
+
+    encoded = document |> IR.encode!() |> Jason.decode!()
+    encoded_style = get_in(encoded, ["root_nodes", Access.at(0), "styles", "gap"])
+    assert encoded_style["value"] == calculation
+    assert encoded_style["source_expression"] == "calc(var(--grid-gap) * 2)"
+  end
+
+  test "legacy calculation strings remain valid" do
+    node = hd(valid_document().root_nodes)
+
+    document = %{
+      valid_document()
+      | root_nodes: [%{node | styles: %{"gap" => StyleValue.calculation("calc(100% - 1rem)")}}]
+    }
+
+    assert IR.validate(document) == :ok
+  end
+
+  test "rejects invalid structured calculation shapes" do
+    valid = %{
+      "operation" => "multiply",
+      "operands" => [
+        %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+        %{"kind" => "literal", "value" => 2}
+      ]
+    }
+
+    invalid_values = [
+      put_in(valid, ["operation"], "divide"),
+      Map.delete(valid, "operation"),
+      Map.delete(valid, "operands"),
+      put_in(valid, ["operands"], []),
+      put_in(valid, ["operands"], [
+        hd(valid["operands"]),
+        List.last(valid["operands"]),
+        List.last(valid["operands"])
+      ]),
+      put_in(valid, ["operands"], 3),
+      put_in(valid, ["operands", Access.at(0), "kind"], "literal"),
+      put_in(valid, ["operands", Access.at(0), "path"], ""),
+      put_in(valid, ["operands", Access.at(0), "path"], "spacing..grid_gap"),
+      put_in(valid, ["operands", Access.at(0), "path"], "var(--grid-gap)"),
+      put_in(valid, ["operands", Access.at(0), "path"], "--lf-space-grid-gap"),
+      put_in(valid, ["operands", Access.at(0), "extra"], true),
+      put_in(valid, ["operands", Access.at(1), "kind"], "token_ref"),
+      put_in(valid, ["operands", Access.at(1), "value"], "2"),
+      put_in(valid, ["operands", Access.at(1)], %{"kind" => "literal"}),
+      put_in(valid, ["operands", Access.at(1)], %{"kind" => "calculation", "value" => valid})
+    ]
+
+    for value <- invalid_values do
+      node = hd(valid_document().root_nodes)
+
+      document = %{
+        valid_document()
+        | root_nodes: [%{node | styles: %{"gap" => StyleValue.calculation(value)}}]
+      }
+
+      assert {:error, diagnostics} = IR.validate(document)
+      assert Enum.any?(diagnostics, &(&1.code == "ir.style.calculation_invalid"))
+    end
+
+    for number <- [0, -1, 1.5, 2] do
+      valid_number = put_in(valid, ["operands", Access.at(1), "value"], number)
+      node = hd(valid_document().root_nodes)
+
+      document = %{
+        valid_document()
+        | root_nodes: [%{node | styles: %{"gap" => StyleValue.calculation(valid_number)}}]
+      }
+
+      assert IR.validate(document) == :ok
+    end
   end
 
   test "encoding is bytewise deterministic for equivalent documents" do

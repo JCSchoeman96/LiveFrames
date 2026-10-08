@@ -387,8 +387,43 @@ defmodule LiveFrames.IR.Validation do
     )
   end
 
-  defp validate_style_kind_value(diagnostics, kind, value, trace)
-       when kind in [:calculation, :keyword] do
+  defp validate_style_kind_value(diagnostics, :calculation, value, trace)
+       when is_binary(value) do
+    require_string(
+      diagnostics,
+      value,
+      "ir.style.text_value_empty",
+      "calculation values must be non-empty strings",
+      trace
+    )
+  end
+
+  defp validate_style_kind_value(diagnostics, :calculation, value, trace)
+       when is_map(value) and not is_struct(value) do
+    if valid_structured_calculation?(value) do
+      diagnostics
+    else
+      error(
+        diagnostics,
+        "ir.style.calculation_invalid",
+        "structured calculation does not match the supported multiply contract",
+        :schema,
+        trace
+      )
+    end
+  end
+
+  defp validate_style_kind_value(diagnostics, :calculation, _value, trace),
+    do:
+      error(
+        diagnostics,
+        "ir.style.calculation_invalid",
+        "calculation values must be non-empty strings or supported structured calculations",
+        :schema,
+        trace
+      )
+
+  defp validate_style_kind_value(diagnostics, :keyword, value, trace) do
     require_string(
       diagnostics,
       value,
@@ -419,6 +454,45 @@ defmodule LiveFrames.IR.Validation do
   end
 
   defp validate_style_kind_value(diagnostics, _kind, _value, _trace), do: diagnostics
+
+  defp valid_structured_calculation?(
+         %{"operation" => "multiply", "operands" => [first, second]} = value
+       ) do
+    exact_keys?(value, ["operation", "operands"]) and
+      valid_token_ref_operand?(first) and valid_literal_operand?(second)
+  end
+
+  defp valid_structured_calculation?(_value), do: false
+
+  defp valid_token_ref_operand?(%{"kind" => "token_ref", "path" => path} = operand)
+       when is_binary(path) and byte_size(path) > 0 do
+    exact_keys?(operand, ["kind", "path"]) and
+      Regex.match?(~r/^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$/, path) and
+      not String.contains?(path, "--") and
+      not Regex.match?(~r/var\s*\(/i, path)
+  end
+
+  defp valid_token_ref_operand?(_operand), do: false
+
+  defp valid_literal_operand?(%{"kind" => "literal", "value" => value} = operand)
+       when is_number(value) do
+    exact_keys?(operand, ["kind", "value"]) and finite_number?(value)
+  end
+
+  defp valid_literal_operand?(_operand), do: false
+
+  defp exact_keys?(map, expected) do
+    map_size(map) == length(expected) and Enum.all?(expected, &Map.has_key?(map, &1))
+  end
+
+  defp finite_number?(value) when is_integer(value), do: true
+
+  defp finite_number?(value) when is_float(value) do
+    case Jason.encode(value) do
+      {:ok, encoded} -> not String.contains?(encoded, ["NaN", "Infinity"])
+      _error -> false
+    end
+  end
 
   defp validate_responsive(diagnostics, responsive, trace)
        when is_map(responsive) and not is_struct(responsive) do

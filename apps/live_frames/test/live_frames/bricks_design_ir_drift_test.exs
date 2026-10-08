@@ -30,7 +30,7 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                theme_styles: @theme_styles_path
              )
 
-    assert document.ir_version == "2.0.0"
+    assert document.ir_version == "3.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
 
