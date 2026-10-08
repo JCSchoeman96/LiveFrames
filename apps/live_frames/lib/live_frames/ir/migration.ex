@@ -226,8 +226,12 @@ defmodule LiveFrames.IR.Migration do
              )
            ]}
         else
-          ordered_entries = insert_migration_entry(entries, migration_entry)
-          {:ok, Map.put(provenance, @migration_provenance_key, ordered_entries)}
+          if Enum.any?(entries, &(&1 == migration_entry)) do
+            {:ok, provenance}
+          else
+            ordered_entries = insert_migration_entry(entries, migration_entry)
+            {:ok, Map.put(provenance, @migration_provenance_key, ordered_entries)}
+          end
         end
 
       {:ok, _other} ->
@@ -262,8 +266,6 @@ defmodule LiveFrames.IR.Migration do
   defp valid_migration_entry?(_entry), do: false
 
   defp insert_migration_entry(entries, migration_entry) do
-    entries = Enum.reject(entries, &(&1 == migration_entry))
-
     index =
       if migration_entry == @v1_to_v2 do
         Enum.find_index(entries, fn

@@ -198,6 +198,34 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert Enum.any?(invalid_entry, &(&1.code == "ir.migration.provenance_collision"))
   end
 
+  test "existing migration record stays in place relative to unrelated history" do
+    current_record = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    unrelated_record = %{
+      "source_version" => "8.0.0",
+      "target_version" => "9.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    history = [current_record, unrelated_record]
+
+    v2 =
+      put_in(
+        minimal_v2_map(),
+        ["provenance", "liveframes_ir_migrations"],
+        history
+      )
+
+    assert {:ok, migrated} = Migration.to_current(v2)
+    assert migrated["provenance"]["liveframes_ir_migrations"] == history
+  end
+
   test "v1 migration orders existing migration records by transition" do
     v2_to_v3 = %{
       "source_version" => "2.0.0",
