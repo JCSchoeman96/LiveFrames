@@ -402,7 +402,7 @@ RENDER_ROLE_NODE_COMPATIBILITY =
   asset_alt        -> image
   link_url         -> link
   heading_level    -> heading
-  subtree_slot     -> actions | button | link
+  subtree_slot     -> actions | button | link | rich_text
   root_id          -> boundary_node_id only
   root_class       -> boundary_node_id only
   root_global_attrs-> boundary_node_id only
@@ -410,6 +410,15 @@ RENDER_ROLE_NODE_COMPATIBILITY =
 
 Any pair outside this closed matrix: invalid / `NEEDS_REVIEW` for generation.
 Do not coerce.
+
+```text
+RICH_TEXT_SUBTREE_SLOT_RULE =
+  DesignNode.semantic_type == "rich_text" may be the target of one
+  RenderProjection with public_slot_name = an approved public Slot and
+  render_role = :subtree_slot;
+  all existing SUBTREE_SLOT_OWNERSHIP_RULE, PUBLIC_TOP_LEVEL_PLACEMENT_RULE,
+  boundary, reference, cardinality, and conflict rules apply unchanged
+```
 
 ### 6.3 Same-node role co-location
 
@@ -442,6 +451,17 @@ SUBTREE_SLOT_OWNERSHIP_RULE =
   subtree_slot replaces the target DesignNode subtree as consumer-owned markup
   for generation purposes
 
+This rule applies unchanged when the target semantic type is `rich_text`.
+`subtree_slot` remains the existing serialized render role; this amendment adds
+no role, plan field, or serialized shape.
+
+RICH_TEXT_SUBTREE_SLOT_NATIVE_BYPASS_RULE =
+  when a rich_text node is replaced by subtree_slot, native generation
+  eligibility MUST NOT require that replaced node to resolve a native tag or
+  emit its static content;
+  this bypass applies only to the replaced subtree, not to a visible,
+  non-replaced rich_text node
+
 SUBTREE_SLOT_BINDING_DESCENDANT_POLICY =
   the target node's parent remains part of generated internal structure;
   the target node and its descendants are not separately emitted from Design IR;
@@ -456,6 +476,10 @@ SUBTREE_SLOT_BINDING_DESCENDANT_POLICY =
 
 If the subtree contains only supported static internal `DesignNode` records (no
 bindings), `subtree_slot` may replace them subject to role/node compatibility.
+The rich-text extension was discovered during CTA Tango A1 preparation. That is
+motivation only; compatibility is determined solely by
+`DesignNode.semantic_type == "rich_text"`, an explicit public `Slot`, and its
+explicit `subtree_slot` placement.
 Collection-backed, repeated, `:let`, fallback, or other slot composition beyond
 `subtree_slot` and `BINDING_BACKED_SLOT_PLAN_RULE` requires later authority.
 
@@ -1269,15 +1293,50 @@ data.
 ### Performance and scaling review
 
 ```text
-DATA_LAYER = compile/build-time cold artifact
-SAFE_AT_100K_RUNTIME_USERS = yes; no runtime path
-EXCESS_DB_CALLS = none
-REDIS_REPRESENTATION = none required
-STREAMING = unnecessary for one component artifact; future whole-catalogue
-  compiler may process documents incrementally
+DATA_LAYER=COLD_BUILD_TIME
+RUNTIME_PATH_CHANGE=NO
+HOT_DATA=N/A
+WARM_DATA=N/A
+REDIS=N/A
+POSTGRES=N/A
+PUBSUB=N/A
+GENSERVER=N/A
+OBAN=N/A
+CACHE_TTL=N/A
+100K_RUNTIME_CONCURRENCY=N/A
+RUNTIME_DB_CALLS=0
+RUNTIME_NETWORK_CALLS=0
+STREAMING=N/A
 ```
 
 Runtime event-platform caching architecture does not apply to this compiler slice.
+
+### Rich-text subtree-slot authority lifecycle
+
+```text
+gap_discovered
+→ authority_scope_verified
+→ rich_text_slot_semantics_frozen
+→ implementation_authorized_candidate
+
+failure terminals:
+schema_change_required
+format_version_decision_required
+generator_architecture_change_required
+authority_conflict
+```
+
+The amendment reuses the existing `subtree_slot` role in plan format `1.0.0`.
+It changes the allowed source-independent target semantic set, but adds no plan
+field or serialized role. Under `PLAN_VERSIONING_RULE`, which versions the
+serialized shape, this compatibility expansion does not require a plan format
+version change.
+
+```text
+PLAN_SERIALIZED_SHAPE_CHANGED=NO
+NEW_RENDER_ROLE_ADDED=NO
+PLAN_FORMAT_VERSION_CHANGE_REQUIRED=NO
+```
 
 ## 18. Decision matrix
 
@@ -1299,7 +1358,7 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Root `id` | integration need | No | Yes | `root_id` | boundary only | No | non-boundary target |
 | Root `class` | additive styling | No | Yes | `root_class` | boundary only | No | source class as API |
 | Root global attrs (`rest`) | Phoenix :global | No | Yes | `root_global_attrs` | boundary only | No | wrong type |
-| Consumer action slot | reviewed action subtree | No (unless binding-backed slot) | Yes | `subtree_slot` | `actions`, `button`, or `link` | No | subtree binding conflict |
+| Consumer-owned subtree slot | reviewed static subtree | No (unless binding-backed slot) | Yes | `subtree_slot` | `actions`, `button`, `link`, or `rich_text` | No | subtree binding conflict |
 | Internal static/decorative label | not public | No | No | — | internal constant | Yes as internal | fake public attr |
 | Static collection-item customization | unbound item field request | No | No in 1.0.0 | — | — | No | `STATIC_COLLECTION_ITEM_RULE` |
 | Evidence-insufficient binding | normalization_status | If emitted, blocks approval | Must not bypass | — | — | No | `EVIDENCE_INSUFFICIENT_RULE` |
@@ -1309,7 +1368,7 @@ Runtime event-platform caching architecture does not apply to this compiler slic
 | Unprojected in-boundary root CollectionBinding | both nodes in boundary | No | — | — | — | No | `binding.uncovered` |
 | Unprojected in-boundary nested CollectionBinding | child in boundary | No | — | — | — | No | `binding.uncovered` / missing parent |
 | Boundary-crossing CollectionBinding | owner/repeat split by boundary | — | — | — | — | No | `boundary.binding_crosses` |
-| `subtree_slot` with binding-backed descendant | ValueBinding/CollectionBinding in subtree | — | Yes invalid | `subtree_slot` | actions/button/link | No | `slot.subtree_conflict` |
+| `subtree_slot` with binding-backed descendant | ValueBinding/CollectionBinding in subtree | — | Yes invalid | `subtree_slot` | actions/button/link/rich_text | No | `slot.subtree_conflict` |
 | Plan vs different DesignDocument, same node IDs | path-based IDs collide | — | — | — | — | No | `design_document.mismatch` |
 | Structured media attr `:map` request | semantic review | No | No in 1.0.0 | — | — | No | role/type matrix |
 | Public attr with zero placement | top-level attr | No | No | — | — | No | `public_input.placement_missing` |

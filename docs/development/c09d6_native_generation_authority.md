@@ -753,6 +753,21 @@ superseded by a public placement on that node.
 projection target. ‡No static child subtree except literal text on the node
 itself.
 
+If a `rich_text` node is the accepted target of a `subtree_slot` projection,
+the existing subtree-slot ownership rule replaces that node and its descendants
+with consumer-owned Phoenix markup. The generator does not emit the replaced
+node, its descendants, or its static content, and does not resolve a native tag
+for that subtree. A missing or incompatible tag therefore does not block
+generation for the replaced subtree. The generator does not parse, trust,
+sanitize, or render source/static markup. This rule does not authorize raw HTML
+or change the non-slotted `rich_text` row above. A visible, non-replaced
+`rich_text` node still requires an explicit compatible tag and follows the
+existing escaped UTF-8 content rule.
+
+Existing subtree-slot binding and ownership guards remain mandatory. Styling
+pruning already follows subtree-slot ownership, so this authority does not
+authorize native styling for consumer-owned slot contents.
+
 #### 10.10.3 `image` and `figure` (frozen structure)
 
 ```text
