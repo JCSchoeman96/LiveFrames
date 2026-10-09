@@ -6,17 +6,37 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
   @token_path ~r/^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$/
 
   @doc false
-  @spec build([map()]) :: {:ok, %{optional(String.t()) => String.t()}} | {:error, term()}
+  @spec build([map()]) :: {:ok, %{optional(String.t()) => [String.t()]}} | {:error, term()}
   def build(mappings) when is_list(mappings) do
     with {:ok, entries} <- validate_layers(mappings),
-         :ok <- validate_unique_direct_paths(entries),
          :ok <- validate_unique_css_variables(entries) do
       direct_entries = Enum.filter(entries, &is_binary(&1["token_set_path"]))
-      {:ok, Map.new(direct_entries, &{&1["token_set_path"], &1["css_variable"]})}
+
+      index =
+        direct_entries
+        |> Enum.group_by(& &1["token_set_path"], & &1["css_variable"])
+        |> Map.new(fn {path, variables} -> {path, Enum.sort(variables)} end)
+
+      {:ok, index}
     end
   end
 
   def build(mappings), do: {:error, {:invalid_mapping_layers, mappings}}
+
+  @doc false
+  @spec lookup(map(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  def lookup(index, token_path) when is_map(index) and is_binary(token_path) do
+    case Map.fetch(index, token_path) do
+      :error ->
+        {:error, {:unknown_token_path, token_path}}
+
+      {:ok, [css_variable]} ->
+        {:ok, css_variable}
+
+      {:ok, css_variables} when is_list(css_variables) and length(css_variables) > 1 ->
+        {:error, {:ambiguous_token_mapping, token_path, Enum.sort(css_variables)}}
+    end
+  end
 
   defp validate_layers(mappings) do
     Enum.reduce_while(mappings, {:ok, []}, fn mapping, {:ok, acc} ->
@@ -39,7 +59,10 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
         {:error, {:invalid_mapping_entries, mapping["entries"]}}
 
       true ->
-        validate_entries(mapping["entries"])
+        with {:ok, entries} <- validate_entries(mapping["entries"]),
+             :ok <- validate_unique_direct_paths(entries) do
+          {:ok, entries}
+        end
     end
   end
 
@@ -170,10 +193,10 @@ defmodule LiveFrames.Styling.TokenBridge do
 
   @spec package_css_variable(String.t()) :: {:ok, String.t()} | {:error, term()}
   def package_css_variable(token_path) when is_binary(token_path) do
-    case Map.fetch(@package_css_variable_index, token_path) do
-      {:ok, css_variable} -> {:ok, css_variable}
-      :error -> {:error, {:unknown_token_path, token_path}}
-    end
+    LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+      @package_css_variable_index,
+      token_path
+    )
   end
 
   def package_css_variable(token_path), do: {:error, {:invalid_token_path, token_path}}

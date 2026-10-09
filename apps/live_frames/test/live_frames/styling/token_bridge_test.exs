@@ -295,6 +295,37 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              TokenBridge.generate(token_set, [shared, hero])
   end
 
+  test "rejects a repeated token path with the same css variable across package layers" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      }
+    ]
+
+    assert {:error, {:duplicate_css_variables, ["--lf-radius-base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "package mapping lookup returns unknown when a path has no candidates" do
+    assert {:error, {:unknown_token_path, "radius.missing"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(%{}, "radius.missing")
+  end
+
+  test "package mapping lookup returns the single candidate" do
+    assert {:ok, "--lf-radius-base"} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+               %{"radius.base" => ["--lf-radius-base"]},
+               "radius.base"
+             )
+  end
+
   test "single-mapping TokenBridge API remains unchanged" do
     mapping = TokenBridge.load_mapping!(@mapping)
     token_set = hero_token_set()
@@ -324,7 +355,7 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              TokenBridge.package_css_variable("spacing.gutter.min")
   end
 
-  test "rejects duplicate direct token paths in package mapping metadata" do
+  test "allows direct token paths to repeat across package layers" do
     mappings = [
       %{
         "schema_version" => "1.0.0",
@@ -335,6 +366,54 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
         "schema_version" => "1.0.0",
         "mapping_version" => "layer_b",
         "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-b"}]
+      }
+    ]
+
+    assert {:ok, index} = LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+
+    assert index == %{
+             "radius.base" => ["--lf-radius-a", "--lf-radius-b"]
+           }
+  end
+
+  test "reports ambiguous package lookup candidates in sorted order" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-z"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"}]
+      }
+    ]
+
+    assert {:ok, index} = LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+
+    assert {:error, {:ambiguous_token_mapping, "radius.base", ["--lf-radius-a", "--lf-radius-z"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(index, "radius.base")
+
+    assert {:ok, reversed_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(Enum.reverse(mappings))
+
+    assert LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+             reversed_index,
+             "radius.base"
+           ) ==
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(index, "radius.base")
+  end
+
+  test "rejects duplicate direct token paths within one package layer" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "one_layer",
+        "entries" => [
+          %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"},
+          %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-b"}
+        ]
       }
     ]
 
