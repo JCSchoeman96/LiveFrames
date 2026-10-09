@@ -361,4 +361,42 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     assert {:error, {:duplicate_css_variables, ["--lf-radius-base"]}} =
              LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
   end
+
+  test "rejects noncanonical semantic paths in package mapping metadata" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "invalid_path",
+        "entries" => [%{"token_set_path" => "../bad path", "css_variable" => "--lf-radius-base"}]
+      }
+    ]
+
+    assert {:error, {:invalid_token_set_path, "../bad path"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects mappings that combine compose and direct token paths" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "ambiguous_entry",
+        "entries" => [
+          %{
+            "compose" => %{
+              "type" => "fluid_px_pair",
+              "min" => "spacing.gutter.min",
+              "max" => "spacing.gutter.max",
+              "viewport_min" => "layout.viewport.min",
+              "viewport_max" => "layout.viewport.max"
+            },
+            "token_set_path" => "spacing.gutter.min",
+            "css_variable" => "--lf-space-gutter"
+          }
+        ]
+      }
+    ]
+
+    assert {:error, {:ambiguous_mapping_entry, "spacing.gutter.min"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
 end

@@ -3,6 +3,7 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
 
   @supported_schema_version "1.0.0"
   @css_variable ~r/^--lf-[a-z0-9]+(?:-[a-z0-9]+)*$/
+  @token_path ~r/^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$/
 
   @doc false
   @spec build([map()]) :: {:ok, %{optional(String.t()) => String.t()}} | {:error, term()}
@@ -60,6 +61,7 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
   defp validate_entry(entry) when is_map(entry) do
     variable = entry["css_variable"]
     compose = entry["compose"]
+    has_direct_path = Map.has_key?(entry, "token_set_path")
 
     cond do
       not (is_binary(variable) and Regex.match?(@css_variable, variable)) ->
@@ -68,14 +70,17 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
       entry["tailwind_alias"] not in [nil, ""] ->
         {:error, {:unsupported_tailwind_alias, entry["tailwind_alias"]}}
 
-      valid_compose?(compose) and valid_direct_path?(entry["token_set_path"]) ->
-        :ok
+      valid_compose?(compose) and has_direct_path ->
+        {:error, {:ambiguous_mapping_entry, entry["token_set_path"]}}
 
       valid_compose?(compose) ->
         :ok
 
-      is_nil(compose) and valid_direct_path?(entry["token_set_path"]) ->
+      is_nil(compose) and has_direct_path and valid_direct_path?(entry["token_set_path"]) ->
         :ok
+
+      is_nil(compose) and has_direct_path ->
+        {:error, {:invalid_token_set_path, entry["token_set_path"]}}
 
       true ->
         {:error, {:invalid_mapping_entry, entry}}
@@ -92,7 +97,8 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
 
   defp valid_compose?(_), do: false
 
-  defp valid_direct_path?(path), do: is_binary(path) and path != ""
+  defp valid_direct_path?(path) when is_binary(path), do: Regex.match?(@token_path, path)
+  defp valid_direct_path?(_path), do: false
 
   defp validate_unique_direct_paths(entries) do
     entries
