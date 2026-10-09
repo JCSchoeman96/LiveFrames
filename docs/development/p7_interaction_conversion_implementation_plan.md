@@ -1,44 +1,28 @@
 # P7 interaction conversion implementation plan
 
-**Plan version:** 1.0.3
+**Plan version:** 1.0.4
 **Date:** 2026-10-09
-**Status:** corrected authority candidate for independent review; P7-A2 acceptance is not established; P7-B1 and later implementation is not authorized
+**Status:** corrected authority candidate for independent review; P7-B1 and later implementation is not authorized
 **Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `0790d6b7c6397863f9d567b0a8542d7d06ba1edc`
-**Tree:** `083cc5425b2f1893e7c8ecb2f68df4f999b683d8`
-**Base CI:** `37946766626 completed/success`
+**Base:** `df03f19f61549d2d4e3e4028f2567b4bb134ab4e`
+**Tree:** `5314cb74606f1385e70d10ccdf35c23355e2fc4e`
+**Base CI:** `37948504085 completed/success`
 
 ## 1. Purpose and authority
 
 P7 establishes a source-neutral behavior contract and turns accepted behavior evidence into accessible Phoenix-native interactions. It must preserve the accepted C09D6 static generation path, bind behavior to one exact DesignDocument, and keep source runtimes and executable source material out of generated components.
 
-This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 authorized no implementation. P7-A1 is implemented on main and accepted as present authority by the owner after independent technical review; this does not establish prior authorization. P7-A2 is implemented on main, but its prior authorization and present authority acceptance are not established. Merge and CI do not supply that acceptance. Neither state authorizes P7-B1 or any later slice; each requires separate owner authorization.
+This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. Their acceptance does not authorize P7-B1 or any later slice. Each remaining issue needs separate owner authorization.
 
 ```text
-P7_A1_STATUS=IMPLEMENTED_MERGED_ACCEPTED
+P7_A1_STATUS=IMPLEMENTED_ACCEPTED
 P7_A1_PR=154
-P7_A1_HEAD=1b4044186b6e9adcfec19d77a9eb26d8ed3716ad
-P7_A1_MERGE=288218a32dc87c0fc028fed730c736f4d7008832
-P7_A1_POST_MERGE_CI=37938079588 completed/success
-P7_A1_TECHNICAL_REVIEW=PASS
-P7_A1_PRIOR_AUTHORIZATION=NOT_ESTABLISHED
-P7_A1_PRESENT_OWNER_ACCEPTANCE=YES
-P7_A1_FORMAT_MIGRATION=NONE
-P7_A1_DESIGN_IR_SCHEMA_CHANGE=NONE
-P7_A1_COMPONENTIZATION_PLAN_FORMAT_CHANGE=NONE
-P7_A1_BEHAVIOR_IMPLEMENTATION=NONE
-
-P7_A2_STATUS=IMPLEMENTED_ON_MAIN_ACCEPTANCE_NOT_ESTABLISHED
+P7_A2_STATUS=IMPLEMENTED_ACCEPTED
 P7_A2_PR=157
-P7_A2_HEAD=ca8a5ba9352e3de195508e39ec7a6b9f97a147f7
-P7_A2_MERGE=66198002db8f35744b09befa780a9841506a51f5
-P7_A2_MERGE_SIGNATURE=VALID
-P7_A2_POST_MERGE_CI=37944328686 completed/success
-P7_A2_PRIOR_AUTHORIZATION=NOT_ESTABLISHED
-P7_A2_PRESENT_OWNER_ACCEPTANCE=NOT_ESTABLISHED
-P7_A2_TECHNICAL_REVIEW=NOT_ESTABLISHED
-
 P7_B1_AND_LATER=PLANNED_NOT_AUTHORIZED
+P7_B1_STATUS=PLANNED_NOT_AUTHORIZED
+P7_B1_PREREQUISITES_A1_A2=SATISFIED
+P7_B1_AUTHORIZATION=NOT_GRANTED
 ```
 
 The target flow is:
@@ -66,6 +50,13 @@ untrusted source behavior evidence
 
 The reusable `apps/live_frames` library remains independent of the preview application, Bricks, Frames, WordPress, ACSS, source JavaScript, private vendor code, and source runtime packages.
 
+```text
+ACSS_DEPENDENCY=NO
+FRAMES_RUNTIME_DEPENDENCY=NO
+STATIC_STYLING_GENERATOR_DEPENDENCY=NO
+SOURCE_RUNTIME_DEPENDENCY=NO
+```
+
 ## 2. Repository truth and compatibility boundary
 
 The cited authorities agree on these facts:
@@ -74,10 +65,9 @@ The cited authorities agree on these facts:
 | --- | --- | --- |
 | Design IR | `LiveFrames.IR.DesignDocument` writes IR `3.0.0`. Required root fields include `interactions`; there is no `behaviors` registry. | Keep BehaviorContract separate. Do not change required fields, field meanings, or serialized Design IR in P7-A1 through P7-L. |
 | Coarse interaction intent | `LiveFrames.IR.Interaction` contains `interaction_id`, `intent`, `trigger`, `target_node_ids`, `parameters`, and `source_trace`. It describes intent and does not select a runtime. | Do not expand or reinterpret it. Existing `interaction_refs` remain references to the current interaction registry. |
-| DesignDocument identity | `LiveFrames.IR.Identity` uses `canonicalization_id=lf-ir-serializer-v1` and `digest_algorithm=sha-256`; `ComponentizationPlan.design_document_sha256/1` delegates to it and retains its compatibility API. | Reuse these exact bytes and digest. Do not replace the digest with JCS or add a second DesignDocument hash. |
+| DesignDocument identity | `LiveFrames.IR.Identity` uses `canonicalization_id=lf-ir-serializer-v1` and `digest_algorithm=sha-256`. `ComponentizationPlan.design_document_sha256/1` delegates to it and retains its compatibility API. | Reuse these exact bytes and digest. Do not replace the digest with JCS or add a second DesignDocument hash. |
 | IR serializer | `LiveFrames.IR.Serializer` emits explicit fields, converts trusted enum atoms to strings, sorts object keys recursively, preserves list order, and delegates JSON encoding to Jason. IR tests assert deterministic output for equivalent conversions. | Treat this existing serializer byte representation as the DesignDocument canonical form for P7. Lock it with golden compatibility tests before changing any implementation. |
-| Canonical JSON | `LiveFrames.CanonicalJSON` owns the source-neutral restricted JCS encoder. `LiveFrames.Catalogue.CanonicalJSON` remains the compatibility wrapper for Catalogue diagnostics and fingerprints. | `LiveFrames.Behavior.*` must not depend on `LiveFrames.Catalogue.*`. Keep Catalogue fingerprints byte-for-byte stable. |
-| Behavior implementation state | `BehaviorContract`, `BehaviorBinding`, `BehaviorReviewResult`, the primitive registry, `BehaviorProjection`, and `RuntimeRealization` are not implemented. | P7-A1 and P7-A2 do not implement Behavior artifacts. Each later slice remains separately gated. |
+| Canonical JSON | `LiveFrames.CanonicalJSON` owns the source-neutral JCS value encoder. `LiveFrames.Catalogue.CanonicalJSON` is the compatibility wrapper preserving Catalogue bytes, diagnostics, and fingerprints. | `LiveFrames.Behavior.*` must not depend on `LiveFrames.Catalogue.*`. Keep Catalogue fingerprints byte-for-byte stable. |
 | Componentization | `ComponentContract 1.0.0` owns the public API and its approval result. `ComponentizationPlan 1.0.0` owns placement and links to a contract and DesignDocument. C09D6 has shared generation prerequisites and human ComponentReview. | Keep both accepted formats unchanged. Behavior review cannot approve a ComponentContract or substitute for ComponentReview. |
 | Slide Menu Alpha disclosure mapping | `docs/development/slide_menu_alpha_disclosure_mapping_preflight.md` accepts the `closed | open` core and native `<details>/<summary>` sufficiency. The full mapping remains partial. Current-page identity input is evidence-insufficient; current-page timing and update lifecycle are unknown; nested policy, accessibility mapping, and motion mapping are partial; target style authority is required; hook need is not proven. | P7-F may test only the accepted core. It must not claim a complete Slide Menu conversion or infer current-page, nesting, ARIA, keyboard, hook, or motion details. |
 
@@ -118,7 +108,7 @@ The accepted canonicalization algorithm is `lf-ir-serializer-v1`. For the curren
 
 P7-A1 implemented the source-neutral `LiveFrames.IR.Identity` boundary. `ComponentizationPlan.design_document_sha256/1` remains callable and delegates to it, preserving its return shape and historical digest. The plan format did not gain an algorithm field. BehaviorContract carries the explicit identity tuple and rejects unknown canonicalization IDs or unsupported IR versions.
 
-This choice uses repository behavior rather than RFC 8785 because the accepted Design IR serializer owns typed struct-to-map conversion and admits finite JSON floats in IR values, while Catalogue JCS rejects floats and accepts only normalized string-key maps. Switching DesignDocument identity to JCS would change the established componentization fingerprint and require explicit migration analysis. The current IR serializer already has explicit field conversion, deterministic key ordering, stable list ordering, and deterministic-output tests. If P7-A1 finds that its bytes cannot be held stable across supported changes, stop with `STOP=IDENTITY_ALGORITHM_UNRESOLVED`; do not silently replace the algorithm.
+This choice uses repository behavior rather than RFC 8785 because the accepted Design IR serializer owns typed struct-to-map conversion and admits finite JSON floats in IR values, while Catalogue JCS rejects floats and accepts only normalized string-key maps. Switching DesignDocument identity to JCS would change the established componentization fingerprint and require explicit migration analysis. The current IR serializer has explicit field conversion, deterministic key ordering, stable list ordering, and deterministic-output tests. The accepted algorithm remains fixed; any proposed change must stop with `STOP=IDENTITY_ALGORITHM_UNRESOLVED` rather than silently replacing it.
 
 ### 2.2 BehaviorBinding identity decision
 
@@ -140,9 +130,9 @@ Binding identity uses the following complete structured payload, encoded as cano
 }
 ```
 
-The identifier algorithm is `lf-behavior-binding-v1-jcs-sha256`. The ID is lowercase SHA-256 of those canonical payload bytes, prefixed `bnd_`. The payload uses named JSON fields, explicit string enum values, a non-negative integer ordinal, and the exact DesignDocument identity. It is unambiguous and does not rely on concatenation or separators. `binding_role` is required and source-independent. P7-B1 defines `binding_id` and `ordinal` as unassigned (`null`) only on the normalized pre-identity binding value; persisted BehaviorContract bindings must have both. P7-B2 assigns them. The semantic structure is fully typed before identity derivation; there is no provisional discriminator map.
+The identifier algorithm is `lf-behavior-binding-v1-jcs-sha256`. The ID is lowercase SHA-256 of those canonical payload bytes, prefixed `bnd_`. The payload uses named JSON fields, explicit string enum values, a non-negative integer ordinal, and the exact DesignDocument identity. Its `primitive_kind` value is `primitive_ref.kind`; `definition_version` is deliberately excluded from this accepted binding ID formula. It is unambiguous and does not rely on concatenation or separators. `binding_role` is required and source-independent. P7-B1 defines `binding_id` and `ordinal` as unassigned (`null`) only on the normalized pre-identity binding value; persisted BehaviorContract bindings must have both. P7-B2 assigns them. The semantic structure is fully typed before identity derivation; there is no provisional discriminator map.
 
-Ordinal assignment is fixed. First group normalized bindings by the exact tuple `(owner_node_id, primitive_kind, binding_role)`. For each binding, its semantic discriminator is a canonical JSON object with exactly these top-level fields:
+Ordinal assignment is fixed. First group normalized bindings by the exact tuple `(owner_node_id, primitive_ref.kind, binding_role)`. For each binding, its semantic discriminator is a canonical JSON object with exactly these top-level fields:
 
 ```json
 {
@@ -160,13 +150,13 @@ Ordinal assignment is fixed. First group normalized bindings by the exact tuple 
 }
 ```
 
-Each nested value is a normalized typed BehaviorBinding occurrence value. The discriminator removes exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace` from the binding. P7-B1 freezes the nested field shapes within these binding-owned fields before P7-B2 implements this algorithm. The map includes typed trigger kind/origin, controlled target roles and node IDs, an optional occurrence-specific initial-state assignment, and the five named binding policies. It does not include the primitive definition's state dimensions/domains, default initialization, invariants, transitions, guards, or effects. Those remain owned by the trusted primitive registry and do not participate in binding identity. A runtime or component-instance value is not a legal BehaviorBinding field. Source/vendor IDs, selectors, and classes are invalid semantic fields and cannot enter this map.
+Each nested value is a normalized typed BehaviorBinding occurrence value. The discriminator removes exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace` from the binding. P7-B1 freezes the nested field shapes within these binding-owned fields before P7-B2 implements this algorithm. The map includes `primitive_kind` from `primitive_ref.kind`, typed trigger kind/origin, controlled target roles and node IDs, an optional occurrence-specific initial-state assignment, and the five named binding policies. It excludes `primitive_ref.definition_version` and the primitive definition's state dimensions/domains, default initialization, invariants, transitions, guards, or effects. Those remain owned by the trusted primitive registry and do not participate in binding identity. A runtime or component-instance value is not a legal BehaviorBinding field. Source/vendor IDs, selectors, and classes are invalid semantic fields and cannot enter this map.
 
 The discriminator's object keys use JCS ordering. Sort trigger records by their complete JCS bytes, targets by `(role, node_id)`, and responsive overrides by mode key. Canonicalize the optional initial-state assignment by its declared dimension keys and typed values. Preserve only schema-declared ordered values; sort set-like collections by stable typed identity. No primitive state-machine definition enters the discriminator. Encode each discriminator with JCS. Within a group, byte-identical discriminators are duplicate semantic bindings and reject the group before any ID is assigned. Otherwise, sort discriminator byte strings in ascending unsigned byte order. The zero-based position is the `ordinal` used in each binding's ID payload. Raw source traversal or map insertion order never participates. P7-B2 consumes the typed structural model defined by P7-B1 and must add golden tests for map-order invariance, source-order noise, duplicate rejection, distinct deterministic ordinals, and stable binding IDs. If normalized occurrence semantics cannot distinguish bindings without a circular ID dependency, stop with `STOP=IDENTITY_ALGORITHM_UNRESOLVED`.
 
 ### 2.3 BehaviorContract serialization and digest decision
 
-P7-A2 implemented the extraction of the tested JCS value encoder behind `LiveFrames.CanonicalJSON` with a neutral validation result/reason API. `LiveFrames.Catalogue.CanonicalJSON` remains a compatibility wrapper and maps neutral failures to the existing `catalogue.canonical_json.*` code, path, and message. The merged implementation reports preservation of success bytes, error shape, validation order, paths, messages, and Catalogue fingerprint values; independent authority acceptance for P7-A2 remains unestablished. The Behavior serializer maps neutral failures to `behavior.*` diagnostics. This is the only canonical JSON implementation. The Behavior domain serializes a typed, explicit map through this utility and does not call Catalogue modules.
+P7-A2 is implemented and accepted. It moved the tested JCS value encoder behind `LiveFrames.CanonicalJSON` with a neutral validation result/reason API. `LiveFrames.Catalogue.CanonicalJSON` remains a compatibility wrapper and maps every neutral failure to the existing `catalogue.canonical_json.*` code, path, and message exactly. It preserves success bytes, error shape, validation order, paths, messages, and Catalogue fingerprint values. The Behavior serializer maps neutral failures to `behavior.*` diagnostics. This is the only canonical JSON implementation. The Behavior domain serializes a typed, explicit map through this utility and does not call Catalogue modules.
 
 The BehaviorContract value algebra is exactly the extracted JCS algebra: `null`, booleans, safe integers, valid Unicode strings, arrays, and objects with valid Unicode string keys. Behavior semantics use integer milliseconds and closed string vocabularies, so binary floats are unnecessary and invalid. Structs, atoms, non-finite numbers, oversized integers, improper lists, invalid Unicode, and non-string object keys are rejected before encoding. Trusted Elixir enum atoms become their fixed vocabulary strings in the Behavior serializer; untrusted strings never become atoms.
 
@@ -181,7 +171,7 @@ Serialization rules are fixed as follows:
 - Source trace values may preserve inert provenance strings and paths under the source/provenance authority. They cannot be interpreted as executable code, runtime instructions, module names, event names, selectors, or filesystem paths.
 - Runtime handles, DOM nodes, listener functions, timers, observers, component-instance scope, current focus, current viewport, and transient runtime state never enter serialized identity.
 
-Unknown algorithm IDs fail closed. A diagnostic may explain an unknown algorithm, but consumers must not hash with a fallback algorithm or compare digests from unlike algorithms. The contract serializes each binding's trusted primitive reference and occurrence semantics; it never embeds a second copy of the trusted primitive registry. A change to a primitive definition is governed by primitive/version authority rather than by duplicating its body in each contract.
+Unknown algorithm IDs fail closed. A diagnostic may explain an unknown algorithm, but consumers must not hash with a fallback algorithm or compare digests from unlike algorithms. The contract serializes each binding's full trusted `PrimitiveRef` and occurrence semantics; it never embeds a second copy of the trusted primitive registry. `PrimitiveRef` includes `kind` and `definition_version`, and both fields participate in canonical BehaviorContract bytes and its digest. Changing the referenced definition version therefore changes the contract digest and makes any prior `BehaviorReviewResult` mismatch. The binding ID continues to use the accepted primitive-kind field only. A change to a primitive definition is governed by primitive/version authority rather than by duplicating its body in each contract.
 
 ## 3. Design IR boundary and review model
 
@@ -217,13 +207,14 @@ Every reference is typed, document-local or contract-local, and validated by its
 | --- | --- | --- | --- | --- | --- |
 | `BehaviorContract` | One conversion result per exact DesignDocument; zero or more bindings and diagnostics | Format version plus one `DesignDocumentIdentity`; owns binding IDs and diagnostic/evidence references | P7-B3 `validate_structure/2` validates identity, shape, values, and references. P7-C adds `validate_semantics/2`; `validate/2` composes both only after P7-C. | Persisted compile-time artifact; explicit `Behavior.Serializer` mapping and digest | BehaviorReviewResult, pre-proposer decision, and BehaviorProjection |
 | `DesignDocumentIdentity` | `LiveFrames.IR.Identity`; one per validated DesignDocument | `(ir_version, canonicalization_id, digest_algorithm, digest)`; no document resemblance matching | IR identity code validates current supported version and exact byte digest | Serializable value inside BehaviorContract and matching review/projection evidence | Componentization matching and stale-document rejection |
-| `BehaviorBinding` | One occurrence in a BehaviorContract; exactly one primitive and owner node | P7-B1 typed occurrence fields; P7-B2 structured `BehaviorBindingID`; references its primitive kind, exact contract owner, triggers, targets, optional initial-state assignment, binding policies, and evidence; never owns a state model or transition definitions | P7-B3 checks shape/references and IDs. P7-C validates occurrence values against the trusted primitive definition. P7-D0 checks candidate-boundary admissibility; P7-D1 checks the approved boundary. | Persisted as part of BehaviorContract, without a copy of primitive-definition semantics | Review, componentization decision, BehaviorProjection, and runtime realization selection |
-| `BehaviorPrimitiveDefinition` | Closed, versioned trusted registry; one definition per implemented primitive kind/version | Fixed registry reference; owns the primitive's `BehaviorStateModel`, transitions, guards/effects, cardinality, invariants, accessibility contract, and permitted policy shapes; binding occurrences provide their allowed policy values; unimplemented registered kinds return unsupported | P7-C registry API and the implementing tracer's definition tests | Trusted compile-time code/configuration; BehaviorContract serializes the primitive reference/kind only | State validation, accessibility policy, realization selector |
+| `BehaviorBinding` | One occurrence in a BehaviorContract; exactly one `PrimitiveRef` and owner node | P7-B1 typed occurrence fields; P7-B2 structured `BehaviorBindingID`; owns one exact `PrimitiveRef`, owner node, binding role, trigger occurrences, controlled targets, optional initial-state assignment, binding policy values, diagnostics/evidence/provenance; never owns a state model or transition definitions | P7-B3 checks shape/references and IDs. P7-C validates the exact primitive reference and occurrence values. P7-D0 checks candidate-boundary admissibility; P7-D1 checks the approved boundary. | Persisted as part of BehaviorContract, without a copy of primitive-definition semantics | Review, componentization decision, BehaviorProjection, and runtime realization selection |
+| `PrimitiveRef` | One exact trusted primitive definition reference owned by one BehaviorBinding | `kind` and `definition_version`, both closed trusted strings; the exact pair selects one definition | P7-B1 validates closed fields; P7-C resolves the exact pair and rejects unknown pairs without fallback | Full value is serialized in BehaviorContract and participates in its digest; not the registry body | Semantic validation and runtime realization selection |
+| `BehaviorPrimitiveDefinition` | Closed, versioned trusted registry; one definition per implemented primitive kind/version | Exact registry lookup by `(kind, definition_version)` from `PrimitiveRef`; owns its `BehaviorStateModel`, state dimensions/domains, default initialization, invariants, cardinality, accessibility contract, and permitted policy shapes; unknown pairs return unsupported | P7-C registry API and the implementing tracer's definition tests | Trusted compile-time code/configuration; BehaviorContract serializes only the primitive reference | State validation, accessibility policy, realization selector |
 | `Trigger` | Owned by one binding; zero or more typed trigger records | Closed trigger kind and optional typed origin node in owner scope | Behavior validator and primitive definition | Persisted semantic value; no arbitrary browser event string | Runtime realization selector |
 | `ControlledTarget` | Owned by one binding; zero or more targets with primitive-specific required roles/cardinality | Exact DesignNode ID and closed target role, inside declared owner subtree | Behavior validator, then P7-D0 candidate and P7-D1 approved-boundary checks | Persisted semantic value; no selector fallback | HEEx relationships and realization |
-| `OccurrenceInitialStateAssignment` | Optional value owned by one BehaviorBinding occurrence | Assigns values only to dimensions declared by that binding's trusted primitive definition; introduces no dimensions, domains, invariants, transitions, guards, or effects | P7-C validates each dimension/value and the resolved full initial state against the primitive definition's domains and invariants | Serialized as binding-owned occurrence data; absent means use the definition's accepted/default initialization | Initial runtime state for that occurrence |
-| `BehaviorStateModel` | Owned by one primitive definition; one or more finite state dimensions | Dimension names/domains, default initial values, invariants, and terminal rule from primitive vocabulary | Primitive definition plus Behavior validator | Trusted compile-time definition; not serialized as a second copy in BehaviorContract | Transition validation and runtime realization |
-| `Transition` | Owned by one state model; zero or more named definitions | Stable transition name, source predicate, trigger, destination dimensions, guards, effects | Primitive definition and Behavior validator check domains, invariants, and atomicity | Trusted compile-time definition; not serialized in BehaviorContract | Runtime realization and browser assertions |
+| `OccurrenceInitialStateAssignment` | Optional value owned by one BehaviorBinding occurrence | Assigns values only to dimensions and values declared by its exact `PrimitiveRef` definition; introduces no dimensions, domains, invariants, transitions, guards, or effects; not mutable runtime state | P7-C resolves the exact definition, applies defaults for omitted dimensions, and validates the complete state against its domains and invariants | Serialized as binding-owned occurrence data; absent means use the referenced definition's accepted/default initialization | Resolved initial-state input for that occurrence |
+| `BehaviorStateModel` | Owned by one primitive definition; one or more finite state dimensions | Dimension names/domains, default initial values, invariants, transitions, and terminal rules/states from primitive vocabulary | Primitive definition plus Behavior validator | Trusted compile-time definition; not serialized as a second copy in BehaviorContract | Transition validation and runtime realization |
+| `Transition` | Owned by one state model; zero or more named definitions | Stable transition name, source predicate, trigger, destination dimensions, guards, effects, and applicable accessibility effects | Primitive definition and Behavior validator check domains, invariants, and atomicity | Trusted compile-time definition; not serialized in BehaviorContract | Runtime realization and browser assertions |
 | `TransitionGuard` | Owned by one transition; zero or more pure definitions | Closed guard kind with typed state/policy/context operands | Primitive definition and Behavior validator | Trusted compile-time definition; no I/O or executable expression; not serialized in BehaviorContract | Runtime realization selector/interpreter |
 | `BehaviorEffect` | Owned by one transition; zero or more definitions | Closed semantic effect kind and typed target/operand references | Primitive definition and Behavior validator | Trusted compile-time definition; no arbitrary DOM mutation recipe; not serialized in BehaviorContract | Runtime realization |
 | `AccessibilityEffect` | Owned by a transition/effect; zero or more synchronized definitions | Semantic state, ARIA/native state, focus and relationships for exact controls/targets | Primitive definition and Behavior validator plus accessibility tests/review | Trusted compile-time definition; not serialized in BehaviorContract | Markup and runtime realization; browser/AT verification |
@@ -261,7 +252,28 @@ BehaviorPrimitiveDefinition
               → AccessibilityEffect
 ```
 
-A `BehaviorBinding` represents one occurrence. It references its primitive definition and owns only occurrence-specific triggers, controlled targets, permitted binding policies, and accepted occurrence values. It does not own or serialize a second state model, transition definitions, guards, or effects. P7-C validates occurrence values against the exact trusted primitive definition.
+A `BehaviorBinding` represents one occurrence. It owns exactly one typed `PrimitiveRef` and owns only occurrence-specific triggers, controlled targets, permitted binding policies, and accepted occurrence values. It does not own or serialize a second state model, transition definitions, guards, or effects. P7-C resolves the exact `(kind, definition_version)` pair and validates occurrence values against that trusted definition. The kind and version are closed trusted strings; untrusted input never becomes an atom. An unknown pair is unsupported, with no latest-version or kind-only fallback.
+
+```text
+PrimitiveRef
+  kind
+  definition_version
+
+BehaviorBinding.primitive_ref = {
+  "kind": "<closed trusted primitive kind>",
+  "definition_version": "<closed trusted definition version>"
+}
+
+PRIMITIVE_REF_KIND=CLOSED_TRUSTED_STRING
+PRIMITIVE_REF_DEFINITION_VERSION=CLOSED_TRUSTED_STRING
+PRIMITIVE_REF_SERIALIZED=YES
+PRIMITIVE_REF_IN_CONTRACT_DIGEST=YES
+PRIMITIVE_DEFINITION_BODY_SERIALIZED=NO
+UNKNOWN_KIND_VERSION_PAIR=UNSUPPORTED
+KIND_ONLY_FALLBACK=PROHIBITED
+LATEST_VERSION_FALLBACK=PROHIBITED
+UNTRUSTED_STRING_TO_ATOM=PROHIBITED
+```
 
 `docs/09_INTERACTION_MODEL.md` §9.1 requires normalization to use an explicit accepted initial state when one exists and otherwise use the Disclosure default `closed`. The occurrence-specific value is represented as an optional typed `initial_state` assignment on `BehaviorBinding`, separate from the primitive definition's state model and its default initialization. The assignment contains only dimension/value pairs whose dimensions and values already exist in that definition. It cannot add dimensions, change domains or invariants, or define transitions, guards, or effects. If absent, every dimension uses the definition's accepted/default initialization. P7-C validates the assigned dimensions and values, resolves unspecified dimensions from the definition, and validates the combined initial state against all declared invariants before full Behavior validation succeeds. This value is an initialization input, not live runtime state.
 
@@ -270,16 +282,31 @@ PRIMITIVE_STATE_MODEL_OWNER=BehaviorPrimitiveDefinition
 TRANSITION_OWNER=BehaviorStateModel
 BINDING_OWNS_STATE_MODEL=NO
 BINDING_OWNS_TRANSITION_DEFINITIONS=NO
+BINDING_OWNS_TRANSITIONS=NO
 BINDING_OWNS_GUARD_DEFINITIONS=NO
 BINDING_OWNS_EFFECT_DEFINITIONS=NO
+BINDING_OWNS_GUARDS=NO
+BINDING_OWNS_EFFECTS=NO
 
 BINDING_OWNS_TRIGGER_OCCURRENCES=YES
 BINDING_OWNS_CONTROLLED_TARGET_OCCURRENCES=YES
 BINDING_OWNS_BINDING_POLICIES=YES
 
-PRIMITIVE_DEFINITION_SERIALIZED_IN_BEHAVIOR_CONTRACT=NO
+PRIMITIVE_DEFINITION_BODY_SERIALIZED_IN_BEHAVIOR_CONTRACT=NO
+FULL_PRIMITIVE_REF_SERIALIZED_IN_BEHAVIOR_CONTRACT=YES
+PRIMITIVE_REF_PARTICIPATES_IN_CONTRACT_DIGEST=YES
+BINDING_ID_FORMULA_CHANGED=NO
+BINDING_ID_INCLUDES_DEFINITION_VERSION=NO
 BINDING_ID_DEPENDS_ON_PRIMITIVE_DEFINITION_BODY=NO
-OCCURRENCE_INITIAL_STATE_REPRESENTATION=RESOLVED
+OCCURRENCE_INITIAL_STATE_REPRESENTATION=OPTIONAL_ASSIGNMENT_THEN_RESOLVED
+INITIAL_STATE_VALIDATION_OWNER=P7-C
+INITIAL_STATE_CAN_ADD_DIMENSION=NO
+INITIAL_STATE_CAN_EXTEND_DOMAIN=NO
+INITIAL_STATE_CAN_EXTEND_DOMAINS=NO
+INITIAL_STATE_CAN_DEFINE_INVARIANT=NO
+INITIAL_STATE_CAN_DEFINE_TRANSITION=NO
+INITIAL_STATE_CAN_DEFINE_GUARD_EFFECT=NO
+INITIAL_STATE_IS_RUNTIME_STATE=NO
 ```
 
 Required accessibility gates follow the accepted primitive semantics in `docs/09`:
@@ -312,7 +339,12 @@ The decision validates that the contract and review result match the exact Desig
 
 An admissible result requires `Behavior.Validation.validate_structure/2` success and one explicit approved review result matching the exact document and contract. P7-D0 uses structural node references to assess boundary containment; it does not claim that an unimplemented primitive is semantically supported. Full P7-C-composed `validate/2` remains mandatory before BehaviorProjection and realization.
 
-For each binding relevant to that candidate (at least one owner or behavior-referenced DesignNode lies in its subtree), the gate resolves the owner and every typed DesignNode reference in the binding, including controlled targets, focus, accessibility, and transition-effect references. It records whether the complete binding is contained in the candidate boundary. A binding with any owner or referenced node outside that boundary is rejected as split or semantically insufficient. Bindings wholly outside the candidate are not assigned to it. No source class, DOM proximity, source/vendor ID, selector, or wrapper depth determines relevance or ownership. `BEHAVIOR_SPLIT_ACROSS_PROPOSED_BOUNDARIES=REJECT`.
+For each binding relevant to that candidate (at least one binding-owned DesignNode reference lies in its subtree), the gate resolves every concrete binding-owned node reference: owner node, trigger origin, controlled targets, focus-policy node refs, accessibility or relationship occurrence refs, and any other explicitly typed occurrence-level node refs. All references contained means `contained`; all references outside the candidate means `outside_candidate`; references on both sides mean `split` and reject; any unresolved reference means `unresolved` and reject. Primitive transition/effect definitions belong to the trusted registry and are not binding references checked by D0. No source class, DOM proximity, source/vendor ID, selector, or wrapper depth determines relevance or ownership. `BEHAVIOR_SPLIT_ACROSS_PROPOSED_BOUNDARIES=REJECT`.
+
+```text
+P7_D0_TRANSITION_EFFECT_REFERENCE_REMOVED=YES
+P7_D0_BINDING_NODE_REFERENCE_RULE=ALL_CONCRETE_OCCURRENCE_OWNED_DESIGN_NODE_REFS
+```
 
 The decision outcome is the closed compile-time value `admissible | rejected`; each binding disposition is `contained | outside_candidate | split | unresolved`. The decision is an **ephemeral compile-time validator result**, not a persisted artifact. It has no serializer, digest, database record, timestamp selection, or independent approval state. During the gated call it holds the exact DesignDocumentIdentity, BehaviorContract digest, BehaviorReviewResult ID, canonical ComponentizationSemanticInput value, proposed boundary node ID, and per-binding containment dispositions sorted by `binding_id`; diagnostics use their existing deterministic ordering. The gate returns a blocking diagnostic and does not call the proposer if it cannot establish safe containment; report `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`. This result need not survive ComponentReview: P7-D1 independently repeats ownership validation against the exact approved tuple, so the decision is not an identity input or a substitute for that later proof.
 
@@ -442,16 +474,19 @@ P7 behavior state is browser-local unless an accepted semantic contract proves t
 
 ```text
 HOT_CACHE=N/A
+DATA_LAYER=COLD_COMPILE_REVIEW_TIME
 REDIS=N/A
 POSTGRES=N/A
 CACHE=N/A
 TTL=N/A
+GENSERVER=N/A
 DB_INDEX=N/A
 PGBouncer=N/A
 READ_REPLICA=N/A
 OBAN=N/A
 PUBSUB=N/A
-SERVER_POLLING=PROHIBITED for browser-local primitives
+SERVER_POLLING=NO for browser-local presentation behavior
+BROWSER_LOCAL_PRESENTATION=NO_POLLING_NO_PER_TOGGLE_BACKEND_CALLS
 DISCLOSURE_DB_CALLS_PER_TOGGLE=0
 DISCLOSURE_NETWORK_CALLS_PER_TOGGLE=0
 DB_CALLS_PER_TOGGLE=0
@@ -491,21 +526,23 @@ Every applicable slice also checks that no imported source code executes, no dyn
 
 ## 11. Ordered future issue tree
 
-P7-A1 is completed and accepted as present authority. P7-A2 is implemented on main, but owner acceptance is not established. Neither is a future implementation issue. No GitHub issues are created by P7-0. P7-B1 through P7-L are future slices and each requires explicit owner authorization; P7-B1 also requires P7-A2 authority acceptance.
+P7-A1 and P7-A2 are implemented and accepted. P7-B1 through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each remaining issue is independently reviewable and requires explicit owner authorization before work begins.
 
 ```text
-P7_A1=IMPLEMENTED_MERGED_ACCEPTED
-P7_A2=IMPLEMENTED_ON_MAIN_ACCEPTANCE_NOT_ESTABLISHED
+P7_ISSUE_COUNT=17
 FUTURE_ISSUE_COUNT=15
 FUTURE_ISSUES_CREATED=NO
+P7_B1_STATUS=PLANNED_NOT_AUTHORIZED
+P7_B1_PREREQUISITES_A1_A2=SATISFIED
+P7_B1_AUTHORIZATION=NOT_GRANTED
 ```
 
 | Order | Issue | Scope and required result | Dependency and hard gate |
 | --- | --- | --- | --- |
-| 1 | **IMPLEMENTED / MERGED / ACCEPTED — P7-A1** DesignDocument identity | Centralized the current IR serializer SHA-256 in `LiveFrames.IR.Identity`; preserved `ComponentizationPlan.design_document_sha256/1`; named the identity algorithm. | PR #154 is accepted as present authority. This record does not claim prior authorization. |
-| 2 | **IMPLEMENTED ON MAIN — ACCEPTANCE NOT ESTABLISHED — P7-A2** Source-neutral JCS utility | Extracted the tested JCS encoder and neutral validation reasons. The Catalogue wrapper remains responsible for its exact compatibility contract. | PR #157 is merged with green exact-main CI. Independent technical review and owner acceptance are not established. Do not treat merge/CI as acceptance. P7-B1 remains gated on acceptance. |
-| 3 | **PLANNED — NOT AUTHORIZED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for primitive references, triggers, targets, occurrence initial-state assignments, binding policies, diagnostics, and provenance. Primitive state-machine definitions remain registry-owned. | Depends on accepted P7-A1 and accepted P7-A2. No ID derivation, contract digest, primitive semantics, or runtime. |
-| 4 | **PLANNED — NOT AUTHORIZED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Depends on P7-B1. No primitive-definition body in the binding ID, provisional map shape, or generic untyped identity API. |
+| 1 | **IMPLEMENTED / ACCEPTED** P7-A1 — DesignDocument identity | `LiveFrames.IR.Identity` owns the current IR serializer SHA-256; `ComponentizationPlan.design_document_sha256/1` delegates to it; algorithm is `lf-ir-serializer-v1` + `sha-256`. | Separately owner-authorized after P7-0. Existing digest values and ComponentizationPlan 1.0.0 remain unchanged. |
+| 2 | **IMPLEMENTED / ACCEPTED** P7-A2 — Source-neutral JCS utility | `LiveFrames.CanonicalJSON` owns the tested JCS encoder; Catalogue compatibility wrapper preserves bytes and diagnostics. | Separately owner-authorized after P7-0. No Behavior → Catalogue dependency or Catalogue contract changes. |
+| 3 | **PLANNED — NOT AUTHORIZED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for versioned primitive references, triggers, targets, occurrence initial-state assignments, binding policies, diagnostics, and provenance. Primitive state-machine definitions remain registry-owned. | A1+A2 prerequisites satisfied; B1 authorization not granted. No ID derivation, contract digest, primitive semantics, or runtime. |
+| 4 | **PLANNED — NOT AUTHORIZED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Depends on P7-B1. Use `primitive_ref.kind` in the accepted ID payload; exclude definition version and primitive-definition body. No provisional map shape or generic untyped identity API. |
 | 5 | **PLANNED — NOT AUTHORIZED** P7-B3 — BehaviorContract serializer and structural validation | Implement contract serializer/digest for DesignDocument identity, primitive references, binding-owned occurrence data, and diagnostics/provenance; verify binding IDs and references. | Depends on P7-B2. Expose `validate_structure/2` only; no full `validate/2` before P7-C. Do not serialize primitive state-machine definitions. |
 | 6 | **PLANNED — NOT AUTHORIZED** P7-B4 — BehaviorReviewResult artifact | Implement the immutable review model, exact JCS serializer, `brv_` identity, matching validator, and explicit-result approval gate. | Depends on P7-B3. No latest/timestamp selection, database, mutable status, or ComponentReview authority. |
 | 7 | **PLANNED — NOT AUTHORIZED** P7-C — Primitive registry and validation composition | Implement the trusted registry and primitive-definition ownership of StateModels, Transitions, Guards, Effects, cardinality, invariants, and semantic validation. Compose `validate/2 = validate_structure/2 AND validate_semantics/2`. | Depends on P7-B4. Validate binding occurrence assignments against definitions. Do not implement every primitive; each tracer adds its own definition. |
@@ -521,31 +558,31 @@ FUTURE_ISSUES_CREATED=NO
 | 16 | **PLANNED — NOT AUTHORIZED** P7-K — Carousel | Add Carousel semantics and opt-in timer/control realization. | Depends on P7-J; timer and cleanup remain primitive-scoped. |
 | 17 | **PLANNED — NOT AUTHORIZED** P7-L — One source integration tracer | Integrate one separately selected source fixture and one approved behavior through the complete reviewed pipeline. | Depends on preceding primitive/pipeline gates. Additional sources or behaviors require separate authorization. |
 
-P7-B1 requires both P7-A1 and P7-A2 to be accepted; P7-A1 is accepted and P7-A2 acceptance is not established. All later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
+P7-B1's A1+A2 prerequisites are satisfied, but its authorization has not been granted. All later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
 
-P7-0 authorized no implementation. P7-A1 is accepted as present authority now; this does not rewrite its historical authorization state. P7-A2 is present on main, but its authority acceptance remains unestablished. This plan does not authorize P7-B1 through P7-L or issue creation. Acceptance of one slice does not authorize its successor.
+P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately authorized and subsequently accepted. This plan correction does not authorize P7-B1 or any successor. Approval of any issue does not authorize its successor.
 
 ## 12. TOON micro-prompts
 
-The P7-A1 and P7-A2 entries below are historical/current-state records, not executable implementation prompts. P7-A1 is accepted as present authority. P7-A2 is implemented on main, with acceptance not established. P7-B1 through P7-L remain planned and unauthorized. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
+P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 through P7-L are future implementation tasks and remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
 
 ### P7-A1 — DesignDocument identity
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **COMPLETED — DO NOT RE-RUN** Centralized the existing DesignDocument identity calculation; merged and accepted as present authority via PR #154. |
-| Objective | Give the current `IR.encode!` plus SHA-256 identity a named source-neutral owner without changing componentization fingerprints. |
-| Output    | `apps/live_frames/lib/live_frames/ir/identity.ex`; compatibility delegation from `apps/live_frames/lib/live_frames/componentization_plan.ex`; golden digest tests. |
-| Note      | This is a historical record. Keep `ComponentizationPlan.design_document_sha256/1` return values and plan format unchanged. No JCS extraction, BehaviorBinding identity, infrastructure, runtime, or source dependency. Prior authorization is not established; present acceptance does not rewrite that history. |
+| Task      | **IMPLEMENTED / ACCEPTED** Historical slice. |
+| Objective | `LiveFrames.IR.Identity` owns the current `IR.encode!` plus SHA-256 identity without changing componentization fingerprints. |
+| Output    | `apps/live_frames/lib/live_frames/ir/identity.ex`; `ComponentizationPlan.design_document_sha256/1` compatibility delegation; accepted digest tests. |
+| Note      | Separately authorized after P7-0. `ComponentizationPlan.design_document_sha256/1` return values and plan format remain unchanged. |
 
 ### P7-A2 — Source-neutral CanonicalJSON
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **IMPLEMENTED ON MAIN — ACCEPTANCE NOT ESTABLISHED; DO NOT RE-RUN** PR #157 extracted the Catalogue-tested JCS value encoder into a source-neutral module. |
-| Objective | Let Behavior serialize through the shared restricted JSON algebra without a Behavior-to-Catalogue dependency. |
-| Output    | `apps/live_frames/lib/live_frames/canonical_json.ex`; compatibility delegation from `apps/live_frames/lib/live_frames/catalogue/canonical_json.ex`; exact-byte, error-contract, and fingerprint regression tests. |
-| Note      | This is a record of the implementation present through PR #157, not an acceptance record. Merge and CI do not establish owner acceptance or prior authorization. The compatibility constraints remain: neutral validation reasons; exact Catalogue diagnostics, bytes, and fingerprints; Behavior maps neutral errors to `behavior.*`; no IR digest changes or infrastructure. |
+| Task      | **IMPLEMENTED / ACCEPTED** Historical slice. |
+| Objective | `LiveFrames.CanonicalJSON` gives Behavior the shared restricted JSON algebra without a Behavior-to-Catalogue dependency. |
+| Output    | `apps/live_frames/lib/live_frames/canonical_json.ex`; Catalogue compatibility wrapper; accepted byte, error-contract, and fingerprint tests. |
+| Note      | Separately authorized after P7-0. Catalogue diagnostics, bytes, and fingerprints remain compatible. |
 
 ### P7-B1 — BehaviorContract / BehaviorBinding structural model
 
@@ -554,7 +591,7 @@ The P7-A1 and P7-A2 entries below are historical/current-state records, not exec
 | Task      | **PLANNED — NOT AUTHORIZED** Define the typed structural model and closed field shapes for BehaviorContract and BehaviorBinding. |
 | Objective | Give identity, serialization, review, and projection slices one stable typed representation to consume. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/contract.ex` and `binding.ex`, with typed primitive references, triggers, controlled targets, optional occurrence initial-state assignments, binding-owned policies, diagnostics/provenance, and closed field-shape tests under `apps/live_frames/test/live_frames/behavior/`. No primitive state-machine definitions are fields on `BehaviorBinding`. |
-| Note      | Depends on P7-A1 and P7-A2. Define `binding_id` and `ordinal` as unassigned `null` only on the normalized pre-identity binding value; persisted contract bindings require both. No ID derivation, digest, primitive semantic validation, source adapter, or runtime. |
+| Note      | Depends on P7-A1 and P7-A2. Freeze `PrimitiveRef {kind, definition_version}` as two closed trusted strings, with exactly one reference per binding. Define `binding_id` and `ordinal` as unassigned `null` only on the normalized pre-identity binding value; persisted contract bindings require both. No ID derivation, digest, primitive semantic validation, source adapter, or runtime. |
 
 ### P7-B2 — BehaviorBinding deterministic identity
 
@@ -563,7 +600,7 @@ The P7-A1 and P7-A2 entries below are historical/current-state records, not exec
 | Task      | **PLANNED — NOT AUTHORIZED** Implement the structured binding ID payload and semantic discriminator ordinal algorithm over P7-B1's typed model. |
 | Objective | Make BehaviorBinding IDs deterministic and independent of source traversal, map order, and final contract digest. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/binding_identity.ex`; golden IDs and order/duplicate/ordinal tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on P7-B1. Group by `(owner_node_id, primitive_kind, binding_role)`; discriminate only on occurrence triggers, controlled targets, optional initial-state assignments, and binding-owned policies; remove exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace`; JCS-encode; reject duplicate bytes; rank unsigned byte strings from zero. Primitive definitions, state models, transitions, guards, and effects never enter a binding ID. No provisional maps, generic untyped API, random/source IDs, selectors/classes, component instances, or runtime. |
+| Note      | Depends on P7-B1. Group by `(owner_node_id, primitive_ref.kind, binding_role)`; discriminate only on occurrence triggers, controlled targets, optional initial-state assignments, and binding-owned policies; remove exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace`; JCS-encode; reject duplicate bytes; rank unsigned byte strings from zero. Exclude `definition_version` and all primitive definitions, state models, transitions, guards, and effects from binding IDs. No provisional maps, generic untyped API, random/source IDs, selectors/classes, component instances, or runtime. |
 
 ### P7-B3 — BehaviorContract serializer and structural validation
 
@@ -572,7 +609,7 @@ The P7-A1 and P7-A2 entries below are historical/current-state records, not exec
 | Task      | **PLANNED — NOT AUTHORIZED** Implement BehaviorContract serialization/digest and structural/reference validation. |
 | Objective | Create the persisted source-neutral contract linked to one exact DesignDocument and verify assigned binding identities. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/serializer.ex`, `diagnostic.ex`, and `validation.ex`; golden bytes/digest and malformed-reference tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on P7-B2. Include diagnostics/provenance and binding-owned occurrence values in identity; serialize primitive references, not registry definition bodies. Validate DesignDocument linkage and every binding ID, and reject unresolved references. Do not expose full `validate/2` before P7-C. Keep Design IR 3.x separate and `IR.Interaction` intent-only. |
+| Note      | Depends on P7-B2. Include diagnostics/provenance and binding-owned occurrence values in identity; serialize each full `(kind, definition_version)` primitive reference, not registry definition bodies. A definition-version change must change BehaviorContract canonical bytes and digest, invalidating any prior BehaviorReviewResult match. Validate DesignDocument linkage and every binding ID, and reject unresolved reference pairs. Do not expose full `validate/2` before P7-C. Keep Design IR 3.x separate and `IR.Interaction` intent-only. |
 
 ### P7-B4 — BehaviorReviewResult artifact
 
@@ -590,7 +627,7 @@ The P7-A1 and P7-A2 entries below are historical/current-state records, not exec
 | Task      | **PLANNED — NOT AUTHORIZED** Implement the trusted registry mechanism, common closed vocabularies, and staged semantic validation API. |
 | Objective | Ensure full Behavior validation cannot pass without both structural/reference checks and primitive semantics. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/primitive_registry.ex` and the composed `validation.ex` API; `validate_semantics/2`; `validate/2 = validate_structure/2 AND validate_semantics/2`; composition and unsupported-definition tests. |
-| Note      | Depends on P7-B4. The trusted registry owns each primitive's `BehaviorStateModel`; that model owns `Transition` definitions, which own their `TransitionGuard`, `BehaviorEffect`, and associated `AccessibilityEffect` definitions. Validate each binding's primitive reference, occurrence initial-state assignment, triggers, targets, and binding policies against the registry. Do not implement every primitive definition here. An unimplemented kind fails closed until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. |
+| Note      | Depends on P7-B4. The trusted registry resolves each exact `(kind, definition_version)` pair and owns that definition's `BehaviorStateModel`; the model owns `Transition` definitions, which own their `TransitionGuard`, `BehaviorEffect`, and associated `AccessibilityEffect` definitions. Validate each binding's primitive reference, occurrence initial-state assignment, triggers, targets, and binding policies against the selected definition. Unknown pairs fail closed. Do not implement every primitive definition here. An unimplemented kind/version remains unsupported until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. |
 
 ### P7-D0 — BehaviorComponentizationDecision
 
