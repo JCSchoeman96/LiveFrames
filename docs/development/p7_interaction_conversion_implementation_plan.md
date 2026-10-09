@@ -2,16 +2,44 @@
 
 **Plan version:** 1.0.3
 **Date:** 2026-10-09
-**Status:** corrected authority candidate for independent review; implementation is not authorized
+**Status:** corrected authority candidate for independent review; P7-A2 acceptance is not established; P7-B1 and later implementation is not authorized
 **Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `71ea4e67faab3aa6fc8503964537b456493caae5`
-**Tree:** `4431b5fc3b008a4062dd555c192d763809ed50ba`
+**Base:** `66198002db8f35744b09befa780a9841506a51f5`
+**Tree:** `67a955593ea40435eff8f67c6b5b33431afd6a87`
+**Base CI:** `37944328686 completed/success`
 
 ## 1. Purpose and authority
 
 P7 establishes a source-neutral behavior contract and turns accepted behavior evidence into accessible Phoenix-native interactions. It must preserve the accepted C09D6 static generation path, bind behavior to one exact DesignDocument, and keep source runtimes and executable source material out of generated components.
 
-This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. It does not authorize P7-A1, create implementation structs, change a schema, create GitHub issues, or implement a primitive. Each future issue below needs separate owner authorization after this plan is reviewed and accepted.
+This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 authorized no implementation. P7-A1 is implemented on main and accepted as present authority by the owner after independent technical review; this does not establish prior authorization. P7-A2 is implemented on main, but its prior authorization and present authority acceptance are not established. Merge and CI do not supply that acceptance. Neither state authorizes P7-B1 or any later slice; each requires separate owner authorization.
+
+```text
+P7_A1_STATUS=IMPLEMENTED_MERGED_ACCEPTED
+P7_A1_PR=154
+P7_A1_HEAD=1b4044186b6e9adcfec19d77a9eb26d8ed3716ad
+P7_A1_MERGE=288218a32dc87c0fc028fed730c736f4d7008832
+P7_A1_POST_MERGE_CI=37938079588 completed/success
+P7_A1_TECHNICAL_REVIEW=PASS
+P7_A1_PRIOR_AUTHORIZATION=NOT_ESTABLISHED
+P7_A1_PRESENT_OWNER_ACCEPTANCE=YES
+P7_A1_FORMAT_MIGRATION=NONE
+P7_A1_DESIGN_IR_SCHEMA_CHANGE=NONE
+P7_A1_COMPONENTIZATION_PLAN_FORMAT_CHANGE=NONE
+P7_A1_BEHAVIOR_IMPLEMENTATION=NONE
+
+P7_A2_STATUS=IMPLEMENTED_ON_MAIN_ACCEPTANCE_NOT_ESTABLISHED
+P7_A2_PR=157
+P7_A2_HEAD=ca8a5ba9352e3de195508e39ec7a6b9f97a147f7
+P7_A2_MERGE=66198002db8f35744b09befa780a9841506a51f5
+P7_A2_MERGE_SIGNATURE=VALID
+P7_A2_POST_MERGE_CI=37944328686 completed/success
+P7_A2_PRIOR_AUTHORIZATION=NOT_ESTABLISHED
+P7_A2_PRESENT_OWNER_ACCEPTANCE=NOT_ESTABLISHED
+P7_A2_TECHNICAL_REVIEW=NOT_ESTABLISHED
+
+P7_B1_AND_LATER=PLANNED_NOT_AUTHORIZED
+```
 
 The target flow is:
 
@@ -46,9 +74,10 @@ The cited authorities agree on these facts:
 | --- | --- | --- |
 | Design IR | `LiveFrames.IR.DesignDocument` writes IR `3.0.0`. Required root fields include `interactions`; there is no `behaviors` registry. | Keep BehaviorContract separate. Do not change required fields, field meanings, or serialized Design IR in P7-A1 through P7-L. |
 | Coarse interaction intent | `LiveFrames.IR.Interaction` contains `interaction_id`, `intent`, `trigger`, `target_node_ids`, `parameters`, and `source_trace`. It describes intent and does not select a runtime. | Do not expand or reinterpret it. Existing `interaction_refs` remain references to the current interaction registry. |
-| DesignDocument identity | `ComponentizationPlan.design_document_sha256/1` validates the document, calls `LiveFrames.IR.encode!/1`, then computes lowercase SHA-256 over those bytes. C09D3/C09D6 use this digest to bind a plan to the exact document. | Centralize and reuse these exact bytes and digest. Preserve the existing API as a delegating compatibility wrapper. Do not replace the digest with JCS or add a second DesignDocument hash. |
+| DesignDocument identity | `LiveFrames.IR.Identity` uses `canonicalization_id=lf-ir-serializer-v1` and `digest_algorithm=sha-256`; `ComponentizationPlan.design_document_sha256/1` delegates to it and retains its compatibility API. | Reuse these exact bytes and digest. Do not replace the digest with JCS or add a second DesignDocument hash. |
 | IR serializer | `LiveFrames.IR.Serializer` emits explicit fields, converts trusted enum atoms to strings, sorts object keys recursively, preserves list order, and delegates JSON encoding to Jason. IR tests assert deterministic output for equivalent conversions. | Treat this existing serializer byte representation as the DesignDocument canonical form for P7. Lock it with golden compatibility tests before changing any implementation. |
-| Catalogue canonical JSON | `LiveFrames.Catalogue.CanonicalJSON` implements RFC 8785 through `Jcs`, with a deliberately restricted value algebra: null, booleans, safe integers, valid Unicode strings, lists, and string-keyed objects. Catalogue fingerprints identify their own algorithm. | Reuse the value algebra and JCS behavior through a source-neutral shared boundary. `LiveFrames.Behavior.*` must not depend on `LiveFrames.Catalogue.*`. Keep Catalogue fingerprints byte-for-byte stable. |
+| Canonical JSON | `LiveFrames.CanonicalJSON` owns the source-neutral restricted JCS encoder. `LiveFrames.Catalogue.CanonicalJSON` remains the compatibility wrapper for Catalogue diagnostics and fingerprints. | `LiveFrames.Behavior.*` must not depend on `LiveFrames.Catalogue.*`. Keep Catalogue fingerprints byte-for-byte stable. |
+| Behavior implementation state | `BehaviorContract`, `BehaviorBinding`, `BehaviorReviewResult`, the primitive registry, `BehaviorProjection`, and `RuntimeRealization` are not implemented. | P7-A1 and P7-A2 do not implement Behavior artifacts. Each later slice remains separately gated. |
 | Componentization | `ComponentContract 1.0.0` owns the public API and its approval result. `ComponentizationPlan 1.0.0` owns placement and links to a contract and DesignDocument. C09D6 has shared generation prerequisites and human ComponentReview. | Keep both accepted formats unchanged. Behavior review cannot approve a ComponentContract or substitute for ComponentReview. |
 | Slide Menu Alpha disclosure mapping | `docs/development/slide_menu_alpha_disclosure_mapping_preflight.md` accepts the `closed | open` core and native `<details>/<summary>` sufficiency. The full mapping remains partial. Current-page identity input is evidence-insufficient; current-page timing and update lifecycle are unknown; nested policy, accessibility mapping, and motion mapping are partial; target style authority is required; hook need is not proven. | P7-F may test only the accepted core. It must not claim a complete Slide Menu conversion or infer current-page, nesting, ARIA, keyboard, hook, or motion details. |
 
@@ -85,9 +114,9 @@ DesignDocumentIdentity =
   + lowercase_sha256(IR.encode!(validated DesignDocument) bytes)
 ```
 
-P7-A1 names the canonicalization algorithm `lf-ir-serializer-v1`. For the current Design IR, that identifier means the explicit field mapping and recursively sorted JSON-object encoding in `LiveFrames.IR.Serializer`, with list order preserved and Jason JSON encoding as currently locked by the repository. The digest algorithm identifier is `sha-256`. The initial supported identity therefore records IR `3.0.0`, `lf-ir-serializer-v1`, `sha-256`, and the exact digest already produced by `ComponentizationPlan.design_document_sha256/1`.
+The accepted canonicalization algorithm is `lf-ir-serializer-v1`. For the current Design IR, that identifier means the explicit field mapping and recursively sorted JSON-object encoding in `LiveFrames.IR.Serializer`, with list order preserved and Jason JSON encoding as locked by the repository. The digest algorithm identifier is `sha-256`. The supported identity records IR `3.0.0`, `lf-ir-serializer-v1`, `sha-256`, and the exact digest produced by `ComponentizationPlan.design_document_sha256/1`.
 
-P7-A1 centralizes the implementation in a source-neutral `LiveFrames.IR.Identity` boundary. `ComponentizationPlan.design_document_sha256/1` remains callable and delegates to it, preserving its return shape and historical digest. P7-A1 must prove existing fixtures and serialized ComponentizationPlans keep the same digest. The plan format does not gain an algorithm field. BehaviorContract carries the explicit identity tuple and rejects unknown canonicalization IDs or unsupported IR versions.
+P7-A1 implemented the source-neutral `LiveFrames.IR.Identity` boundary. `ComponentizationPlan.design_document_sha256/1` remains callable and delegates to it, preserving its return shape and historical digest. The plan format did not gain an algorithm field. BehaviorContract carries the explicit identity tuple and rejects unknown canonicalization IDs or unsupported IR versions.
 
 This choice uses repository behavior rather than RFC 8785 because the accepted Design IR serializer owns typed struct-to-map conversion and admits finite JSON floats in IR values, while Catalogue JCS rejects floats and accepts only normalized string-key maps. Switching DesignDocument identity to JCS would change the established componentization fingerprint and require explicit migration analysis. The current IR serializer already has explicit field conversion, deterministic key ordering, stable list ordering, and deterministic-output tests. If P7-A1 finds that its bytes cannot be held stable across supported changes, stop with `STOP=IDENTITY_ALGORITHM_UNRESOLVED`; do not silently replace the algorithm.
 
@@ -137,7 +166,7 @@ The discriminator's object keys use JCS ordering. Sort trigger records by their 
 
 ### 2.3 BehaviorContract serialization and digest decision
 
-P7-A2 extracts the tested JCS value encoder behind `LiveFrames.CanonicalJSON` with a neutral validation result/reason API. `LiveFrames.Catalogue.CanonicalJSON` remains a compatibility wrapper and maps every neutral failure to the existing `catalogue.canonical_json.*` code, path, and message exactly. It must preserve success bytes, error shape, validation order, paths, messages, and Catalogue fingerprint values. The Behavior serializer maps neutral failures to `behavior.*` diagnostics. This is the only canonical JSON implementation after extraction. The Behavior domain serializes a typed, explicit map through this utility and does not call Catalogue modules.
+P7-A2 implemented the extraction of the tested JCS value encoder behind `LiveFrames.CanonicalJSON` with a neutral validation result/reason API. `LiveFrames.Catalogue.CanonicalJSON` remains a compatibility wrapper and maps neutral failures to the existing `catalogue.canonical_json.*` code, path, and message. The merged implementation reports preservation of success bytes, error shape, validation order, paths, messages, and Catalogue fingerprint values; independent authority acceptance for P7-A2 remains unestablished. The Behavior serializer maps neutral failures to `behavior.*` diagnostics. This is the only canonical JSON implementation. The Behavior domain serializes a typed, explicit map through this utility and does not call Catalogue modules.
 
 The BehaviorContract value algebra is exactly the extracted JCS algebra: `null`, booleans, safe integers, valid Unicode strings, arrays, and objects with valid Unicode string keys. Behavior semantics use integer milliseconds and closed string vocabularies, so binary floats are unnecessary and invalid. Structs, atoms, non-finite numbers, oversized integers, improper lists, invalid Unicode, and non-string object keys are rejected before encoding. Trusted Elixir enum atoms become their fixed vocabulary strings in the Behavior serializer; untrusted strings never become atoms.
 
@@ -462,18 +491,20 @@ Every applicable slice also checks that no imported source code executes, no dyn
 
 ## 11. Ordered future issue tree
 
-Every item is **PLANNED — NOT AUTHORIZED**. No GitHub issues are created by P7-0. Each issue is independently reviewable and requires explicit owner authorization before work begins.
+P7-A1 is completed and accepted as present authority. P7-A2 is implemented on main, but owner acceptance is not established. Neither is a future implementation issue. No GitHub issues are created by P7-0. P7-B1 through P7-L are future slices and each requires explicit owner authorization; P7-B1 also requires P7-A2 authority acceptance.
 
 ```text
-FUTURE_ISSUE_COUNT=17
+P7_A1=IMPLEMENTED_MERGED_ACCEPTED
+P7_A2=IMPLEMENTED_ON_MAIN_ACCEPTANCE_NOT_ESTABLISHED
+FUTURE_ISSUE_COUNT=15
 FUTURE_ISSUES_CREATED=NO
 ```
 
 | Order | Issue | Scope and required result | Dependency and hard gate |
 | --- | --- | --- | --- |
-| 1 | **PLANNED — NOT AUTHORIZED** P7-A1 — DesignDocument identity | Centralize the current IR serializer SHA-256 in `LiveFrames.IR.Identity`; preserve `ComponentizationPlan.design_document_sha256/1`; name the identity algorithm. | Independent of P7-A2. Existing digest values and ComponentizationPlan 1.0.0 remain unchanged. |
-| 2 | **PLANNED — NOT AUTHORIZED** P7-A2 — Source-neutral JCS utility | Extract the tested JCS encoder and neutral validation reasons. Preserve Catalogue bytes and exact diagnostics through a compatibility wrapper. | Independent of P7-A1. No Behavior → Catalogue dependency or Catalogue contract changes. |
-| 3 | **PLANNED — NOT AUTHORIZED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for primitive references, triggers, targets, occurrence initial-state assignments, binding policies, diagnostics, and provenance. Primitive state-machine definitions remain registry-owned. | Depends on P7-A1 and P7-A2. No ID derivation, contract digest, primitive semantics, or runtime. |
+| 1 | **IMPLEMENTED / MERGED / ACCEPTED — P7-A1** DesignDocument identity | Centralized the current IR serializer SHA-256 in `LiveFrames.IR.Identity`; preserved `ComponentizationPlan.design_document_sha256/1`; named the identity algorithm. | PR #154 is accepted as present authority. This record does not claim prior authorization. |
+| 2 | **IMPLEMENTED ON MAIN — ACCEPTANCE NOT ESTABLISHED — P7-A2** Source-neutral JCS utility | Extracted the tested JCS encoder and neutral validation reasons. The Catalogue wrapper remains responsible for its exact compatibility contract. | PR #157 is merged with green exact-main CI. Independent technical review and owner acceptance are not established. Do not treat merge/CI as acceptance. P7-B1 remains gated on acceptance. |
+| 3 | **PLANNED — NOT AUTHORIZED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for primitive references, triggers, targets, occurrence initial-state assignments, binding policies, diagnostics, and provenance. Primitive state-machine definitions remain registry-owned. | Depends on accepted P7-A1 and accepted P7-A2. No ID derivation, contract digest, primitive semantics, or runtime. |
 | 4 | **PLANNED — NOT AUTHORIZED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Depends on P7-B1. No primitive-definition body in the binding ID, provisional map shape, or generic untyped identity API. |
 | 5 | **PLANNED — NOT AUTHORIZED** P7-B3 — BehaviorContract serializer and structural validation | Implement contract serializer/digest for DesignDocument identity, primitive references, binding-owned occurrence data, and diagnostics/provenance; verify binding IDs and references. | Depends on P7-B2. Expose `validate_structure/2` only; no full `validate/2` before P7-C. Do not serialize primitive state-machine definitions. |
 | 6 | **PLANNED — NOT AUTHORIZED** P7-B4 — BehaviorReviewResult artifact | Implement the immutable review model, exact JCS serializer, `brv_` identity, matching validator, and explicit-result approval gate. | Depends on P7-B3. No latest/timestamp selection, database, mutable status, or ComponentReview authority. |
@@ -490,31 +521,31 @@ FUTURE_ISSUES_CREATED=NO
 | 16 | **PLANNED — NOT AUTHORIZED** P7-K — Carousel | Add Carousel semantics and opt-in timer/control realization. | Depends on P7-J; timer and cleanup remain primitive-scoped. |
 | 17 | **PLANNED — NOT AUTHORIZED** P7-L — One source integration tracer | Integrate one separately selected source fixture and one approved behavior through the complete reviewed pipeline. | Depends on preceding primitive/pipeline gates. Additional sources or behaviors require separate authorization. |
 
-P7-A1 and P7-A2 may be authorized in parallel; P7-B1 requires both. All later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
+P7-B1 requires both P7-A1 and P7-A2 to be accepted; P7-A1 is accepted and P7-A2 acceptance is not established. All later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
 
-P7-0 authorizes none of P7-A1 through P7-L. Approval of this plan does not authorize implementation or issue creation. Approval of any issue does not authorize its successor.
+P7-0 authorized no implementation. P7-A1 is accepted as present authority now; this does not rewrite its historical authorization state. P7-A2 is present on main, but its authority acceptance remains unestablished. This plan does not authorize P7-B1 through P7-L or issue creation. Acceptance of one slice does not authorize its successor.
 
 ## 12. TOON micro-prompts
 
-Each prompt is one future implementation task. Every task remains **PLANNED — NOT AUTHORIZED** until the owner authorizes that issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
+The P7-A1 and P7-A2 entries below are historical/current-state records, not executable implementation prompts. P7-A1 is accepted as present authority. P7-A2 is implemented on main, with acceptance not established. P7-B1 through P7-L remain planned and unauthorized. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
 
 ### P7-A1 — DesignDocument identity
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **PLANNED — NOT AUTHORIZED** Centralize the existing DesignDocument identity calculation. |
+| Task      | **COMPLETED — DO NOT RE-RUN** Centralized the existing DesignDocument identity calculation; merged and accepted as present authority via PR #154. |
 | Objective | Give the current `IR.encode!` plus SHA-256 identity a named source-neutral owner without changing componentization fingerprints. |
 | Output    | `apps/live_frames/lib/live_frames/ir/identity.ex`; compatibility delegation from `apps/live_frames/lib/live_frames/componentization_plan.ex`; golden digest tests. |
-| Note      | Independent of P7-A2. Keep `ComponentizationPlan.design_document_sha256/1` return values and plan format unchanged. Validate IR before hashing. No JCS extraction, BehaviorBinding identity, infrastructure, runtime, or source dependency. |
+| Note      | This is a historical record. Keep `ComponentizationPlan.design_document_sha256/1` return values and plan format unchanged. No JCS extraction, BehaviorBinding identity, infrastructure, runtime, or source dependency. Prior authorization is not established; present acceptance does not rewrite that history. |
 
 ### P7-A2 — Source-neutral CanonicalJSON
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **PLANNED — NOT AUTHORIZED** Extract the Catalogue-tested JCS value encoder into a source-neutral module. |
+| Task      | **IMPLEMENTED ON MAIN — ACCEPTANCE NOT ESTABLISHED; DO NOT RE-RUN** PR #157 extracted the Catalogue-tested JCS value encoder into a source-neutral module. |
 | Objective | Let Behavior serialize through the shared restricted JSON algebra without a Behavior-to-Catalogue dependency. |
 | Output    | `apps/live_frames/lib/live_frames/canonical_json.ex`; compatibility delegation from `apps/live_frames/lib/live_frames/catalogue/canonical_json.ex`; exact-byte, error-contract, and fingerprint regression tests. |
-| Note      | Independent of P7-A1. Neutral utility returns validation reasons. Catalogue wrapper preserves every existing diagnostic code, path, message, error shape, order, success byte, and fingerprint. Behavior maps neutral errors to `behavior.*`. No IR digest changes or infrastructure. |
+| Note      | This is a record of the implementation present through PR #157, not an acceptance record. Merge and CI do not establish owner acceptance or prior authorization. The compatibility constraints remain: neutral validation reasons; exact Catalogue diagnostics, bytes, and fingerprints; Behavior maps neutral errors to `behavior.*`; no IR digest changes or infrastructure. |
 
 ### P7-B1 — BehaviorContract / BehaviorBinding structural model
 
