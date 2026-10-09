@@ -67,7 +67,10 @@ Entities/concepts:
   MotionPolicy
 
 Relationships:
-  SummaryControl owns one disclosure state
+  DisclosureGroup is a stateful occurrence represented by its BehaviorBinding, whose owner node is the group.
+  The Disclosure primitive definition owns the closed|open state model.
+  SummaryControl is the activation control and typed trigger owned by that binding.
+  DisclosureContent is the typed controlled target of the binding, revealed or concealed by its transition effects.
   DisclosureGroup contains navigation descendants
   CurrentPageMarker may identify a descendant link
   containing group may be required open when that relation is accepted
