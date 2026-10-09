@@ -4,9 +4,9 @@
 **Date:** 2026-10-09
 **Status:** corrected authority candidate for independent review; P7-A2 acceptance is not established; P7-B1 and later implementation is not authorized
 **Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `66198002db8f35744b09befa780a9841506a51f5`
-**Tree:** `67a955593ea40435eff8f67c6b5b33431afd6a87`
-**Base CI:** `37944328686 completed/success`
+**Base:** `0790d6b7c6397863f9d567b0a8542d7d06ba1edc`
+**Tree:** `083cc5425b2f1893e7c8ecb2f68df4f999b683d8`
+**Base CI:** `37946766626 completed/success`
 
 ## 1. Purpose and authority
 
