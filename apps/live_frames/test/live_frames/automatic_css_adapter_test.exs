@@ -1032,6 +1032,28 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     token_set.tokens["typography.body.scale.small"]
   end
 
+  @text_s_required_source_keys [
+    "base-text-mob",
+    "base-text-desk",
+    "mob-text-scale",
+    "text-scale",
+    "vp-min",
+    "vp-max"
+  ]
+
+  defp assert_text_s_provenance!(token, min_count, max_count) do
+    source_keys = token.provenance["source_keys"]
+
+    assert length(source_keys) == length(Enum.uniq(source_keys))
+
+    for key <- @text_s_required_source_keys do
+      assert Enum.count(source_keys, &(&1 == key)) == 1
+    end
+
+    assert Enum.count(source_keys, &(&1 == "text-s-min")) == min_count
+    assert Enum.count(source_keys, &(&1 == "text-s-max")) == max_count
+  end
+
   describe "typography.body.scale.small (text-s)" do
     test "optional override source keys are included in Normalizer.source_keys/0" do
       keys = Normalizer.source_keys()
@@ -1076,6 +1098,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                VariableAuthority.resolve(index, "--text-s")
 
       assert path == "typography.body.scale.small"
+      assert_text_s_provenance!(token, 0, 0)
     end
 
     test "D0E2 published endpoint overrides produce the frozen clamp expression" do
@@ -1093,6 +1116,9 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
       assert token.value["inputs"]["mobile_endpoint_override_px"] == 14.0
       assert token.value["inputs"]["desktop_endpoint_override_px"] == 15.0
+      assert_text_s_provenance!(token, 1, 1)
+      assert token.provenance["raw_value"]["text-s-min"] == 14
+      assert token.provenance["raw_value"]["text-s-max"] == 15
     end
 
     test "mobile-only override keeps default desktop endpoint" do
@@ -1106,6 +1132,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
       assert token.metadata["css_expression"] ==
                FluidClamp.from_px_pair(14, 18 / 1.333, 360, 1366)
+
+      assert_text_s_provenance!(token, 1, 0)
+      assert token.provenance["raw_value"]["text-s-min"] == 14
+      refute Map.has_key?(token.provenance["raw_value"], "text-s-max")
     end
 
     test "desktop-only override keeps default mobile endpoint" do
@@ -1119,6 +1149,10 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
       assert token.metadata["css_expression"] ==
                FluidClamp.from_px_pair(16 / 1.2, 15, 360, 1366)
+
+      assert_text_s_provenance!(token, 0, 1)
+      refute Map.has_key?(token.provenance["raw_value"], "text-s-min")
+      assert token.provenance["raw_value"]["text-s-max"] == 15
     end
 
     test "present numeric zero is not treated as absent" do

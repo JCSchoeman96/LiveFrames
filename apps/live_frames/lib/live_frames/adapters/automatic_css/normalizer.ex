@@ -449,10 +449,19 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
   @spec source_keys() :: [String.t()]
   def source_keys do
     mapping()
-    |> Enum.flat_map(& &1.source_keys)
+    |> Enum.flat_map(&recognized_source_keys/1)
     |> Kernel.++(IconTokens.source_keys())
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  defp recognized_source_keys(entry) do
+    optional_keys =
+      entry
+      |> Map.get(:optional_inputs, [])
+      |> Enum.map(&elem(&1, 1))
+
+    entry.source_keys ++ optional_keys
   end
 
   @spec normalize(map(), map(), keyword()) :: {map(), [Diagnostic.t()]}
@@ -712,6 +721,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         |> Map.put("calculation_group", entry.calculation_group)
 
       effective_source_keys = source_keys ++ used_optional_source_keys(optional_inputs, settings)
+      effective_raw_value = source_value(settings, effective_source_keys)
 
       result =
         Resolver.derived(
@@ -739,7 +749,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
           )
 
         true ->
-          result
+          put_in(result.metadata["effective_raw_value"], effective_raw_value)
       end
     else
       {:error, invalid_value, source_key, reason} ->
@@ -1261,13 +1271,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     optional_inputs = Keyword.get(opts, :optional_inputs, [])
     constants = Keyword.get(opts, :constants, %{})
 
-    optional_source_keys = Enum.map(optional_inputs, &elem(&1, 1))
-
     %{
       path: path,
       category: category,
       strategy: :derived,
-      source_keys: Enum.map(inputs, &elem(&1, 1)) ++ optional_source_keys,
+      source_keys: Enum.map(inputs, &elem(&1, 1)),
       optional_inputs: optional_inputs,
       constants: constants,
       inputs: inputs,
