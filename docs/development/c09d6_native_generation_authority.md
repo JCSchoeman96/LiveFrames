@@ -26,7 +26,7 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
 
 **Accepted tree:** `4626a0348538979e933d955e1e67c21236536b57`
 
-**Last updated:** 2026-10-07
+**Last updated:** 2026-10-09
 
 ### Revision log
 
@@ -105,10 +105,12 @@ routing native generation through LiveFrames.Fidelity
 
 ## 2. Repository truth (current checkpoint)
 
-Reconciled against accepted base `a3efdafe3d8bcb7d04aa1c4ad9660f0858f86bc3`
-(C09D6-B merged PR #134; C09D6-C0 authority in flight PR #136; C09D6-C
-implementation PR #135 on hold). Short pointers: `docs/17_ROADMAP.md`,
-`README.md`.
+Current repository truth at main checkpoint
+`fcbdb05512a4f33453a043be8b361e7d3abe921e`. C09D6-B is implemented and
+accepted (PR #134). C09D6-C0 authority is merged and accepted (PR #136).
+C09D6-C's native generator is implemented and merged on main (PR #135,
+merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`). Short pointers:
+`docs/17_ROADMAP.md`, `README.md`.
 
 | Area | State |
 | --- | --- |
@@ -119,7 +121,8 @@ implementation PR #135 on hold). Short pointers: `docs/17_ROADMAP.md`,
 | Catalogue schema, manifest, lifecycle, Registry, fingerprint, versioning, discovery | **implemented** in library code |
 | Production Catalogue root `apps/live_frames/priv/catalogue/` | **absent** (no committed manifests) |
 | Production Registry at compile time | **empty** membership (no canonical Hero Catalogue manifest) |
-| Native component generator | **not on `main`** (PR #135 evidence only; blocked on C09D6-C0) |
+| C09D6-C0 native emission authority | **merged / accepted** (PR #136) |
+| C09D6-C native component generator | **implemented / merged on `main`** (PR #135; merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`) |
 | P10 Catalogue ejection generator | **not implemented** |
 | Phase 6 Hero native section | **accepted** (hand-authored; not proposer/generator pipeline) |
 
@@ -681,8 +684,8 @@ low-level CSS serialization helpers only where semantics match (§12).
 
 ### 10.10 Native element emission (C09D6-C0 freeze)
 
-PR #135 (`feat/c09d6-c-native-generator`) is **evidence only**. It must not be
-treated as authority. This section freezes the mechanical emitter.
+PR #135 (`feat/c09d6-c-native-generator`) implemented C09D6-C and is merged on
+`main`. This section records the accepted C09D6-C0 mechanical emitter contract.
 
 #### 10.10.1 Native tag resolution (two layers)
 
@@ -1174,12 +1177,14 @@ that tracer and escalate; do not stretch C09D6.
 ```text
 C09D6-A  authority + repository truth          ← this slice
 C09D6-B  reviewer approval implementation    ← implemented on main (PR #134)
-C09D6-C0 native emission surface authority    ← v6 §10.4.1, §10.10–§10.17 (this amendment)
-C09D6-C  native generator core (HEEx)         ← blocked until C0 merged; PR #135 hold
-C09D6-D  native styling generation
-C09D7-A  CTA Tango componentization tracer
-C09D7-B  CTA Tango generation + Storybook/browser verification
-C09D7-C  external consumer proof / Catalogue handoff
+C09D6-C0 native emission authority           ← accepted (v6 §10.4.1, §10.10–§10.17)
+C09D6-C  native HEEx generator               ← implemented / merged (PR #135)
+R5       CTA style-coverage rerun             ← accepted (PR #147)
+D1A      styling selector/artifact authority  ← pending review / merge / acceptance (§21)
+D1       native styling implementation       ← authorized; execution waits for D1A review, merge, independent post-merge verification, and acceptance
+C09D7-A  CTA Tango componentization           ← not authorized until D1 succeeds
+C09D7-B  CTA generation + verification        ← downstream
+C09D7-C  consumer proof / Catalogue handoff   ← downstream
 P9       Catalogue expansion
 P10      consumer ejection
 later    Behavior IR + interactive components
@@ -1227,7 +1232,8 @@ by C0.
 | --- | --- |
 | `docs/development/c09d6_native_generation_authority.md` | this file (v6 accepted; §21 v7 candidate) |
 | `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
-| Generator production code | **out of scope** (PR #135 remains on hold) |
+| Existing C09D6-C generator production code | implemented / merged on main (PR #135); unchanged by D1A |
+| D1 styling production code | out of scope for this authority slice; implementation not started |
 
 ---
 
@@ -1235,8 +1241,10 @@ by C0.
 
 **Authority status:** v6 / C09D6-C0 remains accepted. This §21 is the v7
 C09D6-D1A amendment candidate and remains pending review, merge, and acceptance.
-It freezes architecture for later D1 implementation; it does not implement or
-authorize that implementation by itself.
+The programme authorized D1 following accepted R5. D1 implementation execution
+remains gated on D1A review, merge, independent post-merge verification, and
+acceptance. This v7 candidate does not satisfy that acceptance gate merely by
+existing on the PR branch.
 
 ### 21.1 Purpose and scope
 
