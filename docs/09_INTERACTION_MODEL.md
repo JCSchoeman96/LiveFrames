@@ -1,8 +1,8 @@
 # Interaction model
 
-**Status:** accepted architecture authority for future behavior work. This document authorizes no implementation.
+**Status:** candidate authority revision for PR #145. This file is the canonical location for the interaction contract; this revision is not accepted on `main` until review and merge. No implementation is authorized.
 
-**Authority revision:** 1.0.0
+**Authority revision:** 1.0.1
 
 **Revision date:** 2026-10-09
 
@@ -70,7 +70,28 @@ admitted source
                                           └─ diagnostics and source provenance
 ```
 
-The contract identity must include its format version, exact DesignDocument IR version, digest of that exact document under a named canonicalization, document-local node IDs, bindings, diagnostics, and provenance. A missing digest, unresolved reference, or unrecognized canonicalization is invalid; consumers fail closed rather than attach behavior to a merely similar document.
+The input identity is a `DesignDocumentIdentity` formed from the Design IR version, a named DesignDocument canonicalization, and the digest of that exact document. A missing digest, unresolved reference, or unrecognized canonicalization is invalid; consumers fail closed rather than attach behavior to a merely similar document.
+
+Binding IDs derive from that input identity before the whole artifact identity exists:
+
+```text
+DesignDocumentIdentity =
+  Design IR version
+  + canonicalization ID
+  + exact DesignDocument digest
+
+BehaviorBindingID =
+  BehaviorContract format version
+  + DesignDocumentIdentity
+  + owner DesignNode ID
+  + primitive kind
+  + stable binding role/ordinal
+
+BehaviorContract canonical identity/digest =
+  computed after normalized bindings and binding IDs exist
+```
+
+The final BehaviorContract identity includes its format version, DesignDocumentIdentity, normalized bindings and their IDs, diagnostics, and provenance. A BehaviorBinding ID MUST NOT depend on the final identity or digest of the BehaviorContract that contains it. The canonicalization ID and digest algorithm remain future implementation decisions; this authority does not implement serialization or hashing.
 
 The existing Design IR 3.x `Interaction` remains a coarse intent record. It may coexist as legacy intent evidence, but cannot become a competing state-machine authority. A future explicit Design IR migration may decide whether interaction refs point to, absorb, or are superseded by BehaviorContract bindings.
 
@@ -81,6 +102,34 @@ Rejected for this phase:
 
 Neither option is permanently prohibited. This authority does not pre-authorize either change.
 
+### 5.1 Componentization and generation gate
+
+BehaviorContract owns whole-DesignDocument, source-neutral behavior semantics. Componentization owns the native component boundaries. BehaviorContract validation or review does not authorize generation and cannot bypass the existing C09D6 pipeline:
+
+```text
+DesignDocument
++ ComponentizationSemanticInput
+→ ComponentizationProposer
+→ proposed ComponentContract + ComponentizationPlan
+→ explicit human ComponentReview
+→ ComponentReview generation prerequisites
+→ native generation
+```
+
+Future behavior integration must follow this sequence:
+
+```text
+DesignDocument + BehaviorContract
+→ behavior-aware componentization/projection decision
+→ ComponentizationProposer
+→ ComponentContract + ComponentizationPlan
+→ ComponentReview
+→ interactive generation prerequisites
+→ native HEEx + behavior realization
+```
+
+The projection and boundary-ownership rules remain an open dependency. Before approved component boundaries exist, BehaviorContract validates targets only against the exact DesignDocument and the binding's declared owner scope/subtree (§7). It does not assign native component ownership. A future explicit integration contract must project or assign each binding to ComponentContract/ComponentizationPlan boundaries and reject cross-boundary or escaping bindings by default. Interactive native generation is blocked until this BehaviorContract ↔ ComponentContract/ComponentizationPlan integration is frozen. No behavior review substitutes for ComponentReview or the existing generation prerequisite validation.
+
 ## 6. Domain model and relationship rules
 
 These are conceptual domain terms, not implementation structs. Every reference is typed and resolves within the exact DesignDocument or BehaviorContract named by its owner. No relationship uses a source-provided selector.
@@ -89,9 +138,9 @@ These are conceptual domain terms, not implementation structs. Every reference i
 | --- | --- | --- | --- |
 | `BehaviorContract` | Conversion result; one exact DesignDocument per contract; zero or more bindings and diagnostics | Holds BehaviorContract version, DesignDocument version/digest, provenance, bindings, diagnostics. Digest and versions must identify one immutable input. | Reject the contract; never attach to a different document by resemblance. |
 | `BehaviorPrimitiveDefinition` | Behavior vocabulary; one definition per normalized primitive kind/version | May be referenced by many bindings. Defines closed semantics and policies, not source runtime code. | Unknown primitive is unsupported and diagnosed. |
-| `BehaviorBinding` | One occurrence in one contract; exactly one primitive and one owner node | Owner and targets are document-local DesignNode IDs. Binding identity is deterministic from document context, primitive kind, owner, and stable role/ordinal. | Reject unresolved, ambiguous, or out-of-scope references. |
+| `BehaviorBinding` | One occurrence in one contract; exactly one primitive and one owner node | Owner and targets are document-local DesignNode IDs. Binding identity derives from BehaviorContract format version, DesignDocumentIdentity, owner node ID, primitive kind, and stable role/ordinal. It never depends on the final containing contract identity. | Reject unresolved, ambiguous, or out-of-scope references. |
 | `Trigger` | Owned by one binding; zero or more typed trigger records | Closed vocabulary such as activate, key, pointer, focus, timer, visibility, or platform preference. Optional origin node must belong to the binding scope. | Unknown trigger is diagnosed and disabled; never parse it as an event name. |
-| `ControlledTarget` | Owned by one binding; zero or more typed targets with role-specific cardinality | References a node in the same DesignDocument and binding scope, with a role such as content, panel, tab, item, dialog, or control. Each primitive defines required roles/cardinality. | Missing required target prevents that binding from being generated. No selector fallback. |
+| `ControlledTarget` | Owned by one binding; zero or more typed targets with role-specific cardinality | References a node in the exact DesignDocument and declared behavior-owner scope/subtree, with a role such as content, panel, tab, item, dialog, or control. Each primitive defines required roles/cardinality. | Missing or out-of-scope targets prevent that binding from being generated. No selector fallback. |
 | `BehaviorStateModel` | Owned by one primitive definition; one or more state dimensions | Each dimension has a finite domain, initial value, invariants, and terminal rule where applicable. Product state must satisfy every invariant. | Invalid combinations are rejected, not normalized by guessing. |
 | `Transition` | Owned by one state model; zero or more named transitions | Names a source condition, trigger, destination, guards, and effects. It may target one dimension or a documented atomic set. | A transition that violates an invariant is invalid and produces no effects. |
 | `TransitionGuard` | Owned by one transition; zero or more pure predicates | Reads normalized state, enabled policy, and typed local context only. It has no side effects or I/O. | False guard is a no-op; unknown guard is unsupported and diagnosed. |
@@ -104,13 +153,32 @@ These are conceptual domain terms, not implementation structs. Every reference i
 | `MotionPolicy` | Owned by a binding; zero or one policy | Defines animation permission, reduced-motion behavior, and whether time affects semantic state. | Missing policy defaults to no autoplay and reduced/non-motion realization. |
 | `ResponsiveBehaviorOverride` | Owned by a binding; zero or more named mode mappings | References accepted responsive authority and defines a reversible semantic state mapping between modes. It is not a CSS style override. | Missing authority or non-reversible mapping prevents the mode conversion and emits a diagnostic. |
 | `BehaviorDiagnostic` | Owned by a contract and optionally linked to one binding/node/evidence item; zero or more | Uses stable category/severity and records source evidence and the unsupported/ambiguous condition. | A diagnostic may not silently be dropped when the behavior is dropped. |
-| `RuntimeInstance` | Ephemeral runtime for one binding and one component/repeated-item scope; zero or more per binding | Holds live DOM references, timer handles, observers, focus ownership, and transient state only while mounted. Never serialized. | On invalid mount/update it disables that instance and releases resources; destruction is terminal. |
+| `RuntimeInstance` | Ephemeral runtime for one binding and one approved component/repeated-item scope; zero or more per binding after componentization | Holds live DOM references, timer handles, observers, focus ownership, and transient state only while mounted. Never serialized. Component scope comes from approved componentization, not BehaviorContract normalization. | On invalid mount/update it releases unsafe resources; destruction is terminal only when its actual owner is removed. |
 
-No binding may target a node owned by another component by default. A future cross-component contract needs an explicit typed capability and owner-approved scope. It cannot be inferred from matching IDs, classes, or DOM proximity.
+Before approved component boundaries exist, a binding may target only nodes in the exact DesignDocument and its declared behavior-owner scope/subtree. By default, that scope is the owner node and its descendants; a narrower scope must be a declared descendant subtree. BehaviorContract normalization does not claim to know native component ownership. After componentization, a future integration contract must validate that each binding remains within its approved ComponentContract/ComponentizationPlan boundary. A binding that crosses or escapes that boundary is rejected by default; future exceptions require an explicit typed capability. Matching IDs, classes, or DOM proximity never establish ownership.
 
 ## 7. Identity, repeated instances, and targeting
 
-Compile-time binding identity derives only from stable normalized document context: the DesignNode owner ID, primitive kind, stable binding role/ordinal, and contract identity. It must not depend on random IDs, Frames/Bricks IDs, vendor names, or unstable source traversal artifacts beyond the deterministic normalized node identity already accepted by Design IR.
+Compile-time binding identity follows this acyclic construction order:
+
+```text
+DesignDocumentIdentity =
+  Design IR version
+  + canonicalization ID
+  + exact DesignDocument digest
+
+BehaviorBindingID =
+  BehaviorContract format version
+  + DesignDocumentIdentity
+  + owner DesignNode ID
+  + primitive kind
+  + stable binding role/ordinal
+
+BehaviorContract identity/digest =
+  computed after all normalized BehaviorBinding IDs exist
+```
+
+A binding ID must not depend on the final identity/digest of the artifact that contains it. Identity inputs must not include random IDs, Frames/Bricks IDs, vendor names, or unstable source traversal artifacts beyond the deterministic normalized node identity already accepted by Design IR. The canonicalization ID and digest algorithm remain future decisions; no hashing or serialization is implemented here.
 
 Runtime scope is separate from compile-time identity:
 
@@ -130,12 +198,22 @@ Targets are typed document-local references, never arbitrary CSS selectors, sour
 The semantic lifecycle describes behavior states. Runtime lifecycle is separate:
 
 ```text
-no instance --mount--> mounted --valid--> active --destroy--> destroyed
-mounted --invalid--> unavailable --cleanup--> destroyed
-active --invalid update--> unavailable --cleanup--> destroyed
+no instance --mount--> mounted
+mounted --valid--> active
+
+mounted --recoverable invalidity--> unavailable
+active --recoverable invalidity--> unavailable
+
+unavailable --valid reconciliation--> active
+
+mounted --owner removed--> destroyed
+active --owner removed--> destroyed
+unavailable --owner removed--> destroyed
 ```
 
-`unmounted` means no `RuntimeInstance` exists; it is not an instance state. Mount creates the instance in `mounted`. Successful target and policy validation permits `active`. Missing targets, duplicate IDs, invalid state, or unsupported capability at mount or update lead to `unavailable` with cleanup. `destroyed` is terminal. Reconnection or a LiveView patch does not create a second active instance for the same scope.
+Mount creates the instance in `mounted`; successful target and policy validation permits `active`. Recoverable target/policy invalidity during a server patch enters `unavailable` but does not destroy the still-mounted owner. Entering `unavailable` releases unsafe live resources while retaining enough instance identity to reconcile later. A later valid patch may return it to `active`. Reconciliation reacquires each resource at most once and never duplicates listeners, timers, or instances.
+
+A statically or fatally invalid BehaviorContract is rejected before mount or its binding remains permanently disabled with a diagnostic. Neither case is a runtime destruction event. `destroyed` is terminal and means the owner element was actually removed, including removal during teardown of its owning LiveView. A LiveView `updated` callback alone never means destroyed.
 
 Every implementation must define mount, post-patch reconciliation, disconnect/reconnect behavior where relevant, and destruction. Cleanup releases all resources owned by that instance: event listeners, timers, observers, drag/pointer capture, media/autoplay control, focus ownership, and scroll-lock ownership. Shared resources use scoped ownership/reference counting so destroying one instance cannot unlock or stop a different active instance.
 
@@ -212,9 +290,9 @@ Effects reveal/conceal content and synchronize expanded state. Links remain nati
 
 Use this primitive only for an actual command menu with menu-item semantics and composite keyboard navigation. Navigation links in a website dropdown remain a Disclosure Popup unless evidence establishes application-menu behavior.
 
-**State dimensions:** `open=closed|open`; when open, `focused_item_id` is one enabled/focusable item or `nil` before focus entry. Disabled menu items may remain focusable according to the accepted menu policy but cannot activate. Submenus have separately owned menu bindings.
+**State dimensions:** `open=closed|open`; when open, `focused_item_id` is one focusable menu item, enabled or disabled, or `nil` before focus entry. Disabled menu items remain focusable but cannot activate. Separators and other non-focusable items are excluded from focus navigation. Submenus have separately owned menu bindings.
 
-**Initial state:** closed. Activation of the menu button opens and moves focus to the first enabled item. Down/Up moves through items with defined wrapping; Home/End moves to first/last; printable-character search may be supported only as an explicit policy. Enter activates or opens a submenu; Space behavior follows item type. Escape closes the active menu level and returns focus to its invoker. Tab/Shift+Tab leave the menu and close it. An item activation closes the menu unless it opens a submenu or the item type defines a persistent checked-state change.
+**Initial state:** closed. Activation of the menu button opens and moves focus to the first menu item, even when it is disabled. Down/Up moves through focusable items, including disabled menu items, with defined wrapping; Home/End moves to the first/last focusable item; printable-character search may be supported only as an explicit policy. Enter activates an enabled item or opens its submenu. Space behavior follows item type and likewise cannot activate a disabled item. Escape closes the active menu level and returns focus to its invoker. Tab/Shift+Tab leave the menu and close it. An item activation closes the menu unless it opens a submenu or the item type defines a persistent checked-state change.
 
 Effects synchronize expanded state on the button, menu visibility, focused item, and any checked/selected item state. Focus is not trapped. Missing invoker, invalid item role/relationship, or unknown command type prevents menu semantics from being generated. Cleanup closes owned levels and restores focus only when the invoker still exists and remains in scope.
 
@@ -224,9 +302,9 @@ Effects synchronize expanded state on the button, menu visibility, focused item,
 
 **Initial state:** closed. Open requires an explicit trigger or platform event and one valid dialog target. Initial focus follows a `FocusPolicy`: usually the first appropriate focusable element, or a static title/content anchor for long structured content. The contract defines return-focus destination.
 
-`closed → open` moves focus into the dialog, makes background content inert, acquires scoped scroll-lock ownership if needed, and records the invoking element. While open, Tab/Shift+Tab remain within the modal, Escape closes unless an explicit accepted policy forbids it, and background interaction is unavailable. `open → closed` releases inertness and owned scroll lock, removes the dialog, and returns focus to the invoker if it still exists; otherwise it chooses an explicit logical fallback. Nested open pushes the stack; close affects only the top dialog.
+`closed → open` moves focus into the dialog, makes background content inert, acquires scoped scroll-lock ownership if needed, and records the invoking element. While open, Tab/Shift+Tab remain within the modal and Escape closes the top active modal. Background interaction is unavailable. `open → closed` releases inertness and owned scroll lock, removes the dialog, and returns focus to the invoker if it still exists; otherwise it chooses an explicit logical fallback. Nested open pushes the stack; close affects only the top dialog. If source evidence requires Escape not to close, preserve that evidence, emit a `BehaviorDiagnostic`, and classify the behavior as unsupported pending an explicit future accessibility decision.
 
-Semantic modal state is invalid if `aria-modal` or equivalent claims modality while background content remains operable. Missing label, focus destination, backdrop/close policy, or target rejects modal generation. Destroying the instance forcibly releases all owned inertness, scroll lock, listeners, and focus state. Native `<dialog>` is preferred when it satisfies these rules and the supported browser baseline.
+Semantic modal state is invalid if `aria-modal` or equivalent claims modality while background content remains operable. Missing label, focus destination, background inertness/dismissal policy, or target rejects modal generation. A visual backdrop is not required by this semantic contract. Destroying the instance forcibly releases all owned inertness, scroll lock, listeners, and focus state. Native `<dialog>` is preferred when it satisfies these rules and the supported browser baseline.
 
 ### 9.7 Carousel
 
@@ -347,7 +425,7 @@ C-07X records these corpus identities:
 | `private_reference/frames/frames-components/` extracted Frames component corpus | 43 | `630332dcedf3807064affcbe22cfed9d16859fdd771b815a8b06d4960774de9e` |
 | `private_reference/frames/staging-2026-09/` export corpus, archive excluded | 34 | `074b60cf0ca2db30babe956a657d4838963bcb3a9c69a1eef70d888d93f31d1e` |
 
-The C-09A authority explicitly marks the extracted component corpus as drifted and prohibited for its Bricks 2.3.1 query conclusions. Here it is only a semantic clue, not source authority. The staging export hash and the C-07X observations are the accepted source evidence for the named examples. Hashes establish corpus identity, not license or redistribution permission.
+The 43-record component corpus and its `630332dc…` digest are the identity recorded by C-07X. C-09A later observed a different/drifted tree at the same private path and prohibited that later tree for Bricks 2.3.1 query conclusions. This does not change the C-07X corpus identity. The C-07X component corpus is semantic evidence only here; the staging export hash and C-07X observations remain the stronger source evidence for the named examples. Hashes establish corpus identity, not license or redistribution permission.
 
 ## 17. Evidence ledger
 
@@ -419,10 +497,15 @@ The backward dependency sequence is:
 safe behavior evidence
 → source-neutral normalization
 → BehaviorContract
-→ validation and review
-→ native generation
+→ BehaviorContract validation/review
+→ behavior-aware componentization/projection decision
+→ ComponentizationProposer
+→ ComponentContract + ComponentizationPlan
+→ explicit human ComponentReview
+→ existing generation prerequisite validation
+→ interactive native generation
 → semantic HEEx
-→ minimal runtime where required
+→ behavior realization, with minimal runtime where required
 → lifecycle cleanup
 → accessibility and browser verification
 → Catalogue admission
@@ -441,7 +524,7 @@ The first proofs should be:
 
 ## 19. Open decisions and stop conditions
 
-These decisions remain downstream and do not block this source-neutral contract: the exact BehaviorContract serialization/digest algorithm; supported browser matrix; responsive breakpoint authority; whether future Design IR should reference or absorb BehaviorContract; optional lightbox history behavior; and any third-party carousel dependency. Splide is not a domain dependency.
+These decisions remain downstream and do not block this source-neutral contract: the exact BehaviorContract serialization/digest algorithm; supported browser matrix; responsive breakpoint authority; whether future Design IR should reference or absorb BehaviorContract; optional lightbox history behavior; and any third-party carousel dependency. The BehaviorContract ↔ ComponentContract/ComponentizationPlan projection and boundary-ownership contract is an open dependency and a hard prerequisite before interactive native generation. BehaviorContract validation/review cannot replace C09D6 component review or generation prerequisites. Splide is not a domain dependency.
 
 Stop future implementation and escalate rather than guess if any of these occur:
 
