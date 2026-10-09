@@ -58,25 +58,25 @@ The single root makes the document single-root. No `evidence_insufficient` bindi
 
 ## 6. Canonical boundary and tree inventory
 
-Paths are derived from normalized semantic kind and zero-based sibling position. `node_id` values are Design IR deterministic IDs, not source element IDs. A dash means the corresponding normalized fact is absent. “Compound” marks a node with more than one child, a mechanical candidate for style-locus review. It does not accept a component boundary.
+Canonical Design IR paths are non-empty lists of positive integers. Indexing is one-based across `DesignDocument.root_nodes` and recursively across every `DesignNode.children` list. These are the same positional paths consumed by `LiveFrames.IR.DesignNode.deterministic_id/1`. Normalized semantic kind and tag are reported separately and are not part of canonical path identity. `node_id` values are Design IR deterministic IDs, not source element IDs. A dash means the corresponding normalized fact is absent. “Compound” marks a node with more than one child, a mechanical candidate for style-locus review. It does not accept a component boundary.
 
-| Canonical path | Design IR node ID | Kind / normalized tag | Children | Bindings on node | Static content | Accessibility semantics | Native-generation eligibility | Compound structure |
+| Canonical Design IR path | Design IR node ID | Kind / normalized tag | Children | Bindings on node | Static content | Accessibility semantics | Native-generation eligibility | Compound structure |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
-| `root/section[0]` | `node_000001` | section | 1 | none | absent | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]` | `node_000001_000001` | container | 2 | none | absent | N/A | unknown before Contract + Plan | yes |
-| `root/section[0]/container[0]/generic[0]` | `node_000001_000001_000001` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]` | `node_000001_000001_000001_000001` | generic | 3 | none | absent | N/A | unknown before Contract + Plan | yes |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[0]` | `node_000001_000001_000001_000001_000001` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[0]/image[0]` | `node_000001_000001_000001_000001_000001_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[1]` | `node_000001_000001_000001_000001_000002` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[1]/image[0]` | `node_000001_000001_000001_000001_000002_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[2]` | `node_000001_000001_000001_000001_000003` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[0]/generic[0]/generic[2]/image[0]` | `node_000001_000001_000001_000001_000003_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[1]` | `node_000001_000001_000002` | generic | 4 | none | absent | N/A | unknown before Contract + Plan | yes |
-| `root/section[0]/container[0]/generic[1]/heading[0]` | `node_000001_000001_000002_000001` | heading / h2 | 0 | none | present, 49 bytes | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[1]/paragraph[1]` | `node_000001_000001_000002_000002` | paragraph / p | 0 | none | present, 14 bytes | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[1]/rich_text[2]` | `node_000001_000001_000002_000003` | rich_text | 0 | none | present, 236 bytes | N/A | unknown before Contract + Plan | no |
-| `root/section[0]/container[0]/generic[1]/button[3]` | `node_000001_000001_000002_000004` | button | 0 | none | present, 14 bytes | N/A | unknown before Contract + Plan | no |
+| `[1]` | `node_000001` | section | 1 | none | absent | N/A | unknown before Contract + Plan | no |
+| `[1, 1]` | `node_000001_000001` | container | 2 | none | absent | N/A | unknown before Contract + Plan | yes |
+| `[1, 1, 1]` | `node_000001_000001_000001` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1]` | `node_000001_000001_000001_000001` | generic | 3 | none | absent | N/A | unknown before Contract + Plan | yes |
+| `[1, 1, 1, 1, 1]` | `node_000001_000001_000001_000001_000001` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1, 1, 1]` | `node_000001_000001_000001_000001_000001_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1, 2]` | `node_000001_000001_000001_000001_000002` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1, 2, 1]` | `node_000001_000001_000001_000001_000002_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1, 3]` | `node_000001_000001_000001_000001_000003` | generic | 1 | none | absent | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 1, 1, 3, 1]` | `node_000001_000001_000001_000001_000003_000001` | image / figure | 0 | none | absent | no normalized alt | unknown before Contract + Plan | no |
+| `[1, 1, 2]` | `node_000001_000001_000002` | generic | 4 | none | absent | N/A | unknown before Contract + Plan | yes |
+| `[1, 1, 2, 1]` | `node_000001_000001_000002_000001` | heading / h2 | 0 | none | present, 49 bytes | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 2, 2]` | `node_000001_000001_000002_000002` | paragraph / p | 0 | none | present, 14 bytes | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 2, 3]` | `node_000001_000001_000002_000003` | rich_text | 0 | none | present, 236 bytes | N/A | unknown before Contract + Plan | no |
+| `[1, 1, 2, 4]` | `node_000001_000001_000002_000004` | button | 0 | none | present, 14 bytes | N/A | unknown before Contract + Plan | no |
 
 ## 7. Binding and asset inventory
 
@@ -127,7 +127,7 @@ Recommendations below are source-independent proposals for A1 review. None is ac
 
 ## 10. CTA-specific decision questions
 
-- **Boundary.** The sole normalized root is `section` at `root/section[0]`. Inner candidates include the two-child container, three-image group, and four-child copy group. A1 must choose the boundary; A0 accepts none.
+- **Boundary.** The sole normalized root is a section at canonical Design IR path `[1]`. Inner candidates include the two-child container, three-image group, and four-child copy group. A1 must choose the boundary; A0 accepts none.
 - **Visible text.** The IR has one `h2` heading (49 bytes), one `p` paragraph (14 bytes), one `rich_text` node (236 bytes), and one button label (14 bytes). There is no separate normalized accent or eyebrow role. The paragraph could be considered for that role, but the IR does not assign it. The heading is the primary-heading candidate by normalized type. No literal is reproduced.
 - **Internal content or API.** All four text records can remain internal static content. Heading, paragraph, and button label could be attrs if consumers need variation. The rich-text node could remain internal or become a slot if composition requires it. A1 must choose.
 - **CTA structure and destination.** The normalized CTA is a `button`; it is not a normalized `link` and has no `navigation`, `href`, or interaction reference. No normalized destination data exists.
