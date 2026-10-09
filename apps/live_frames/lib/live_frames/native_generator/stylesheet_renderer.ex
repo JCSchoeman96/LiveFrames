@@ -113,7 +113,7 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
          max_width: width,
          styles: styles
        })
-       when is_map(styles) and (is_integer(width) or is_float(width)) and width > 0 do
+       when is_map(styles) and (is_integer(width) or is_float(width)) and width >= 0 do
     case serialize_width(width) do
       {:ok, css_width} -> {:ok, width, css_width, styles}
       :error -> :error

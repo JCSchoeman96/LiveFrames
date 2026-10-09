@@ -55,6 +55,26 @@ defmodule LiveFrames.NativeGenerator.StylesheetRendererTest do
     assert css == reversed_css
   end
 
+  test "renders integer and float zero thresholds as canonical zero pixels" do
+    integer_zero = %ResponsiveOverride{
+      resolution_status: :resolved,
+      max_width: 0,
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    float_zero = %ResponsiveOverride{integer_zero | max_width: 0.0}
+
+    assert {:ok, integer_css} = StylesheetRenderer.render(@private_class, %{}, [integer_zero])
+    assert {:ok, float_css} = StylesheetRenderer.render(@private_class, %{}, [float_zero])
+    assert integer_css == float_css
+    assert integer_css =~ "@media (max-width: 0px)"
+
+    negative = %ResponsiveOverride{integer_zero | max_width: -1}
+
+    assert {:error, diagnostic} = StylesheetRenderer.render(@private_class, %{}, [negative])
+    assert diagnostic.code == "native_generator.styling.responsive_cascade_authority_gap"
+  end
+
   test "combines disjoint overrides at one width and rejects property conflicts" do
     first = %ResponsiveOverride{
       resolution_status: :resolved,
