@@ -1,29 +1,33 @@
 # P7 interaction conversion implementation plan
 
-**Plan version:** 1.0.5
+**Plan version:** 1.0.6
 **Date:** 2026-10-09
-**Status:** corrected authority candidate for independent review; P7-B1 and later implementation is not authorized
+**Status:** proposed authority amendment; v1.0.5 is accepted; P7-B1 is authorized but blocked pending v1.0.6 acceptance
 **Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `3e75c70433aac1f783221b0c6de3af43679598da`
-**Tree:** `ea85c0adcaf484c8616e114a8680f5a82ac18ee1`
-**Base CI:** `37961704551 completed/success`
+**Base:** `a2bfee2baefbebacd570be1f59df7f82336c83af`
+**Tree:** `0388b1a415a022a45f72f150e5e7b9b54e1a9274`
+**Base CI:** `37975332147 completed/success`
 
 ## 1. Purpose and authority
 
 P7 establishes a source-neutral behavior contract and turns accepted behavior evidence into accessible Phoenix-native interactions. It must preserve the accepted C09D6 static generation path, bind behavior to one exact DesignDocument, and keep source runtimes and executable source material out of generated components.
 
-This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. Their acceptance does not authorize P7-B1 or any later slice. Each remaining issue needs separate owner authorization.
+This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. P7-B1 was separately authorized after version 1.0.5 was accepted. Its preflight exposed an unresolved FocusPolicy reference shape before any B1 code was written. Version 1.0.6 freezes that shape; B1 remains blocked until this amendment is independently accepted and merged. Each later issue still needs separate owner authorization.
 
 ```text
 P7_A1_STATUS=IMPLEMENTED_ACCEPTED
 P7_A1_PR=154
 P7_A2_STATUS=IMPLEMENTED_ACCEPTED
 P7_A2_PR=157
-P7_B1_AND_LATER=PLANNED_NOT_AUTHORIZED
-P7_B1_STATUS=PLANNED_NOT_AUTHORIZED
+P7_B1_AUTHORIZATION=GRANTED
+P7_B1_IMPLEMENTATION=BLOCKED_PENDING_V1_0_6_ACCEPTANCE
+P7_B1_STATUS=AUTHORIZED_BUT_BLOCKED
+P7_B1_IMPLEMENTED=NO
+P7_B2_AND_LATER=PLANNED_NOT_AUTHORIZED
 P7_B1_PREREQUISITES_A1_A2=SATISFIED
-P7_B1_AUTHORIZATION=NOT_GRANTED
 ```
+
+Version 1.0.5 is accepted. B1 preflight then found that FocusPolicy's typed DesignNode references and their cardinality were not frozen. The preflight stopped before implementation. This 1.0.6 amendment resolves that structural gap without changing `docs/09_INTERACTION_MODEL.md` or authorizing B2 or later work.
 
 The target flow is:
 
@@ -194,6 +198,61 @@ On the normalized pre-identity binding, `binding_id` and `ordinal` are `null`. B
 
 `BehaviorPrimitiveDefinition` owns permitted primitive policy keys, value types and shapes, value domains, defaults, and invariants. `BehaviorBinding` owns the selected occurrence values. P7-B1 validates structural representation only: object keys are strings, values use the accepted canonical value algebra, and every array is an ordered sequence. B1 does not decide whether a policy key or value shape is permitted for a primitive. P7-B2 deterministically identities that structural representation without classifying arrays by primitive-specific meaning. P7-B3 validates structure and references, then serializes the values. P7-C resolves exactly `(PrimitiveRef.kind, PrimitiveRef.definition_version)` and validates selected keys, value types and shapes, domains, required/optional status, and invariants against that definition. It may reject an array when the exact definition requires another shape, but it never reinterprets an array as a set or changes its order. P7-C does not fall back to kind-only or latest-version lookup. No validation implementation is authorized by this documentation change.
 
+### 2.4 FocusPolicy structural shape and node references
+
+Version 1.0.5 established that FocusPolicy owns initial focus, containment or roving, restoration, and focus scope, with typed node references. It did not define the concrete reference fields or their cardinality. P7-B1 uses this closed structural shape:
+
+```text
+FocusPolicy
+  initial_strategy: string | null
+  initial_target_node_id: DesignNode ID | null
+  containment_strategy: string | null
+  movement_strategy: string | null
+  scope_node_id: DesignNode ID | null
+  restoration_strategy: string | null
+  restoration_target_node_id: DesignNode ID | null
+  restoration_fallback_node_id: DesignNode ID | null
+```
+
+`BehaviorBinding.focus_policy` has cardinality zero or one. Each of the four node-reference fields has cardinality zero or one. The complete FocusPolicy DesignNode-reference set is `initial_target_node_id`, `scope_node_id`, `restoration_target_node_id`, and `restoration_fallback_node_id`. No FocusPolicy field carries a list of arbitrary node IDs.
+
+All four `*_strategy` values are inert source-neutral strings or `null` in B1. B1 checks structural types only. P7-C owns their closed vocabularies and validates which strategies require, allow, or prohibit each related reference, along with primitive-specific focus rules and modal/non-modal requirements. No imported string becomes an atom.
+
+When `scope_node_id` is `null`, `binding.owner_node_id` is the focus scope. This is the only canonical representation of the owner as focus scope. A non-null `scope_node_id` must identify a node distinct from `binding.owner_node_id`; an explicit reference equal to the owner is noncanonical and B1 rejects it before identity assignment. B2 receives canonical B1 input and does not normalize redundant scope forms. A distinct non-null scope is structurally allowed, while P7-C decides whether the primitive and strategy permit it. `initial_target_node_id` is the optional explicit destination for predetermined initial focus, such as an accepted static title/content anchor. A dynamic strategy such as choosing the first appropriate focusable descendant does not serialize a node ID for that runtime choice. P7-C validates the strategy/reference combination.
+
+`restoration_target_node_id` is the optional explicit return-focus destination. `restoration_fallback_node_id` is the optional explicit logical fallback if that destination is unavailable. Both are DesignNode references. P7-C validates their combinations with `restoration_strategy`.
+
+FocusPolicy does not serialize `invoker_node_id`, `runtime_invoker_id`, or `last_trigger_node_id`. A strategy that returns focus to the invoker uses the activating occurrence/runtime context; the concrete invoker is ephemeral RuntimeInstance state. Roving-focus members and other concrete control/item relationships remain in `controlled_targets`. FocusPolicy does not duplicate them as `roving_node_ids`, `focusable_node_ids`, or `contained_node_ids`. `movement_strategy` may express source-neutral movement semantics only.
+
+P7-B3 serializes every FocusPolicy field, preserves strategy values as strings, and resolves each non-null node reference against the exact DesignDocument. It rejects malformed or unresolved references and never searches selectors for replacements. P7-D0 enumerates all four FocusPolicy references for candidate-boundary checks. P7-D1 repeats those checks against approved component boundaries. P7-C owns the strategy vocabulary and semantic combinations. If a later accepted primitive needs another concrete focus relationship that cannot use `owner_node_id`, `controlled_targets`, or these four FocusPolicy references, it requires a separate typed-reference authority amendment.
+
+Other cross-cutting policies cannot introduce hidden DesignNode references through arbitrary strings or maps:
+
+```text
+TIMER_POLICY_DESIGN_NODE_REFS=NONE
+KEYBOARD_POLICY_DESIGN_NODE_REFS=NONE
+MOTION_POLICY_DESIGN_NODE_REFS=NONE
+RESPONSIVE_OVERRIDE_DESIGN_NODE_REFS=NONE
+```
+
+Keyboard focus movement is expressed semantically over already typed binding relationships. Any future requirement for another concrete node relationship needs an explicit typed field and matching B3/D0/D1 enumeration authority.
+
+```text
+FOCUS_POLICY_CARDINALITY=0..1
+FOCUS_POLICY_NODE_REFERENCE_FIELDS=initial_target_node_id,scope_node_id,restoration_target_node_id,restoration_fallback_node_id
+EACH_FOCUS_POLICY_NODE_REFERENCE_CARDINALITY=0..1
+NULL_SCOPE_MEANS_BINDING_OWNER=YES
+FOCUS_SCOPE_CANONICAL_FORM=NULL_FOR_BINDING_OWNER
+EXPLICIT_SCOPE_EQUAL_TO_OWNER_ALLOWED=NO
+B2_CAN_RECEIVE_REDUNDANT_OWNER_SCOPE=NO
+FOCUS_POLICY_SERIALIZES_RUNTIME_INVOKER=NO
+FOCUS_POLICY_DUPLICATES_CONTROLLED_TARGETS=NO
+P7_C_OWNS_FOCUS_STRATEGY_VOCABULARY_AND_COMBINATIONS=YES
+P7_B3_RESOLVES_ALL_FOUR_FOCUS_NODE_REFS=YES
+P7_D0_ENUMERATES_ALL_FOUR_FOCUS_NODE_REFS=YES
+P7_D1_ENUMERATES_ALL_FOUR_FOCUS_NODE_REFS=YES
+```
+
 ```text
 UNKNOWN_KIND_VERSION_PAIR=UNSUPPORTED
 KIND_ONLY_FALLBACK=PROHIBITED
@@ -218,7 +277,7 @@ SET_LIKE_POLICY_REPRESENTATION_GUIDANCE=STABLE_KEY_OBJECT
 SET_LIKE_ARRAY_REJECTION_OWNER=P7-C_SEMANTIC_VALIDATION
 ```
 
-Policy values cannot contain or encode DesignNode references. D0 continues to enumerate explicit typed references such as `owner_node_id`, trigger origins, `controlled_targets`, and node references in focus or accessibility relationships. A future primitive relationship requires a separately authorized typed structural field. Primitive policy values do not replace `timer_policy`, `focus_policy`, `keyboard_policy`, `motion_policy`, or `responsive_overrides`; those remain shared cross-primitive contracts, while this field holds only primitive-specific occurrence policies.
+Policy values cannot contain or encode DesignNode references. D0 enumerates explicit typed references: `owner_node_id`, trigger origins, `controlled_targets`, and the four FocusPolicy node references frozen in §2.4. TimerPolicy, KeyboardPolicy, MotionPolicy, and ResponsiveBehaviorOverride cannot introduce DesignNode references in B1. A future primitive relationship requires a separately authorized typed structural field and matching B3/D0/D1 reference enumeration. Primitive policy values do not replace `timer_policy`, `focus_policy`, `keyboard_policy`, `motion_policy`, or `responsive_overrides`; those remain shared cross-primitive contracts, while this field holds only primitive-specific occurrence policies.
 
 This field does not change the accepted ownership hierarchy: `BehaviorPrimitiveDefinition → BehaviorStateModel → Transition → TransitionGuard / BehaviorEffect`. `BehaviorBinding` does not own state models, state domains, default-state definitions, invariants, transitions, guards, effects, or terminal-state definitions. `PrimitiveRef` remains exactly `{kind, definition_version}`. Unknown pairs are unsupported; kind-only and latest-version fallbacks are prohibited.
 
@@ -232,7 +291,88 @@ PRIMITIVE_POLICY_VALUES_SERIALIZED=YES
 PRIMITIVE_POLICY_VALUES_IN_CONTRACT_DIGEST=YES
 ```
 
-### 2.4 BehaviorContract serialization and digest decision
+### 2.5 Cross-cutting policy structural shapes
+
+The five cross-cutting binding policies use source-neutral structures that B1 can freeze without taking ownership of P7-C semantic vocabularies. Their stored values are occurrence data. B1 does not serialize them or call `LiveFrames.CanonicalJSON` during normal construction to produce bytes.
+
+```text
+CrossCuttingPolicyValues
+= string-keyed canonical-value object
+
+canonical value
+= null
+| boolean
+| safe integer
+| valid Unicode string
+| ordered array of canonical values
+| string-keyed object of canonical values
+```
+
+Every array at every nesting level is an order-significant sequence. B2 preserves each array's exact order. P7-C may reject an unpermitted value shape, but it never reinterprets or reorders an accepted array. Unordered or set-like data uses a stable string-keyed object, not an array. Object keys use the existing source-neutral CanonicalJSON value domain; B1 does not encode these policy values.
+
+```text
+CROSS_CUTTING_POLICY_ARRAYS_ORDER_SIGNIFICANT=YES
+CROSS_CUTTING_POLICY_VALUES_CONTAIN_DESIGN_NODE_REFS=NO
+B2_REQUIRES_P7_C_FOR_CROSS_CUTTING_STRUCTURE=NO
+```
+
+Strings in these generic values are inert data. They never become DesignNode references by key name, prefix, equality with a node ID, selector, or source ID. A future concrete node relationship requires an explicit typed structural field and matching B3/D0/D1 reference authority. FocusPolicy remains the accepted cross-cutting policy with explicit occurrence-level node references.
+
+The three singular policy fields have this B1 shape and default:
+
+```text
+BehaviorBinding.timer_policy: CrossCuttingPolicyValues | null = null
+BehaviorBinding.keyboard_policy: CrossCuttingPolicyValues | null = null
+BehaviorBinding.motion_policy: CrossCuttingPolicyValues | null = null
+```
+
+B1 checks the string-keyed object and recursive canonical-value structure only. It does not define universal fields inside these objects. P7-C owns the semantic keys, values, domains, applicability, required/optional status, defaults, and invariants. It owns TimerPolicy purpose, duration, eligibility, start/stop/restart/reset behavior, reduced-motion interaction, and named-timer semantics; KeyboardPolicy interaction models, key/modifier vocabularies, transition mappings, and focus-movement semantics; and MotionPolicy animation, autoplay, reduced-motion, and time/state semantics. Named timer configuration may use stable string keys when a later exact definition permits it. Keyboard focus movement acts over existing typed binding relationships. None of these three policies contains DesignNode references.
+
+Responsive overrides have a closed outer record because B2 orders them by mode. `ResponsiveBehaviorOverride` has exactly these three fields:
+
+```text
+ResponsiveBehaviorOverride
+  mode: string
+  authority_ref: string | null
+  state_mapping: CrossCuttingPolicyValues
+
+BehaviorBinding.responsive_overrides: [ResponsiveBehaviorOverride] = []
+```
+
+`mode` is the source-neutral mode key used for deterministic ordering. `authority_ref` is a stable source-neutral semantic identifier for the accepted responsive authority that defines or resolves the mode condition used by this override. It is an inert compile-time identifier, not an evidence citation, selector, URL, filesystem path, module name, runtime callback, or source-runtime identifier. Evidence-only citations belong in `provenance`, `source_trace`, or the applicable diagnostic/evidence structure, and never in `authority_ref`. Because the authority is semantic occurrence input, `authority_ref` participates in the B2 discriminator and the canonical BehaviorContract bytes and digest. `state_mapping` is a string-keyed canonical-value object; P7-C owns accepted responsive authority, allowed modes, mapping validity and reversibility, and primitive-specific compatibility. This field adds no DesignNode references.
+
+Within one binding, `mode` values must be structurally unique. B1 rejects duplicate modes before B2 assigns any ordinal or ID. It does not keep the first/last record or use input order as a tie-breaker. P7-C decides whether a unique mode string is semantically allowed.
+
+```text
+RESPONSIVE_OVERRIDE_MODE_UNIQUE_PER_BINDING=YES
+RESPONSIVE_AUTHORITY_REF_IS_SEMANTIC=YES
+RESPONSIVE_AUTHORITY_REF_IS_PROVENANCE_ONLY=NO
+EVIDENCE_ONLY_RESPONSIVE_REFERENCE_IN_AUTHORITY_REF=NO
+```
+
+B2 canonicalizes object keys in `timer_policy`, `keyboard_policy`, `motion_policy`, and each responsive `state_mapping` through JCS while preserving every nested array's order. It uses the complete typed FocusPolicy value, assumes B1 has rejected an explicit owner-valued `scope_node_id`, and does not normalize redundant scope forms. It sorts `responsive_overrides` by unique `mode`; source traversal order is never a tie-breaker. A semantic `authority_ref` participates in the discriminator. Evidence-only responsive citations remain in excluded provenance/source-trace fields and do not affect binding identity. Duplicate modes reject before identity assignment. These rules require no P7-C lookup:
+
+```text
+B2_REQUIRES_P7_C_FOR_CROSS_CUTTING_STRUCTURE=NO
+```
+
+B3 serializes the stored forms of `timer_policy`, `focus_policy`, `keyboard_policy`, `motion_policy`, and `responsive_overrides`. Objects canonicalize with JCS. Arrays preserve their stored order unless a schema explicitly declares otherwise. Generic cross-cutting values do not create DesignNode references; B3 resolves only explicit typed references, including the four FocusPolicy fields.
+
+After this amendment B1 stores the policies as follows:
+
+```text
+timer_policy             = null | CrossCuttingPolicyValues
+focus_policy             = null | exact FocusPolicy
+keyboard_policy          = null | CrossCuttingPolicyValues
+motion_policy            = null | CrossCuttingPolicyValues
+responsive_overrides     = [ResponsiveBehaviorOverride]
+```
+
+B1 does not own semantic keys/values, primitive applicability, policy defaults beyond the field defaults above, primitive-specific invariants, or runtime behavior. P7-C owns those decisions. This amendment does not implement these types or tests.
+
+B1 tests prove the three null defaults, the empty responsive list default, recursive string-keyed safe policy values, ordered arrays, exact `ResponsiveBehaviorOverride` fields, unique responsive modes, and the absence of any generic policy node-reference channel. They also prove `scope_node_id: nil` is the canonical owner scope, an explicit scope equal to the owner is rejected, and a distinct explicit scope is structurally allowed. B2 tests prove reordered unique responsive records yield the same discriminator, duplicate modes reject before identity assignment, and only canonical FocusPolicy scope forms reach identity assignment. They prove changing semantic `authority_ref` changes the discriminator while changing evidence-only provenance/source-trace references does not. B3 tests that changing `authority_ref` changes canonical bytes and digest. This plan amendment implements no tests.
+
+### 2.6 BehaviorContract serialization and digest decision
 
 P7-A2 is implemented and accepted. It moved the tested JCS value encoder behind `LiveFrames.CanonicalJSON` with a neutral validation result/reason API. `LiveFrames.Catalogue.CanonicalJSON` remains a compatibility wrapper and maps every neutral failure to the existing `catalogue.canonical_json.*` code, path, and message exactly. It preserves success bytes, error shape, validation order, paths, messages, and Catalogue fingerprint values. The Behavior serializer maps neutral failures to `behavior.*` diagnostics. This is the only canonical JSON implementation. The Behavior domain serializes a typed, explicit map through this utility and does not call Catalogue modules.
 
@@ -244,7 +384,7 @@ Serialization rules are fixed as follows:
 
 - The serializer emits every defined top-level field. Optional scalar/reference fields encode as JSON `null`; empty collections encode as `[]` or `{}` according to their declared type. The serializer never alternates between omission and null for one field.
 - Primitive references, triggers, roles, primitive policy values, cross-cutting policy values, keys, severity, category, identifiers, and algorithm names serialize using their declared safe types and closed strings. Primitive transition/effect definitions remain registry-owned and are not contract fields. No atom names are created from input.
-- Binding order is ascending `binding_id`. Binding-owned triggers, targets, occurrence initial-state assignments, `primitive_policy_values`, and cross-cutting policy entries use their schema-defined values and stable semantic order. Primitive definitions and their state dimensions, invariants, transitions, guards, and effects are not serialized as BehaviorContract fields. Object keys follow JCS ordering. For fields other than `primitive_policy_values`, arrays are not sorted unless the schema explicitly declares a set-like collection; such collections sort by their stable typed identity before serialization.
+- Binding order is ascending `binding_id`. Binding-owned triggers, targets, occurrence initial-state assignments, `primitive_policy_values`, and cross-cutting policy entries use their schema-defined values and stable semantic order. Responsive overrides have unique modes and serialize in the mode order assigned by B2. Primitive definitions and their state dimensions, invariants, transitions, guards, and effects are not serialized as BehaviorContract fields. Object keys follow JCS ordering. For fields other than `primitive_policy_values`, arrays are not sorted unless the schema explicitly declares a stable order; such collections sort by their stable typed identity before serialization.
 - Within `primitive_policy_values`, object keys use canonical JCS ordering and arrays are emitted in their stored order. The serializer never sorts policy arrays and does not consult primitive-registry semantics to choose an order.
 - `primitive_policy_values` participates in the semantic discriminator, canonical BehaviorContract bytes, and contract digest. Changing its selected values changes the BehaviorReviewResult compatibility input. The field cannot carry DesignNode references.
 - Diagnostics and provenance participate in the BehaviorContract digest, as required by `docs/09` §5 and §6. Diagnostics sort by `(code, severity, category, binding_id-or-empty, node_id-or-empty, stable evidence ID, message)`. Provenance records use typed stable fields, sort set-like evidence by stable evidence ID, and preserve order only for explicitly ordered traces. Changing a diagnostic or provenance record changes the digest.
@@ -300,10 +440,10 @@ Every reference is typed, document-local or contract-local, and validated by its
 | `BehaviorEffect` | Owned by one transition; zero or more definitions | Closed semantic effect kind and typed target/operand references | Primitive definition and Behavior validator | Trusted compile-time definition; no arbitrary DOM mutation recipe; not serialized in BehaviorContract | Runtime realization |
 | `AccessibilityEffect` | Owned by a transition/effect; zero or more synchronized definitions | Semantic state, ARIA/native state, focus and relationships for exact controls/targets | Primitive definition and Behavior validator plus accessibility tests/review | Trusted compile-time definition; not serialized in BehaviorContract | Markup and runtime realization; browser/AT verification |
 | `TimerPolicy` | Owned by a binding; zero or one policy unless the primitive defines named timers | Closed purpose, integer duration, eligibility, stop/restart rules and reduced-motion response | Primitive definition and Behavior validator | Persisted policy only; timer handle is ephemeral | Runtime timer owner for opted-in timed behavior |
-| `FocusPolicy` | Owned by a binding; zero or one named policy | Closed initial, movement, containment, restoration, and safe fallback rules referencing typed nodes | Primitive definition and Behavior validator | Persisted policy | Runtime realization and accessibility checks |
+| `FocusPolicy` | Owned by a binding; zero or one policy | Exact fields: `initial_strategy`, `initial_target_node_id`, `containment_strategy`, `movement_strategy`, `scope_node_id`, `restoration_strategy`, `restoration_target_node_id`, and `restoration_fallback_node_id`. Strategies are inert strings or null. The four node references are each optional single DesignNode IDs. A null `scope_node_id` means `owner_node_id`; an explicit scope equal to the owner is noncanonical and rejected by B1; roving members remain in `controlled_targets`; runtime invoker identity is not serialized. | B1 checks structure and the canonical scope form; B3 resolves all four references; P7-C validates strategy vocabulary/combinations; D0 and D1 enumerate all four references for boundary containment. | Persisted typed policy; no selector fallback or runtime invoker ID | Runtime realization and accessibility checks |
 | `KeyboardPolicy` | Owned by a binding; zero or one policy per keyboard interaction model | Closed key/modifier vocabulary and transition/focus mapping | Primitive definition and Behavior validator | Persisted policy | Native semantics or client runtime |
 | `MotionPolicy` | Owned by a binding; zero or one policy | Closed animation/autoplay/reduced-motion behavior; time changes semantic state only when explicitly stated | Primitive definition and Behavior validator | Persisted policy | CSS/runtime selector and browser verification |
-| `ResponsiveBehaviorOverride` | Owned by a binding; zero or more named mode mappings | Accepted responsive authority plus source-independent modes and reversible state map | Behavior validator; responsive authority resolver | Persisted semantic mapping, not style override | Projection and runtime mode reconciliation |
+| `ResponsiveBehaviorOverride` | Owned by a binding; zero or more named mode mappings | Stable semantic `authority_ref`, source-independent mode, and reversible state map; evidence citations remain in provenance/source trace | P7-C and responsive authority resolver validate semantic authority and mapping | Persisted semantic mapping, not style override; `authority_ref` participates in B2 identity and the contract digest | Projection and runtime mode reconciliation |
 | `BehaviorDiagnostic` | Owned by a contract; may link one binding, node, or stable evidence record; zero or more | Stable code, severity, category, typed IDs, message, action and provenance evidence | Behavior validator/normalizer; reviewer resolves meaning | Persisted within contract and included in its digest | Review gate; unsupported bindings fail closed |
 | `RuntimeInstance` | Runtime owner creates zero or more per binding and repeated item | `(binding_id, approved component instance scope, stable caller item key)`; DOM nodes/handles are references only at runtime | Runtime lifecycle manager | Ephemeral browser state; never serialized or persisted across page lifetime unless primitive semantics explicitly require it | RuntimeRealization and lifecycle cleanup |
 | `BehaviorReviewResult` | Each human decision creates a separate immutable artifact; consumers receive exactly one explicit result for a gate | `brv_` ID over exact JCS result fields, including decision and exact BehaviorContract digest | P7-B4 review serializer/validator checks field shape, decision, and exact contract/document match. No latest-result selector exists. | Persisted compile-time review evidence; no mutable lifecycle | P7-D0 and P7-D1 gates; never substitutes for ComponentReview |
@@ -420,11 +560,12 @@ The decision validates that the contract and review result match the exact Desig
 
 An admissible result requires `Behavior.Validation.validate_structure/2` success and one explicit approved review result matching the exact document and contract. P7-D0 uses structural node references to assess boundary containment; it does not claim that an unimplemented primitive is semantically supported. Full P7-C-composed `validate/2` remains mandatory before BehaviorProjection and realization.
 
-For each binding relevant to that candidate (at least one binding-owned DesignNode reference lies in its subtree), the gate resolves every concrete binding-owned node reference: owner node, trigger origin, controlled targets, focus-policy node refs, accessibility or relationship occurrence refs, and any other explicitly typed occurrence-level node refs. All references contained means `contained`; all references outside the candidate means `outside_candidate`; references on both sides mean `split` and reject; any unresolved reference means `unresolved` and reject. Primitive transition/effect definitions belong to the trusted registry and are not binding references checked by D0. No source class, DOM proximity, source/vendor ID, selector, or wrapper depth determines relevance or ownership. `BEHAVIOR_SPLIT_ACROSS_PROPOSED_BOUNDARIES=REJECT`.
+For each binding relevant to that candidate (at least one binding-owned DesignNode reference lies in its subtree), the gate resolves every concrete binding-owned node reference: `owner_node_id`, trigger origin node IDs, controlled target node IDs, `focus_policy.initial_target_node_id`, `focus_policy.scope_node_id`, `focus_policy.restoration_target_node_id`, `focus_policy.restoration_fallback_node_id`, and any other separately authorized explicit occurrence-level node-reference fields. These four FocusPolicy references are the complete FocusPolicy reference set. All references contained means `contained`; all references outside the candidate means `outside_candidate`; references on both sides mean `split` and reject; any unresolved reference means `unresolved` and reject. Primitive transition/effect definitions belong to the trusted registry and are not binding references checked by D0. No source class, DOM proximity, source/vendor ID, selector, or wrapper depth determines relevance or ownership. `BEHAVIOR_SPLIT_ACROSS_PROPOSED_BOUNDARIES=REJECT`.
 
 ```text
 P7_D0_TRANSITION_EFFECT_REFERENCE_REMOVED=YES
 P7_D0_BINDING_NODE_REFERENCE_RULE=ALL_CONCRETE_OCCURRENCE_OWNED_DESIGN_NODE_REFS
+P7_D0_FOCUS_POLICY_REFERENCE_SET_EXPLICIT=YES
 ```
 
 The decision outcome is the closed compile-time value `admissible | rejected`; each binding disposition is `contained | outside_candidate | split | unresolved`. The decision is an **ephemeral compile-time validator result**, not a persisted artifact. It has no serializer, digest, database record, timestamp selection, or independent approval state. During the gated call it holds the exact DesignDocumentIdentity, BehaviorContract digest, BehaviorReviewResult ID, canonical ComponentizationSemanticInput value, proposed boundary node ID, and per-binding containment dispositions sorted by `binding_id`; diagnostics use their existing deterministic ordering. The gate returns a blocking diagnostic and does not call the proposer if it cannot establish safe containment; report `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`. This result need not survive ComponentReview: P7-D1 independently repeats ownership validation against the exact approved tuple, so the decision is not an identity input or a substitute for that later proof.
@@ -452,7 +593,7 @@ The projection records the exact DesignDocumentIdentity, BehaviorContract digest
 
 BehaviorProjection uses format version `1.0.0`. Its explicit JCS identity payload contains `projection_format_version`, DesignDocumentIdentity, BehaviorContract digest algorithm/value, BehaviorReviewResult algorithm/ID, `ComponentContract.contract_id`, ComponentizationPlan fingerprint algorithm/value, boundary identity (`design_document_sha256`, `contract_id`, and `boundary_node_id`), deterministically ordered `{binding_id, boundary_node_id}` mappings, and projection diagnostics. Ownership mappings sort by `binding_id`. Projection diagnostics serialize as their explicit typed maps and sort by their complete JCS bytes. Do not include `projection_id` in its own payload. The projection ID is `bpr_` plus lowercase SHA-256 of those JCS bytes, algorithm `lf-behavior-projection-v1-jcs-sha256`. `RuntimeRealization` refers to this exact projection ID. P7-D1 must add golden projection bytes/ID tests and rejection tests for altered review, plan, boundary, mapping, or diagnostics.
 
-The projection does not copy or reinterpret BehaviorContract state semantics and does not change the public component API. The first implementation permits one binding to be projected wholly within one approved component boundary only. A binding whose owner or controlled target escapes the boundary, or whose behavior spans multiple component boundaries, fails closed with a stable diagnostic. A future cross-boundary capability requires a new typed authority and explicit authorization.
+The projection does not copy or reinterpret BehaviorContract state semantics and does not change the public component API. The first implementation permits one binding to be projected wholly within one approved component boundary only. A binding whose owner, trigger origin, controlled target, or non-null FocusPolicy reference escapes the boundary, or whose behavior spans multiple component boundaries, fails closed with a stable diagnostic. D1 enumerates `focus_policy.initial_target_node_id`, `focus_policy.scope_node_id`, `focus_policy.restoration_target_node_id`, and `focus_policy.restoration_fallback_node_id` explicitly. A future cross-boundary capability requires a new typed authority and explicit authorization.
 
 Option A keeps C09D1 `ComponentContract 1.0.0` and C09D3 `ComponentizationPlan 1.0.0` schemas and the accepted static C09D6 path unchanged. Option B would put behavior ownership into placement authority, require ComponentizationPlan format evolution or a tightly constrained optional extension, introduce reader/migration questions, and couple state semantics to a plan whose current purpose is static public-input placement. It would risk making existing static generation depend on behavior data it does not need. Neither schema needs a version change to implement the sidecar.
 
@@ -462,7 +603,7 @@ Projection validation requires all of the following:
 2. The ComponentContract and ComponentizationPlan validate under their existing authorities; the plan references that exact contract and existing DesignDocument digest.
 3. The ComponentContract is explicitly approved. Behavior review cannot set or imply its approval status.
 4. The same shared C09D6 generation prerequisites pass, excluding only final code emission.
-5. Every binding owner and controlled target resolves in the exact DesignDocument and lies wholly within one approved component boundary.
+5. Every binding owner, controlled target, trigger origin, and each non-null FocusPolicy node reference resolves in the exact DesignDocument and lies wholly within one approved component boundary.
 6. Every projected binding maps exactly once. Unprojected required behavior, ambiguous ownership, escaped targets, or cross-boundary behavior blocks interactive generation.
 7. The projection carries immutable hashes/IDs for all exact inputs. The DesignDocument, BehaviorContract, BehaviorReviewResult, and plan are checked by exact identity/digest. The component contract is checked by its existing `contract_id`, approval result, intrinsic/reference validation, and shared C09D6 prerequisites; P7 does not invent a competing ComponentContract fingerprint.
 
@@ -586,14 +727,14 @@ Every implementation issue follows TDD: add a focused failing test, confirm the 
 | --- | --- |
 | P7-A1 | Existing DesignDocument SHA-256 values remain byte-for-byte equal; known and unknown canonicalization IDs; invalid documents rejected before identity calculation. |
 | P7-A2 | All JCS success bytes remain identical; Catalogue failure codes, paths, messages, error shape, and validation order remain identical; neutral errors map to Behavior diagnostics. |
-| P7-B1 | Typed contract/binding shapes for primitive references, triggers, controlled targets, optional occurrence initial-state assignments, `primitive_policy_values` with default `{}`, cross-cutting policies, diagnostics, provenance, and the complete occurrence field list. Evidence confirms state and policy assignments remain distinct, arrays are structurally ordered sequences, and primitive-definition/state-machine fields remain absent. B1 tests do not classify policy values by primitive-specific meaning. |
-| P7-B2 | Binding-ID golden vectors prove occurrence-only discriminators; changing `primitive_policy_values` changes the discriminator; different object insertion order with the same values yields the same discriminator; `['a', 'b']` and `['b', 'a']` yield different discriminators; equivalent stable-key objects with different insertion order yield the same discriminator. Also test source traversal noise, duplicate occurrence rejection, stable zero-based ordinals, and that primitive-definition body changes do not affect binding IDs. B2 tests prove structural determinism, not primitive policy validity. |
-| P7-B3 | Contract serializer golden bytes/digest include `primitive_policy_values`; changing its values changes canonical bytes and digest. Object keys canonicalize with JCS and policy arrays serialize in stored order without registry lookup or sorting. Include binding-owned occurrence values and primitive references only; diagnostic/provenance digest inclusion; identity, binding-ID, and reference checks; full semantic validation is not exposed yet. |
+| P7-B1 | Typed contract/binding shapes for primitive references, triggers, controlled targets, optional occurrence initial-state assignments, `primitive_policy_values` with default `{}`, the eight exact FocusPolicy fields and their cardinality, diagnostics, provenance, and the complete occurrence field list. Evidence confirms all four FocusPolicy references are enumerable, null scope means binding owner, explicit owner-valued scope is rejected as noncanonical, runtime invoker and roving-target references are not duplicated, other cross-cutting policies carry no node references, state and policy assignments remain distinct, arrays are ordered, and primitive-definition/state-machine fields remain absent. Also prove the three null policy defaults, empty responsive list, recursive safe string-keyed values, ordered arrays, exact ResponsiveBehaviorOverride fields, unique modes, and no generic node-reference channel. |
+| P7-B2 | Binding-ID golden vectors prove occurrence-only discriminators; changing `primitive_policy_values` changes the discriminator; different object insertion order with the same values yields the same discriminator; `['a', 'b']` and `['b', 'a']` yield different discriminators; equivalent stable-key objects with different insertion order yield the same discriminator. Also test source traversal noise, duplicate occurrence rejection, stable zero-based ordinals, and that primitive-definition body changes do not affect binding IDs. B2 tests prove structural determinism, not primitive policy validity. Also prove nested policy arrays retain order, reordered unique responsive records yield the same discriminator, duplicate modes reject before identity assignment without P7-C lookup, B2 receives no redundant owner scope, changing semantic `authority_ref` changes the discriminator, and evidence-only provenance/source-trace references do not. |
+| P7-B3 | Contract serializer golden bytes/digest include `primitive_policy_values` and all FocusPolicy fields; changes to either change canonical bytes and digest. Changing semantic responsive `authority_ref` changes canonical bytes and digest, while evidence-only provenance/source-trace references remain outside the binding discriminator. Object keys canonicalize with JCS and policy arrays serialize in stored order without registry lookup or sorting. Resolve all four non-null FocusPolicy node refs in the exact DesignDocument and reject unresolved refs without selector search. Include binding-owned occurrence values and primitive references only; diagnostic/provenance digest inclusion; identity and binding-ID checks; full semantic validation is not exposed yet. Also cover generic policy objects and responsive records; generic values create no DesignNode refs. |
 | P7-B4 | Same fields yield same `brv_` ID; changed decision changes ID; changed contract digest or DesignDocumentIdentity rejects; duplicate evidence refs reject; zero/multiple results reject; `needs_review`/`rejected` fail the downstream approval gate; timestamps never select authority. |
-| P7-C | Registry rejects unknown/unimplemented exact `(kind, definition_version)` pairs without fallback; validates occurrence initial-state assignments and `primitive_policy_values` keys, value types/shapes, domains, required/optional status, defaults, and invariants against the exact definition. Evidence proves an array is semantically rejected when that definition requires a stable-key object, while a permitted stable-key object may pass; permitted arrays retain their exact order. P7-C never reinterprets or reorders arrays. `validate/2` calls both `validate_structure/2` and `validate_semantics/2`; semantic diagnostics are deterministic. |
-| P7-D0 | Exact document/contract/review matching; structural validation; candidate boundary and every typed node reference checked; contained, irrelevant, split, and unresolved bindings classified deterministically; proposer is not called on rejection and receives the unchanged validated semantic input on acceptance. Unsupported primitive semantics remain blocked at the later full validation gate. |
+| P7-C | Registry rejects unknown/unimplemented exact `(kind, definition_version)` pairs without fallback; validates occurrence initial-state assignments and `primitive_policy_values` keys, value types/shapes, domains, required/optional status, defaults, and invariants against the exact definition. Evidence proves an array is semantically rejected when that definition requires a stable-key object, while a permitted stable-key object may pass; permitted arrays retain their exact order. P7-C never reinterprets or reorders arrays. `validate/2` calls both `validate_structure/2` and `validate_semantics/2`; semantic diagnostics are deterministic. P7-C owns Timer/Keyboard/Motion/Responsive semantic vocabularies, applicability, domains, defaults, invariants, mode/authority checks, reversibility, and primitive-specific combinations. |
+| P7-D0 | Exact document/contract/review matching; structural validation; candidate boundary and every typed node reference checked, including all four FocusPolicy references; contained, irrelevant, split, and unresolved bindings classified deterministically; proposer is not called on rejection and receives unchanged validated semantic input on acceptance. Unsupported primitive semantics remain blocked at the later full validation gate. Generic policy values add no node-reference channel. |
 | Existing ComponentizationProposer + ComponentReview | Existing proposer still creates only a proposed tuple; its existing ComponentReview and C09D6 gates remain mandatory before the post-review projection. |
-| P7-D1 | Five exact inputs required; review decision/document/contract digest match; golden projection bytes/ID; plan fingerprint equals NativeGenerator's serialized-plan SHA-256; invalid boundaries, stale inputs, ambiguous mappings, and unprojected required bindings reject. |
+| P7-D1 | Five exact inputs required; review decision/document/contract digest match; golden projection bytes/ID; plan fingerprint equals NativeGenerator's serialized-plan SHA-256; all four FocusPolicy node refs rechecked against approved boundaries; invalid boundaries, stale inputs, ambiguous mappings, and unprojected required bindings reject. Generic policy values add no node-reference channel. |
 | P7-E | Realization selector chooses only supported least-cost strategies; unknown/unsafe strategy rejects; no hook, RuntimeInstance, browser resource manager, or DOM lifecycle code is introduced. |
 | P7-F | Core `closed | open`; native details/summary candidate; ordinary links; accepted native activation/accessibility only; no invented ARIA; no JavaScript and no RuntimeInstance. Browser verification only for this bounded core. |
 | P7-G | Separate focused/selected tab state; activation modes and keyboard policy; accessible relationships; if a managed runtime is required, its patch/reconnect/resource cleanup tests cover Tabs only. |
@@ -607,26 +748,29 @@ Every applicable slice also checks that no imported source code executes, no dyn
 
 ## 11. Ordered future issue tree
 
-P7-A1 and P7-A2 are implemented and accepted. P7-B1 through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each remaining issue is independently reviewable and requires explicit owner authorization before work begins.
+P7-A1 and P7-A2 are implemented and accepted. P7-B1 is authorized but blocked until this v1.0.6 amendment is independently accepted and merged with passing post-merge CI. P7-B2 through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each later issue is independently reviewable and requires explicit owner authorization before work begins.
 
 ```text
 P7_ISSUE_COUNT=17
 FUTURE_ISSUE_COUNT=15
 FUTURE_ISSUES_CREATED=NO
-P7_B1_STATUS=PLANNED_NOT_AUTHORIZED
+P7_B1_STATUS=AUTHORIZED_BUT_BLOCKED
+P7_B1_AUTHORIZATION=GRANTED
+P7_B1_IMPLEMENTATION=BLOCKED_PENDING_V1_0_6_ACCEPTANCE
+P7_B1_IMPLEMENTED=NO
 P7_B1_PREREQUISITES_A1_A2=SATISFIED
-P7_B1_AUTHORIZATION=NOT_GRANTED
+P7_B2_AND_LATER=PLANNED_NOT_AUTHORIZED
 ```
 
 | Order | Issue | Scope and required result | Dependency and hard gate |
 | --- | --- | --- | --- |
 | 1 | **IMPLEMENTED / ACCEPTED** P7-A1 — DesignDocument identity | `LiveFrames.IR.Identity` owns the current IR serializer SHA-256; `ComponentizationPlan.design_document_sha256/1` delegates to it; algorithm is `lf-ir-serializer-v1` + `sha-256`. | Separately owner-authorized after P7-0. Existing digest values and ComponentizationPlan 1.0.0 remain unchanged. |
 | 2 | **IMPLEMENTED / ACCEPTED** P7-A2 — Source-neutral JCS utility | `LiveFrames.CanonicalJSON` owns the tested JCS encoder; Catalogue compatibility wrapper preserves bytes and diagnostics. | Separately owner-authorized after P7-0. No Behavior → Catalogue dependency or Catalogue contract changes. |
-| 3 | **PLANNED — NOT AUTHORIZED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for versioned primitive references, triggers, targets, occurrence initial-state assignments, source-neutral `primitive_policy_values` defaulting to `{}`, cross-cutting policies, diagnostics, and provenance. Freeze string object keys, the accepted canonical value algebra, and arrays as ordered sequences. Primitive-specific policy keys, value types, shapes, and semantics are not validated here. Primitive state-machine definitions remain registry-owned. | A1+A2 prerequisites satisfied; B1 authorization not granted. Structural representation only; no ID derivation, contract digest, primitive semantics, or runtime. |
-| 4 | **PLANNED — NOT AUTHORIZED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, including `primitive_policy_values`, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Depends on P7-B1. Use `primitive_ref.kind` in the accepted ID payload; exclude definition version and primitive-definition body. Canonicalize policy object keys and preserve every policy array's exact order. Do not classify arrays by primitive-specific meaning or consult P7-C for ordering. Structurally valid values may receive deterministic identity before P7-C rejects them semantically. Policy values affect the discriminator and can indirectly affect the final ID through ordinal; the high-level ID formula does not change. No provisional map shape or generic untyped identity API. |
-| 5 | **PLANNED — NOT AUTHORIZED** P7-B3 — BehaviorContract serializer and structural validation | Implement contract serializer/digest for DesignDocument identity, primitive references, binding-owned occurrence data including `primitive_policy_values`, and diagnostics/provenance; verify binding IDs and references. | Depends on P7-B2. Expose `validate_structure/2` only; no full `validate/2` before P7-C. Serialize policy values, not primitive-definition bodies. |
+| 3 | **AUTHORIZED — BLOCKED PENDING VERSION 1.0.6 ACCEPTANCE** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for versioned primitive references, triggers, targets, occurrence initial-state assignments, source-neutral `primitive_policy_values` defaulting to `{}`, cross-cutting policies including the FocusPolicy reference fields in §2.4, diagnostics, and provenance. Freeze string object keys, the accepted canonical value algebra, and arrays as ordered sequences. Primitive-specific policy keys, value types, shapes, and semantics are not validated here. Primitive state-machine definitions remain registry-owned. | A1+A2 prerequisites satisfied. B1 remains blocked until this amendment is independently accepted and merged with passing post-merge CI. Structural representation only; no ID derivation, contract digest, primitive semantics, or runtime. Also freeze CrossCuttingPolicyValues, exact responsive fields, ordered nested arrays, and unique modes; B1 checks structure only. |
+| 4 | **PLANNED — NOT AUTHORIZED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, including `primitive_policy_values`, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Depends on P7-B1. Use `primitive_ref.kind` in the accepted ID payload; exclude definition version and primitive-definition body. Canonicalize policy object keys and preserve every policy array's exact order. Do not classify arrays by primitive-specific meaning or consult P7-C for ordering. Structurally valid values may receive deterministic identity before P7-C rejects them semantically. Policy values affect the discriminator and can indirectly affect the final ID through ordinal; the high-level ID formula does not change. No provisional map shape or generic untyped identity API. Canonicalize generic policy objects and preserve nested arrays; reject duplicate responsive modes and redundant owner-valued FocusPolicy scope before identity assignment, then sort responsive records by unique mode. B2 assumes canonical B1 FocusPolicy input and does not normalize it. Semantic `authority_ref` participates in the discriminator; evidence-only provenance/source-trace references do not. |
+| 5 | **PLANNED — NOT AUTHORIZED** P7-B3 — BehaviorContract serializer and structural validation | Implement contract serializer/digest for DesignDocument identity, primitive references, binding-owned occurrence data including `primitive_policy_values` and FocusPolicy, and diagnostics/provenance; verify binding IDs and references. | Depends on P7-B2. Expose `validate_structure/2` only; no full `validate/2` before P7-C. Resolve the four non-null FocusPolicy node refs against the exact DesignDocument. Serialize policy values, not primitive-definition bodies. Serialize generic policy objects and responsive records; resolve only the four explicit FocusPolicy node refs. |
 | 6 | **PLANNED — NOT AUTHORIZED** P7-B4 — BehaviorReviewResult artifact | Implement the immutable review model, exact JCS serializer, `brv_` identity, matching validator, and explicit-result approval gate. | Depends on P7-B3. No latest/timestamp selection, database, mutable status, or ComponentReview authority. |
-| 7 | **PLANNED — NOT AUTHORIZED** P7-C — Primitive registry and validation composition | Implement the trusted registry and primitive-definition ownership of StateModels, Transitions, Guards, Effects, cardinality, invariants, and semantic validation. Compose `validate/2 = validate_structure/2 AND validate_semantics/2`. | Depends on P7-B4. Validate state assignments and each exact primitive definition's allowed policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Reject mismatching structural shapes, such as an array where the exact definition requires a stable-key object; preserve the exact order of every permitted array. Never reinterpret or reorder arrays. Do not implement every primitive; each tracer adds its own definition. |
+| 7 | **PLANNED — NOT AUTHORIZED** P7-C — Primitive registry and validation composition | Implement the trusted registry and primitive-definition ownership of StateModels, Transitions, Guards, Effects, cardinality, invariants, and semantic validation. Compose `validate/2 = validate_structure/2 AND validate_semantics/2`. | Depends on P7-B4. Validate state assignments and each exact primitive definition's allowed policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Own FocusPolicy strategy vocabularies, strategy/reference combinations, and primitive-specific focus invariants. Reject mismatching structural shapes, such as an array where the exact definition requires a stable-key object; preserve the exact order of every permitted array. Never reinterpret or reorder arrays. Do not implement every primitive; each tracer adds its own definition. P7-C owns semantic policy values and combinations for Timer/Keyboard/Motion/Responsive. |
 | 8 | **PLANNED — NOT AUTHORIZED** P7-D0 — BehaviorComponentizationDecision | Validate the exact reviewed behavior against the explicit candidate `ComponentizationSemanticInput`; gate the existing proposer call on whole-binding containment. | Depends on P7-C and P7-B4. Ephemeral result only. Reject split/uncertain boundaries with `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`; do not bypass or change the proposer. |
 | Existing stage | EXISTING — ComponentizationProposer + ComponentReview | Existing authorities create a proposed ComponentContract/Plan and require explicit human ComponentReview plus C09D6 prerequisites. | This is an existing pipeline stage, not a new P7 issue. P7-D1 cannot proceed before its exact approved tuple exists. |
 | 9 | **PLANNED — NOT AUTHORIZED** P7-D1 — BehaviorProjection | Implement the five-input post-review projection, exact review-result validation, deterministic `bpr_` identity, ownership verification, and C09D6 prerequisites. | Depends on P7-D0, existing ComponentizationProposer, and approved ComponentReview. Use a test-only trusted primitive definition; add no production primitive. Formats remain 1.0.0. |
@@ -639,13 +783,13 @@ P7_B1_AUTHORIZATION=NOT_GRANTED
 | 16 | **PLANNED — NOT AUTHORIZED** P7-K — Carousel | Add Carousel semantics and opt-in timer/control realization. | Depends on P7-J; timer and cleanup remain primitive-scoped. |
 | 17 | **PLANNED — NOT AUTHORIZED** P7-L — One source integration tracer | Integrate one separately selected source fixture and one approved behavior through the complete reviewed pipeline. | Depends on preceding primitive/pipeline gates. Additional sources or behaviors require separate authorization. |
 
-P7-B1's A1+A2 prerequisites are satisfied, but its authorization has not been granted. All later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
+P7-B1's A1+A2 prerequisites are satisfied and its authorization is granted, but implementation is blocked until this v1.0.6 amendment is independently accepted and merged with passing post-merge CI. B2 and later issues remain unauthorized and depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
 
-P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately authorized and subsequently accepted. This plan correction does not authorize P7-B1 or any successor. Approval of any issue does not authorize its successor.
+P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately authorized and subsequently accepted. This plan correction does not authorize B2 or any successor. Approval of any issue does not authorize its successor.
 
 ## 12. TOON micro-prompts
 
-P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 through P7-L are future implementation tasks and remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
+P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 is authorized but blocked pending v1.0.6 acceptance and merge. P7-B2 through P7-L remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
 
 ### P7-A1 — DesignDocument identity
 
@@ -669,10 +813,10 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **PLANNED — NOT AUTHORIZED** Define the typed structural model and closed field shapes for BehaviorContract and BehaviorBinding. |
+| Task      | **AUTHORIZED — BLOCKED PENDING VERSION 1.0.6 ACCEPTANCE** Define the typed structural model and closed field shapes for BehaviorContract and BehaviorBinding. Also prove policy defaults, recursive safe values, ordered arrays, exact responsive fields, unique modes, and no generic node-reference channel. |
 | Objective | Give identity, serialization, review, and projection slices one stable typed representation to consume. |
-| Output    | `apps/live_frames/lib/live_frames/behavior/contract.ex` and `binding.ex`, with typed primitive references, triggers, controlled targets, optional occurrence initial-state assignments, `primitive_policy_values` as a source-neutral string-keyed canonical-value object with default `{}`, cross-cutting binding policies, diagnostics/provenance, and closed field-shape tests under `apps/live_frames/test/live_frames/behavior/`. Tests keep state assignments separate from policy assignments, define arrays as ordered sequences, and reject primitive-definition/state-machine fields on bindings. |
-| Note      | Depends on P7-A1 and P7-A2. Freeze `PrimitiveRef {kind, definition_version}` as two closed trusted strings, with exactly one reference per binding. B1 freezes string object keys, the accepted canonical value algebra, and order-significant arrays. B1 owns structural representation only and does not validate primitive-specific policy vocabulary or value shapes, or consult the registry. Define `binding_id` and `ordinal` as unassigned `null` only on the normalized pre-identity binding value; persisted contract bindings require both. No ID derivation, digest, primitive semantic validation, source adapter, or runtime. |
+| Output    | `apps/live_frames/lib/live_frames/behavior/contract.ex` and `binding.ex`, with typed primitive references, triggers, controlled targets, optional occurrence initial-state assignments, `primitive_policy_values` as a source-neutral string-keyed canonical-value object with default `{}`, cross-cutting binding policies, diagnostics/provenance, and closed field-shape tests under `apps/live_frames/test/live_frames/behavior/`. Tests keep state assignments separate from policy assignments, define arrays as ordered sequences, and reject primitive-definition/state-machine fields on bindings. Tests prove timer/keyboard/motion defaults are nil, responsive overrides default to [], recursive safe string-key values, ordered arrays, unique modes, canonical owner scope with redundant owner scope rejected, and no generic node-reference channel. Focus-scope cases prove owner plus null is canonical, owner-equal explicit scope is rejected, and distinct explicit scope is structurally allowed. |
+| Note      | Depends on accepted P7-A1 and P7-A2. Freeze `PrimitiveRef {kind, definition_version}` as two closed trusted strings, with exactly one reference per binding. B1 freezes string object keys, the accepted canonical value algebra, order-significant arrays, and the FocusPolicy field/reference shape in §2.4. B1 owns structural representation only and does not validate primitive-specific policy vocabulary or value shapes, or consult the registry. Define `binding_id` and `ordinal` as unassigned `null` only on the normalized pre-identity binding value; persisted contract bindings require both. B1 may resume only after v1.0.6 is independently accepted and merged with passing post-merge CI. No ID derivation, digest, primitive semantic validation, source adapter, or runtime. Freeze CrossCuttingPolicyValues as safe string-keyed values with ordered arrays. Timer/keyboard/motion are object-or-null; responsive records have unique modes and semantic authority references. B1 rejects duplicate modes and explicit owner-valued FocusPolicy scope before identity; owner plus null is canonical and distinct explicit scope remains structurally allowed. P7-C owns policy meaning and strategy/reference combinations. |
 
 ### P7-B2 — BehaviorBinding deterministic identity
 
@@ -681,7 +825,7 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 | Task      | **PLANNED — NOT AUTHORIZED** Implement the structured binding ID payload and semantic discriminator ordinal algorithm over P7-B1's typed model. |
 | Objective | Make BehaviorBinding IDs deterministic and independent of source traversal, map order, and final contract digest. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/binding_identity.ex`; golden IDs and order/duplicate/ordinal tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on P7-B1. Group by `(owner_node_id, primitive_ref.kind, binding_role)`; discriminate on occurrence triggers, controlled targets, optional initial-state assignments, `primitive_policy_values`, and binding-owned cross-cutting policies; remove exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace`; JCS-encode; reject duplicate bytes; rank unsigned byte strings from zero. Canonicalize policy object keys and preserve every policy array's exact order without classifying arrays by primitive-specific meaning or consulting P7-C for ordering. Structurally valid values may receive deterministic identity before P7-C rejects their semantic shape. Different values produce different discriminators; equivalent maps with different insertion order produce the same discriminator; reversed ordered arrays produce different discriminators. Exclude `definition_version` and all primitive definitions, state models, transitions, guards, and effects from binding IDs. Do not change the high-level binding ID payload formula. No provisional maps, generic untyped API, random/source IDs, selectors/classes, component instances, or runtime. |
+| Note      | Depends on P7-B1. Group by `(owner_node_id, primitive_ref.kind, binding_role)`; discriminate on occurrence triggers, controlled targets, optional initial-state assignments, `primitive_policy_values`, and binding-owned cross-cutting policies including the complete typed `focus_policy` value; remove exactly `binding_id`, `ordinal`, `diagnostics`, `provenance`, and `source_trace`; JCS-encode; reject duplicate bytes; rank unsigned byte strings from zero. Canonicalize policy object keys and preserve every policy array's exact order without classifying arrays by primitive-specific meaning or consulting P7-C for ordering. Structurally valid values may receive deterministic identity before P7-C rejects their semantic shape. Different values produce different discriminators; equivalent maps with different insertion order produce the same discriminator; reversed ordered arrays produce different discriminators. Exclude `definition_version` and all primitive definitions, state models, transitions, guards, and effects from binding IDs. Do not change the high-level binding ID formula. No FocusPolicy fields enter the high-level payload. No provisional maps, generic untyped API, random/source IDs, selectors/classes, component instances, or runtime. Preserve the accepted identity vectors and add proofs for nested policy-array order, responsive input-order invariance, duplicate-mode rejection before ordinal/ID assignment, and canonical FocusPolicy scope input. Changing semantic `authority_ref` changes the discriminator; changing evidence-only provenance/source-trace references does not. B2 assumes B1 canonical scope and never normalizes it. |
 
 ### P7-B3 — BehaviorContract serializer and structural validation
 
@@ -690,7 +834,7 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 | Task      | **PLANNED — NOT AUTHORIZED** Implement BehaviorContract serialization/digest and structural/reference validation. |
 | Objective | Create the persisted source-neutral contract linked to one exact DesignDocument and verify assigned binding identities. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/serializer.ex`, `diagnostic.ex`, and `validation.ex`; golden bytes/digest and malformed-reference tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on P7-B2. Include `primitive_policy_values`, diagnostics/provenance, and binding-owned occurrence values in canonical bytes and digest; changing policy values changes both and therefore BehaviorReviewResult compatibility. Canonicalize policy object keys with JCS and serialize arrays in stored order without sorting or consulting primitive-registry semantics. Serialize each full `(kind, definition_version)` primitive reference, not registry definition bodies. A definition-version change must change BehaviorContract canonical bytes and digest, invalidating any prior BehaviorReviewResult match. Validate DesignDocument linkage and every binding ID, and reject unresolved reference pairs. Do not expose full `validate/2` before P7-C. Keep Design IR 3.x separate and `IR.Interaction` intent-only. |
+| Note      | Depends on P7-B2. Include `primitive_policy_values`, diagnostics/provenance, and binding-owned occurrence values in canonical bytes and digest; changing policy values changes both and therefore BehaviorReviewResult compatibility. Serialize all FocusPolicy fields, preserve strategy strings and null optional fields under the accepted serializer rules, and resolve the four non-null FocusPolicy node references against the exact DesignDocument. Reject malformed or unresolved references, with no selector search. Canonicalize policy object keys with JCS and serialize arrays in stored order without sorting or consulting primitive-registry semantics. Serialize each full `(kind, definition_version)` primitive reference, not registry definition bodies. A definition-version change must change BehaviorContract canonical bytes and digest, invalidating any prior BehaviorReviewResult match. Validate DesignDocument linkage and every binding ID, and reject unresolved reference pairs. Do not expose full `validate/2` before P7-C. Keep Design IR 3.x separate and `IR.Interaction` intent-only. Generic policy objects and responsive records use the frozen structures; generic values do not create DesignNode refs. Serialize semantic `authority_ref` as occurrence data, so changing it changes canonical bytes and digest; keep evidence-only citations in provenance/source trace and outside binding identity. |
 
 ### P7-B4 — BehaviorReviewResult artifact
 
@@ -708,7 +852,7 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 | Task      | **PLANNED — NOT AUTHORIZED** Implement the trusted registry mechanism, common closed vocabularies, and staged semantic validation API. |
 | Objective | Ensure full Behavior validation cannot pass without both structural/reference checks and primitive semantics. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/primitive_registry.ex` and the composed `validation.ex` API; `validate_semantics/2`; `validate/2 = validate_structure/2 AND validate_semantics/2`; composition and unsupported-definition tests. |
-| Note      | Depends on P7-B4. The trusted registry resolves each exact `(kind, definition_version)` pair and owns that definition's `BehaviorStateModel`; the model owns `Transition` definitions, which own their `TransitionGuard`, `BehaviorEffect`, and associated `AccessibilityEffect` definitions. Validate each binding's primitive reference, occurrence initial-state assignment, `primitive_policy_values`, triggers, targets, and binding policies against the selected definition. Unknown pairs fail closed; kind-only and latest-version fallback are prohibited. The exact definition owns permitted policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Reject a structural value shape, including an array, when that exact policy definition does not permit it; a semantically invalid binding may already have a deterministic structural ID. For an allowed ordered sequence, validate its contents without reinterpreting or reordering it. Where a policy is defined as unordered/set-like, its permitted shape should use a stable-key object. Policy values contain no DesignNode references. Do not implement every primitive definition here. An unimplemented kind/version remains unsupported until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. |
+| Note      | Depends on P7-B4. The trusted registry resolves each exact `(kind, definition_version)` pair and owns that definition's `BehaviorStateModel`; the model owns `Transition` definitions, which own their `TransitionGuard`, `BehaviorEffect`, and associated `AccessibilityEffect` definitions. Validate each binding's primitive reference, occurrence initial-state assignment, `primitive_policy_values`, triggers, targets, and binding policies against the selected definition. Unknown pairs fail closed; kind-only and latest-version fallback are prohibited. The exact definition owns permitted policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Reject a structural value shape, including an array, when that exact policy definition does not permit it; a semantically invalid binding may already have a deterministic structural ID. For an allowed ordered sequence, validate its contents without reinterpreting or reordering it. Where a policy is defined as unordered/set-like, its permitted shape should use a stable-key object. Policy values contain no DesignNode references. Do not implement every primitive definition here. An unimplemented kind/version remains unsupported until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. P7-C owns Timer/Keyboard/Motion/Responsive semantics, modes and authority validity, reversible mapping, and primitive-specific combinations. |
 
 ### P7-D0 — BehaviorComponentizationDecision
 
@@ -717,7 +861,7 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 | Task      | **PLANNED — NOT AUTHORIZED** Add the ephemeral pre-proposer boundary admissibility gate for the exact reviewed BehaviorContract and explicit ComponentizationSemanticInput. |
 | Objective | Prevent a human componentization candidate from splitting or excluding a behavior binding before the existing proposer constructs a tuple. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/componentization_decision.ex`; deterministic containment diagnostics; tests proving fail-closed gating and unchanged input to the existing `ComponentizationProposer.propose/2`. |
-| Note      | Depends on P7-C and the P7-B4 review artifact. Require `validate_structure/2` and validate existing semantic input, exact DesignDocumentIdentity/contract digest/review ID, the proposed boundary node, and every typed node reference in each relevant binding. This gate makes no claim that an unimplemented primitive passes semantic validation; full `validate/2` is required before projection/generation. No serializer, ID, persistence, proposer bypass/change, boundary inference, source selector/class/runtime, or format change. Reject split/uncertain bindings with `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`. |
+| Note      | Depends on P7-C and the P7-B4 review artifact. Require `validate_structure/2` and validate existing semantic input, exact DesignDocumentIdentity/contract digest/review ID, the proposed boundary node, and every typed node reference in each relevant binding. Enumerate `owner_node_id`, trigger origins, controlled targets, all four FocusPolicy references, and any other separately authorized typed occurrence-level references. This gate makes no claim that an unimplemented primitive passes semantic validation; full `validate/2` is required before projection/generation. No serializer, ID, persistence, proposer bypass/change, boundary inference, source selector/class/runtime, or format change. Reject split/uncertain bindings with `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`. The four FocusPolicy refs are the complete current FocusPolicy node-ref set; generic policy values add no reference channel. |
 
 ### P7-D1 — BehaviorProjection post-review sidecar
 
@@ -726,7 +870,7 @@ P7-A1 and P7-A2 below are accepted historical slices, not future prompts. P7-B1 
 | Task      | **PLANNED — NOT AUTHORIZED** Verify exact binding ownership against the actual approved ComponentContract and matching ComponentizationPlan. |
 | Objective | Prove every required binding fits the component tuple after the existing ComponentReview. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/projection.ex` and its explicit JCS serializer/validator; `bpr_` IDs; golden serializer/digest and stale/boundary tests. |
-| Note      | Depends on P7-D0, the existing proposer output, and its approved ComponentReview. Inputs are exact DesignDocument, BehaviorContract, one approved matching BehaviorReviewResult, approved ComponentContract, and matching ComponentizationPlan. Use NativeGenerator's serialized-plan SHA-256. Use a test-only trusted primitive definition; add no production primitive. No component hash, cross-boundary mapping, schema change, or runtime. |
+| Note      | Depends on P7-D0, the existing proposer output, and its approved ComponentReview. Inputs are exact DesignDocument, BehaviorContract, one approved matching BehaviorReviewResult, approved ComponentContract, and matching ComponentizationPlan. Recheck all four FocusPolicy references against approved boundaries. Use NativeGenerator's serialized-plan SHA-256. Use a test-only trusted primitive definition; add no production primitive. No component hash, cross-boundary mapping, schema change, or runtime. Recheck the FocusPolicy references against approved boundaries; generic values add no node refs. |
 
 ### P7-E — Compile-time RuntimeRealization selector
 
