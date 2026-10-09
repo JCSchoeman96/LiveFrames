@@ -60,6 +60,26 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
     token_set
   end
 
+  defp default_global_classes(css_custom) do
+    [
+      %{
+        "id" => @image_group_class_id,
+        "name" => "image-group-tango",
+        "settings" => %{"_cssCustom" => css_custom}
+      },
+      %{
+        "id" => @wrapper_class_id,
+        "name" => "image-group-tango__image-wrapper",
+        "settings" => %{}
+      },
+      %{
+        "id" => @image_class_id,
+        "name" => "image-group-tango__image",
+        "settings" => %{"_width" => "100%", "_height" => "100%", "_objectFit" => "cover"}
+      }
+    ]
+  end
+
   defp cta_fragment_source(opts \\ []) do
     css_custom = Keyword.get(opts, :css_custom, @canonical_css)
     owner_children = Keyword.get(opts, :owner_children, [@child_1, @child_2, @child_3])
@@ -73,6 +93,9 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
         :child_1_settings,
         %{"_cssGlobalClasses" => [@wrapper_class_id]}
       )
+
+    global_classes =
+      Keyword.get(opts, :global_classes, default_global_classes(css_custom))
 
     %{
       "source" => "bricksCopiedElements",
@@ -135,23 +158,7 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
           ]
         }
       ],
-      "globalClasses" => [
-        %{
-          "id" => @image_group_class_id,
-          "name" => "image-group-tango",
-          "settings" => %{"_cssCustom" => css_custom}
-        },
-        %{
-          "id" => @wrapper_class_id,
-          "name" => "image-group-tango__image-wrapper",
-          "settings" => %{}
-        },
-        %{
-          "id" => @image_class_id,
-          "name" => "image-group-tango__image",
-          "settings" => %{"_width" => "100%", "_height" => "100%", "_objectFit" => "cover"}
-        }
-      ]
+      "globalClasses" => global_classes
     }
   end
 
@@ -243,7 +250,7 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
       for source_id <- [@owner_id, @child_1, @child_2, @child_3] do
         node = node_by_source_id(document, source_id)
 
-        for {_property, %StyleValue{} = style} <- node.styles do
+        for {property, %StyleValue{} = style} <- node.styles, property != "custom-css" do
           encoded = inspect(style.value) <> inspect(style.source_expression)
 
           for fragment <- forbidden do
@@ -258,7 +265,8 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
       child = node_by_source_id(document, @child_1)
 
       assert %StyleValue{source_trace: trace, metadata: metadata} = child.styles["grid-column"]
-      assert trace.source_path =~ "_cssCustom"
+      assert trace.source_path =~ "class_refs["
+      assert trace.source_path =~ "settings._cssCustom"
       assert metadata["source_owner_id"] == @owner_id
       assert metadata["bounded_rule_id"] == "CCS-02"
     end
@@ -307,6 +315,181 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
       assert Enum.any?(document.diagnostics, fn diagnostic ->
                diagnostic.code == "bricks.bounded_custom_css.duplicate_rule"
              end)
+    end
+
+    test "R4_TRIPLE_DUPLICATE_FAILS_CLOSED=PASS three identical frozen selectors fail closed" do
+      css =
+        @canonical_css <>
+          "\n.image-group-tango { min-height: 675px; }\n.image-group-tango { min-height: 675px; }\n"
+
+      document = normalize_cta_document(css_custom: css)
+      owner = node_by_source_id(document, @owner_id)
+
+      refute Map.has_key?(owner.styles, "min-height")
+
+      assert Enum.count(
+               document.diagnostics,
+               &(&1.code == "bricks.bounded_custom_css.duplicate_rule")
+             ) >=
+               3
+    end
+
+    test "R4_CONFLICTING_DUPLICATE_SELECTOR_FAILS_CLOSED=PASS conflicting duplicate selectors fail closed" do
+      css = """
+      .image-group-tango { min-height: 675px; }
+      .image-group-tango { min-height: 700px; }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.duplicate_rule"
+             end)
+    end
+
+    test "R4_MALFORMED_RULE_PRESERVED=PASS malformed block remains in complex_css" do
+      css = """
+      .image-group-tango { min-height: 675px; }
+      .future-rule { broken declaration }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+
+      assert %StyleValue{kind: :complex_css, value: %{"rules" => [rule_text]}} =
+               owner.styles["custom-css"]
+
+      assert rule_text =~ "future-rule"
+      assert rule_text =~ "broken declaration"
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.unparseable_block"
+             end)
+    end
+
+    test "R4_DUPLICATE_DECLARATION_RULE_PRESERVED=PASS duplicate declarations inside a rule fail closed" do
+      css =
+        String.replace(
+          @canonical_css,
+          "grid-column: 1/-1;",
+          "width: 80%;\n  width: 90%;\n  grid-column: 1/-1;"
+        )
+
+      document = normalize_cta_document(css_custom: css)
+      child = node_by_source_id(document, @child_1)
+
+      refute Map.has_key?(child.styles, "grid-column")
+      refute Map.has_key?(child.styles, "width")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code in [
+                 "bricks.bounded_custom_css.unparseable_block",
+                 "bricks.bounded_custom_css.declaration_mismatch"
+               ]
+             end)
+    end
+
+    test "R4_UNRESOLVED_STYLE_COLLISION_FAILS_CLOSED=PASS does not overwrite unresolved width" do
+      document =
+        normalize_cta_document(
+          child_1_settings: %{
+            "_cssGlobalClasses" => [@wrapper_class_id],
+            "_width" => "var(--cta-r4-unknown-width)"
+          }
+        )
+
+      child = node_by_source_id(document, @child_1)
+      assert %StyleValue{kind: :unresolved} = child.styles["width"]
+      refute Map.has_key?(child.styles, "grid-column")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.style_collision"
+             end)
+    end
+
+    test "R4_UNRESOLVED_PRECEDENCE_COLLISION_FAILS_CLOSED=PASS does not resolve precedence conflicts" do
+      width_a = "width-a-r4"
+      width_b = "width-b-r4"
+
+      document =
+        normalize_cta_document(
+          child_1_settings: %{"_cssGlobalClasses" => [width_a, width_b]},
+          global_classes:
+            default_global_classes(@canonical_css) ++
+              [
+                %{"id" => width_a, "name" => "width-a", "settings" => %{"_width" => "40%"}},
+                %{"id" => width_b, "name" => "width-b", "settings" => %{"_width" => "50%"}}
+              ]
+        )
+
+      child = node_by_source_id(document, @child_1)
+      refute Map.has_key?(child.styles, "grid-column")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.style_collision"
+             end)
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.style.precedence_conflict"
+             end)
+    end
+
+    test "R4_ELEMENT_LOCAL_COPY_NOT_AUTHORIZED=PASS element-local effective css is not normalized" do
+      document =
+        normalize_cta_document(
+          owner_settings: %{
+            "_cssGlobalClasses" => [@image_group_class_id],
+            "_cssCustom" => @canonical_css
+          },
+          global_classes:
+            default_global_classes("")
+            |> Enum.map(fn
+              %{"id" => @image_group_class_id} = gc -> put_in(gc, ["settings"], %{})
+              other -> other
+            end)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
+    end
+
+    test "R4_OTHER_CLASS_COPY_NOT_AUTHORIZED=PASS later global class css is not normalized as frozen class" do
+      other_class_id = "otherCssR4"
+
+      document =
+        normalize_cta_document(
+          owner_settings: %{"_cssGlobalClasses" => [@image_group_class_id, other_class_id]},
+          global_classes:
+            (default_global_classes("")
+             |> Enum.map(fn
+               %{"id" => @image_group_class_id} = gc -> put_in(gc, ["settings"], %{})
+               other -> other
+             end)) ++
+              [
+                %{
+                  "id" => other_class_id,
+                  "name" => "other-css-copy",
+                  "settings" => %{"_cssCustom" => @canonical_css}
+                }
+              ]
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
     end
 
     test "R4_TARGET_TOPOLOGY_MISMATCH_FAILS_CLOSED=PASS reordered children do not receive relocated styles" do
@@ -359,7 +542,9 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
   end
 
   test "parse_blocks recognizes four frozen CTA rules" do
-    assert length(BoundedCustomCssNormalizer.parse_blocks(@canonical_css)) == 4
+    {rules, rejects} = BoundedCustomCssNormalizer.parse_parts(@canonical_css)
+    assert length(rules) == 4
+    assert rejects == []
   end
 
   test "parse_blocks handles a single owner rule" do

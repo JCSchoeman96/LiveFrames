@@ -2,6 +2,8 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   @moduledoc false
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
+  alias LiveFrames.Adapters.Bricks.Settings
+  alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.Adapters.Bricks.Tree
   alias LiveFrames.IR.StyleValue
 
@@ -33,6 +35,8 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     }
   }
 
+  @frozen_selector_strings Enum.map(@rule_specs, fn {_id, spec} -> spec.selector end)
+
   @type result :: %{
           styles_by_source_id: %{optional(String.t()) => map()},
           residual_custom_css_by_source_id: %{optional(String.t()) => String.t() | nil},
@@ -42,7 +46,14 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
 
   @doc false
   @spec parse_blocks(String.t()) :: [map()]
-  def parse_blocks(blob) when is_binary(blob), do: parse_rule_blocks(blob)
+  def parse_blocks(blob) when is_binary(blob) do
+    {rules, _rejects} = parse_rule_blocks(blob)
+    rules
+  end
+
+  @doc false
+  @spec parse_parts(String.t()) :: {[map()], [map()]}
+  def parse_parts(blob) when is_binary(blob), do: parse_rule_blocks(blob)
 
   @spec empty_result() :: result()
   def empty_result do
@@ -77,15 +88,12 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
         empty_result()
 
       true ->
-        with {:ok, owner_trace} <- owner_css_custom_trace(context) do
-          style_result = Map.fetch!(context.dependencies.style_results, @owner_id)
-          css_blobs = style_result.custom_css.base
+        case authorized_effective_custom_css(context) do
+          {:ok, blob, owner_trace} ->
+            process_blob(blob, owner_trace, context, empty_result())
 
-          Enum.reduce(css_blobs, empty_result(), fn blob, acc ->
-            process_blob(blob, owner_trace, context, acc)
-          end)
-        else
-          _ -> empty_result()
+          {:error, _} ->
+            empty_result()
         end
     end
   end
@@ -93,13 +101,18 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   defp verify_owner_class(context) do
     resolved = Map.fetch!(context.resolved.elements, @owner_id)
 
-    cond do
-      @class_id in resolved.class_ids and @class_name in resolved.class_names ->
-        :ok
-
-      true ->
-        {:error, :owner_class_mismatch}
+    if frozen_class_ref?(resolved) do
+      :ok
+    else
+      {:error, :owner_class_mismatch}
     end
+  end
+
+  defp frozen_class_ref?(resolved) do
+    Enum.any?(resolved.class_refs, fn ref ->
+      ref.id == @class_id and ref.name == @class_name and
+        ref.resolution_status in [:local_resolved, :external_resolved]
+    end)
   end
 
   defp verify_topology(%Tree{} = tree) do
@@ -112,31 +125,78 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     end
   end
 
-  defp owner_css_custom_trace(context) do
+  defp authorized_effective_custom_css(context) do
+    resolved = Map.fetch!(context.resolved.elements, @owner_id)
+    style_result = Map.fetch!(context.dependencies.style_results, @owner_id)
+
+    layers =
+      StylePrecedence.layers(resolved.class_refs, resolved.source_settings, @owner_id)
+
+    extraction_opts = [semantic_settings: [], rejected_semantic_settings: []]
+
+    contributions =
+      layers
+      |> Enum.flat_map(fn layer ->
+        extraction = Settings.extract(layer.settings, extraction_opts)
+
+        Enum.map(extraction.custom_css.base, fn value -> {layer, value} end)
+      end)
+
+    with [_ | _] = contributions,
+         {effective_layer, effective_blob} <- List.last(contributions),
+         true <- effective_layer.origin == :global_class,
+         true <- effective_layer.class_id == @class_id,
+         true <- frozen_layer_class_ref?(resolved, effective_layer),
+         true <- effective_blob_effective?(style_result, effective_blob),
+         {:ok, owner_trace} <- owner_css_custom_trace(context, effective_layer) do
+      {:ok, effective_blob, owner_trace}
+    else
+      _ -> {:error, :unauthorized_custom_css_source}
+    end
+  end
+
+  defp effective_blob_effective?(style_result, effective_blob) do
+    case style_result.custom_css.base do
+      [^effective_blob] -> true
+      [] -> false
+      [other] -> other == effective_blob
+      _ -> effective_blob in style_result.custom_css.base
+    end
+  end
+
+  defp frozen_layer_class_ref?(resolved, layer) do
+    case Enum.at(resolved.class_refs, layer.class_reference_index) do
+      %{id: id, name: name} when id == @class_id and name == @class_name ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  defp owner_css_custom_trace(context, effective_layer) do
     case Map.fetch(context.trace_index, @owner_id) do
       {:ok, %{trace: owner_trace}} ->
         resolved = Map.fetch!(context.resolved.elements, @owner_id)
+        index = effective_layer.class_reference_index
 
-        class_ref_index =
-          resolved.class_refs
-          |> Enum.find_index(fn ref -> ref.id == @class_id or ref.name == @class_name end)
+        case Enum.at(resolved.class_refs, index) do
+          %{id: @class_id, name: @class_name} ->
+            trace = %{
+              owner_trace
+              | source_type: "bricks_style",
+                source_path:
+                  "#{owner_trace.source_path}.class_refs[#{index}].settings._cssCustom",
+                source_name: "_cssCustom",
+                inference:
+                  "bounded CTA Tango image-group custom CSS normalized to node-local styles"
+            }
 
-        source_path =
-          if is_integer(class_ref_index) do
-            "#{owner_trace.source_path}.class_refs[#{class_ref_index}].settings._cssCustom"
-          else
-            "#{owner_trace.source_path}.settings._cssCustom"
-          end
+            {:ok, trace}
 
-        trace = %{
-          owner_trace
-          | source_type: "bricks_style",
-            source_path: source_path,
-            source_name: "_cssCustom",
-            inference: "bounded CTA Tango image-group custom CSS normalized to node-local styles"
-        }
-
-        {:ok, trace}
+          _ ->
+            {:error, :missing_frozen_class_ref}
+        end
 
       :error ->
         {:error, :missing_owner}
@@ -144,10 +204,34 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp process_blob(blob, owner_trace, context, acc) when is_binary(blob) do
-    parsed_rules = parse_rule_blocks(blob)
+    {parsed_rules, unparseable_blocks} = parse_rule_blocks(blob)
+
+    duplicate_selectors = duplicate_frozen_selectors(parsed_rules)
+
+    unparseable_rejects =
+      Enum.map(unparseable_blocks, fn block ->
+        %{
+          raw: block.raw,
+          kind: :unparseable,
+          selector: Map.get(block, :selector)
+        }
+      end)
+
+    unparseable_diagnostics =
+      Enum.map(unparseable_blocks, fn block ->
+        diagnostic(
+          "bricks.bounded_custom_css.unparseable_block",
+          :warning,
+          "Bounded custom CSS block could not be parsed safely and was preserved in residual complex_css",
+          block.raw
+        )
+      end)
 
     {accepted, rejected, diagnostics} =
-      classify_rules(parsed_rules, context, owner_trace)
+      classify_rules(parsed_rules, duplicate_selectors, context, owner_trace)
+
+    rejected = rejected ++ unparseable_rejects
+    diagnostics = diagnostics ++ unparseable_diagnostics
 
     styles_by_source_id =
       merge_styles(acc.styles_by_source_id, accepted)
@@ -179,12 +263,46 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
 
   defp process_blob(_blob, _owner_trace, _context, acc), do: acc
 
-  defp classify_rules(parsed_rules, context, owner_trace) do
+  defp duplicate_frozen_selectors(rules) do
+    rules
+    |> Enum.filter(&frozen_selector?/1)
+    |> Enum.group_by(&normalize_selector(&1.selector))
+    |> Enum.filter(fn {_selector, grouped} -> length(grouped) >= 2 end)
+    |> Enum.map(&elem(&1, 0))
+    |> MapSet.new()
+  end
+
+  defp frozen_selector?(%{selector: selector}) do
+    normalized = normalize_selector(selector)
+
+    Enum.any?(@frozen_selector_strings, fn frozen ->
+      normalize_selector(frozen) == normalized
+    end)
+  end
+
+  defp classify_rules(parsed_rules, duplicate_selectors, context, owner_trace) do
     Enum.reduce(parsed_rules, {%{}, [], []}, fn rule, {accepted, rejected, diagnostics} ->
-      case match_rule(rule) do
-        {:ok, rule_id} ->
-          case Map.get(accepted, rule_id) do
-            nil ->
+      normalized_selector = normalize_selector(rule.selector)
+
+      cond do
+        MapSet.member?(duplicate_selectors, normalized_selector) ->
+          {
+            accepted,
+            rejected ++ [rule],
+            diagnostics ++
+              [
+                diagnostic(
+                  "bricks.bounded_custom_css.duplicate_rule",
+                  :warning,
+                  "Bounded custom CSS frozen selector appeared more than once in the source blob",
+                  rule.selector
+                )
+              ]
+          }
+
+        true ->
+          case match_rule(rule) do
+            {:ok, rule_id} ->
               case apply_rule(rule_id, context, owner_trace) do
                 {:ok, styles} ->
                   {Map.put(accepted, rule_id, styles), rejected, diagnostics}
@@ -206,51 +324,36 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
                   }
               end
 
-            _existing ->
+            {:error, :declaration_mismatch} ->
               {
-                Map.delete(accepted, rule_id),
+                accepted,
                 rejected ++ [rule],
                 diagnostics ++
                   [
                     diagnostic(
-                      "bricks.bounded_custom_css.duplicate_rule",
+                      "bricks.bounded_custom_css.declaration_mismatch",
                       :warning,
-                      "Bounded custom CSS rule #{rule_id} appeared more than once in the source blob",
-                      rule_id
+                      "Bounded custom CSS declarations did not match the frozen CTA Tango contract",
+                      rule.selector
+                    )
+                  ]
+              }
+
+            :unsupported ->
+              {
+                accepted,
+                rejected ++ [rule],
+                diagnostics ++
+                  [
+                    diagnostic(
+                      "bricks.bounded_custom_css.unsupported_selector",
+                      :warning,
+                      "Bounded custom CSS selector is outside the frozen CTA Tango CCS-01..04 contract",
+                      rule.selector
                     )
                   ]
               }
           end
-
-        {:error, :declaration_mismatch} ->
-          {
-            accepted,
-            rejected ++ [rule],
-            diagnostics ++
-              [
-                diagnostic(
-                  "bricks.bounded_custom_css.declaration_mismatch",
-                  :warning,
-                  "Bounded custom CSS declarations did not match the frozen CTA Tango contract",
-                  rule.selector
-                )
-              ]
-          }
-
-        :unsupported ->
-          {
-            accepted,
-            rejected ++ [rule],
-            diagnostics ++
-              [
-                diagnostic(
-                  "bricks.bounded_custom_css.unsupported_selector",
-                  :warning,
-                  "Bounded custom CSS selector is outside the frozen CTA Tango CCS-01..04 contract",
-                  rule.selector
-                )
-              ]
-          }
       end
     end)
   end
@@ -260,14 +363,11 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     target_id = spec.target_id
     style_result = Map.fetch!(context.dependencies.style_results, target_id)
 
-    existing_properties =
-      style_result.base_styles
-      |> Map.keys()
-      |> MapSet.new()
+    owned_properties = base_resolution_properties(style_result)
 
     colliding_property =
       Enum.find(spec.properties, fn {property, _value} ->
-        MapSet.member?(existing_properties, property)
+        MapSet.member?(owned_properties, property)
       end)
 
     if colliding_property do
@@ -290,6 +390,13 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
 
       {:ok, styles}
     end
+  end
+
+  defp base_resolution_properties(style_result) do
+    style_result.resolutions
+    |> Enum.filter(&(&1.breakpoint == nil))
+    |> Enum.map(& &1.property)
+    |> MapSet.new()
   end
 
   defp match_rule(%{selector: selector, declarations: declarations}) do
@@ -329,28 +436,44 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     blob
     |> strip_comments()
     |> String.split("}", trim: true)
+    |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
-    |> Enum.map(&parse_rule_block/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.filter(&String.contains?(&1, "{"))
+    |> Enum.reduce({[], []}, fn chunk, {rules, rejects} ->
+      case parse_rule_block(chunk) do
+        {:ok, rule} ->
+          {rules ++ [rule], rejects}
+
+        {:unparseable, reject} ->
+          {rules, rejects ++ [reject]}
+      end
+    end)
   end
 
   defp parse_rule_block(chunk) do
+    trimmed = String.trim(chunk)
+
     case String.split(chunk, "{", parts: 2) do
       [selector, body] ->
-        declarations = parse_declarations(body)
+        case parse_declarations(body) do
+          {:ok, declarations} ->
+            {:ok,
+             %{
+               selector: String.trim(selector),
+               declarations: declarations,
+               raw: "#{String.trim(selector)} { #{String.trim(body)} }"
+             }}
 
-        if map_size(declarations) == 0 do
-          nil
-        else
-          %{
-            selector: String.trim(selector),
-            declarations: declarations,
-            raw: "#{String.trim(selector)} { #{String.trim(body)} }"
-          }
+          {:error, _} ->
+            {:unparseable,
+             %{
+               raw: "#{String.trim(selector)} { #{String.trim(body)} }",
+               selector: String.trim(selector)
+             }}
         end
 
       _ ->
-        nil
+        {:unparseable, %{raw: trimmed <> "}", selector: trimmed}}
     end
   end
 
@@ -376,8 +499,8 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
       end
     end)
     |> case do
-      {declarations, nil} -> declarations
-      _ -> %{}
+      {declarations, nil} when map_size(declarations) > 0 -> {:ok, declarations}
+      _ -> {:error, :invalid_declarations}
     end
   end
 
