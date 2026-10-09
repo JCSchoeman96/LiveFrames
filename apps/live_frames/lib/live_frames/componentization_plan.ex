@@ -9,6 +9,7 @@ defmodule LiveFrames.ComponentizationPlan do
   alias LiveFrames.ComponentizationPlan.Serializer
   alias LiveFrames.ComponentizationPlan.Validation
   alias LiveFrames.ComponentizationPlan.ValidationError
+  alias LiveFrames.IR.Identity
 
   @current_format_version "1.0.0"
 
@@ -68,11 +69,9 @@ defmodule LiveFrames.ComponentizationPlan do
   @spec design_document_sha256(term()) :: {:ok, String.t()} | {:error, [Diagnostic.t()]}
   def design_document_sha256(design_document) do
     try do
-      case LiveFrames.IR.validate(design_document) do
-        :ok ->
-          bytes = LiveFrames.IR.encode!(design_document)
-          digest = :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
-          {:ok, digest}
+      case Identity.from_document(design_document) do
+        {:ok, identity} ->
+          {:ok, identity.digest}
 
         {:error, _ir_diagnostics} ->
           {:error, [fingerprint_error()]}
