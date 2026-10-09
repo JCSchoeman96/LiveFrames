@@ -10,13 +10,15 @@ This document does not implement Pricing Echo, Tabs, Accordion, behavior normali
 
 ```text
 REPOSITORY=JCSchoeman96/LiveFrames
-BASE_SHA=fcbdb05512a4f33453a043be8b361e7d3abe921e
-BASE_TREE=2cc556899175c41d33b3244ed2a6dae66da89347
-POST_MERGE_CI=37928670953
+PRE_REBASE_HEAD=cd790f8de7e6e7423a905553fb7c3176ca0f2a7b
+BASE_SHA=df03f19f61549d2d4e3e4028f2567b4bb134ab4e
+BASE_TREE=5314cb74606f1385e70d10ccdf35c23355e2fc4e
+POST_MERGE_CI=37948504085
+BASE_CI=37948504085 completed/success
 POST_MERGE_CI_STATUS=completed
 POST_MERGE_CI_CONCLUSION=success
-POST_MERGE_CI_HEAD=fcbdb05512a4f33453a043be8b361e7d3abe921e
-WORKTREE_CLEAN=YES
+POST_MERGE_CI_HEAD=df03f19f61549d2d4e3e4028f2567b4bb134ab4e
+PRE_REBASE_WORKTREE_CLEAN=YES
 PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 ```
 
@@ -35,6 +37,12 @@ The document branch starts from the exact accepted base. No behavior or producti
 - `docs/development/c09d6_native_generation_authority.md` requires approved component and plan inputs and generation prerequisites. Behavior review cannot replace those gates.
 
 These authorities agree on the supported facts and the unresolved implementation boundary. No conflicting canonical authority was found.
+
+## Current implementation-boundary context
+
+`docs/09_INTERACTION_MODEL.md` remains the canonical BehaviorContract authority. `BehaviorPrimitiveDefinition` owns `BehaviorStateModel`. The model owns `Transition` definitions. Each `Transition` owns its guards and effects. A `BehaviorBinding` represents one occurrence. It owns occurrence triggers, controlled targets, permitted binding policies, and may carry bounded occurrence initial-state assignments. A Pricing binding does not own a Tabs or Accordion state-machine definition. Pricing source evidence supplies occurrence requirements and unresolved policy facts.
+
+P7-A2 implementation is present on main, but its acceptance remains unestablished and Pricing does not depend on that acceptance. The D1B native styling foundation is present and provides deterministic private styling identity and TokenBridge lookup. It does not establish Pricing card-grid styling, Tabs styling, Accordion styling, Pricing spacing, motion values, or icon rendering.
 
 ## 4. Accepted Pricing facts
 
@@ -135,8 +143,8 @@ BehaviorContract defines `open_item_ids` and independent target policy dimension
 ```text
 SOURCE_ACCORDION_MODE=UNKNOWN
 SOURCE_ACCORDION_CLOSURE_POLICY=UNKNOWN
-SOURCE_INITIAL_OPEN_ITEMS=UNKNOWN
 SOURCE_MULTI_OPEN_ALLOWED=UNKNOWN
+SOURCE_INITIAL_OPEN_ITEMS=UNKNOWN
 SOURCE_DISABLED_ITEMS=UNKNOWN
 SOURCE_ITEM_ORDER=UNKNOWN
 ```
@@ -235,6 +243,8 @@ Accepted Pricing evidence does not establish accessible names, roles, relationsh
 
 ```text
 ACCESSIBILITY_MAPPING=PARTIAL
+BEHAVIOR=PARTIAL
+ACCESSIBILITY=PARTIAL
 ```
 
 The target requirements are supported by BehaviorContract; Pricing-specific source mapping is incomplete.
@@ -284,6 +294,8 @@ Accepted Pricing evidence records static monthly/yearly pricing panels and featu
 ```text
 SOURCE_QUERY_OBJECTS=NONE_ACCEPTED
 BACKEND_QUERY_REQUIRED=NO
+DATA=N/A
+EXTERNAL_DEPENDENCY=NONE
 CALLER_DATA_BINDING_REQUIRED=NO_CURRENT_EVIDENCE
 
 POSTGRES=N/A
@@ -313,10 +325,13 @@ No icon assets, licenses, libraries, or C08B changes are selected.
 
 ## 21. Styling boundary
 
-This preflight maps semantic Tabs mode, Accordion mode, and responsive state-mapping requirements. It does not establish breakpoint values, card-grid CSS, tab or Accordion styling, responsive spacing, icon CSS, or motion values.
+This preflight establishes the accepted Pricing source-responsive `mobile_portrait` condition at `max-width 478px`. It does not establish target styling values such as Pricing card-grid CSS, Tabs or Accordion visual treatment, spacing, icon CSS, or motion values.
 
 ```text
 STYLE_AUTHORITY_REQUIRED=YES
+GENERIC_NATIVE_STYLING_FOUNDATION=PRESENT
+PRICING_SPECIFIC_STYLE_MAPPING=PARTIAL
+STATIC=PARTIAL
 ```
 
 ## 22. Security review
@@ -394,6 +409,7 @@ ACCORDION_CORE_MAPPING=PARTIAL
 SOURCE_ACCORDION_MODE=UNKNOWN
 SOURCE_ACCORDION_CLOSURE_POLICY=UNKNOWN
 SOURCE_MULTI_OPEN_ALLOWED=UNKNOWN
+SOURCE_INITIAL_OPEN_ITEMS=UNKNOWN
 
 SOURCE_RESPONSIVE_BREAKPOINT_NAME=mobile_portrait
 SOURCE_RESPONSIVE_BREAKPOINT_CONDITION=max-width 478px
@@ -408,9 +424,12 @@ ITEM_IDENTITY_MAPPING=PARTIAL
 FORWARD_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_LOGICAL_CORRESPONDENCE=SUPPORTED; TYPED_BINDING=PARTIAL
 REVERSE_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_LOGICAL_CORRESPONDENCE=SUPPORTED; TYPED_BINDING=PARTIAL
 ROUND_TRIP_REVERSIBLE=SUPPORTED_AS_TARGET_RULE; PRICING_INSTANCE=NOT_PROVEN
+PRICING_INSTANCE_REVERSIBILITY=NOT_PROVEN
 SOURCE_COMPATIBILITY_WITH_SINGLE_CANONICAL_ITEM=NOT_PROVEN
 
 ACCESSIBILITY_MAPPING=PARTIAL
+BEHAVIOR=PARTIAL
+ACCESSIBILITY=PARTIAL
 FOCUS_CONTINUITY_MAPPING=PARTIAL
 
 MANAGED_RESPONSIVE_RUNTIME_REQUIRED=NOT_PROVEN
@@ -420,8 +439,13 @@ VIEWPORT_OBSERVATION_MECHANISM=UNKNOWN
 MODE_CHANGE_RUNTIME_TECHNIQUE=UNKNOWN
 
 BACKEND_QUERY_REQUIRED=NO
+DATA=N/A
+EXTERNAL_DEPENDENCY=NONE
 ICON_RENDERABILITY_AUTHORITY=SEPARATE_BLOCKER
 STYLE_AUTHORITY_REQUIRED=YES
+GENERIC_NATIVE_STYLING_FOUNDATION=PRESENT
+PRICING_SPECIFIC_STYLE_MAPPING=PARTIAL
+STATIC=PARTIAL
 
 BEHAVIOR_IMPLEMENTATION_AUTHORIZED=NO
 PRIVATE_SOURCE_NEW_SEMANTICS=NONE
@@ -431,10 +455,21 @@ PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 
 ```text
 OVERALL_VERDICT=PARTIAL_RESPONSIVE_BEHAVIOR_MAPPING
+OVERALL=NOT_READY
 ```
 
 The responsive Tabs/Accordion relationship, `mobile_portrait` breakpoint condition, and monthly/yearly logical correspondence are supported. Pricing-specific reversible mapping remains unproven because stable typed identity and source Accordion compatibility are not established. This preflight does not authorize implementation.
 
+## Remaining blocker ownership
+
+- Pricing-specific style conversion and evidence, including card grid, Tabs, Accordion, spacing, and motion → Static leg.
+- Generic Tabs and Accordion lifecycle or runtime realization → Behavior / P7 leg.
+- Stable typed behavior or component identity → Behavior/componentization integration authority.
+- Source Accordion mode, closure, multi-open policy, initial state, and Pricing-specific accessibility evidence → Frames Conversion / Evidence leg.
+- Generic accessibility realization → Behavior leg.
+- Icons → separate icon/asset authority.
+- Backend query and data abstraction → N/A under current Pricing evidence.
+- External runtime or library → none established; any future runtime choice belongs to the Behavior leg.
 ## 28. Next-required-authority graph
 
 ```text
