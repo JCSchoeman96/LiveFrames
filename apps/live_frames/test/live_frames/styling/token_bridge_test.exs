@@ -302,4 +302,63 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     assert {:ok, css} = TokenBridge.generate(token_set, mapping)
     refute css =~ "--lf-typography-body-size-small:"
   end
+
+  test "looks up shared package CSS variables by exact semantic token path" do
+    assert {:ok, "--lf-typography-body-size-small"} =
+             TokenBridge.package_css_variable("typography.body.scale.small")
+
+    assert {:ok, "--lf-radius-base"} = TokenBridge.package_css_variable("radius.base")
+    assert {:ok, "--lf-space-grid-gap"} = TokenBridge.package_css_variable("spacing.grid_gap")
+  end
+
+  test "looks up primary action CSS variables from package metadata" do
+    assert {:ok, "--lf-action-primary-background"} =
+             TokenBridge.package_css_variable("button.primary.background")
+  end
+
+  test "fails explicitly for unknown and composed token paths" do
+    assert {:error, {:unknown_token_path, "unknown.path"}} =
+             TokenBridge.package_css_variable("unknown.path")
+
+    assert {:error, {:unknown_token_path, "spacing.gutter.min"}} =
+             TokenBridge.package_css_variable("spacing.gutter.min")
+  end
+
+  test "rejects duplicate direct token paths in package mapping metadata" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-b"}]
+      }
+    ]
+
+    assert {:error, {:duplicate_token_set_paths, ["radius.base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects duplicate CSS variable ownership across package layers" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [
+          %{"token_set_path" => "radius.other", "css_variable" => "--lf-radius-base"}
+        ]
+      }
+    ]
+
+    assert {:error, {:duplicate_css_variables, ["--lf-radius-base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
 end

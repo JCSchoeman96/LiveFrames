@@ -1,3 +1,131 @@
+defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
+  @moduledoc false
+
+  @supported_schema_version "1.0.0"
+  @css_variable ~r/^--lf-[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+  @doc false
+  @spec build([map()]) :: {:ok, %{optional(String.t()) => String.t()}} | {:error, term()}
+  def build(mappings) when is_list(mappings) do
+    with {:ok, entries} <- validate_layers(mappings),
+         :ok <- validate_unique_direct_paths(entries),
+         :ok <- validate_unique_css_variables(entries) do
+      direct_entries = Enum.filter(entries, &is_binary(&1["token_set_path"]))
+      {:ok, Map.new(direct_entries, &{&1["token_set_path"], &1["css_variable"]})}
+    end
+  end
+
+  def build(mappings), do: {:error, {:invalid_mapping_layers, mappings}}
+
+  defp validate_layers(mappings) do
+    Enum.reduce_while(mappings, {:ok, []}, fn mapping, {:ok, acc} ->
+      case validate_layer(mapping) do
+        {:ok, entries} -> {:cont, {:ok, acc ++ entries}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_layer(mapping) when is_map(mapping) do
+    cond do
+      mapping["schema_version"] != @supported_schema_version ->
+        {:error, {:unsupported_mapping_schema, mapping["schema_version"]}}
+
+      not (is_binary(mapping["mapping_version"]) and mapping["mapping_version"] != "") ->
+        {:error, {:invalid_mapping_version, mapping["mapping_version"]}}
+
+      not is_list(mapping["entries"]) ->
+        {:error, {:invalid_mapping_entries, mapping["entries"]}}
+
+      true ->
+        validate_entries(mapping["entries"])
+    end
+  end
+
+  defp validate_layer(mapping), do: {:error, {:invalid_mapping, mapping}}
+
+  defp validate_entries(entries) do
+    Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, acc} ->
+      case validate_entry(entry) do
+        :ok -> {:cont, {:ok, [entry | acc]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, valid_entries} -> {:ok, Enum.reverse(valid_entries)}
+      {:error, _} = error -> error
+    end
+  end
+
+  defp validate_entry(entry) when is_map(entry) do
+    variable = entry["css_variable"]
+    compose = entry["compose"]
+
+    cond do
+      not (is_binary(variable) and Regex.match?(@css_variable, variable)) ->
+        {:error, {:invalid_css_variable, variable}}
+
+      entry["tailwind_alias"] not in [nil, ""] ->
+        {:error, {:unsupported_tailwind_alias, entry["tailwind_alias"]}}
+
+      valid_compose?(compose) and valid_direct_path?(entry["token_set_path"]) ->
+        :ok
+
+      valid_compose?(compose) ->
+        :ok
+
+      is_nil(compose) and valid_direct_path?(entry["token_set_path"]) ->
+        :ok
+
+      true ->
+        {:error, {:invalid_mapping_entry, entry}}
+    end
+  end
+
+  defp validate_entry(entry), do: {:error, {:invalid_mapping_entry, entry}}
+
+  defp valid_compose?(%{"type" => "fluid_px_pair"} = compose) do
+    Enum.all?(["min", "max", "viewport_min", "viewport_max"], fn key ->
+      is_binary(compose[key]) and compose[key] != ""
+    end)
+  end
+
+  defp valid_compose?(_), do: false
+
+  defp valid_direct_path?(path), do: is_binary(path) and path != ""
+
+  defp validate_unique_direct_paths(entries) do
+    entries
+    |> Enum.flat_map(fn
+      %{"token_set_path" => path} when is_binary(path) -> [path]
+      _ -> []
+    end)
+    |> duplicate_values()
+    |> case do
+      [] -> :ok
+      duplicates -> {:error, {:duplicate_token_set_paths, duplicates}}
+    end
+  end
+
+  defp validate_unique_css_variables(entries) do
+    entries
+    |> Enum.map(& &1["css_variable"])
+    |> duplicate_values()
+    |> case do
+      [] -> :ok
+      duplicates -> {:error, {:duplicate_css_variables, duplicates}}
+    end
+  end
+
+  defp duplicate_values(values) do
+    values
+    |> Enum.frequencies()
+    |> Enum.filter(fn {_value, count} -> count > 1 end)
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.sort()
+  end
+end
+
 defmodule LiveFrames.Styling.TokenBridge do
   @moduledoc false
 
@@ -9,6 +137,40 @@ defmodule LiveFrames.Styling.TokenBridge do
   @css_variable ~r/^--lf-[a-z0-9]+(?:-[a-z0-9]+)*$/
   @unsafe_value ~r/[{};\\]/
   @unsafe_external_url ~r/url\s*\(\s*(?:["']\s*|\/\*.*?\*\/\s*)*(?:https?:|\/\/|javascript:)/is
+
+  @shared_mapping_path Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
+  @hero_mapping_path Path.expand("../../../priv/token_maps/native_hero_v1.json", __DIR__)
+  @external_resource @shared_mapping_path
+  @external_resource @hero_mapping_path
+
+  @package_css_variable_index (
+                                mappings =
+                                  [@shared_mapping_path, @hero_mapping_path]
+                                  |> Enum.map(fn path ->
+                                    path |> File.read!() |> Jason.decode!()
+                                  end)
+
+                                case LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(
+                                       mappings
+                                     ) do
+                                  {:ok, index} ->
+                                    index
+
+                                  {:error, reason} ->
+                                    raise ArgumentError,
+                                          "invalid package token mapping metadata: #{inspect(reason)}"
+                                end
+                              )
+
+  @spec package_css_variable(String.t()) :: {:ok, String.t()} | {:error, term()}
+  def package_css_variable(token_path) when is_binary(token_path) do
+    case Map.fetch(@package_css_variable_index, token_path) do
+      {:ok, css_variable} -> {:ok, css_variable}
+      :error -> {:error, {:unknown_token_path, token_path}}
+    end
+  end
+
+  def package_css_variable(token_path), do: {:error, {:invalid_token_path, token_path}}
 
   @spec load_mapping!(binary()) :: map()
   def load_mapping!(path) when is_binary(path) do
