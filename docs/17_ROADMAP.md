@@ -2,7 +2,7 @@
 
 **Authoritative architecture roadmap:** [`00_LIVEFRAMES_MASTER_SPEC.md`](00_LIVEFRAMES_MASTER_SPEC.md)
 
-**Current repository checkpoint:** `a3672351db32ac90a8742b2fabb4c259a7ff62a9`
+**Current repository checkpoint:** `518b382c73418da97cd6908c84f49b1d03f78bfa`
 
 ## Execution status (post–Phase 6, C09 programme)
 
@@ -21,10 +21,11 @@
 - **R1:** complete / merged / accepted (PR #140)
 - **R2 (G-GRID-STRUCT):** complete / merged / accepted (PR #141)
 - **C09D6-D0R2A (Design IR 3.0.0 + `docs/03` + structured semantic calculation):** complete / merged / accepted (PR #142)
-- **R3 (shared token / value normalization):** in review / not accepted on `main`
-- **R4:** not authorized until R3 is accepted and merged
-- **R5 / D1 / C09D7-A:** not authorized
-- **R4 / R5 (upstream implementation):** **not authorized**
+- **R3 (shared token / value normalization):** complete / merged / accepted (PR #143 — `518b382c73418da97cd6908c84f49b1d03f78bfa`)
+- **R4 (G-CUSTOM-CSS bounded normalization):** in implementation / review; not accepted on `main` until R4 PR merges
+- **R5 (upstream implementation):** **not authorized** until R4 is accepted and merged
+- **D1 (C09D6-D native styling generator):** **not authorized** — requires R5 D0 rerun PASS
+- **C09D7-A (componentization):** **not authorized** — downstream of successful C09D6-D programme
 - **Native styling generator (C09D6-D / D1):** **not authorized** — blocked until R5 D0 rerun passes; see D0R1 dependency graph
 - **P10 consumer ejection:** **not implemented** / not authorized
 - **Next static native tracer (provisional):** CTA Tango — **provisional**; componentization (C09D7-A) **not authorized** until C09D6-D succeeds (sequence remains C → D → D7-A)
