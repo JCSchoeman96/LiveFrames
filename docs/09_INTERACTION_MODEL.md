@@ -2,6 +2,10 @@
 
 **Status:** accepted architecture authority for future behavior work. This document authorizes no implementation.
 
+**Authority revision:** 1.0.0
+
+**Revision date:** 2026-10-09
+
 ## 1. Authority, scope, and status
 
 `docs/00_LIVEFRAMES_MASTER_SPEC.md` remains the product and architecture authority. This document owns the source-neutral behavior contract, primitive semantics, and boundary between normalized behavior and runtime realization. The Design IR, source/provenance, and native-generation authorities keep their existing scopes.
@@ -126,11 +130,12 @@ Targets are typed document-local references, never arbitrary CSS selectors, sour
 The semantic lifecycle describes behavior states. Runtime lifecycle is separate:
 
 ```text
-unmounted → mounted → active → destroyed
-                 ↘ unavailable → destroyed
+no instance --mount--> mounted --valid--> active --destroy--> destroyed
+mounted --invalid--> unavailable --cleanup--> destroyed
+active --invalid update--> unavailable --cleanup--> destroyed
 ```
 
-`RuntimeInstance` starts at `mounted`; successful target and policy validation permits `active`. Missing targets, duplicate IDs, invalid state, or unsupported capability lead to `unavailable` with cleanup. `destroyed` is terminal. Reconnection or a LiveView patch does not create a second active instance for the same scope.
+`unmounted` means no `RuntimeInstance` exists; it is not an instance state. Mount creates the instance in `mounted`. Successful target and policy validation permits `active`. Missing targets, duplicate IDs, invalid state, or unsupported capability at mount or update lead to `unavailable` with cleanup. `destroyed` is terminal. Reconnection or a LiveView patch does not create a second active instance for the same scope.
 
 Every implementation must define mount, post-patch reconciliation, disconnect/reconnect behavior where relevant, and destruction. Cleanup releases all resources owned by that instance: event listeners, timers, observers, drag/pointer capture, media/autoplay control, focus ownership, and scroll-lock ownership. Shared resources use scoped ownership/reference counting so destroying one instance cannot unlock or stop a different active instance.
 
@@ -140,11 +145,15 @@ Prefer native HTML and CSS where they satisfy the semantic contract. A hook is r
 
 Each model below defines state, initial state, transitions, guards, effects, invalid transitions, terminal behavior, and cleanup. The state models describe semantics. Animation phases and browser handles remain runtime details unless they change valid semantic transitions.
 
+Every primitive inherits `RuntimeInstance.destroyed` as its terminal state and the resource-release rules in §8. Primitive-specific destruction effects below add to that shared cleanup contract.
+
 ### 9.1 Disclosure / Toggle
 
 **State:** `closed | open`. `enabled` is a guard/policy dimension, not a third lifecycle state. Runtime lifecycle follows §8.
 
 **Initial state:** source-independent normalization must use explicit accepted initial state; if absent, `closed`. Native `<details>/<summary>` is the preferred realization when the content is a disclosure and native semantics meet the contract.
+
+Keyboard: a native `<summary>` uses its platform disclosure activation. A custom disclosure control supports `Enter` and `Space` activation. Neither form adds arrow-key behavior.
 
 | Transition | Trigger and guard | Effects |
 | --- | --- | --- |
@@ -159,9 +168,13 @@ Invalid transitions: disabled activation is a no-op; duplicate/missing target or
 
 **Initial state:** explicit valid source-neutral state, otherwise empty for `allow_all_closed`; for `require_one_open`, the first enabled item in normalized order. If none is enabled, validation fails.
 
+Keyboard: `Enter` and `Space` on an enabled item control toggle its panel. `Tab` and `Shift+Tab` follow the document tab order; the accordion does not trap focus.
+
 Transitions use item activation. Opening an enabled item in `single` mode atomically replaces the open set; in `multiple` mode it adds the item. Closing removes it only if `allow_all_closed`, or if another enabled item remains under `require_one_open`. Disabled items cannot transition. Invariants are `single ⇒ |open_item_ids| ≤ 1` and `require_one_open ⇒ |open_item_ids| ≥ 1`.
 
 Effects reveal/conceal each associated panel and synchronize each control's expanded state. Focus remains on the activated control. An attempted transition that violates an invariant is a no-op; malformed IDs, duplicate items, or missing panels invalidate the binding. Cleanup is per owned runtime instance and must not disturb nested accordion state.
+
+Destruction ends the runtime instance and removes its listeners without changing another accordion's state.
 
 Prefer native `<details>` groups where the required semantics match. HTML's `details[name]` supplies exclusive grouping, but it does not by itself prove every accordion heading/region requirement; validate the requested contract before choosing it.
 
@@ -177,6 +190,8 @@ Selection effects show only the selected panel, synchronize selected state, tab-
 
 Manual activation is the safe default when panels may load or update with noticeable latency. APG recommends automatic activation only when panel content appears without noticeable latency.
 
+Destruction ends the runtime instance and releases its keyboard listeners and any focus references it owns.
+
 #### Responsive Tabs → Accordion
 
 This is a semantic mode transition, not a style override. The `ResponsiveBehaviorOverride` must cite accepted breakpoint authority and provide a reversible mapping. The initial mapping carries the selected tab into the one open accordion item; reverse mapping selects that same item. The first-wave rule keeps one canonical selected/open item in both modes. Multi-open accordion state cannot be losslessly mapped to single-selection tabs and is rejected for this conversion unless a future authority defines reconciliation.
@@ -189,7 +204,7 @@ This primitive represents content revealed from a trigger, including ordinary si
 
 **State:** `closed | open`, initial `closed` unless explicit accepted state says otherwise. `enabled`, pointer-hover availability, and dismiss policy are guard/policy dimensions.
 
-Activation toggles open/closed. Escape closes and returns focus to the trigger when focus was in the popup. Outside activation may close only when that policy is explicitly accepted and the trigger/target relationship is scoped. Pointer leave may close only when the source semantics and usable pointer/focus treatment are established; hover alone cannot be the only way to access content. Tab navigation follows ordinary document order and does not trap focus. Focus entering the popup keeps it open; focus leaving its owner scope may close it if policy says so.
+`Enter` and `Space` on the trigger activate the disclosure; pointer activation may use the same transition. Escape closes and returns focus to the trigger when focus was in the popup. Outside activation may close only when that policy is explicitly accepted and the trigger/target relationship is scoped. Pointer leave may close only when the source semantics and usable pointer/focus treatment are established; hover alone cannot be the only way to access content. Tab navigation follows ordinary document order and does not trap focus. Focus entering the popup keeps it open; focus leaving its owner scope may close it if policy says so.
 
 Effects reveal/conceal content and synchronize expanded state. Links remain native links. Invalid trigger/target or a popup that requires unsupported placement/ownership behavior is diagnosed; no selector search is attempted. Destroy closes the popup and releases owned listeners.
 
@@ -226,7 +241,7 @@ movement: idle | transitioning | dragging
 
 Additional policy dimensions include loop mode, autoplay permission, pause reasons, user-stop latch, and reduced-motion preference. Initial state is first valid slide, `rotation=manual` unless explicitly approved autoplay policy exists, and `movement=idle`.
 
-Previous/next/jump transitions update `active_slide`; at a non-loop boundary they are no-ops. Movement may pass `idle → transitioning → idle`, or `idle → dragging → transitioning/idle`; drag cancellation returns to the original or nearest valid slide according to explicit policy. Destroy is terminal and stops timers, drag capture, observers, and media control.
+Keyboard: native previous, next, picker, and rotation buttons use `Enter` and `Space`. They follow ordinary tab order; focus stays on the control after activation. Arrow-key navigation is only present when a separately defined tabs picker policy applies. Previous/next/jump transitions update `active_slide`; at a non-loop boundary they are no-ops. Movement may pass `idle → transitioning → idle`, or `idle → dragging → transitioning/idle`; drag cancellation returns to the original or nearest valid slide according to explicit policy. Destroy is terminal and stops timers, drag capture, observers, and media control.
 
 Autoplay may start only with an explicit timer policy and accessible rotation control. Focus entering or pointer hover pauses rotation. After a user or focus stop, rotation does not resume automatically; explicit activation of the rotation control is required. Reduced-motion preference disables autoplay by default and removes or shortens non-essential movement. Manual slide navigation remains available. Effects update the active slide, control state/labels, slide exposure, and any selected picker state together.
 
@@ -238,7 +253,11 @@ Lightbox composes **Dialog + CollectionNavigation**; it is not a separate focus-
 
 **State:** `closed | open(active_item_id)`. Initial state is closed. Open requires a valid collection item and dialog binding. Next, previous, and jump change the active item only within that collection. At collection boundaries, behavior follows explicit `clamp | wrap` policy; absent policy defaults to clamp. Escape/close follows Dialog. It inherits Dialog initial focus, containment, return focus, inertness, nested ownership, and cleanup rules.
 
+Keyboard: Escape, Tab, and Shift+Tab follow the inherited Dialog policy. Native previous, next, and item-picker buttons use Enter/Space; focus remains on the activated control. Arrow keys are optional and require an explicit collection-navigation policy.
+
 The underlying media or a normal media link remains available without the lightbox runtime. Collection changes that remove the active item close the lightbox and restore focus to its originating control if present. Missing item relationship, dialog semantics, or label rejects the composed behavior. History/deep-link behavior is optional and must never be inferred from a source widget name or DOM ID.
+
+Destruction ends the runtime instance and releases the composed Dialog and collection-navigation resources.
 
 ## 10. Accessibility, keyboard, and motion authority
 
@@ -298,7 +317,7 @@ The server-rendered or no-JS form must retain meaningful content and ordinary li
 
 All imported JSON, HTML, CSS, JavaScript, PHP, selectors, and paths are untrusted data. Behavior normalization must not execute or evaluate them. It must not emit `eval`, dynamic function construction, source module/function names, source event names, arbitrary CSS selectors, cross-component selector traversal, arbitrary attribute mutation, HTML injection, unvalidated navigation URLs, or source-defined code.
 
-Triggers, target roles, states, guards, effects, key mappings, and mutations use a closed normalized vocabulary. Text and labels remain escaped data. URLs pass the existing URL policy before navigation. Runtime-generated IDs are unique and scoped. Focus cannot leave the binding's permitted ownership scope except through its explicit focus policy. Timers, listeners, observers, drag handlers, and scroll locks have bounded ownership and mandatory cleanup.
+Triggers, target roles, states, guards, effects, key mappings, and mutations use a closed normalized vocabulary. Text and labels remain escaped data. Navigation URLs pass an explicit closed validation policy before emission. Runtime-generated IDs are unique and scoped. Focus cannot leave the binding's permitted ownership scope except through its explicit focus policy. Timers, listeners, observers, drag handlers, and scroll locks have bounded ownership and mandatory cleanup.
 
 If source behavior cannot be represented safely, preserve its evidence and emit a `BehaviorDiagnostic`. Do not approximate it with broader selectors or invented semantics.
 
@@ -321,7 +340,7 @@ Browser-local interaction state does not become a cache layer merely because it 
 
 Private Frames exports and extracted source are read-only, untrusted evidence. Permitted inspection is limited to safe text/file listing, hashing, and search. Never execute, evaluate, import, run embedded scripts, or copy proprietary implementation. Never add a vendor runtime or make the reusable library depend on WordPress, ACSS, Bricks, Frames, Splide, or private material.
 
-The accepted C-07X source sets retain these corpus identities:
+C-07X records these corpus identities:
 
 | Evidence set | Records | SHA-256 |
 | --- | ---: | --- |
@@ -338,11 +357,11 @@ Each record uses the same fields. `STATE` means `observed`, `verified`, `accepte
 
 | EVIDENCE_ID | CLAIM | STATE | SOURCE_TYPE | SOURCE | SOURCE_SHA_OR_VERSION | RELEVANT_COMPONENTS | OBSERVATION | DECISION | DOWNSTREAM_CONSUMERS | INVALIDATION_TRIGGER |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `BEH-R001` | Design IR Interaction is intent-only. | verified | REPOSITORY_EVIDENCE | `docs/03_DESIGN_IR_SPEC.md`, `apps/live_frames/lib/live_frames/ir/interaction.ex` | Design IR `3.0.0`, base `3b18f94…` | Interaction, DesignDocument | Current fields carry intent, trigger, node targets, parameters, and trace; specification leaves runtime strategy undecided. | Keep Design IR 3.x meaning unchanged. | Behavior normalization, validation, generator | Accepted Design IR version migration. |
-| `BEH-R002` | Bricks behavior is not normalized into the current IR. | verified | REPOSITORY_EVIDENCE | `apps/live_frames/lib/live_frames/adapters/bricks/design_ir_normalizer.ex` | base `3b18f94…` | Bricks adapter | Normalizer constructs `interactions: %{}` and nodes with `interaction_refs: []`. | A separate behavior evidence/normalization path is required. | Bricks adapter, BehaviorContract | Adapter implementation changes and passes review. |
-| `BEH-R003` | A shared behavior/runtime path is a known gap. | accepted | REPOSITORY_EVIDENCE | `docs/development/c07x_unsupported_surface_inventory.md` | C-07X recorded corpus hashes above | Frames widget behavior, LiveFrames runtime | Audit identifies missing behavior/runtime translation and classifies relevant families unsupported or partial. | Resolve through this contract before interactive component admission. | Behavior normalizer, runtime, Catalogue | Accepted replacement audit supersedes C-07X. |
-| `BEH-R004` | C09D6 defers Behavior IR and interactive generation. | verified | REPOSITORY_EVIDENCE | `docs/development/c09d6_native_generation_authority.md` | authority as of base `3b18f94…` | Native generation | Explicit non-goal: Behavior IR or interactive component generation. | Keep behavior implementation separate and downstream of this authority. | Native generator, roadmap | C09D6 authority is formally amended. |
-| `BEH-R005` | Source provenance and clean-room boundaries prohibit private runtime coupling. | accepted | REPOSITORY_EVIDENCE | `AGENTS.md`, `docs/04_SOURCE_AND_PROVENANCE.md` | base `3b18f94…` | Private references, adapters, release | Private/vendor code is untrusted and is not a runtime dependency; redistribution remains separately governed. | Store semantics and provenance only; never vendor code. | All adapters and generators | Provenance authority is amended. |
+| `BEH-R001` | Design IR Interaction is intent-only. | verified | REPOSITORY_EVIDENCE | `docs/03_DESIGN_IR_SPEC.md`, `apps/live_frames/lib/live_frames/ir/interaction.ex` | Design IR `3.0.0`; repository base `3b18f94bb0ca960a4dcb6af441776addb8109b7a` | Interaction, DesignDocument | Current fields carry intent, trigger, node targets, parameters, and trace; specification leaves runtime strategy undecided. | Keep Design IR 3.x meaning unchanged. | Behavior normalization, validation, generator | Accepted Design IR version migration. |
+| `BEH-R002` | Bricks behavior is not normalized into the current IR. | verified | REPOSITORY_EVIDENCE | `apps/live_frames/lib/live_frames/adapters/bricks/design_ir_normalizer.ex` | repository base `3b18f94bb0ca960a4dcb6af441776addb8109b7a` | Bricks adapter | Normalizer constructs `interactions: %{}` and nodes with `interaction_refs: []`. | A separate behavior evidence/normalization path is required. | Bricks adapter, BehaviorContract | Adapter implementation changes and passes review. |
+| `BEH-R003` | A shared behavior/runtime path is a known gap. | accepted | REPOSITORY_EVIDENCE | `docs/development/c07x_unsupported_surface_inventory.md` | repository base `3b18f94bb0ca960a4dcb6af441776addb8109b7a`; C-07X corpus hashes above | Frames widget behavior, LiveFrames runtime | Audit identifies missing behavior/runtime translation and classifies relevant families unsupported or partial. | Resolve through this contract before interactive component admission. | Behavior normalizer, runtime, Catalogue | Accepted replacement audit supersedes C-07X. |
+| `BEH-R004` | C09D6 defers Behavior IR and interactive generation. | verified | REPOSITORY_EVIDENCE | `docs/development/c09d6_native_generation_authority.md` | repository base `3b18f94bb0ca960a4dcb6af441776addb8109b7a` | Native generation | Explicit non-goal: Behavior IR or interactive component generation. | Keep behavior implementation separate and downstream of this authority. | Native generator, roadmap | C09D6 authority is formally amended. |
+| `BEH-R005` | Source provenance and clean-room boundaries prohibit private runtime coupling. | accepted | REPOSITORY_EVIDENCE | `AGENTS.md`, `docs/04_SOURCE_AND_PROVENANCE.md` | repository base `3b18f94bb0ca960a4dcb6af441776addb8109b7a` | Private references, adapters, release | Private/vendor code is untrusted and is not a runtime dependency; redistribution remains separately governed. | Store semantics and provenance only; never vendor code. | All adapters and generators | Provenance authority is amended. |
 
 ### Private example records
 
@@ -368,7 +387,7 @@ For each example, `SOURCE` is the corresponding folder in the 34-record staging 
 | `BEH-S005` | Auto-rotating carousels need controls and stop/resume rules. | verified | EXTERNAL_STANDARD | [APG Carousel](https://www.w3.org/WAI/ARIA/apg/patterns/carousel/) | APG page checked 2026-10-09; guidance | Carousel, TimerPolicy | APG recommends a rotation control, stop on focus/hover, and no automatic resume after focus enters. | Autoplay is opt-in; user/focus stop requires explicit restart. | Carousel runtime | APG guidance or accessibility verification changes policy. |
 | `BEH-S006` | HTML `details` is a disclosure primitive and supports exclusive named groups. | verified | EXTERNAL_STANDARD | [WHATWG HTML Living Standard, `details`](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-details-element) | Living Standard accessed 2026-10-09 | Disclosure, Accordion | Native open/close behavior and `name` grouping exist; the standard says not to use details to represent tabs or menus. | Prefer it only when the requested semantics are disclosure-compatible. | Native renderer | HTML standard or supported browser baseline changes. |
 | `BEH-S007` | Reduced-motion is a user preference signal for reducing non-essential motion. | verified | EXTERNAL_STANDARD | [CSS Media Queries Level 5](https://www.w3.org/TR/mediaqueries-5/#prefers-reduced-motion), [MDN `prefers-reduced-motion`](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/prefers-reduced-motion) | CSS Media Queries Level 5; MDN accessed 2026-10-09 | MotionPolicy, Carousel, Disclosure | The media feature represents a device/user preference and can reduce or replace motion. | Treat as policy input; turn off autoplay by default when reduced motion is requested. | CSS/runtime motion policy | Media Queries specification or browser support changes. |
-| `BEH-S008` | LiveView hook lifecycle must match the pinned 1.2.11 runtime. | verified | EXTERNAL_STANDARD | [Phoenix LiveView JavaScript interoperability](https://hexdocs.pm/phoenix_live_view/1.2.11/js-interop.html) | repository lockfile `phoenix_live_view 1.2.11`; docs target 1.2.11 | Hook mount/update/disconnect/reconnect/destroy | The repository pins LiveView 1.2.11; runtime callback names and patch behavior are version-specific. | Verify lifecycle claims against this version during implementation; do not infer from latest docs. | Hook-backed runtime | Lockfile update or 1.2.11 docs/API change. |
+| `BEH-S008` | LiveView hook lifecycle must match the pinned 1.2.11 runtime. | verified | EXTERNAL_STANDARD | [Phoenix LiveView JavaScript interoperability](https://hexdocs.pm/phoenix_live_view/1.2.11/js-interop.html) | repository lockfile `phoenix_live_view 1.2.11`; docs target 1.2.11 | Hook mount/update/disconnect/reconnect/destroy | Version 1.2.11 documents `mounted`, `beforeUpdate`, `updated`, `destroyed`, `disconnected`, and `reconnected`. `destroyed` runs when a parent update removes the hooked element or the parent is removed. | Reconcile on updates and release resources on destruction using these release-specific callbacks. | Hook-backed runtime | Lockfile update or 1.2.11 docs/API change. |
 | `BEH-S009` | WAI-ARIA defines roles/states/properties; APG is authoring guidance. | verified | EXTERNAL_STANDARD | [WAI-ARIA 1.2 Recommendation](https://www.w3.org/TR/wai-aria-1.2/), [W3C ARIA overview](https://www.w3.org/WAI/standards-guidelines/aria/) | WAI-ARIA 1.2 Recommendation 2023-06-06; overview accessed 2026-10-09 | All primitives | WAI-ARIA is normative specification text; W3C describes APG as recommendations for authors. Roles do not implement behavior. | Keep specification requirements and adopted APG guidance visibly distinct. | All accessibility contracts | W3C publishes a new ARIA version or updates APG status. |
 
 ## 18. Future implementation boundaries and sequence
