@@ -1,10 +1,10 @@
 # C09D6-A — Native generation and review authority
 
-**Status:** v6 / C09D6-C0 authority accepted; v7 / C09D6-D1A amendment is an authority candidate pending review, merge, and acceptance
+**Status:** v7 / C09D6-D1A authority accepted; D1 native styling implementation complete, merged, and accepted
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v7 candidate
+**Plan version:** v7 accepted
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -52,11 +52,14 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   static navigation, boundary-root Plan blockers, repository-truth reconciliation;
   static navigation emission via `LiveFrames.StaticNavigation.validate_navigation_map/1`
   (not `StaticMarkupContract` for `href`/`target`/`rel`)
-- `v7` — C09D6-D1A authority candidate: freezes path-validated private node
+- `v7` — C09D6-D1A authority: freezes path-validated private node
   selector identity, native style-locus rules, mechanical StyleValue-to-CSS
   emission, TokenBridge ownership, responsive ordering, primary-action source
   isolation, stylesheet artifact paths, import-graph ownership, and the styling
-  lifecycle and terminal behavior. Pending review, merge, and acceptance.
+  lifecycle and terminal behavior. The D1A/v7 authority was accepted via PR #152
+  (merge `de6dc96f3a852f7b5fc67b051b3ee04406ac8b1b`). D1D implementation later
+  completed via PR #160 (merge `3e75c70433aac1f783221b0c6de3af43679598da`;
+  post-merge CI `37961704551` passed).
 
 ---
 
@@ -106,7 +109,9 @@ routing native generation through LiveFrames.Fidelity
 ## 2. Repository truth (current checkpoint)
 
 Current repository truth at main checkpoint
-`fcbdb05512a4f33453a043be8b361e7d3abe921e`. C09D6-B is implemented and
+`3e75c70433aac1f783221b0c6de3af43679598da` (tree
+`ea85c0adcaf484c8616e114a8680f5a82ac18ee1`; D1D post-merge CI
+`37961704551` passed). C09D6-B is implemented and
 accepted (PR #134). C09D6-C0 authority is merged and accepted (PR #136).
 C09D6-C's native generator is implemented and merged on main (PR #135,
 merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`). Short pointers:
@@ -123,6 +128,11 @@ merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`). Short pointers:
 | Production Registry at compile time | **empty** membership (no canonical Hero Catalogue manifest) |
 | C09D6-C0 native emission authority | **merged / accepted** (PR #136) |
 | C09D6-C native component generator | **implemented / merged on `main`** (PR #135; merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`) |
+| C09D6-D1A / v7 native styling authority | **accepted** (PR #152; approved head `8f45f177a115a88744ac9c1e907eba4ebccf131a`; merge `de6dc96f3a852f7b5fc67b051b3ee04406ac8b1b`) |
+| C09D6-D1 native styling implementation | **complete / merged / accepted** (PR #160; approved head `1fb01cf9359af3fc01119663aeaf8e79796c6169`; merge `3e75c70433aac1f783221b0c6de3af43679598da`; post-merge CI `37961704551` passed) |
+| C09D7-A CTA Tango componentization | **authorized to begin**; no component contract or plan decisions are accepted |
+| C09D7-B CTA generation + browser verification | **downstream / not authorized** |
+| C09D7-C consumer proof / Catalogue handoff | **downstream / not authorized** |
 | P10 Catalogue ejection generator | **not implemented** |
 | Phase 6 Hero native section | **accepted** (hand-authored; not proposer/generator pipeline) |
 
@@ -1180,9 +1190,9 @@ C09D6-B  reviewer approval implementation    ← implemented on main (PR #134)
 C09D6-C0 native emission authority           ← accepted (v6 §10.4.1, §10.10–§10.17)
 C09D6-C  native HEEx generator               ← implemented / merged (PR #135)
 R5       CTA style-coverage rerun             ← accepted (PR #147)
-D1A      styling selector/artifact authority  ← pending review / merge / acceptance (§21)
-D1       native styling implementation       ← authorized; execution waits for D1A review, merge, independent post-merge verification, and acceptance
-C09D7-A  CTA Tango componentization           ← not authorized until D1 succeeds
+D1A      styling selector/artifact authority  ← accepted (v7, §21)
+D1       native styling implementation       ← complete / merged / accepted (D1D merge `3e75c704…`; CI `37961704551` PASS)
+C09D7-A  CTA Tango componentization           ← authorized to begin; contract and plan decisions remain unapproved
 C09D7-B  CTA generation + verification        ← downstream
 C09D7-C  consumer proof / Catalogue handoff   ← downstream
 P9       Catalogue expansion
@@ -1230,21 +1240,18 @@ by C0.
 
 | Deliverable | Status |
 | --- | --- |
-| `docs/development/c09d6_native_generation_authority.md` | this file (v6 accepted; §21 v7 candidate) |
+| `docs/development/c09d6_native_generation_authority.md` | this file (v7 accepted; D1 complete / merged / accepted) |
 | `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
 | Existing C09D6-C generator production code | implemented / merged on main (PR #135); unchanged by D1A |
-| D1 styling production code | out of scope for this authority slice; implementation not started |
+| D1 styling production code | complete / merged / accepted; unchanged by this documentation status reconciliation |
 
 ---
 
-## 21. C09D6-D1A native styling selector and artifact authority (v7 candidate)
+## 21. C09D6-D1A native styling selector and artifact authority (v7 accepted)
 
-**Authority status:** v6 / C09D6-C0 remains accepted. This §21 is the v7
-C09D6-D1A amendment candidate and remains pending review, merge, and acceptance.
-The programme authorized D1 following accepted R5. D1 implementation execution
-remains gated on D1A review, merge, independent post-merge verification, and
-acceptance. This v7 candidate does not satisfy that acceptance gate merely by
-existing on the PR branch.
+**Authority status:** v7 / C09D6-D1A is accepted. D1 implementation is
+complete, merged, and accepted. The frozen authority below is unchanged by this
+status reconciliation.
 
 ### 21.1 Purpose and scope
 
@@ -1257,8 +1264,9 @@ styling authority. D1A closes the remaining authority questions:
 2. which stylesheet artifact the pure generator returns, and which later step
    owns package import-graph changes.
 
-R5 evidence remains accepted and unchanged. D1 is authorized but implementation
-has not started. C09D7-A remains unauthorized.
+R5 evidence remains accepted and unchanged. D1 is complete, merged, and
+accepted. C09D7-A is authorized to begin; this authorization does not accept any
+component contract or plan decisions.
 
 ### 21.2 Public package identity and private node selectors
 
@@ -1535,8 +1543,8 @@ STOP=TEST_CHANGE_REQUIRED
 
 Do not repair these conditions in D1A.
 
-D1A is architecture/documentation only. It does not implement the styling
+D1A was architecture/documentation only. It did not implement the styling
 generator, CTA Tango, CSS, tests, schema changes, TokenBridge changes, mapping
-JSON changes, import edits, or C09D7-A. Its roadmap state remains pending review
-and acceptance until the amendment is reviewed, merged, and independently
-verified after merge.
+JSON changes, import edits, or C09D7-A. D1 implementation is complete and
+accepted. C09D7-A is authorized to begin; its component contract and plan still
+require explicit review and approval.
