@@ -1,6 +1,6 @@
 # Interaction model
 
-**Status:** candidate authority revision for PR #145. This file is the canonical location for the interaction contract; this revision is not accepted on `main` until review and merge. No implementation is authorized.
+**Status:** accepted architecture authority for future behavior work. No implementation is authorized.
 
 **Authority revision:** 1.0.1
 
