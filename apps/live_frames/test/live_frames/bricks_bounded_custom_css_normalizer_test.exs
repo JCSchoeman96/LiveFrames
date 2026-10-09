@@ -354,6 +354,123 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
              end)
     end
 
+    test "R4_MISSING_CLOSING_BRACE_FAILS_CLOSED=PASS missing closing brace does not consume CCS-01" do
+      css = """
+      .image-group-tango {
+        min-height: 675px;
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_UNMATCHED_CLOSING_BRACE_FAILS_CLOSED=PASS extra closing brace fails the blob closed" do
+      css = ".image-group-tango { min-height: 675px; }}"
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_ORPHAN_TEXT_PRESERVED=PASS orphan text without braces preserves full blob" do
+      css = """
+      .image-group-tango {
+        min-height: 675px;
+      }
+
+      .future-rule broken declaration
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+
+      assert %StyleValue{kind: :complex_css, value: %{"rules" => [rule_text]}} =
+               owner.styles["custom-css"]
+
+      assert rule_text =~ "future-rule broken declaration"
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_NESTED_BLOCK_FAILS_CLOSED=PASS nested rule framing is not consumed as CCS-01" do
+      css = """
+      @media (min-width: 600px) {
+        .image-group-tango {
+          min-height: 675px;
+        }
+      }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_PARSED_PLUS_UNPARSEABLE_DUPLICATE_FAILS_CLOSED=PASS malformed duplicate invalidates first occurrence" do
+      css = """
+      .image-group-tango {
+        min-height: 675px;
+      }
+
+      .image-group-tango {
+        min-height: 675px;
+        min-height: 700px;
+      }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.duplicate_rule"
+             end)
+    end
+
     test "R4_MALFORMED_RULE_PRESERVED=PASS malformed block remains in complex_css" do
       css = """
       .image-group-tango { min-height: 675px; }

@@ -204,9 +204,41 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp process_blob(blob, owner_trace, context, acc) when is_binary(blob) do
-    {parsed_rules, unparseable_blocks} = parse_rule_blocks(blob)
+    case scan_flat_blocks(blob) do
+      {:error, reason, _detail} ->
+        framing_fail_closed(acc, blob, reason)
 
-    duplicate_selectors = duplicate_frozen_selectors(parsed_rules)
+      {:ok, frames} ->
+        process_framed_blob(blob, frames, owner_trace, context, acc)
+    end
+  end
+
+  defp process_blob(_blob, _owner_trace, _context, acc), do: acc
+
+  defp framing_fail_closed(acc, blob, reason) do
+    %{
+      acc
+      | residual_custom_css_by_source_id:
+          Map.put(acc.residual_custom_css_by_source_id, @owner_id, String.trim(blob)),
+        custom_css_mode_by_source_id:
+          Map.put(acc.custom_css_mode_by_source_id, @owner_id, :residual),
+        diagnostics:
+          acc.diagnostics ++
+            [
+              diagnostic(
+                "bricks.bounded_custom_css.framing_ambiguous",
+                :warning,
+                "Bounded custom CSS blob framing is ambiguous or incomplete; the full source blob was preserved in residual complex_css",
+                reason
+              )
+            ]
+    }
+  end
+
+  defp process_framed_blob(_blob, frames, owner_trace, context, acc) do
+    duplicate_selectors = duplicate_frozen_selectors_from_frames(frames)
+
+    {parsed_rules, unparseable_blocks} = frames_to_rules(frames)
 
     unparseable_rejects =
       Enum.map(unparseable_blocks, fn block ->
@@ -261,20 +293,17 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     }
   end
 
-  defp process_blob(_blob, _owner_trace, _context, acc), do: acc
-
-  defp duplicate_frozen_selectors(rules) do
-    rules
-    |> Enum.filter(&frozen_selector?/1)
-    |> Enum.group_by(&normalize_selector(&1.selector))
-    |> Enum.filter(fn {_selector, grouped} -> length(grouped) >= 2 end)
+  defp duplicate_frozen_selectors_from_frames(frames) do
+    frames
+    |> Enum.map(&normalize_selector(&1.selector))
+    |> Enum.filter(&frozen_selector_normalized?/1)
+    |> Enum.frequencies()
+    |> Enum.filter(fn {_selector, count} -> count >= 2 end)
     |> Enum.map(&elem(&1, 0))
     |> MapSet.new()
   end
 
-  defp frozen_selector?(%{selector: selector}) do
-    normalized = normalize_selector(selector)
-
+  defp frozen_selector_normalized?(normalized) do
     Enum.any?(@frozen_selector_strings, fn frozen ->
       normalize_selector(frozen) == normalized
     end)
@@ -433,47 +462,171 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp parse_rule_blocks(blob) do
-    blob
-    |> strip_comments()
-    |> String.split("}", trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.filter(&String.contains?(&1, "{"))
-    |> Enum.reduce({[], []}, fn chunk, {rules, rejects} ->
-      case parse_rule_block(chunk) do
+    case scan_flat_blocks(blob) do
+      {:ok, frames} ->
+        frames_to_rules(frames)
+
+      {:error, _reason, _detail} ->
+        {[], [%{raw: blob, selector: nil}]}
+    end
+  end
+
+  defp frames_to_rules(frames) do
+    Enum.reduce(frames, {[], []}, fn frame, {rules, rejects} ->
+      case frame_to_rule(frame) do
         {:ok, rule} ->
           {rules ++ [rule], rejects}
 
-        {:unparseable, reject} ->
-          {rules, rejects ++ [reject]}
+        {:error, _} ->
+          {rules, rejects ++ [%{raw: frame.raw, selector: frame.selector}]}
       end
     end)
   end
 
-  defp parse_rule_block(chunk) do
-    trimmed = String.trim(chunk)
+  defp frame_to_rule(frame) do
+    case parse_declarations(frame.body) do
+      {:ok, declarations} ->
+        {:ok,
+         %{
+           selector: frame.selector,
+           declarations: declarations,
+           raw: frame.raw
+         }}
 
-    case String.split(chunk, "{", parts: 2) do
-      [selector, body] ->
-        case parse_declarations(body) do
-          {:ok, declarations} ->
-            {:ok,
-             %{
-               selector: String.trim(selector),
-               declarations: declarations,
-               raw: "#{String.trim(selector)} { #{String.trim(body)} }"
-             }}
+      {:error, _} ->
+        {:error, :invalid_declarations}
+    end
+  end
 
-          {:error, _} ->
-            {:unparseable,
-             %{
-               raw: "#{String.trim(selector)} { #{String.trim(body)} }",
-               selector: String.trim(selector)
-             }}
+  defp scan_flat_blocks(blob) when is_binary(blob) do
+    scan_flat_blocks(blob, 0, [])
+  end
+
+  defp scan_flat_blocks(blob, index, blocks) do
+    index = skip_trivia(blob, index)
+
+    cond do
+      index >= byte_size(blob) ->
+        {:ok, Enum.reverse(blocks)}
+
+      :binary.at(blob, index) == ?} ->
+        {:error, :unmatched_closing_brace, index}
+
+      true ->
+        case read_flat_block(blob, index) do
+          {:ok, frame, next_index} ->
+            scan_flat_blocks(blob, next_index, [frame | blocks])
+
+          {:error, _reason, _detail} = error ->
+            error
+        end
+    end
+  end
+
+  defp read_flat_block(blob, index) do
+    selector_start = index
+    {selector_end, index} = read_until(blob, index, ?{)
+
+    if index >= byte_size(blob) do
+      orphan =
+        String.slice(blob, selector_start, byte_size(blob) - selector_start) |> String.trim()
+
+      if orphan == "" do
+        {:error, :missing_closing_brace, selector_start}
+      else
+        {:error, :orphan_text, selector_start}
+      end
+    else
+      selector =
+        String.slice(blob, selector_start, selector_end - selector_start) |> String.trim()
+
+      if selector == "" do
+        {:error, :framing_ambiguous, index}
+      else
+        body_start = index + 1
+        block_start = selector_start
+
+        case read_balanced_body(blob, body_start, 1) do
+          {:ok, body_end, close_index} ->
+            body = String.slice(blob, body_start, body_end - body_start)
+            raw = String.slice(blob, block_start, close_index - block_start + 1)
+
+            frame = %{
+              selector: selector,
+              body: body,
+              raw: raw
+            }
+
+            {:ok, frame, close_index + 1}
+
+          {:error, _reason, _detail} = error ->
+            error
+        end
+      end
+    end
+  end
+
+  defp read_balanced_body(blob, index, depth) do
+    if index >= byte_size(blob) do
+      {:error, :missing_closing_brace, index}
+    else
+      case :binary.at(blob, index) do
+        ?{ ->
+          if depth >= 1 do
+            {:error, :nested_block, index}
+          else
+            read_balanced_body(blob, index + 1, depth + 1)
+          end
+
+        ?} ->
+          next_depth = depth - 1
+
+          if next_depth == 0 do
+            {:ok, index, index}
+          else
+            read_balanced_body(blob, index + 1, next_depth)
+          end
+
+        _ ->
+          read_balanced_body(blob, index + 1, depth)
+      end
+    end
+  end
+
+  defp read_until(blob, index, char) do
+    if index >= byte_size(blob) do
+      {index, index}
+    else
+      case :binary.at(blob, index) do
+        ^char ->
+          {index, index}
+
+        _ ->
+          read_until(blob, index + 1, char)
+      end
+    end
+  end
+
+  defp skip_trivia(blob, index) do
+    cond do
+      index >= byte_size(blob) ->
+        index
+
+      index + 1 < byte_size(blob) and :binary.part(blob, index, 2) == "/*" ->
+        comment_body_start = index + 2
+
+        case :binary.match(blob, "*/", [
+               {:scope, {comment_body_start, byte_size(blob) - comment_body_start}}
+             ]) do
+          {close_start, _close_length} -> skip_trivia(blob, close_start + 2)
+          :nomatch -> byte_size(blob)
         end
 
-      _ ->
-        {:unparseable, %{raw: trimmed <> "}", selector: trimmed}}
+      :binary.at(blob, index) in [?\s, ?\n, ?\r, ?\t] ->
+        skip_trivia(blob, index + 1)
+
+      true ->
+        index
     end
   end
 
@@ -518,10 +671,6 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
 
   defp normalize_declaration_value(_property, value) do
     value |> String.trim() |> String.replace(~r/\s+/, " ")
-  end
-
-  defp strip_comments(css) do
-    Regex.replace(~r/\/\*.*?\*\//s, css, "")
   end
 
   defp merge_styles(styles_by_source_id, accepted_rules) do
