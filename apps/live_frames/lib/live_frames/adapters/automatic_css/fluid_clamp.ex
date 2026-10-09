@@ -39,6 +39,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
   defp range("h4", inputs), do: scaled_heading(inputs, 0)
   defp range("text-m", inputs), do: scaled_text(inputs, 0)
   defp range("text-l", inputs), do: scaled_text(inputs, 1)
+  defp range("text-s", inputs), do: text_s_range(inputs)
   defp range("space-xs", inputs), do: spaced(inputs, -2)
   defp range("space-s", inputs), do: spaced(inputs, -1)
   defp range("space-m", inputs), do: spaced(inputs, 0)
@@ -59,6 +60,31 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
       {:ok, mobile_base * pow(mobile_scale, power), desktop_base * pow(desktop_scale, power)}
     end
   end
+
+  defp text_s_range(inputs) do
+    with -1 <- scale_power(inputs),
+         {:ok, mobile_base, desktop_base, mobile_scale, desktop_scale} <- scales(inputs),
+         {:ok, default_mobile} <- scale_by(mobile_base, mobile_scale, -1),
+         {:ok, default_desktop} <- scale_by(desktop_base, desktop_scale, -1) do
+      mobile = endpoint_px(inputs["mobile_endpoint_override_px"], default_mobile)
+      desktop = endpoint_px(inputs["desktop_endpoint_override_px"], default_desktop)
+
+      if is_number(mobile) and is_number(desktop) do
+        {:ok, mobile, desktop}
+      else
+        :error
+      end
+    else
+      _ -> :error
+    end
+  end
+
+  defp scale_power(%{"scale_power" => -1}), do: -1
+  defp scale_power(_inputs), do: :error
+
+  defp endpoint_px(value, _default) when is_number(value), do: value
+  defp endpoint_px(_value, default) when is_number(default), do: default
+  defp endpoint_px(_, _), do: :error
 
   defp spaced(inputs, power) do
     with {:ok, mobile_base, desktop_base, mobile_scale, desktop_scale} <- scales(inputs),

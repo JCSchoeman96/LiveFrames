@@ -8,6 +8,7 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
 
   @fixture Path.expand("../../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   @mapping Path.expand("../../../priv/token_maps/native_hero_v1.json", __DIR__)
+  @shared_mapping Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
   @committed_theme Path.expand("../../../assets/css/theme/lf_theme.css", __DIR__)
 
   defp hero_token_set do
@@ -232,10 +233,73 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
   end
 
   test "committed lf_theme.css matches regenerated output" do
+    token_set = hero_token_set()
+    mappings = [TokenBridge.load_mapping!(@shared_mapping), TokenBridge.load_mapping!(@mapping)]
+
+    assert {:ok, generated} = TokenBridge.generate(token_set, mappings)
+    assert File.read!(@committed_theme) == generated
+  end
+
+  test "layered shared then hero mappings combine deterministically" do
+    token_set = hero_token_set()
+    shared = TokenBridge.load_mapping!(@shared_mapping)
+    hero = TokenBridge.load_mapping!(@mapping)
+
+    assert {:ok, layered} = TokenBridge.generate(token_set, [shared, hero])
+    assert {:ok, repeated} = TokenBridge.generate(token_set, [shared, hero])
+    assert layered == repeated
+
+    assert layered =~ "--lf-typography-body-size-small:"
+    assert layered =~ "--lf-radius-base:"
+    assert layered =~ "--lf-space-grid-gap:"
+    refute layered =~ "--text-s:"
+    refute layered =~ "--radius:"
+    refute layered =~ "--grid-gap:"
+  end
+
+  test "allows the same token_set_path across layers when css variables differ" do
+    token_set = hero_token_set()
+
+    first_layer = %{
+      "schema_version" => "1.0.0",
+      "mapping_version" => "synthetic_layer_a",
+      "entries" => [
+        %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-shared-alias"}
+      ]
+    }
+
+    second_layer = %{
+      "schema_version" => "1.0.0",
+      "mapping_version" => "synthetic_layer_b",
+      "entries" => [
+        %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-hero-alias"}
+      ]
+    }
+
+    assert {:ok, css} = TokenBridge.generate(token_set, [first_layer, second_layer])
+    assert css =~ "--lf-radius-shared-alias:"
+    assert css =~ "--lf-radius-hero-alias:"
+  end
+
+  test "rejects duplicate css variables across mapping layers" do
+    token_set = hero_token_set()
+    shared = TokenBridge.load_mapping!(@shared_mapping)
+
+    hero =
+      TokenBridge.load_mapping!(@mapping)
+      |> update_in(["entries", Access.at(0), "css_variable"], fn _ ->
+        "--lf-typography-body-size-small"
+      end)
+
+    assert {:error, {:duplicate_css_variables, ["--lf-typography-body-size-small"]}} =
+             TokenBridge.generate(token_set, [shared, hero])
+  end
+
+  test "single-mapping TokenBridge API remains unchanged" do
     mapping = TokenBridge.load_mapping!(@mapping)
     token_set = hero_token_set()
 
-    assert {:ok, generated} = TokenBridge.generate(token_set, mapping)
-    assert File.read!(@committed_theme) == generated
+    assert {:ok, css} = TokenBridge.generate(token_set, mapping)
+    refute css =~ "--lf-typography-body-size-small:"
   end
 end

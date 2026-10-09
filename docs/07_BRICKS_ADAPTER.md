@@ -346,8 +346,14 @@ types.
 
 The normalizer uses the existing StyleValue kinds. Safe values become literal
 or keyword values, and calc and clamp expressions remain complete calculations.
-Only an exact direct `var(--x)` expression can become a token reference, when
-VariableAuthority returns one resolved candidate. Fallback expressions keep
+On `gap` only, the bounded form `calc(var(--grid-gap) * <positive-rational>)`
+may become a structured `StyleValue.calculation` multiply when `--grid-gap`
+authority is uniquely `spacing.grid_gap`; other `--grid-gap` calculation shapes
+fail closed. On bounded radius properties only, ambiguous `var(--radius)` may
+canonicalize to `token_ref radius.base` when every non-base candidate is a
+resolved semantic reference to `radius.base` (no global VariableAuthority
+rewrite). Only an exact direct `var(--x)` expression can become a token
+reference, when VariableAuthority returns one resolved candidate. Fallback expressions keep
 their complete source and fallback metadata and remain unresolved. Ambiguous
 authority and unresolved tokens never select a path. Nested overlay variables
 and the unitless source value "400" remain unresolved. Gradients and custom

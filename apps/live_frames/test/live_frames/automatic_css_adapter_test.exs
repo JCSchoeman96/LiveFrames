@@ -3,6 +3,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
+  alias LiveFrames.Adapters.AutomaticCSS.IconTokens
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.VariableAuthority
@@ -431,6 +432,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       {"spacing.scale.xxl", "--space-xxl", nil},
       {"spacing.section", "--section-space-m", nil},
       {"typography.body.scale.medium", "--text-m", nil},
+      {"typography.body.scale.small", "--text-s", nil},
       {"typography.heading.scale.h1", "--h1", nil}
     ]
 
@@ -475,6 +477,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                {"spacing.scale.xxl", "--space-xxl", nil},
                {"spacing.section", "--section-space-m", nil},
                {"typography.body.scale.medium", "--text-m", nil},
+               {"typography.body.scale.small", "--text-s", nil},
                {"typography.heading.scale.h1", "--h1", nil}
              ])
 
@@ -487,6 +490,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       {"spacing.scale.xxl", "--space-xxl", "spacing"},
       {"spacing.section", "--section-space-m", "section-spacing"},
       {"typography.body.scale.medium", "--text-m", "text"},
+      {"typography.body.scale.small", "--text-s", "text"},
       {"typography.heading.scale.h1", "--h1", "headings"}
     ]
 
@@ -939,7 +943,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping(fixture_settings()))
-    assert map_size(token_set.tokens) == 100
+    assert map_size(token_set.tokens) == 101
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
@@ -948,7 +952,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              layout: 3,
              radius: 1,
              spacing: 15,
-             typography: 9
+             typography: 10
            }
 
     required_paths = AutomaticCSS.required_paths(:hero_foundation)
@@ -991,14 +995,228 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     unknown = Enum.find(diagnostics, &(&1.code == "acss.setting.unknown"))
     assert unknown.metadata["count"] > 0
 
-    assert unknown.metadata["count"] ==
-             token_set.source_metadata["source_key_count"] - length(Normalizer.source_keys())
+    recognized_keys =
+      Normalizer.source_keys()
+      |> Kernel.++(["option-icons"] ++ IconTokens.omitted_source_keys())
+      |> MapSet.new()
+
+    expected_unknown_count =
+      fixture_settings()
+      |> Map.keys()
+      |> Enum.reject(&MapSet.member?(recognized_keys, &1))
+      |> length()
+
+    assert unknown.metadata["count"] == expected_unknown_count
 
     assert Enum.all?(unknown.metadata["sample_keys"], &is_binary/1)
     refute Map.has_key?(token_set.tokens, "overlay.background")
     refute Map.has_key?(token_set.tokens, "layout.breakpoint.tablet")
     refute Map.has_key?(token_set.tokens, "layout.breakpoint.mobile")
     assert token_set.tokens["layout.breakpoint.auto_grid"].resolved_value == "992px"
+  end
+
+  defp d0e2_text_scale_settings(overrides \\ %{}) do
+    minimal_settings()
+    |> Map.merge(%{
+      "base-text-mob" => 16,
+      "base-text-desk" => 18,
+      "mob-text-scale" => 1.2,
+      "text-scale" => 1.333,
+      "vp-min" => 360,
+      "vp-max" => 1366
+    })
+    |> Map.merge(overrides)
+  end
+
+  defp text_s_token(token_set) do
+    token_set.tokens["typography.body.scale.small"]
+  end
+
+  @text_s_required_source_keys [
+    "base-text-mob",
+    "base-text-desk",
+    "mob-text-scale",
+    "text-scale",
+    "vp-min",
+    "vp-max"
+  ]
+
+  defp assert_text_s_provenance!(token, min_count, max_count) do
+    source_keys = token.provenance["source_keys"]
+
+    assert length(source_keys) == length(Enum.uniq(source_keys))
+
+    for key <- @text_s_required_source_keys do
+      assert Enum.count(source_keys, &(&1 == key)) == 1
+    end
+
+    assert Enum.count(source_keys, &(&1 == "text-s-min")) == min_count
+    assert Enum.count(source_keys, &(&1 == "text-s-max")) == max_count
+  end
+
+  describe "typography.body.scale.small (text-s)" do
+    test "optional override source keys are included in Normalizer.source_keys/0" do
+      keys = Normalizer.source_keys()
+      assert "text-s-min" in keys
+      assert "text-s-max" in keys
+    end
+
+    test "exists with acss.clamp recipe, text-s variable, and scale_power -1 defaults" do
+      assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(d0e2_text_scale_settings())
+      token = text_s_token(token_set)
+
+      assert token.resolution_status == :resolved
+      assert token.value["type"] == "derived"
+      assert token.value["recipe"] == "acss.clamp"
+      assert token.value["variable"] == "text-s"
+      assert token.value["inputs"]["scale_power"] == -1
+
+      inputs = token.value["inputs"]
+
+      assert inputs["mobile_base"] == 16.0
+      assert inputs["desktop_base"] == 18.0
+      assert inputs["mobile_scale"] == 1.2
+      assert inputs["desktop_scale"] == 1.333
+      assert inputs["calculation_group"] == "text"
+      refute Map.has_key?(inputs, "mobile_endpoint_override_px")
+      refute Map.has_key?(inputs, "desktop_endpoint_override_px")
+
+      assert token.metadata["css_expression"] ==
+               FluidClamp.from_px_pair(16 / 1.2, 18 / 1.333, 360, 1366)
+
+      assert authority(token, "--text-s", "source_output_alias") == %{
+               "variable" => "--text-s",
+               "kind" => "source_output_alias",
+               "authority_id" => "automatic-css-4.0.1:calculated-variable-group:text:text-s",
+               "source_key" => nil,
+               "source_version" => "4.0.1"
+             }
+
+      assert {:ok, index} = VariableAuthority.build(token_set)
+
+      assert %{state: :unique_candidate, candidates: [%{token_path: path}]} =
+               VariableAuthority.resolve(index, "--text-s")
+
+      assert path == "typography.body.scale.small"
+      assert_text_s_provenance!(token, 0, 0)
+    end
+
+    test "D0E2 published endpoint overrides produce the frozen clamp expression" do
+      settings =
+        d0e2_text_scale_settings(%{
+          "text-s-min" => 14,
+          "text-s-max" => 15
+        })
+
+      assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(settings)
+      token = text_s_token(token_set)
+
+      assert token.metadata["css_expression"] ==
+               "clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem)"
+
+      assert token.value["inputs"]["mobile_endpoint_override_px"] == 14.0
+      assert token.value["inputs"]["desktop_endpoint_override_px"] == 15.0
+      assert_text_s_provenance!(token, 1, 1)
+      assert token.provenance["raw_value"]["text-s-min"] == 14
+      assert token.provenance["raw_value"]["text-s-max"] == 15
+    end
+
+    test "mobile-only override keeps default desktop endpoint" do
+      assert {:ok, token_set, _} =
+               AutomaticCSS.normalize(d0e2_text_scale_settings(%{"text-s-min" => 14}))
+
+      token = text_s_token(token_set)
+
+      assert token.value["inputs"]["mobile_endpoint_override_px"] == 14.0
+      refute Map.has_key?(token.value["inputs"], "desktop_endpoint_override_px")
+
+      assert token.metadata["css_expression"] ==
+               FluidClamp.from_px_pair(14, 18 / 1.333, 360, 1366)
+
+      assert_text_s_provenance!(token, 1, 0)
+      assert token.provenance["raw_value"]["text-s-min"] == 14
+      refute Map.has_key?(token.provenance["raw_value"], "text-s-max")
+    end
+
+    test "desktop-only override keeps default mobile endpoint" do
+      assert {:ok, token_set, _} =
+               AutomaticCSS.normalize(d0e2_text_scale_settings(%{"text-s-max" => 15}))
+
+      token = text_s_token(token_set)
+
+      assert token.value["inputs"]["desktop_endpoint_override_px"] == 15.0
+      refute Map.has_key?(token.value["inputs"], "mobile_endpoint_override_px")
+
+      assert token.metadata["css_expression"] ==
+               FluidClamp.from_px_pair(16 / 1.2, 15, 360, 1366)
+
+      assert_text_s_provenance!(token, 0, 1)
+      refute Map.has_key?(token.provenance["raw_value"], "text-s-min")
+      assert token.provenance["raw_value"]["text-s-max"] == 15
+    end
+
+    test "present numeric zero is not treated as absent" do
+      assert {:ok, token_set, _} =
+               AutomaticCSS.normalize(d0e2_text_scale_settings(%{"text-s-min" => 0}))
+
+      token = text_s_token(token_set)
+      assert token.value["inputs"]["mobile_endpoint_override_px"] == 0.0
+      assert token.resolution_status == :resolved
+    end
+
+    test "numeric string overrides fail closed with diagnostics" do
+      for {key, value} <- [{"text-s-min", "14"}, {"text-s-max", "15.0"}, {"text-s-min", " 14 "}] do
+        assert {:ok, token_set, diagnostics} =
+                 AutomaticCSS.normalize(d0e2_text_scale_settings(%{key => value}))
+
+        token = text_s_token(token_set)
+        assert token.resolution_status == :unresolved
+
+        assert Enum.any?(diagnostics, fn diagnostic ->
+                 diagnostic.path == "typography.body.scale.small" and
+                   diagnostic.code == "acss.value.unresolved"
+               end)
+      end
+    end
+
+    test "malformed present overrides fail closed with diagnostics" do
+      for {key, value} <- [{"text-s-min", "bad"}, {"text-s-max", "bad"}] do
+        assert {:ok, token_set, diagnostics} =
+                 AutomaticCSS.normalize(d0e2_text_scale_settings(%{key => value}))
+
+        token = text_s_token(token_set)
+        assert token.resolution_status == :unresolved
+
+        assert Enum.any?(diagnostics, fn diagnostic ->
+                 diagnostic.path == "typography.body.scale.small" and
+                   diagnostic.code == "acss.value.unresolved"
+               end)
+      end
+    end
+  end
+
+  test "FluidClamp text-m and text-l regressions stay unchanged" do
+    inputs = %{
+      "mobile_base" => 16.0,
+      "desktop_base" => 18.0,
+      "mobile_scale" => 1.2,
+      "desktop_scale" => 1.333,
+      "viewport_min" => 360.0,
+      "viewport_max" => 1366.0,
+      "calculation_group" => "text"
+    }
+
+    assert FluidClamp.css_expression(%{
+             "recipe" => "acss.clamp",
+             "variable" => "text-m",
+             "inputs" => inputs
+           }) == FluidClamp.from_px_pair(16, 18, 360, 1366)
+
+    assert FluidClamp.css_expression(%{
+             "recipe" => "acss.clamp",
+             "variable" => "text-l",
+             "inputs" => inputs
+           }) == FluidClamp.from_px_pair(16 * 1.2, 18 * 1.333, 360, 1366)
   end
 
   test "serializes the complete fixture deterministically across source map orders" do

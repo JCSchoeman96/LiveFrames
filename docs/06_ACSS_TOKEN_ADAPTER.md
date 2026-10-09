@@ -300,12 +300,13 @@ output alias. The alias authority IDs follow
 variables. Contextual gaps retain semantic references to the scale tokens.
 The spacing and section values preserve their respective ACSS clamp inputs.
 
-### Typography (9)
+### Typography (10)
 
 ~~~text
 typography.body.base_size
 typography.body.scale
 typography.body.scale.medium
+typography.body.scale.small
 typography.body.line_height
 typography.heading.base_size
 typography.heading.scale
@@ -315,9 +316,14 @@ typography.heading.font_weight
 ~~~
 
 Base sizes are responsive pairs from the demonstrated mobile and desktop
-settings. Line-height expressions remain source CSS expressions. Heading font
-weight uses the exported `heading-weight` setting when present, otherwise the
-Automatic.css SCSS default `700`.
+settings. `typography.body.scale.small` uses the `acss.clamp` recipe with
+frozen `scale_power = -1`, default mobile/desktop endpoints derived from the
+body scale settings, and independent optional overrides from `text-s-min` /
+`text-s-max` when those keys are present as JSON numbers. TokenSet
+remains **1.0.0**; `--text-s` is a calculated output alias only. Line-height
+expressions remain source CSS expressions. Heading font weight uses the
+exported `heading-weight` setting when present, otherwise the Automatic.css
+SCSS default `700`.
 
 ### Primary button (21)
 

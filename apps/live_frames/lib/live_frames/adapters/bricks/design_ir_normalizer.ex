@@ -34,9 +34,18 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Styles.StructuralVariableAuthority
+  alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.VariableAuthority
 
   @bricks_container_width_default "1100px"
+  @radius_canonicalization_properties MapSet.new([
+                                        "border-radius",
+                                        "border-top-left-radius",
+                                        "border-top-right-radius",
+                                        "border-bottom-right-radius",
+                                        "border-bottom-left-radius"
+                                      ])
+  @grid_gap_multiply_expression ~r/^\s*calc\s*\(\s*var\s*\(\s*--grid-gap\s*\)\s*\*\s*(\d+(?:\.\d+)?|\.\d+)\s*\)\s*$/i
   @valid_width_length ~r/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ch|vw|vh|vmin|vmax|ex|cm|mm|in|pt|pc)$/i
   @direct_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*\)\s*$/
   @fallback_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*,\s*(.*)\)\s*$/s
@@ -1058,7 +1067,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
             )
 
           :error ->
-            normalize_non_direct_style(value, trace, metadata)
+            normalize_non_direct_style(value, property, authority_index, trace, metadata)
         end
     end
   end
@@ -1070,8 +1079,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     )
   end
 
-  defp normalize_non_direct_style(value, trace, metadata) do
+  defp normalize_non_direct_style(value, property, authority_index, trace, metadata) do
     cond do
+      calculation?(value) and grid_gap_expression?(value) ->
+        normalize_grid_gap_calculation(value, property, authority_index, trace, metadata)
+
       calculation?(value) ->
         StyleValue.calculation(value,
           source_expression: value,
@@ -1141,14 +1153,29 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           "token_unresolved"
         )
 
-      {:ambiguous_candidates, _candidates} ->
-        unresolved_authority_style(
-          value,
-          trace,
-          metadata,
-          authority_metadata,
-          "mapping_ambiguous"
-        )
+      {:ambiguous_candidates, candidates} ->
+        case canonicalize_radius_variable(
+               variable,
+               property,
+               candidates,
+               authority_index
+             ) do
+          {:ok, token_path} ->
+            StyleValue.token_ref(token_path,
+              source_expression: value,
+              source_trace: trace,
+              metadata: Map.merge(metadata, authority_metadata)
+            )
+
+          :error ->
+            unresolved_authority_style(
+              value,
+              trace,
+              metadata,
+              authority_metadata,
+              "mapping_ambiguous"
+            )
+        end
 
       {:no_authority, []} ->
         resolve_structural_direct_variable(
@@ -1337,6 +1364,137 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       source_expression: value,
       source_trace: trace,
       metadata: metadata
+    )
+  end
+
+  defp canonicalize_radius_variable("--radius", property, candidates, authority_index) do
+    if not MapSet.member?(@radius_canonicalization_properties, property) do
+      :error
+    else
+      base =
+        Enum.find(candidates, fn candidate ->
+          candidate.token_path == "radius.base" and candidate.resolution_status == :resolved
+        end)
+
+      others = Enum.reject(candidates, &(&1.token_path == "radius.base"))
+
+      cond do
+        is_nil(base) ->
+          :error
+
+        Enum.all?(others, &radius_semantic_reference_to_base?(&1, authority_index)) ->
+          {:ok, "radius.base"}
+
+        true ->
+          :error
+      end
+    end
+  end
+
+  defp canonicalize_radius_variable(_variable, _property, _candidates, _authority_index),
+    do: :error
+
+  defp radius_semantic_reference_to_base?(candidate, authority_index) do
+    case Map.get(authority_index.tokens_by_path, candidate.token_path) do
+      %Token{resolution_status: :resolved, references: references, value: value} ->
+        candidate.resolution_status == :resolved and references == ["radius.base"] and
+          Map.get(value, "type") == "reference" and Map.get(value, "path") == "radius.base"
+
+      _ ->
+        false
+    end
+  end
+
+  defp grid_gap_expression?(value), do: String.contains?(value, "--grid-gap")
+
+  defp normalize_grid_gap_calculation(value, property, authority_index, trace, metadata) do
+    if property != "gap" do
+      unresolved_grid_gap_calculation(value, trace, metadata, "grid_gap_wrong_property")
+    else
+      case parse_grid_gap_multiply(value) do
+        {:ok, factor} ->
+          case grid_gap_authority(authority_index) do
+            :ok ->
+              calculation = %{
+                "operation" => "multiply",
+                "operands" => [
+                  %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+                  %{"kind" => "literal", "value" => factor}
+                ]
+              }
+
+              StyleValue.calculation(calculation,
+                source_expression: value,
+                source_trace: trace,
+                metadata: metadata
+              )
+
+            {:error, reason} ->
+              unresolved_grid_gap_calculation(value, trace, metadata, reason)
+          end
+
+        :error ->
+          unresolved_grid_gap_calculation(
+            value,
+            trace,
+            metadata,
+            "grid_gap_expression_unsupported"
+          )
+      end
+    end
+  end
+
+  defp parse_grid_gap_multiply(value) do
+    case Regex.run(@grid_gap_multiply_expression, String.trim(value)) do
+      [_, factor] -> parse_positive_rational(factor)
+      _ -> :error
+    end
+  end
+
+  defp parse_positive_rational(factor) do
+    cond do
+      String.starts_with?(factor, "+") ->
+        :error
+
+      String.contains?(factor, ["e", "E", "/"]) ->
+        :error
+
+      true ->
+        case Float.parse(factor) do
+          {number, ""} -> parse_positive_finite(number)
+          _ -> :error
+        end
+    end
+  end
+
+  defp parse_positive_finite(number) when is_integer(number) and number > 0,
+    do: {:ok, number * 1.0}
+
+  defp parse_positive_finite(number) when is_float(number) and number > 0 and number == number,
+    do: {:ok, number}
+
+  defp parse_positive_finite(_number), do: :error
+
+  defp grid_gap_authority(authority_index) do
+    resolution = VariableAuthority.resolve(authority_index, "--grid-gap")
+
+    case resolution do
+      %{
+        state: :unique_candidate,
+        candidates: [%{token_path: "spacing.grid_gap", resolution_status: :resolved}]
+      } ->
+        :ok
+
+      _ ->
+        {:error, "grid_gap_authority_invalid"}
+    end
+  end
+
+  defp unresolved_grid_gap_calculation(value, trace, metadata, reason) do
+    StyleValue.unresolved(value,
+      source_expression: value,
+      source_trace: trace,
+      metadata: Map.put(metadata, "resolution_reason", reason)
     )
   end
 

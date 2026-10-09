@@ -6,6 +6,7 @@ defmodule LiveFrames.Styling.AssetsDriftTest do
 
   @fixture Path.expand("../../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   @mapping Path.expand("../../../priv/token_maps/native_hero_v1.json", __DIR__)
+  @shared_mapping Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
   @compiled Path.expand("../../../priv/static/live_frames/css/live_frames.css", __DIR__)
   @theme Path.expand("../../../assets/css/theme/lf_theme.css", __DIR__)
 
@@ -18,8 +19,8 @@ defmodule LiveFrames.Styling.AssetsDriftTest do
         source_version_status: "fixture_reference"
       )
 
-    mapping = TokenBridge.load_mapping!(@mapping)
-    assert {:ok, generated} = TokenBridge.generate(token_set, mapping)
+    mappings = [TokenBridge.load_mapping!(@shared_mapping), TokenBridge.load_mapping!(@mapping)]
+    assert {:ok, generated} = TokenBridge.generate(token_set, mappings)
     assert File.read!(@theme) == generated
   end
 
