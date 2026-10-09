@@ -30,6 +30,18 @@ defmodule LiveFrames.NativeGenerator.StylesheetRendererTest do
     assert {:ok, ""} = StylesheetRenderer.render(@private_class, %{})
   end
 
+  test "renders only the two approved semantic pseudo states" do
+    styles = %{"outline-style" => StyleValue.keyword("solid")}
+
+    assert {:ok, ".#{@private_class}:focus-visible {\n  outline-style: solid;\n}\n"} =
+             StylesheetRenderer.render_pseudo(@private_class, :focus_visible, styles)
+
+    assert {:error, diagnostic} =
+             StylesheetRenderer.render_pseudo(@private_class, :active, styles)
+
+    assert diagnostic.code == "native_generator.styling.css_serialization_failed"
+  end
+
   test "renders broader responsive max-width overrides before narrower ones" do
     overrides = [
       %ResponsiveOverride{

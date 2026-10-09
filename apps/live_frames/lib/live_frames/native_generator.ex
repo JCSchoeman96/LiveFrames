@@ -6,11 +6,11 @@ defmodule LiveFrames.NativeGenerator do
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.IR.DesignDocument
-  alias LiveFrames.IR.DesignNode
   alias LiveFrames.NativeGenerator.Artifact
   alias LiveFrames.NativeGenerator.Diagnostic
   alias LiveFrames.NativeGenerator.GeneratedArtifactBundle
   alias LiveFrames.NativeGenerator.Renderer
+  alias LiveFrames.NativeGenerator.StyleIntegration
 
   @type diagnostic ::
           ComponentContract.Diagnostic.t()
@@ -24,16 +24,17 @@ defmodule LiveFrames.NativeGenerator do
   def generate(contract, plan, design_document) do
     with :ok <- gate_contract(contract, design_document),
          :ok <- gate_plan(plan, contract, design_document),
-         {:ok, nodes_by_id} <- index_document(design_document),
+         {:ok, styling} <- StyleIntegration.build(contract, plan, design_document),
          {:ok, indexes} <-
            Renderer.build_indexes(
              contract,
              plan,
-             nodes_by_id,
-             normalize_registry(design_document.value_bindings)
+             styling.nodes_by_id,
+             normalize_registry(design_document.value_bindings),
+             styling.private_class_by_id
            ),
          {:ok, source} <- Renderer.render_module(indexes),
-         {:ok, bundle} <- build_bundle(contract, plan, design_document, indexes, source) do
+         {:ok, bundle} <- build_bundle(contract, plan, design_document, indexes, source, styling) do
       {:ok, bundle}
     else
       {:error, :generation_blocked, diagnostics} ->
@@ -61,23 +62,6 @@ defmodule LiveFrames.NativeGenerator do
     end
   end
 
-  defp index_document(%DesignDocument{root_nodes: roots}) do
-    nodes_by_id =
-      Enum.reduce(roots, %{}, fn node, acc ->
-        index_node(node, acc)
-      end)
-
-    {:ok, nodes_by_id}
-  end
-
-  defp index_node(%DesignNode{} = node, acc) do
-    acc = Map.put(acc, node.node_id, node)
-
-    Enum.reduce(node.children, acc, fn child, child_acc ->
-      index_node(child, child_acc)
-    end)
-  end
-
   defp normalize_registry(registry) when is_map(registry) do
     Enum.reduce(registry, %{}, fn {id, value}, acc ->
       Map.put(acc, to_string(id), value)
@@ -86,25 +70,34 @@ defmodule LiveFrames.NativeGenerator do
 
   defp normalize_registry(_registry), do: %{}
 
-  defp build_bundle(contract, plan, design_document, indexes, source) do
+  defp build_bundle(contract, plan, design_document, indexes, source, styling) do
     with {:ok, design_document_sha256} <-
            ComponentizationPlan.design_document_sha256(design_document),
          {:ok, plan_bytes} <- ComponentizationPlan.encode(plan) do
       plan_fingerprint =
         :crypto.hash(:sha256, plan_bytes) |> Base.encode16(case: :lower)
 
-      artifact = %Artifact{
-        kind: :elixir_module,
-        path: indexes.artifact_path,
-        content: source
-      }
+      artifacts =
+        [
+          %Artifact{
+            kind: :elixir_module,
+            path: indexes.artifact_path,
+            content: source
+          },
+          %Artifact{
+            kind: :stylesheet,
+            path: styling.stylesheet_path,
+            content: styling.stylesheet_content
+          }
+        ]
+        |> Enum.sort_by(& &1.path)
 
       {:ok,
        %GeneratedArtifactBundle{
          contract_id: contract.contract_id,
          design_document_sha256: design_document_sha256,
          plan_fingerprint: plan_fingerprint,
-         artifacts: [artifact]
+         artifacts: artifacts
        }}
     else
       {:error, diagnostics} -> {:error, diagnostics}
