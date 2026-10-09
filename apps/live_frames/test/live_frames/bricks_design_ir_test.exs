@@ -1798,4 +1798,156 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert small.metadata["css_expression"] ==
              "clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem)"
   end
+
+  @tag :cta_tango_private_reference
+  test "CTA Tango R5 full style-coverage proof (read-only reference)" do
+    path = cta_tango_reference_path()
+
+    if is_nil(path) do
+      IO.warn("CTA Tango private reference unavailable; skipping R5 proof assertions")
+    else
+      run_cta_tango_r5_proof(path)
+    end
+  end
+
+  defp run_cta_tango_r5_proof(cta_path) do
+    settings =
+      Jason.decode!(File.read!(@token_fixture_path))
+      |> Map.merge(%{
+        "base-text-mob" => 16,
+        "base-text-desk" => 18,
+        "mob-text-scale" => 1.2,
+        "text-scale" => 1.333,
+        "vp-min" => 360,
+        "vp-max" => 1366,
+        "text-s-min" => 14,
+        "text-s-max" => 15
+      })
+
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.normalize(settings,
+               strict: true,
+               profile: :hero_foundation,
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
+
+    assert {:ok, structural_authority} =
+             AutomaticCSS.structural_variable_authority("4.0.1", grid_variables_enabled: true)
+
+    assert {:ok, document} =
+             Bricks.to_ir(cta_path,
+               component_id: "hxambs",
+               token_set: token_set,
+               structural_variable_authority: structural_authority
+             )
+
+    inner = node_by_source_id(document, "775f40")
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "minmax(0, 3fr) minmax(0, 2fr)"
+           } = inner.styles["grid-template-columns"]
+
+    assert %StyleValue{kind: :calculation, value: gap_calculation} = inner.styles["gap"]
+    assert gap_calculation["operation"] == "multiply"
+
+    assert hd(gap_calculation["operands"]) == %{
+             "kind" => "token_ref",
+             "path" => "spacing.grid_gap"
+           }
+
+    assert List.last(gap_calculation["operands"]) == %{"kind" => "literal", "value" => 2.0}
+    refute Jason.encode!(gap_calculation) =~ "--grid-gap"
+
+    tablet = inner.responsive["tablet_portrait"]
+
+    assert %StyleValue{kind: :literal, value: "repeat(1, minmax(0, 1fr))"} =
+             tablet.styles["grid-template-columns"]
+
+    image_group = node_by_source_id(document, "0531fc")
+
+    assert %StyleValue{kind: :literal, value: "repeat(2, minmax(0, 1fr))"} =
+             image_group.styles["grid-template-columns"]
+
+    assert %StyleValue{kind: :literal, value: "repeat(1, minmax(0, 1fr))"} =
+             image_group.styles["grid-template-rows"]
+
+    assert %StyleValue{kind: :literal, value: "675px"} = image_group.styles["min-height"]
+    assert %StyleValue{kind: :keyword, value: "nowrap"} = image_group.styles["flex-wrap"]
+
+    first_wrapper = node_by_source_id(document, "1171e1")
+    assert %StyleValue{kind: :literal, value: "1 / -1"} = first_wrapper.styles["grid-column"]
+    assert %StyleValue{kind: :literal, value: "90%"} = first_wrapper.styles["width"]
+
+    second_wrapper = node_by_source_id(document, "806d86")
+    assert %StyleValue{kind: :literal, value: "100%"} = second_wrapper.styles["width"]
+    assert %StyleValue{kind: :literal, value: "16/9"} = second_wrapper.styles["aspect-ratio"]
+
+    third_wrapper = node_by_source_id(document, "fc5f68")
+    assert %StyleValue{kind: :literal, value: "100%"} = third_wrapper.styles["width"]
+    assert %StyleValue{kind: :literal, value: "5/3.5"} = third_wrapper.styles["aspect-ratio"]
+
+    radius_properties = [
+      "border-top-left-radius",
+      "border-top-right-radius",
+      "border-bottom-right-radius",
+      "border-bottom-left-radius"
+    ]
+
+    for image_id <- ["0a0447", "b3b3c9", "b266bb"] do
+      image = node_by_source_id(document, image_id)
+      assert image.semantic_type == "image"
+
+      for property <- radius_properties do
+        assert %StyleValue{kind: :token_ref, value: "radius.base"} = image.styles[property]
+      end
+    end
+
+    accent = node_by_source_id(document, "a29aa8")
+
+    assert %StyleValue{kind: :token_ref, value: "typography.body.scale.small"} =
+             accent.styles["font-size"]
+
+    small = token_set.tokens["typography.body.scale.small"]
+
+    assert small.metadata["css_expression"] ==
+             "clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem)"
+
+    all_nodes = flatten(document.root_nodes)
+
+    all_style_entries =
+      Enum.flat_map(all_nodes, fn node ->
+        base_styles = Map.to_list(node.styles)
+
+        responsive_styles =
+          node.responsive
+          |> Map.values()
+          |> Enum.flat_map(&Map.to_list(&1.styles))
+
+        base_styles ++ responsive_styles
+      end)
+
+    refute Enum.any?(all_style_entries, fn {property, style} ->
+             property == "custom-css" or style.kind == :complex_css
+           end)
+
+    semantic_values =
+      all_style_entries
+      |> Enum.map(fn {_property, style} -> style.value end)
+      |> Jason.encode!()
+
+    for source_only_value <- [
+          "--grid-",
+          "--grid-gap",
+          "--radius",
+          "--text-s",
+          ".image-group-tango",
+          ":first-child",
+          ":nth-child",
+          "_cssCustom"
+        ] do
+      refute semantic_values =~ source_only_value
+    end
+  end
 end

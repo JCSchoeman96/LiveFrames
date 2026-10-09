@@ -2,7 +2,7 @@
 
 **Authoritative architecture roadmap:** [`00_LIVEFRAMES_MASTER_SPEC.md`](00_LIVEFRAMES_MASTER_SPEC.md)
 
-**Current repository checkpoint:** `518b382c73418da97cd6908c84f49b1d03f78bfa`
+**Current repository checkpoint:** `3b18f94bb0ca960a4dcb6af441776addb8109b7a` (accepted main base for R5; the R5 branch is pending review and merge)
 
 ## Execution status (post–Phase 6, C09 programme)
 
@@ -14,7 +14,7 @@
 - **G1 architecture/spec (docs/23–24):** approved written architecture; historical “implementation NOT AUTHORIZED” language refers to the pre-#48 programme gate, not denial that library Catalogue code exists today
 - **Native Phoenix/HEEx generator (C09D6-C):** implemented / merged on `main` (PR #135 — `c09e6fd721e003ce65ffd46c359adc027cf70efb`); emission surface frozen in [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md) **v6 / C09D6-C0** (§10.4.1, §10.10–§10.17)
 - **Reviewer approval (C09D6-B):** implemented / accepted on `main` (PR #134 — `ComponentReview`, shared `validate_generation_prerequisites/3`)
-- **C09D6-D0 (CTA Tango style-coverage preflight):** **complete / BLOCKED** — [`docs/development/c09d6d_cta_tango_style_coverage_preflight.md`](development/c09d6d_cta_tango_style_coverage_preflight.md) (`C09D6_D_STYLE_COVERAGE=BLOCKED`); **D0 must be rerun** after upstream G-* gaps close (R5)
+- **C09D6-D0 (CTA Tango style-coverage preflight):** R5 full 30-row verification **PASS candidate / pending review and merge** — [`docs/development/c09d6d_cta_tango_style_coverage_preflight.md`](development/c09d6d_cta_tango_style_coverage_preflight.md) (`R5_VERIFICATION=PASS`, `R5_EVIDENCE_STATE=verified`); D1 remains unauthorized until R5 acceptance
 - **D0E1 (ACSS 4.0.1 structural grid evidence):** **complete / merged** (PR #138) — [`docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md`](evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md)
 - **D0E2 (ACSS 4.0.1 text-scale evidence):** **complete / merged** (PR #139) — [`docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md`](evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md)
 - **C09D6-D0R1 (upstream styling gap authority):** **complete / merged / accepted** (PR #140 — `fa5a6f3991427d5af4ffa0d1bb66313f920a8660`) — [`docs/development/c09d6d_upstream_style_gap_resolution_authority.md`](development/c09d6d_upstream_style_gap_resolution_authority.md); freezes G-* architecture for R2–R5
@@ -22,11 +22,11 @@
 - **R2 (G-GRID-STRUCT):** complete / merged / accepted (PR #141)
 - **C09D6-D0R2A (Design IR 3.0.0 + `docs/03` + structured semantic calculation):** complete / merged / accepted (PR #142)
 - **R3 (shared token / value normalization):** complete / merged / accepted (PR #143 — `518b382c73418da97cd6908c84f49b1d03f78bfa`)
-- **R4 (G-CUSTOM-CSS bounded normalization):** in implementation / review; not accepted on `main` until R4 PR merges
-- **R5 (upstream implementation):** **not authorized** until R4 is accepted and merged
-- **D1 (C09D6-D native styling generator):** **not authorized** — requires R5 D0 rerun PASS
+- **R4 (G-CUSTOM-CSS bounded normalization):** complete / merged / accepted (PR #144; approved head `1e6e99615abcaab1d68f5aaa29376263bcdc526b`)
+- **R5 (CTA Tango full style-coverage rerun):** verification PASS candidate; pending review and merge; evidence state is `verified`, not accepted
+- **D1 (C09D6-D native styling generator):** **not authorized** until R5 is merged, independently verified, and accepted
 - **C09D7-A (componentization):** **not authorized** — downstream of successful C09D6-D programme
-- **Native styling generator (C09D6-D / D1):** **not authorized** — blocked until R5 D0 rerun passes; see D0R1 dependency graph
+- **Native styling generator (C09D6-D / D1):** **not authorized** until R5 is merged, independently verified, and accepted; see D0R1 dependency graph
 - **P10 consumer ejection:** **not implemented** / not authorized
 - **Next static native tracer (provisional):** CTA Tango — **provisional**; componentization (C09D7-A) **not authorized** until C09D6-D succeeds (sequence remains C → D → D7-A)
 
