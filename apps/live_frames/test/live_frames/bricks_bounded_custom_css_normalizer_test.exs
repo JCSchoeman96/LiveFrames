@@ -445,6 +445,76 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
              end)
     end
 
+    test "R4_UNTERMINATED_COMMENT_AFTER_VALID_RULE_FAILS_CLOSED=PASS trailing unterminated comment fails blob closed" do
+      css = """
+      .image-group-tango {
+        min-height: 675px;
+      }
+
+      /* unterminated comment
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+
+      assert %StyleValue{kind: :complex_css, value: %{"rules" => [rule_text]}} =
+               owner.styles["custom-css"]
+
+      assert rule_text =~ "unterminated comment"
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_UNTERMINATED_LEADING_COMMENT_FAILS_CLOSED=PASS leading unterminated comment fails blob closed" do
+      css = """
+      /* unterminated comment
+      .image-group-tango {
+        min-height: 675px;
+      }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      refute Map.has_key?(owner.styles, "min-height")
+      assert %StyleValue{kind: :complex_css} = owner.styles["custom-css"]
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.bounded_custom_css.framing_ambiguous"
+             end)
+    end
+
+    test "R4_TERMINATED_COMMENT_TRIVIA_REGRESSION=PASS properly closed comments are skipped as trivia" do
+      css = """
+      /* trivia before CCS-01 */
+      .image-group-tango {
+        min-height: 675px;
+      }
+      """
+
+      document =
+        normalize_cta_document(
+          css_custom: css,
+          global_classes: default_global_classes(css)
+        )
+
+      owner = node_by_source_id(document, @owner_id)
+      assert %StyleValue{kind: :literal, value: "675px"} = owner.styles["min-height"]
+      refute_complex_custom_css?(owner)
+    end
+
     test "R4_PARSED_PLUS_UNPARSEABLE_DUPLICATE_FAILS_CLOSED=PASS malformed duplicate invalidates first occurrence" do
       css = """
       .image-group-tango {

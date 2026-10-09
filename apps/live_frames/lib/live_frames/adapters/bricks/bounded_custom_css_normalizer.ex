@@ -503,22 +503,26 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp scan_flat_blocks(blob, index, blocks) do
-    index = skip_trivia(blob, index)
+    case skip_trivia(blob, index) do
+      {:error, _reason, _detail} = error ->
+        error
 
-    cond do
-      index >= byte_size(blob) ->
-        {:ok, Enum.reverse(blocks)}
+      {:ok, index} ->
+        cond do
+          index >= byte_size(blob) ->
+            {:ok, Enum.reverse(blocks)}
 
-      :binary.at(blob, index) == ?} ->
-        {:error, :unmatched_closing_brace, index}
+          :binary.at(blob, index) == ?} ->
+            {:error, :unmatched_closing_brace, index}
 
-      true ->
-        case read_flat_block(blob, index) do
-          {:ok, frame, next_index} ->
-            scan_flat_blocks(blob, next_index, [frame | blocks])
+          true ->
+            case read_flat_block(blob, index) do
+              {:ok, frame, next_index} ->
+                scan_flat_blocks(blob, next_index, [frame | blocks])
 
-          {:error, _reason, _detail} = error ->
-            error
+              {:error, _reason, _detail} = error ->
+                error
+            end
         end
     end
   end
@@ -610,23 +614,24 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   defp skip_trivia(blob, index) do
     cond do
       index >= byte_size(blob) ->
-        index
+        {:ok, index}
 
       index + 1 < byte_size(blob) and :binary.part(blob, index, 2) == "/*" ->
+        comment_start = index
         comment_body_start = index + 2
 
         case :binary.match(blob, "*/", [
                {:scope, {comment_body_start, byte_size(blob) - comment_body_start}}
              ]) do
           {close_start, _close_length} -> skip_trivia(blob, close_start + 2)
-          :nomatch -> byte_size(blob)
+          :nomatch -> {:error, :unterminated_comment, comment_start}
         end
 
       :binary.at(blob, index) in [?\s, ?\n, ?\r, ?\t] ->
         skip_trivia(blob, index + 1)
 
       true ->
-        index
+        {:ok, index}
     end
   end
 
