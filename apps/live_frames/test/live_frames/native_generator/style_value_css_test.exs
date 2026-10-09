@@ -108,7 +108,7 @@ defmodule LiveFrames.NativeGenerator.StyleValueCSSTest do
     assert {:ok, css_value} == StyleValueCSS.serialize(second)
   end
 
-  test "rejects unsafe values and non-finite literals" do
+  test "rejects unsafe values and non-numeric literals" do
     assert {:error, :unsafe_css_value} =
              StyleValueCSS.serialize(StyleValue.literal("red;display:none"))
 

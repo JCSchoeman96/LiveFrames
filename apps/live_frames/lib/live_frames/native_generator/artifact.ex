@@ -1,7 +1,7 @@
 defmodule LiveFrames.NativeGenerator.Artifact do
   @moduledoc false
 
-  @type kind :: :elixir_module
+  @type kind :: :elixir_module | :stylesheet
 
   @type t :: %__MODULE__{
           kind: kind(),
