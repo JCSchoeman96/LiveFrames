@@ -56,8 +56,10 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   selector identity, native style-locus rules, mechanical StyleValue-to-CSS
   emission, TokenBridge ownership, responsive ordering, primary-action source
   isolation, stylesheet artifact paths, import-graph ownership, and the styling
-  lifecycle and terminal behavior. Accepted in PR #160; D1D merged as
-  `3e75c70433aac1f783221b0c6de3af43679598da` with post-merge CI `37961704551` passing.
+  lifecycle and terminal behavior. The D1A/v7 authority was accepted via PR #152
+  (merge `de6dc96f3a852f7b5fc67b051b3ee04406ac8b1b`). D1D implementation later
+  completed via PR #160 (merge `3e75c70433aac1f783221b0c6de3af43679598da`;
+  post-merge CI `37961704551` passed).
 
 ---
 
@@ -126,8 +128,8 @@ merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`). Short pointers:
 | Production Registry at compile time | **empty** membership (no canonical Hero Catalogue manifest) |
 | C09D6-C0 native emission authority | **merged / accepted** (PR #136) |
 | C09D6-C native component generator | **implemented / merged on `main`** (PR #135; merge `c09e6fd721e003ce65ffd46c359adc027cf70efb`) |
-| C09D6-D1A / v7 native styling authority | **accepted** (PR #160; approved head `1fb01cf9359af3fc01119663aeaf8e79796c6169`) |
-| C09D6-D1 native styling implementation | **complete / merged / accepted** (merge `3e75c70433aac1f783221b0c6de3af43679598da`; post-merge CI `37961704551` passed) |
+| C09D6-D1A / v7 native styling authority | **accepted** (PR #152; approved head `8f45f177a115a88744ac9c1e907eba4ebccf131a`; merge `de6dc96f3a852f7b5fc67b051b3ee04406ac8b1b`) |
+| C09D6-D1 native styling implementation | **complete / merged / accepted** (PR #160; approved head `1fb01cf9359af3fc01119663aeaf8e79796c6169`; merge `3e75c70433aac1f783221b0c6de3af43679598da`; post-merge CI `37961704551` passed) |
 | C09D7-A CTA Tango componentization | **authorized to begin**; no component contract or plan decisions are accepted |
 | C09D7-B CTA generation + browser verification | **downstream / not authorized** |
 | C09D7-C consumer proof / Catalogue handoff | **downstream / not authorized** |
