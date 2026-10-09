@@ -10,13 +10,14 @@ This document does not implement Disclosure or BehaviorContract. It does not def
 
 ```text
 REPOSITORY=JCSchoeman96/LiveFrames
-BASE_SHA=ccac7ec157544fceff47eb2cdc959c7095e71a65
-BASE_TREE=7bc5400055f7644a03aa6efe4a6532b788d7339c
-POST_MERGE_CI=37923655109
+BASE_SHA=9d37aaf5169f8e59b38cda737f685b7fbf43d567
+BASE_TREE=91511a843a32e5f5f74da45c58d0fe91cd5b1298
+POST_MERGE_CI=37927023917
 POST_MERGE_CI_STATUS=completed
 POST_MERGE_CI_CONCLUSION=success
-POST_MERGE_CI_HEAD=ccac7ec157544fceff47eb2cdc959c7095e71a65
+POST_MERGE_CI_HEAD=9d37aaf5169f8e59b38cda737f685b7fbf43d567
 WORKTREE_CLEAN=YES
+PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 ```
 
 The branch starts at the exact accepted base above. This preflight is documentation-only.
@@ -25,7 +26,7 @@ The branch starts at the exact accepted base above. This preflight is documentat
 
 - `docs/development/c07x_unsupported_surface_inventory.md` records the accepted historical Slide Menu observations and their evidence limits.
 - `docs/development/frames_native_conversion_matrix.md` places Slide Menu Alpha as the Disclosure tracer and leaves nesting, current-page lifecycle, keyboard/ARIA details, transition timing, and cleanup unresolved.
-- `docs/09_INTERACTION_MODEL.md` owns the source-neutral BehaviorContract vocabulary, Disclosure state model, native realization preference, runtime lifecycle, client-local default, security, and performance rules.
+- `docs/09_INTERACTION_MODEL.md` has `STATUS=accepted architecture authority for future behavior work`, `AUTHORITY_REVISION=1.0.1`, and `IMPLEMENTATION_AUTHORIZED=NO`. PR #149 activated this status only; Disclosure semantics did not change. It owns the source-neutral BehaviorContract vocabulary, Disclosure state model, native realization preference, runtime lifecycle, client-local default, security, and performance rules.
 - `docs/03_DESIGN_IR_SPEC.md` owns Design IR meaning and does not define a Slide Menu current-page input here.
 - `docs/04_SOURCE_AND_PROVENANCE.md` owns source-use and provenance boundaries. This document adds no permission or source interpretation.
 - `docs/development/c09d1_component_contract_authority.md`, `c09d3_componentization_plan_authority.md`, `c09d5_componentization_proposer_authority.md`, and `c09d6_native_generation_authority.md` retain their respective component boundary, placement, proposer, review, generation, and styling roles. They do not authorize implementation in this preflight.
