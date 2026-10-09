@@ -295,11 +295,211 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              TokenBridge.generate(token_set, [shared, hero])
   end
 
+  test "rejects a repeated token path with the same css variable across package layers" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      }
+    ]
+
+    assert {:error, {:duplicate_css_variables, ["--lf-radius-base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "package mapping lookup returns unknown when a path has no candidates" do
+    assert {:error, {:unknown_token_path, "radius.missing"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(%{}, "radius.missing")
+  end
+
+  test "package mapping lookup returns the single candidate" do
+    assert {:ok, "--lf-radius-base"} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+               %{"radius.base" => ["--lf-radius-base"]},
+               "radius.base"
+             )
+  end
+
   test "single-mapping TokenBridge API remains unchanged" do
     mapping = TokenBridge.load_mapping!(@mapping)
     token_set = hero_token_set()
 
     assert {:ok, css} = TokenBridge.generate(token_set, mapping)
     refute css =~ "--lf-typography-body-size-small:"
+  end
+
+  test "looks up shared package CSS variables by exact semantic token path" do
+    assert {:ok, "--lf-typography-body-size-small"} =
+             TokenBridge.package_css_variable("typography.body.scale.small")
+
+    assert {:ok, "--lf-radius-base"} = TokenBridge.package_css_variable("radius.base")
+    assert {:ok, "--lf-space-grid-gap"} = TokenBridge.package_css_variable("spacing.grid_gap")
+  end
+
+  test "looks up primary action CSS variables from package metadata" do
+    assert {:ok, "--lf-action-primary-background"} =
+             TokenBridge.package_css_variable("button.primary.background")
+  end
+
+  test "fails explicitly for unknown and composed token paths" do
+    assert {:error, {:unknown_token_path, "unknown.path"}} =
+             TokenBridge.package_css_variable("unknown.path")
+
+    assert {:error, {:unknown_token_path, "spacing.gutter.min"}} =
+             TokenBridge.package_css_variable("spacing.gutter.min")
+  end
+
+  test "allows direct token paths to repeat across package layers" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-b"}]
+      }
+    ]
+
+    assert {:ok, index} = LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+
+    assert index == %{
+             "radius.base" => ["--lf-radius-a", "--lf-radius-b"]
+           }
+  end
+
+  test "reports ambiguous package lookup candidates in sorted order" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-z"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"}]
+      }
+    ]
+
+    assert {:ok, index} = LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+
+    assert {:error, {:ambiguous_token_mapping, "radius.base", ["--lf-radius-a", "--lf-radius-z"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(index, "radius.base")
+
+    assert {:ok, reversed_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(Enum.reverse(mappings))
+
+    assert LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+             reversed_index,
+             "radius.base"
+           ) ==
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(index, "radius.base")
+  end
+
+  test "rejects duplicate direct token paths within one package layer" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "one_layer",
+        "entries" => [
+          %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-a"},
+          %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-b"}
+        ]
+      }
+    ]
+
+    assert {:error, {:duplicate_token_set_paths, ["radius.base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects duplicate CSS variable ownership across package layers" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_a",
+        "entries" => [%{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-base"}]
+      },
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "layer_b",
+        "entries" => [
+          %{"token_set_path" => "radius.other", "css_variable" => "--lf-radius-base"}
+        ]
+      }
+    ]
+
+    assert {:error, {:duplicate_css_variables, ["--lf-radius-base"]}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects noncanonical semantic paths in package mapping metadata" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "invalid_path",
+        "entries" => [%{"token_set_path" => "../bad path", "css_variable" => "--lf-radius-base"}]
+      }
+    ]
+
+    assert {:error, {:invalid_token_set_path, "../bad path"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects mappings that combine compose and direct token paths" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "ambiguous_entry",
+        "entries" => [
+          %{
+            "compose" => %{
+              "type" => "fluid_px_pair",
+              "min" => "spacing.gutter.min",
+              "max" => "spacing.gutter.max",
+              "viewport_min" => "layout.viewport.min",
+              "viewport_max" => "layout.viewport.max"
+            },
+            "token_set_path" => "spacing.gutter.min",
+            "css_variable" => "--lf-space-gutter"
+          }
+        ]
+      }
+    ]
+
+    assert {:error, {:ambiguous_mapping_entry, "spacing.gutter.min"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
+
+  test "rejects noncanonical paths in package mapping compositions" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "invalid_compose_path",
+        "entries" => [
+          %{
+            "compose" => %{
+              "type" => "fluid_px_pair",
+              "min" => "../bad path",
+              "max" => "spacing.gutter.max",
+              "viewport_min" => "layout.viewport.min",
+              "viewport_max" => "layout.viewport.max"
+            },
+            "css_variable" => "--lf-space-gutter"
+          }
+        ]
+      }
+    ]
+
+    assert {:error, {:invalid_mapping_entry, _entry}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
   end
 end
