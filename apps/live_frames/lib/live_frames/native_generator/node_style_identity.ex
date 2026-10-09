@@ -22,17 +22,18 @@ defmodule LiveFrames.NativeGenerator.NodeStyleIdentity do
     index_nodes(root_nodes, [], package_root_class, index)
   end
 
-  defp index_nodes(nodes, parent_path, package_root_class, index) do
+  defp index_nodes(nodes, reversed_parent_path, package_root_class, index) do
     nodes
     |> Enum.with_index(1)
     |> Enum.reduce_while({:ok, index}, fn {node, position}, {:ok, acc} ->
-      path = parent_path ++ [position]
+      reversed_path = [position | reversed_parent_path]
+      path = Enum.reverse(reversed_path)
       expected_node_id = DesignNode.deterministic_id(path)
 
       if node.node_id == expected_node_id do
         node_index = put_node(acc, node, path, package_root_class)
 
-        case index_nodes(node.children, path, package_root_class, node_index) do
+        case index_nodes(node.children, reversed_path, package_root_class, node_index) do
           {:ok, updated_index} -> {:cont, {:ok, updated_index}}
           {:error, diagnostic} -> {:halt, {:error, diagnostic}}
         end
