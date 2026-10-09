@@ -130,7 +130,7 @@ Stage A maps only this deliberate setting subset:
 | `_objectFit`, `_objectPosition` | same object property |
 | `_background.color.raw` | `background` |
 | `_gradient` | validated linear `background-image` |
-| `_cssCustom` | preserved source CSS |
+| `_cssCustom` | default: preserved as `complex_css`; R4 bounded CTA Tango `image-group-tango` CCS-01..04 → node-local styles; unsupported selectors remain `complex_css` + diagnostic |
 
 Values containing declaration separators, braces, unsafe URL expressions, or
 ambiguous units are not executed or guessed. The Hero `_margin.top` value
@@ -155,10 +155,13 @@ that threshold.
 
 ## Custom CSS and dependencies
 
-Base `_cssCustom` text is copied into `styles.css` and represented with source
-trace in `report.json`. Responsive custom CSS is preserved in the report and
-as an explanatory source comment until its threshold is authoritative. Custom
-CSS is not parsed or executed by the adapter.
+Base `_cssCustom` is represented in Design IR as `complex_css` with source
+trace unless an authorized bounded normalization slice applies (R4: frozen CTA
+Tango `image-group-tango` CCS-01..04 only). Unsupported selectors or
+declaration mismatches remain `complex_css` with deterministic diagnostics; the
+adapter does not implement generic CSS selector matching. Stage A still copies
+source custom CSS into `styles.css` / `report.json` for fidelity; responsive
+custom CSS stays preserved until breakpoint thresholds are authoritative.
 
 Variable references are extracted from supported values and custom CSS,
 including nested fallbacks. Stage A and Design IR use the TokenSet's

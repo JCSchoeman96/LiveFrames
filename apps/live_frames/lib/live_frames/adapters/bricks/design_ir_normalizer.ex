@@ -7,6 +7,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   runtime values.
   """
 
+  alias LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer
   alias LiveFrames.Adapters.Bricks.ClassResolver
   alias LiveFrames.Adapters.Bricks.DependencyExtractor
   alias LiveFrames.Adapters.Bricks.Diagnostic, as: BricksDiagnostic
@@ -313,6 +314,14 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         trace_index: trace_index,
         frontend_bindings: frontend_bindings,
         source_diagnostics: source_diagnostics
+      })
+
+    bounded_custom_css = BoundedCustomCssNormalizer.normalize(context)
+
+    context =
+      Map.merge(context, %{
+        bounded_custom_css: bounded_custom_css,
+        source_diagnostics: context.source_diagnostics ++ bounded_custom_css.diagnostics
       })
 
     {assets, asset_ids_by_source} = build_assets(context, trace_index)
@@ -705,25 +714,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       end)
 
     styles =
-      Enum.reduce(style_result.custom_css.base, styles, fn value, styles ->
-        source_key = "_cssCustom"
-
-        Map.put(
-          styles,
-          "custom-css",
-          StyleValue.complex_css(
-            %{
-              "type" => "custom_css",
-              "property" => "custom-css",
-              "source_key" => source_key,
-              "rules" => [value]
-            },
-            source_expression: value,
-            source_trace: style_trace(trace, source_key),
-            metadata: %{"source_key" => source_key}
-          )
-        )
-      end)
+      styles
+      |> merge_bounded_custom_css_styles(element.id, context)
+      |> merge_custom_css_styles(style_result, trace, element.id, context)
 
     merge_intrinsic_styles(
       styles,
@@ -739,6 +732,60 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     |> Enum.filter(&(&1.breakpoint == nil and &1.state == :unresolved_precedence))
     |> Enum.map(& &1.property)
     |> MapSet.new()
+  end
+
+  defp merge_bounded_custom_css_styles(styles, source_id, context) do
+    bounded = Map.get(context, :bounded_custom_css, BoundedCustomCssNormalizer.empty_result())
+
+    case Map.get(bounded.styles_by_source_id, source_id) do
+      nil ->
+        styles
+
+      extra when map_size(extra) == 0 ->
+        styles
+
+      extra ->
+        Map.merge(styles, extra)
+    end
+  end
+
+  defp merge_custom_css_styles(styles, style_result, trace, source_id, context) do
+    bounded = Map.get(context, :bounded_custom_css, BoundedCustomCssNormalizer.empty_result())
+
+    values =
+      case Map.get(bounded.custom_css_mode_by_source_id, source_id) do
+        :consumed ->
+          []
+
+        :residual ->
+          case Map.get(bounded.residual_custom_css_by_source_id, source_id) do
+            residual when is_binary(residual) and residual != "" -> [residual]
+            _ -> style_result.custom_css.base
+          end
+
+        _ ->
+          style_result.custom_css.base
+      end
+
+    Enum.reduce(values, styles, fn value, styles ->
+      source_key = "_cssCustom"
+
+      Map.put(
+        styles,
+        "custom-css",
+        StyleValue.complex_css(
+          %{
+            "type" => "custom_css",
+            "property" => "custom-css",
+            "source_key" => source_key,
+            "rules" => [value]
+          },
+          source_expression: value,
+          source_trace: style_trace(trace, source_key),
+          metadata: %{"source_key" => source_key}
+        )
+      )
+    end)
   end
 
   defp style_declaration_trace(trace, declaration) do
