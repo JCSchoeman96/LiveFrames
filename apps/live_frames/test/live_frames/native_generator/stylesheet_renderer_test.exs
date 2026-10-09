@@ -63,16 +63,30 @@ defmodule LiveFrames.NativeGenerator.StylesheetRendererTest do
     }
 
     float_zero = %ResponsiveOverride{integer_zero | max_width: 0.0}
+    negative_zero = %ResponsiveOverride{integer_zero | max_width: -0.0}
 
     assert {:ok, integer_css} = StylesheetRenderer.render(@private_class, %{}, [integer_zero])
     assert {:ok, float_css} = StylesheetRenderer.render(@private_class, %{}, [float_zero])
+
+    assert {:ok, negative_zero_css} =
+             StylesheetRenderer.render(@private_class, %{}, [negative_zero])
+
     assert integer_css == float_css
+    assert integer_css == negative_zero_css
     assert integer_css =~ "@media (max-width: 0px)"
 
-    negative = %ResponsiveOverride{integer_zero | max_width: -1}
+    negative = %ResponsiveOverride{integer_zero | max_width: -0.1}
 
     assert {:error, diagnostic} = StylesheetRenderer.render(@private_class, %{}, [negative])
     assert diagnostic.code == "native_generator.styling.responsive_cascade_authority_gap"
+
+    negative_integer = %ResponsiveOverride{integer_zero | max_width: -1}
+
+    assert {:error, negative_integer_diagnostic} =
+             StylesheetRenderer.render(@private_class, %{}, [negative_integer])
+
+    assert negative_integer_diagnostic.code ==
+             "native_generator.styling.responsive_cascade_authority_gap"
   end
 
   test "combines disjoint overrides at one width and rejects property conflicts" do

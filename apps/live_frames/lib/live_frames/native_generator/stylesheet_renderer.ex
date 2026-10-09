@@ -124,6 +124,8 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
 
   defp serialize_width(width) when is_integer(width), do: {:ok, Integer.to_string(width)}
 
+  defp serialize_width(width) when is_float(width) and width == 0, do: {:ok, "0"}
+
   defp serialize_width(width) when is_float(width) do
     serialized = :erlang.float_to_binary(width, [:short])
 
