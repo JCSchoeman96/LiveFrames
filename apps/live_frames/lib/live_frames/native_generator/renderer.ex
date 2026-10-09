@@ -38,6 +38,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               collection_inputs_by_binding_id: %{},
               item_fields_by_collection: %{},
               package_root_class: nil,
+              private_class_by_id: %{},
               module_name: nil,
               function_name: nil,
               artifact_path: nil,
@@ -54,7 +55,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
   @spec build_indexes(ComponentContract.t(), ComponentizationPlan.t(), map(), map()) ::
           {:ok, Indexes.t()} | {:error, Diagnostic.t()}
-  def build_indexes(contract, plan, nodes_by_id, value_bindings) do
+  def build_indexes(contract, plan, nodes_by_id, value_bindings, private_class_by_id \\ %{}) do
     boundary_node = Map.get(nodes_by_id, plan.boundary_node_id)
 
     if boundary_node == nil do
@@ -126,6 +127,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          collection_inputs_by_binding_id: collection_inputs_by_binding_id,
          item_fields_by_collection: item_fields_by_collection,
          package_root_class: package_root_class(contract),
+         private_class_by_id: private_class_by_id,
          module_name: module_name(contract),
          function_name: contract.function_intent,
          artifact_path: artifact_path(contract),
@@ -1159,18 +1161,28 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp class_attr(indexes, node, roles, collection_stack, is_root?) do
     package? = is_root? and node.node_id == indexes.boundary_id
     consumer? = is_root? and Map.has_key?(roles, :root_class)
+    private_class = Map.get(indexes.private_class_by_id, node.node_id)
 
     cond do
       package? and consumer? ->
         expr = role_expr(indexes, node.node_id, :root_class, collection_stack)
-        " class={[#{inspect(indexes.package_root_class)}, #{expr || "nil"}]}"
+
+        " class={[#{inspect(indexes.package_root_class)}, #{inspect(private_class)}, #{expr || "nil"}]}"
 
       package? ->
-        " class={#{inspect(indexes.package_root_class)}}"
+        " class={[#{inspect(indexes.package_root_class)}, #{inspect(private_class)}]}"
 
       consumer? ->
         expr = role_expr(indexes, node.node_id, :root_class, collection_stack)
-        if expr, do: " class={#{expr}}", else: ""
+
+        if private_class do
+          " class={[#{inspect(private_class)}, #{expr || "nil"}]}"
+        else
+          if expr, do: " class={#{expr}}", else: ""
+        end
+
+      is_binary(private_class) ->
+        " class={#{inspect(private_class)}}"
 
       true ->
         ""

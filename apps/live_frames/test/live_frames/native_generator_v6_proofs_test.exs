@@ -58,7 +58,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
   defp generate_source(contract, plan, document) do
     case NativeGenerator.generate(contract, plan, document) do
       {:ok, bundle} ->
-        hd(bundle.artifacts).content
+        Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
 
       other ->
         flunk("expected generation success, got #{inspect(other)}")

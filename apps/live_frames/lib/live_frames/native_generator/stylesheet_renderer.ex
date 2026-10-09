@@ -32,6 +32,23 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
     end
   end
 
+  @spec render_pseudo(String.t(), :hover | :focus_visible, map()) ::
+          {:ok, String.t()} | {:error, Diagnostic.t()}
+  def render_pseudo(private_class, pseudo, styles) when pseudo in [:hover, :focus_visible] do
+    with :ok <- validate_private_class(private_class),
+         {:ok, declarations} <- serialize_styles(styles) do
+      suffix = if pseudo == :hover, do: ":hover", else: ":focus-visible"
+      css = render_block("." <> private_class <> suffix, declarations, 2)
+      if is_nil(css), do: {:ok, ""}, else: {:ok, css <> "\n"}
+    else
+      {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
+      {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
+  def render_pseudo(_private_class, _pseudo, _styles),
+    do: {:error, style_diagnostic(:unsupported_pseudo)}
+
   defp validate_private_class(class) when is_binary(class) do
     if Regex.match?(@selector_pattern, class), do: :ok, else: {:error, :unsafe_private_class}
   end

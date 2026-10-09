@@ -14,6 +14,7 @@ defmodule LiveFrames.NativeGeneratorTest do
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR.StyleValue
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR
   alias LiveFrames.NativeGenerator
@@ -108,6 +109,8 @@ defmodule LiveFrames.NativeGeneratorTest do
     end
   end
 
+  defp elixir_artifact(bundle), do: Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
+
   test "unapproved contract returns generation_blocked" do
     document = document()
     c = contract(approval_status: :proposed)
@@ -171,7 +174,7 @@ defmodule LiveFrames.NativeGeneratorTest do
       )
 
     bundle = generate!(c, p, document)
-    [artifact] = bundle.artifacts
+    artifact = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
 
     assert artifact.path == "lib/live_frames/components/sections/marketing_block.ex"
     assert artifact.content =~ "defmodule LiveFrames.Components.Sections.MarketingBlock"
@@ -207,7 +210,7 @@ defmodule LiveFrames.NativeGeneratorTest do
         )
 
       bundle = generate!(c, p, document)
-      [artifact] = bundle.artifacts
+      artifact = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
 
       assert artifact.path == unquote(path_segment)
       assert artifact.content =~ unquote("defmodule #{prefix}")
@@ -215,8 +218,108 @@ defmodule LiveFrames.NativeGeneratorTest do
     end
   end
 
+  test "generation returns sorted module and stylesheet artifacts with canonical classes" do
+    document = document()
+    [boundary] = document.root_nodes
+    [heading, paragraph] = boundary.children
+
+    document = %{
+      document
+      | root_nodes: [
+          %{
+            boundary
+            | styles: %{"display" => StyleValue.keyword("grid")},
+              children: [
+                %{heading | styles: %{"color" => StyleValue.literal("red")}},
+                paragraph
+              ]
+          }
+        ]
+    }
+
+    c = contract()
+    bundle = generate!(c, plan(c, document), document)
+    module = elixir_artifact(bundle)
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet))
+
+    assert length(bundle.artifacts) == 2
+    assert Enum.map(bundle.artifacts, & &1.kind) == [:stylesheet, :elixir_module]
+
+    assert Enum.map(bundle.artifacts, & &1.path) ==
+             Enum.sort(Enum.map(bundle.artifacts, & &1.path))
+
+    assert stylesheet.path == "assets/css/components/sections/marketing_block.css"
+    assert module.content =~ "lf-section-marketing-block"
+    assert module.content =~ "lf-section-marketing-block__n-000001"
+    assert module.content =~ "lf-section-marketing-block__n-000001-000001"
+    refute module.content =~ "lf-section-marketing-block__n-000001-000002"
+    assert stylesheet.content =~ ".lf-section-marketing-block__n-000001 {"
+    assert stylesheet.content =~ ".lf-section-marketing-block__n-000001-000001 {"
+    refute stylesheet.content =~ "000001-000002"
+  end
+
+  test "styled figure image blocks when the emitted style element cannot be proven" do
+    document = document()
+    [boundary] = document.root_nodes
+    image_id = DesignNode.deterministic_id([1, 3])
+
+    document = %{
+      document
+      | root_nodes: [
+          %{
+            boundary
+            | children:
+                boundary.children ++
+                  [
+                    %DesignNode{
+                      node_id: image_id,
+                      semantic_type: "image",
+                      attributes: %{"tag" => "figure"},
+                      styles: %{"object-fit" => StyleValue.keyword("cover")}
+                    }
+                  ]
+          }
+        ]
+    }
+
+    c =
+      contract(
+        public_attrs: [
+          attr("src", :string,
+            required: true,
+            accessibility: %{"image_alt_policy" => "decorative"}
+          )
+        ]
+      )
+
+    p = plan(c, document, render_projections: [render_attr("src", :asset_src, image_id)])
+
+    assert {:error, :generation_blocked, [diagnostic]} = NativeGenerator.generate(c, p, document)
+    assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+  end
+
   test "render projections for root, link, image accessibility, and subtree slot" do
     document = rich_document()
+
+    [boundary] = document.root_nodes
+
+    document = %{
+      document
+      | root_nodes: [
+          %{
+            boundary
+            | children:
+                Enum.map(boundary.children, fn
+                  %DesignNode{node_id: @actions_id} = actions ->
+                    %{actions | styles: %{"display" => StyleValue.keyword("grid")}}
+
+                  other ->
+                    other
+                end)
+          }
+        ]
+    }
+
     assert :ok = IR.validate(document)
 
     c =
@@ -287,13 +390,19 @@ defmodule LiveFrames.NativeGeneratorTest do
       )
 
     bundle = generate!(c, p, document)
-    source = hd(bundle.artifacts).content
+    source = elixir_artifact(bundle).content
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
 
     assert source =~ "Map.get(assigns, :title)"
     assert source =~ "case @level"
     assert source =~ "href={Map.get(assigns, :href)}"
     assert source =~ "id={Map.get(assigns, :id)}"
-    assert source =~ ~s/class={["lf-section-marketing-block", Map.get(assigns, :class)]}/
+    assert source =~ ~s/"lf-section-marketing-block__n-000001"/
+
+    assert source =~
+             ~s/class={["lf-section-marketing-block", "lf-section-marketing-block__n-000001", Map.get(assigns, :class)]}/
+
+    assert source =~ "Map.get(assigns, :class)"
     assert source =~ "lf_optional_global_attrs(Map.get(assigns, :rest))"
     assert source =~ "lf_validate_first_wave_slots!"
     assert source =~ "lf_src = Map.get(assigns, :src)"
@@ -303,6 +412,8 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "render_slot(@actions)"
     refute source =~ "node_"
     refute source =~ "LiveFrames.Fidelity"
+    refute source =~ "lf-section-marketing-block__n-000001-000004"
+    refute stylesheet =~ "lf-section-marketing-block__n-000001-000004"
   end
 
   test "collection repeat targets repeat_root_node_id and item field accessors" do
@@ -315,7 +426,14 @@ defmodule LiveFrames.NativeGeneratorTest do
           %DesignNode{
             boundary
             | children:
-                boundary.children ++ [%DesignNode{node_id: image_id, semantic_type: "image"}]
+                boundary.children ++
+                  [
+                    %DesignNode{
+                      node_id: image_id,
+                      semantic_type: "image",
+                      styles: %{"object-fit" => StyleValue.keyword("cover")}
+                    }
+                  ]
           }
         ]
       )
@@ -413,9 +531,11 @@ defmodule LiveFrames.NativeGeneratorTest do
       )
 
     p = plan(c, document)
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
 
     assert source =~ "for lf_ci_1 <- Map.get(assigns, :members)"
+    assert source =~ "class={\"lf-section-marketing-block__n-000001-000005\"}"
+    assert length(String.split(source, "lf-section-marketing-block__n-000001-000005")) == 2
     assert source =~ ~s/lf_item_field(lf_ci_1, 1, "photo")/
     assert source =~ ~s/lf_item_field(lf_ci_1, 1, "alt")/
     assert source =~ "case {collection_ordinal, field} do"
@@ -442,7 +562,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     second = generate!(c, p, document)
 
     assert first == second
-    assert hd(first.artifacts).content == hd(second.artifacts).content
+    assert first.artifacts == second.artifacts
     assert {:ok, plan_bytes} = ComponentizationPlan.encode(p)
 
     assert first.plan_fingerprint ==
@@ -457,7 +577,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     p =
       plan(c, document, render_projections: [render_attr("title", :text_content, @heading_id)])
 
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
     assert source =~ "Static body"
     refute source =~ "attr :static"
   end
@@ -513,7 +633,7 @@ defmodule LiveFrames.NativeGeneratorTest do
 
     c = contract(public_attrs: [attr("title")])
     p = plan(c, document, render_projections: [render_attr("title", :text_content, @heading_id)])
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
 
     assert source =~ "Shop now"
     assert source =~ ~s(href="/shop")
@@ -557,7 +677,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     p =
       plan(c, document, render_projections: [render_attr("src", :asset_src, image_id)])
 
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
     assert source =~ "<figure"
     assert source =~ "lf-section-marketing-block"
     assert source =~ "<img src={@src}"
@@ -621,7 +741,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     }
 
     p = plan(c, document)
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
 
     assert source =~ "href={Map.get(assigns, :url)}"
     refute source =~ ~s(href="/static")
@@ -690,7 +810,7 @@ defmodule LiveFrames.NativeGeneratorTest do
 
     assert :ok = IR.validate(document)
     p = plan(c, document)
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
     assert source =~ "lf_validate_count!"
     assert source =~ "lf_validate_count!(Map.get(assigns, :total), 2)"
     refute source =~ "min:"
@@ -719,7 +839,7 @@ defmodule LiveFrames.NativeGeneratorTest do
         ]
       )
 
-    source = hd(generate!(c, p, rich_doc).artifacts).content
+    source = elixir_artifact(generate!(c, p, rich_doc)).content
     assert source =~ "slot actions allows at most one entry"
   end
 
@@ -762,7 +882,7 @@ defmodule LiveFrames.NativeGeneratorTest do
 
     c = contract(public_attrs: [attr("title")])
     p = plan(c, document, render_projections: [render_attr("title", :text_content, @heading_id)])
-    source = hd(generate!(c, p, document).artifacts).content
+    source = elixir_artifact(generate!(c, p, document)).content
     assert source =~ ~s(type="submit")
     refute source =~ "type=\"button\""
   end
