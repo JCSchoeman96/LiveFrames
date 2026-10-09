@@ -4,7 +4,17 @@
 
 This document maps accepted Slider Basel evidence to the source-independent Carousel contract, frontend-data authorities, native styling, accessibility, icon/asset, and dependency authorities. It is an evidence preflight only. It does not authorize Carousel/P7, Slider, styling, data, icon, or dependency implementation.
 
-The pinned base is `3e75c70433aac1f783221b0c6de3af43679598da`, tree `ea85c0adcaf484c8616e114a8680f5a82ac18ee1`. Exact-main CI run `37961704551` completed successfully. PR #160, `C09D6-D1D: integrate native styling generation`, is merged at this base.
+The current base is:
+
+```text
+BASE_SHA=4c74d914643027d54843c676635ad3c991a038cc
+BASE_TREE=35c7e9aa5a6285b7234deffe5454eae2db587cd5
+BASE_CI=37973482591 completed/success
+PR_162=P7 primitive-specific occurrence policy values
+P7_PLAN_VERSION=1.0.5
+```
+
+PR #160, `C09D6-D1D: integrate native styling generation`, and PR #162 are merged at this base. P7 1.0.5 remains a plan authority. It does not authorize implementation.
 
 The selected Slider Basel export (`T-SLIDER`) and reusable Frames widgets (`W-SLIDER`, `W-SLIDER-CONTROLS`) are separate evidence sources. Widget capability evidence does not prove exact selected-export implementation equivalence. Generic Carousel policy below is target policy, not a claim about Slider Basel's exact source settings.
 
@@ -176,9 +186,37 @@ SERVER_STATE_REQUIRED=NO_CURRENT_EVIDENCE
 
 P7_B1_STATUS=PLANNED_NOT_AUTHORIZED
 P7_B1_AUTHORIZED=NO
+P7_A1_STATUS=IMPLEMENTED_ACCEPTED
+P7_A2_STATUS=IMPLEMENTED_ACCEPTED
 SLIDER_BEHAVIOR_BINDING_CREATED=NO
 PRIMITIVE_DEFINITION_VERSION_SELECTED=NO
 BEHAVIOR_IMPLEMENTATION_AUTHORIZED=NO
+```
+
+### P7 1.0.5 occurrence-policy boundary
+
+The current [P7 implementation plan](p7_interaction_conversion_implementation_plan.md) is version 1.0.5. It distinguishes occurrence-selected primitive STATE assignments in `initial_state` from primitive-specific POLICY assignments in `primitive_policy_values`. Shared cross-primitive fields remain separate: `timer_policy`, `focus_policy`, `keyboard_policy`, `motion_policy`, and `responsive_overrides`.
+
+The Carousel policy concepts listed earlier, including loop mode, autoplay permission, pause reasons, and user-stop latch, are generic target concepts. This preflight does not assign them serialized keys or freeze their value shapes. The exact primitive definition and later P7-C authority must define allowed policy keys and values. No inferred Carousel map belongs in this evidence document.
+
+For future authorized implementation, primitive-specific Carousel occurrence policies belong in `primitive_policy_values` only after an exact `BehaviorPrimitiveDefinition` is authorized and available. Timer configuration belongs in `timer_policy`. Reduced-motion behavior belongs in `motion_policy`. Focus, keyboard, and responsive rules remain in their respective shared policy fields. `primitive_policy_values` does not replace those fields.
+
+```text
+PRIMITIVE_POLICY_VALUES_FIELD=PLANNED_IN_P7_1_0_5
+PRIMITIVE_POLICY_VALUES_IMPLEMENTED=NO
+PRIMITIVE_POLICY_VALUES_SELECTED_FOR_SLIDER=NO
+CAROUSEL_PRIMITIVE_POLICY_KEY_SET=NOT_FROZEN_BY_THIS_PREFLIGHT
+CAROUSEL_PRIMITIVE_POLICY_VALUE_SHAPES=NOT_FROZEN_BY_THIS_PREFLIGHT
+TIMER_CONFIGURATION_OWNER=timer_policy
+REDUCED_MOTION_OWNER=motion_policy
+P7_B1_AUTHORIZED=NO
+```
+
+P7 1.0.5 keeps DesignNode and other node/reference identity in typed structural fields. Primitive policy values cannot contain or encode DesignNode references. This preflight also does not copy source IDs into policy values. Source IDs remain provenance and do not resolve Slider's stable per-item identity:
+
+```text
+STABLE_SLIDE_IDENTITY=NOT_ESTABLISHED
+DATA=PARTIAL
 ```
 
 No BehaviorPrimitiveDefinition, BehaviorBinding, PrimitiveRef, version selection, binding ID, or ordinal is created by this preflight. P7-A1 and P7-A2 are accepted; P7-B1 and later work remain unauthorized.
