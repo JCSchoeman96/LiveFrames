@@ -138,6 +138,38 @@ defmodule LiveFrames.Catalogue.CanonicalJSONTest do
     )
   end
 
+  test "maps neutral failures to the exact Catalogue diagnostics" do
+    assert CanonicalJSON.encode(:unsupported) ==
+             {:error,
+              [
+                %{
+                  code: "catalogue.canonical_json.invalid_value",
+                  path: "$",
+                  message: "Value is not supported."
+                }
+              ]}
+
+    assert CanonicalJSON.encode(%{"value" => <<0xFF>>}) ==
+             {:error,
+              [
+                %{
+                  code: "catalogue.canonical_json.invalid_string",
+                  path: "$.value",
+                  message: "String must contain valid Unicode scalar values."
+                }
+              ]}
+
+    assert CanonicalJSON.encode(%{1 => "value"}) ==
+             {:error,
+              [
+                %{
+                  code: "catalogue.canonical_json.invalid_object_key",
+                  path: "$",
+                  message: "Object keys must be valid Unicode strings."
+                }
+              ]}
+  end
+
   test "accepts safe integer bounds and rejects integers outside them" do
     assert {:ok, "-9007199254740991"} = CanonicalJSON.encode(-9_007_199_254_740_991)
     assert {:ok, "9007199254740991"} = CanonicalJSON.encode(9_007_199_254_740_991)
