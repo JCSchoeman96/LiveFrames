@@ -40,14 +40,14 @@ These authorities agree on the supported facts and the unresolved implementation
 
 Accepted repository evidence establishes that Pricing Echo contains Frames tabs, monthly/yearly pricing panels, repeated feature rows, icon content, accordion-on-device settings, and responsive card grids. The BehaviorContract evidence ledger records tabs with responsive accordion mode. The matrix also records that the pricing panels change through tab interaction.
 
-These facts establish the existence of a responsive presentation relationship and a logical monthly/yearly choice. They do not establish the source widget's detailed state, correspondence IDs, exact breakpoint, accessibility behavior, or runtime lifecycle.
+These facts establish a responsive presentation relationship, the monthly/yearly logical choices, and accepted cross-mode correspondence: the monthly/yearly panels themselves become accordion-style at `mobile_portrait`. C-07X's accepted responsive authority defines `mobile_portrait` as `max-width 478px`. These facts do not establish normalized stable item IDs, detailed Accordion state policy, accessibility behavior, or runtime lifecycle.
 
 ## 5. Facts not established
 
 Accepted evidence does not establish:
 
-- an exact breakpoint value or breakpoint token/name, viewport observation mechanism, or mode-change timing;
-- stable logical IDs or exact tab-to-panel-to-accordion item correspondence;
+- the viewport observation mechanism or mode-change timing;
+- stable typed IDs for the logical monthly/yearly options, or normalized tab-to-panel-to-Accordion binding records;
 - the initial monthly/yearly selection or initial Accordion open item;
 - source tab activation, focus, orientation, disabled-item, or keyboard policy;
 - Accordion `single|multiple`, closure policy, item enabled state, item order, or multi-open behavior;
@@ -145,25 +145,26 @@ Responsive Accordion existence does not establish any of these settings. Slide M
 
 ## 10. ResponsiveBehaviorOverride mapping
 
-BehaviorContract treats Tabs-to-Accordion as a semantic mode transition. It requires accepted breakpoint authority, reversible state mapping, stable item identity, and one canonical selection in both modes for the first wave. It rejects lossy conversion from multiple open Accordion items to one selected tab.
+BehaviorContract treats Tabs-to-Accordion as a semantic mode transition. Accepted C-07X responsive authority supplies Pricing's `mobile_portrait` condition at `max-width 478px`; C-07X also says the monthly/yearly panels become accordion-style at that condition. The semantic correspondence and mode direction are supported. A reversible target mapping still requires normalized stable item identity and one canonical selection in both modes for the first wave. BehaviorContract rejects lossy conversion from multiple open Accordion items to one selected tab.
 
 | Lifecycle | State | Initial state | Transition and guard | Effects and accessibility | Invalid/no-op cases | Side effects and cleanup |
 |---|---|---|---|---|---|---|
-| Responsive presentation mode | Conceptual `tabs_mode` or `accordion_mode`; not a business state | Initial presentation mode and breakpoint are not established by accepted Pricing evidence. | A mode change is permitted only under accepted breakpoint authority and a valid reversible mapping. | Preserve the logical pricing option. Map focus to the corresponding control only if the old focused control is removed. Update exposed control/panel relationships with the new presentation. | Missing breakpoint authority, unstable item identity, or a non-reversible state prevents the override. Do not infer a threshold. | Do not assume CSS alone, a hook, or a server event. If a managed runtime is later justified, mount, patch reconciliation, reconnect, and destruction must follow shared BehaviorContract lifecycle rules. |
+| Responsive presentation mode | Conceptual `tabs_mode` or `accordion_mode`; not a business state | Pricing's accepted responsive condition is `mobile_portrait`, `max-width 478px`. Source initial pricing selection is unknown. | At the accepted `mobile_portrait` condition, the monthly/yearly panels become Accordion-style. The reverse presentation applies outside that condition. A complete binding still requires stable typed identity and reversible state compatibility. | Preserve the same logical pricing option. Map focus to the corresponding control only if the old focused control is removed. Update exposed control/panel relationships with the new presentation. | Missing typed identity or a non-reversible Accordion state prevents claiming a complete override. The accepted threshold does not resolve source Accordion policy. | Do not assume CSS alone, a hook, or a server event. If a managed runtime is later justified, mount, patch reconciliation, reconnect, and destruction must follow shared BehaviorContract lifecycle rules. |
 
 The two questions remain distinct: A. which pricing option is selected; B. how that option is presented in Tabs mode; C. how it is presented in Accordion mode. Responsive layout does not create another business-data state.
 
 ## 11. Item identity analysis
 
-Accepted evidence names monthly/yearly panels and a responsive Accordion setting. It does not prove that each tab and Accordion item refers to the same durable logical option. Similar labels or visual proximity do not establish identity.
+Accepted C-07X evidence says the monthly/yearly panels themselves become Accordion-style at `mobile_portrait`. This supports the logical correspondence across presentation modes: monthly remains the monthly pricing meaning, and yearly remains the yearly pricing meaning. It does not establish the normalized, stable typed IDs or binding records required by BehaviorContract. Labels must not become durable runtime IDs by assumption.
 
 ```text
 LABEL_SIMILARITY=ACCEPTED_MONTHLY_YEARLY_LABELS
-STABLE_LOGICAL_IDENTITY=NOT_ESTABLISHED
-ITEM_IDENTITY_MAPPING=EVIDENCE_INSUFFICIENT
+CROSS_MODE_LOGICAL_CORRESPONDENCE=SUPPORTED
+STABLE_TYPED_ITEM_IDENTITY=NOT_ESTABLISHED
+ITEM_IDENTITY_MAPPING=PARTIAL
 ```
 
-No IDs or cross-mode correspondence are invented here. A later authority must accept a typed, stable relationship among each pricing option, its tab, panel, and Accordion item.
+No IDs are invented here. A later authority must accept a typed, stable relationship among each pricing option, its tab, panel, and Accordion item.
 
 ## 12. Reversibility analysis
 
@@ -181,20 +182,24 @@ Tabs(monthly) → Accordion(monthly) → Tabs(monthly)
 Tabs(yearly)  → Accordion(yearly)  → Tabs(yearly)
 ```
 
-These paths round-trip under the target rule only if the corresponding item identities and mappings are accepted. Pricing evidence does not establish those identities, so Pricing-specific reversibility is not proven.
+Accepted cross-mode correspondence supports the logical meaning of both paths. Stable typed identity and normalized binding records remain unresolved, and the source Accordion policy is unknown. Therefore these paths are supported as a target mapping shape but do not prove a complete or reversible Pricing instance.
 
 The state `Accordion(open={X,Y})` cannot losslessly map to single-selection Tabs under the accepted first-wave rule. Pricing evidence does not prove that the source forbids this state. Do not silently choose one option or normalize multiple open items.
 
 ## 13. Breakpoint authority
 
-Responsive accordion-on-device behavior is accepted as existing. That establishes mode existence, not the exact threshold, token/name, or observation method. No Pricing-specific accepted authority in this chain supplies an exact threshold.
+Accepted C-07X evidence records that the monthly/yearly panels become Accordion-style at `mobile_portrait`. C-07X responsive authority defines `mobile_portrait` as `max-width 478px` and records that the accepted authority and Fidelity tests emit that condition. This source breakpoint authority is not a public component API.
 
 ```text
-RESPONSIVE_MODE_EXISTENCE=SUPPORTED
-BREAKPOINT_AUTHORITY=EVIDENCE_INSUFFICIENT
+SOURCE_RESPONSIVE_BREAKPOINT_NAME=mobile_portrait
+SOURCE_RESPONSIVE_BREAKPOINT_CONDITION=max-width 478px
+BREAKPOINT_AUTHORITY=SUPPORTED
+RESPONSIVE_MODE_DIRECTION=SUPPORTED
+RESPONSIVE_PRESENTATION_CONDITION=SUPPORTED
+VIEWPORT_OBSERVATION_MECHANISM=UNKNOWN
 ```
 
-Do not choose a pixel value, infer an ACSS breakpoint, inspect a private setting to manufacture authority, or infer the threshold from a capture.
+The accepted condition informs future normalized responsive authority. Do not expose `mobile_portrait` or `478px` as a public component attribute. The accepted threshold does not establish how a runtime observes viewport conditions.
 
 ## 14. Initial state
 
@@ -236,7 +241,7 @@ The target requirements are supported by BehaviorContract; Pricing-specific sour
 
 ## 17. Runtime realization
 
-Candidates remain unselected:
+Candidates remain unselected. The accepted breakpoint does not determine the realization technique:
 
 | Candidate | Current evidence |
 |---|---|
@@ -249,6 +254,7 @@ Candidates remain unselected:
 MANAGED_RESPONSIVE_RUNTIME_REQUIRED=NOT_PROVEN
 CLIENT_HOOK_REQUIRED=NOT_PROVEN
 SERVER_EVENT_REQUIRED=NOT_PROVEN
+MODE_CHANGE_RUNTIME_TECHNIQUE=UNKNOWN
 ```
 
 A server round trip must not be added merely to switch presentation mode. A later authority may select a realization only after semantic and breakpoint requirements are known.
@@ -354,24 +360,26 @@ No server load should be introduced to switch Tabs and Accordion presentation, i
 | Accordion mode existence | Accordion-on-device setting | Accordion binding and responsive mode | `SUPPORTED` | Treat as a distinct semantic presentation mode | Source open behavior and precise item set |
 | Accordion open policy | None accepted | `single|multiple`; `open_item_ids` | `EVIDENCE_INSUFFICIENT` | Select no source policy by assumption | Source mode and multi-open facts |
 | Accordion closure policy | None accepted | `allow_all_closed|require_one_open` | `EVIDENCE_INSUFFICIENT` | Do not infer from defaults | Source closure configuration |
-| Tab-to-Accordion item identity | Monthly/yearly labels and panels exist | Stable typed item identity | `EVIDENCE_INSUFFICIENT` | Require accepted one-to-one correspondence | Durable option/tab/panel/Accordion IDs |
+| Cross-mode logical correspondence | C-07X says the monthly/yearly panels themselves become Accordion-style at `mobile_portrait` | Same logical option across presentation modes | `SUPPORTED` | Preserve monthly/yearly meaning across modes | Normalized typed binding records |
+| Stable typed item identity | Monthly/yearly logical correspondence is accepted | Stable typed BehaviorContract item identity | `NOT_ESTABLISHED` | Do not use labels as runtime IDs | Accepted typed IDs and option/tab/panel/Accordion relationships |
+| Tab-to-Accordion item identity | Monthly/yearly panels undergo responsive conversion | Typed identity plus responsive binding | `PARTIAL` | Use accepted logical correspondence; require typed binding for implementation | Stable normalized identity and binding records |
 | Responsive mode existence | Accordion-on-device behavior | `ResponsiveBehaviorOverride` | `SUPPORTED` | Model a semantic mode transition | Pricing mode lifecycle details |
-| Breakpoint | No exact threshold accepted | Breakpoint authority | `EVIDENCE_INSUFFICIENT` | Do not choose a threshold | Accepted Pricing-specific breakpoint authority |
-| Forward mapping | Target rule carries selected tab to one open item | Selected tab → open item | Target rule `SUPPORTED`; Pricing application `EVIDENCE_INSUFFICIENT` | Keep one canonical item | Accepted identity and source Accordion compatibility |
-| Reverse mapping | Target rule selects tab matching open item | Open item → selected tab | Target rule `SUPPORTED`; Pricing application `EVIDENCE_INSUFFICIENT` | Preserve the same option | Accepted identity |
-| Round-trip reversibility | No source round-trip evidence | Reversible mapping | Target rule `SUPPORTED`; Pricing instance `NOT_PROVEN` | Require both directions before claiming reversible | Identity and source open-state policy |
+| Breakpoint | C-07X maps the Pricing Accordion-style panels to `mobile_portrait`; accepted condition is `max-width 478px` | Breakpoint authority | `SUPPORTED` | Future normalized responsive authority uses the accepted condition; keep it out of public API | Viewport observation mechanism and mode-change timing |
+| Forward mapping | Monthly/yearly panels become Accordion-style at the responsive condition | Selected tab → open item | Target rule `SUPPORTED`; Pricing logical correspondence `SUPPORTED`; typed binding `PARTIAL` | Preserve the same logical option with one canonical item | Stable typed identity and source Accordion compatibility |
+| Reverse mapping | Same monthly/yearly panels return to tab presentation outside the condition | Open item → selected tab | Target rule `SUPPORTED`; Pricing logical correspondence `SUPPORTED`; typed binding `PARTIAL` | Preserve the same option | Stable typed identity and source Accordion compatibility |
+| Round-trip reversibility | Logical correspondence is supported; source state compatibility is unknown | Reversible mapping | Target rule `SUPPORTED`; Pricing instance `NOT_PROVEN` | Require both directions before claiming reversible | Typed identity and source open-state policy |
 | Focus continuity | No source focus evidence | Responsive focus policy | Target requirement `SUPPORTED`; source mapping `EVIDENCE_INSUFFICIENT` | Map focus only when the old control is removed | Source controls and transition behavior |
 | Accessibility | No Pricing-specific semantic details | Synchronized selection, expansion, relationships, focus | `PARTIAL` | Meet target semantics without inventing source ARIA | Names, relationships, inactive content, focus facts |
-| Managed runtime need | No target lifecycle evidence | Runtime realization and lifecycle | `NOT_PROVEN` | Do not select a runtime yet | Breakpoint and DOM lifecycle authority |
+| Managed runtime need | Breakpoint is known; no target lifecycle evidence | Runtime realization and lifecycle | `NOT_PROVEN` | Do not select a runtime yet | DOM lifecycle and semantic realization authority |
 | Cleanup | No managed source lifecycle evidence | Runtime destruction cleanup | `DEFERRED` | If managed, apply shared lifecycle contract | Proof that managed runtime is required |
 | Icons | Icon content present | Separate asset/renderability authority | `SEPARATE_BLOCKER` | Keep icon decision out of this mapping | Icon authority |
-| Styling | Responsive card grids accepted | Style authority | `PARTIAL` | Styling authority remains required | Breakpoint, grid, tabs, Accordion and spacing values |
+| Styling | Responsive card grids and conversion condition accepted | Style authority | `PARTIAL` | Styling authority remains required | Grid, tabs, Accordion and spacing values |
 
 ## 25. Evidence gaps and conflicts
 
-The repository consistently supports monthly/yearly panels, tab selection, and responsive Accordion presentation. The remaining gaps concern mapping and source policy rather than whether the responsive relationship exists. No accepted authority resolves stable item identity, breakpoint, source Accordion policy, initial selection, keyboard behavior, accessibility details, or runtime lifecycle.
+The repository supports monthly/yearly panels, tab selection, conversion of those panels to Accordion-style presentation at `mobile_portrait`, and the accepted `max-width 478px` condition. It also supports logical monthly/yearly correspondence across those modes. Stable typed identity, source Accordion policy, initial selection, keyboard behavior, accessibility details, and runtime lifecycle remain unresolved.
 
-`docs/03_DESIGN_IR_SPEC.md` can preserve unresolved responsive style intent without inventing a numeric threshold. That style representation does not supply the behavior-mode breakpoint authority required by `ResponsiveBehaviorOverride`. No conflict requires a stop; unresolved source interpretation remains row-local.
+`docs/03_DESIGN_IR_SPEC.md` can represent responsive style overrides separately from the semantic mode transition. The accepted source condition does not establish the runtime observation mechanism or make source breakpoint naming part of a public component API. No conflict requires a stop; unresolved source interpretation remains row-local.
 
 ## 26. Final classifications
 
@@ -387,11 +395,18 @@ SOURCE_ACCORDION_MODE=UNKNOWN
 SOURCE_ACCORDION_CLOSURE_POLICY=UNKNOWN
 SOURCE_MULTI_OPEN_ALLOWED=UNKNOWN
 
-ITEM_IDENTITY_MAPPING=EVIDENCE_INSUFFICIENT
-BREAKPOINT_AUTHORITY=EVIDENCE_INSUFFICIENT
+SOURCE_RESPONSIVE_BREAKPOINT_NAME=mobile_portrait
+SOURCE_RESPONSIVE_BREAKPOINT_CONDITION=max-width 478px
+BREAKPOINT_AUTHORITY=SUPPORTED
+RESPONSIVE_MODE_DIRECTION=SUPPORTED
+RESPONSIVE_PRESENTATION_CONDITION=SUPPORTED
 
-FORWARD_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_SPECIFIC=EVIDENCE_INSUFFICIENT
-REVERSE_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_SPECIFIC=EVIDENCE_INSUFFICIENT
+CROSS_MODE_LOGICAL_CORRESPONDENCE=SUPPORTED
+STABLE_TYPED_ITEM_IDENTITY=NOT_ESTABLISHED
+ITEM_IDENTITY_MAPPING=PARTIAL
+
+FORWARD_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_LOGICAL_CORRESPONDENCE=SUPPORTED; TYPED_BINDING=PARTIAL
+REVERSE_MAPPING=SUPPORTED_BY_BEHAVIOR_AUTHORITY; PRICING_LOGICAL_CORRESPONDENCE=SUPPORTED; TYPED_BINDING=PARTIAL
 ROUND_TRIP_REVERSIBLE=SUPPORTED_AS_TARGET_RULE; PRICING_INSTANCE=NOT_PROVEN
 SOURCE_COMPATIBILITY_WITH_SINGLE_CANONICAL_ITEM=NOT_PROVEN
 
@@ -401,6 +416,8 @@ FOCUS_CONTINUITY_MAPPING=PARTIAL
 MANAGED_RESPONSIVE_RUNTIME_REQUIRED=NOT_PROVEN
 CLIENT_HOOK_REQUIRED=NOT_PROVEN
 SERVER_EVENT_REQUIRED=NOT_PROVEN
+VIEWPORT_OBSERVATION_MECHANISM=UNKNOWN
+MODE_CHANGE_RUNTIME_TECHNIQUE=UNKNOWN
 
 BACKEND_QUERY_REQUIRED=NO
 ICON_RENDERABILITY_AUTHORITY=SEPARATE_BLOCKER
@@ -416,7 +433,7 @@ PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 OVERALL_VERDICT=PARTIAL_RESPONSIVE_BEHAVIOR_MAPPING
 ```
 
-The responsive Tabs/Accordion relationship and its target mapping rule are supported. Pricing-specific reversible mapping remains unproven because stable item correspondence, source Accordion compatibility, and breakpoint authority are not established. This preflight does not authorize implementation.
+The responsive Tabs/Accordion relationship, `mobile_portrait` breakpoint condition, and monthly/yearly logical correspondence are supported. Pricing-specific reversible mapping remains unproven because stable typed identity and source Accordion compatibility are not established. This preflight does not authorize implementation.
 
 ## 28. Next-required-authority graph
 
@@ -424,12 +441,13 @@ The responsive Tabs/Accordion relationship and its target mapping rule are suppo
 Accepted Pricing logical option semantics
 + accepted Tabs semantics
 + accepted Accordion semantics
-→ responsive behavior mapping
++ accepted `mobile_portrait` responsive condition
++ accepted cross-mode logical correspondence
+→ partial responsive behavior mapping
 
-accepted stable item correspondence
-+ accepted Accordion compatibility
-+ accepted breakpoint authority
-→ reversible ResponsiveBehaviorOverride
+stable typed item identity/projection
++ accepted Accordion compatibility and policy
+→ complete reversible ResponsiveBehaviorOverride mapping
 
 then:
 responsive behavior authority
@@ -448,4 +466,4 @@ Each downstream step retains its existing authority and review gates. This graph
 
 ## 29. Invalidation conditions
 
-Revisit this mapping if accepted Pricing evidence changes, an authority accepts stable item correspondence or a Pricing-specific breakpoint, source Accordion policy or initial state becomes accepted, accessibility or focus evidence changes, or the BehaviorContract mapping rule changes. New evidence must enter through its accepted authority; private source facts do not become accepted by this document.
+Revisit this mapping if accepted Pricing evidence changes, stable typed identity or a Pricing-specific binding is accepted, source Accordion policy or initial state becomes accepted, the `mobile_portrait` breakpoint authority changes, accessibility or focus evidence changes, or the BehaviorContract mapping rule changes. New evidence must enter through its accepted authority; private source facts do not become accepted by this document.
