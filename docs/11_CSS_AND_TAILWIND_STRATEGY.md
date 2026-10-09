@@ -98,9 +98,12 @@ stylesheet or scoped container, loaded so overrides win through normal cascade.
 
 Approved **TokenSet** values are the semantic value authority. **`lf_theme.css`**
 is the deterministic generated/resolved CSS representation of those values.
-**`native_hero_v1.json`** (under `priv/token_maps/`) contains mapping metadata
-only and must not be treated as a value authority. This document names variable
-groups and purpose; it does not duplicate literal token values.
+Default theme generation loads **`native_shared_v1.json`** then
+**`native_hero_v1.json`** (under `priv/token_maps/`). Mapping files contain
+metadata only and must not be treated as value authorities. Shared public
+variables introduced for cross-component tokens: `--lf-typography-body-size-small`,
+`--lf-radius-base`, `--lf-space-grid-gap`. This document names variable groups
+and purpose; it does not duplicate literal token values.
 
 ### Public variable groups (Hero-relevant)
 
@@ -108,7 +111,8 @@ groups and purpose; it does not duplicate literal token values.
 | --- | --- | --- |
 | Background / text on dark | `--lf-color-background-ultra-dark`, `--lf-color-heading-on-dark`, `--lf-color-text-on-dark` | Section and typography colors |
 | Display typography | `--lf-typography-display-size`, `--lf-typography-display-weight`, `--lf-typography-display-line-height` | Hero heading visual scale (independent of HTML heading level) |
-| Body typography | `--lf-typography-body-size`, `--lf-typography-body-line-height` | Lede and base section type |
+| Body typography | `--lf-typography-body-size`, `--lf-typography-body-size-small`, `--lf-typography-body-line-height` | Lede, small body scale, and base section type |
+| Shared radius / grid gap | `--lf-radius-base`, `--lf-space-grid-gap` | Cross-component radius and grid-gap semantic surface |
 | Container width | `--lf-layout-container-max-width` | Capped content width |
 | Section / container / content spacing | `--lf-space-section-padding-block`, `--lf-space-gutter`, `--lf-space-container-gap`, `--lf-space-content-gap` | Padding and gaps |
 | Primary action | `--lf-action-primary-*` | Filled primary slotted control |

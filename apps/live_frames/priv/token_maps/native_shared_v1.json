@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "mapping_version": "native_shared_v1",
+  "entries": [
+    {
+      "token_set_path": "typography.body.scale.small",
+      "css_variable": "--lf-typography-body-size-small"
+    },
+    {
+      "token_set_path": "radius.base",
+      "css_variable": "--lf-radius-base"
+    },
+    {
+      "token_set_path": "spacing.grid_gap",
+      "css_variable": "--lf-space-grid-gap"
+    }
+  ]
+}

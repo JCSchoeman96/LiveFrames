@@ -304,7 +304,9 @@ P6.4A does **not** add the dependency.
 ```text
 approved TokenSet values (authority)
         +
-native_hero_v1.json (mapping only: TokenSet path → LiveFrames name)
+native_shared_v1.json (shared mapping layer, metadata only)
+        +
+native_hero_v1.json (Hero mapping layer, metadata only)
         ↓
 focused deterministic bridge builder (P6.4B — required, not optional)
         ↓
@@ -315,9 +317,11 @@ ordinary public CSS custom properties --lf-*
 semantic component CSS (+ selective Tailwind utilities)
 ```
 
-### `native_hero_v1.json` role
+### Mapping layers (`native_shared_v1.json`, `native_hero_v1.json`)
 
-- Contains **deterministic mapping metadata** only, for example:
+Default theme build applies **shared first, Hero second**. Explicit single-map
+`--mapping` overrides remain supported for backwards compatibility. Each layer
+contains **deterministic mapping metadata** only, for example:
   - approved TokenSet path → LiveFrames CSS variable name;
   - optional Tailwind theme alias name when a utility is required.
 - **Must not** duplicate authoritative token **values**. Values come from the

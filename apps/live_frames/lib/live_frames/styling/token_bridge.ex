@@ -18,21 +18,63 @@ defmodule LiveFrames.Styling.TokenBridge do
     |> validate_mapping_structure!()
   end
 
-  @spec generate(TokenSet.t(), map()) :: {:ok, String.t()} | {:error, term()}
+  @spec generate(TokenSet.t(), map() | [map()]) :: {:ok, String.t()} | {:error, term()}
+  def generate(%TokenSet{} = token_set, mappings) when is_list(mappings) do
+    with {:ok, entries} <- validate_mapping_layers(token_set, mappings),
+         :ok <- validate_cross_layer_duplicates(entries) do
+      generate_entries(token_set, entries)
+    end
+  end
+
   def generate(%TokenSet{} = token_set, mapping) when is_map(mapping) do
     with :ok <- validate_mapping(token_set, mapping) do
-      mapping["entries"]
-      |> Enum.sort_by(&entry_sort_key/1)
-      |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
-        case declaration_for(entry, token_set) do
-          {:error, _} = error -> {:halt, error}
-          line -> {:cont, {:ok, [line | acc]}}
-        end
-      end)
-      |> case do
-        {:error, _} = error -> error
-        {:ok, lines} -> {:ok, format_stylesheet(Enum.reverse(lines))}
+      generate_entries(token_set, mapping["entries"])
+    end
+  end
+
+  defp generate_entries(token_set, entries) do
+    entries
+    |> Enum.sort_by(&entry_sort_key/1)
+    |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
+      case declaration_for(entry, token_set) do
+        {:error, _} = error -> {:halt, error}
+        line -> {:cont, {:ok, [line | acc]}}
       end
+    end)
+    |> case do
+      {:error, _} = error -> error
+      {:ok, lines} -> {:ok, format_stylesheet(Enum.reverse(lines))}
+    end
+  end
+
+  defp validate_mapping_layers(token_set, mappings) do
+    Enum.reduce_while(mappings, {:ok, []}, fn mapping, {:ok, acc} ->
+      case validate_mapping(token_set, mapping) do
+        :ok -> {:cont, {:ok, acc ++ mapping["entries"]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_cross_layer_duplicates(entries) do
+    paths =
+      entries
+      |> Enum.flat_map(fn
+        %{"token_set_path" => path} when is_binary(path) -> [path]
+        _ -> []
+      end)
+
+    css_variables = Enum.map(entries, & &1["css_variable"])
+
+    case duplicate_values(paths) do
+      [] ->
+        case duplicate_values(css_variables) do
+          [] -> :ok
+          dupes -> {:error, {:duplicate_css_variables, dupes}}
+        end
+
+      dupes ->
+        {:error, {:duplicate_token_set_paths, dupes}}
     end
   end
 

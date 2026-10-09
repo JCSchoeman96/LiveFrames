@@ -50,6 +50,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     "spacing.scale.xxl" => {"--space-xxl", "spacing"},
     "spacing.section" => {"--section-space-m", "section-spacing"},
     "typography.body.scale.medium" => {"--text-m", "text"},
+    "typography.body.scale.small" => {"--text-s", "text"},
     "typography.heading.scale.h1" => {"--h1", "headings"}
   }
 
@@ -269,6 +270,26 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         ["typography.body.base_size", "layout.viewport.min", "layout.viewport.max"],
         "text"
       ),
+      derived(
+        "typography.body.scale.small",
+        :typography,
+        "text-s",
+        [
+          {"mobile_base", "base-text-mob"},
+          {"desktop_base", "base-text-desk"},
+          {"mobile_scale", "mob-text-scale"},
+          {"desktop_scale", "text-scale"},
+          {"viewport_min", "vp-min"},
+          {"viewport_max", "vp-max"}
+        ],
+        ["typography.body.base_size", "layout.viewport.min", "layout.viewport.max"],
+        "text",
+        optional_inputs: [
+          {"mobile_endpoint_override_px", "text-s-min"},
+          {"desktop_endpoint_override_px", "text-s-max"}
+        ],
+        constants: %{"scale_power" => -1}
+      ),
       direct("typography.body.line_height", :typography, "base-text-lh", :css),
       responsive(
         "typography.heading.base_size",
@@ -440,7 +461,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     {tokens, diagnostics, consumed} =
       Enum.reduce(mapping(settings), {%{}, [], MapSet.new()}, fn entry,
                                                                  {tokens, diagnostics, consumed} ->
-        consumed = Enum.reduce(entry.source_keys, consumed, &MapSet.put(&2, &1))
+        consumed = consume_entry_source_keys(entry, settings, consumed)
 
         if Map.has_key?(tokens, entry.path) do
           diagnostic =
@@ -674,38 +695,119 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
          %{strategy: :derived, source_keys: source_keys, inputs: inputs} = entry,
          settings
        ) do
+    optional_inputs = Map.get(entry, :optional_inputs, [])
+    constants = Map.get(entry, :constants, %{})
+
     input_values =
       Map.new(inputs, fn {name, source_key} -> {name, Map.get(settings, source_key)} end)
 
     raw_value = source_value(settings, source_keys)
 
-    if Enum.all?(Map.values(input_values), &number?/1) do
+    with true <- Enum.all?(Map.values(input_values), &number?/1),
+         {:ok, optional_values} <- optional_derived_inputs(optional_inputs, settings) do
+      input_values =
+        input_values
+        |> Map.merge(optional_values)
+        |> Map.merge(constants)
+        |> Map.put("calculation_group", entry.calculation_group)
+
+      effective_source_keys = source_keys ++ used_optional_source_keys(optional_inputs, settings)
+
       result =
         Resolver.derived(
           entry.recipe,
           entry.variable,
-          Map.put(input_values, "calculation_group", entry.calculation_group),
+          input_values,
           entry.references,
-          source_keys
+          effective_source_keys
         )
 
-      if entry.variable in @spacing_scale_variables and
-           is_nil(FluidClamp.css_expression(result.value)) do
+      cond do
+        entry.variable in @spacing_scale_variables and
+            is_nil(FluidClamp.css_expression(result.value)) ->
+          Resolver.unresolved(
+            raw_value,
+            List.first(source_keys),
+            "spacing clamp inputs are incomplete or invalid"
+          )
+
+        entry.variable == "text-s" and is_nil(FluidClamp.css_expression(result.value)) ->
+          Resolver.unresolved(
+            raw_value,
+            List.first(source_keys),
+            "derived source inputs are incomplete or invalid"
+          )
+
+        true ->
+          result
+      end
+    else
+      {:error, invalid_value, source_key, reason} ->
+        Resolver.unresolved(invalid_value, source_key, reason)
+
+      false ->
         Resolver.unresolved(
           raw_value,
           List.first(source_keys),
-          "spacing clamp inputs are incomplete or invalid"
+          "derived source inputs are incomplete or invalid"
         )
-      else
-        result
-      end
-    else
-      Resolver.unresolved(
-        raw_value,
-        List.first(source_keys),
-        "derived source inputs are incomplete or invalid"
-      )
     end
+  end
+
+  defp optional_derived_inputs([], _settings), do: {:ok, %{}}
+
+  defp optional_derived_inputs(optional_inputs, settings) do
+    Enum.reduce_while(optional_inputs, {:ok, %{}}, fn {name, source_key}, {:ok, acc} ->
+      if Map.has_key?(settings, source_key) do
+        value = Map.get(settings, source_key)
+
+        case optional_numeric(value) do
+          {:ok, number} ->
+            {:cont, {:ok, Map.put(acc, name, number)}}
+
+          :error ->
+            {:halt,
+             {:error, value, source_key, "derived source inputs are incomplete or invalid"}}
+        end
+      else
+        {:cont, {:ok, acc}}
+      end
+    end)
+  end
+
+  defp optional_numeric(value) when is_integer(value), do: {:ok, value * 1.0}
+  defp optional_numeric(value) when is_float(value), do: {:ok, value}
+
+  defp optional_numeric(value) when is_binary(value) do
+    case Float.parse(String.trim(value)) do
+      {number, ""} -> {:ok, number}
+      _ -> :error
+    end
+  end
+
+  defp optional_numeric(_value), do: :error
+
+  defp used_optional_source_keys(optional_inputs, settings) do
+    Enum.flat_map(optional_inputs, fn {_name, source_key} ->
+      if Map.has_key?(settings, source_key), do: [source_key], else: []
+    end)
+  end
+
+  defp consume_entry_source_keys(
+         %{source_keys: source_keys, optional_inputs: optional_inputs},
+         settings,
+         consumed
+       )
+       when is_list(optional_inputs) and optional_inputs != [] do
+    consumed = Enum.reduce(source_keys, consumed, &MapSet.put(&2, &1))
+
+    Enum.reduce(optional_inputs, consumed, fn {_name, source_key}, acc ->
+      if Map.has_key?(settings, source_key), do: MapSet.put(acc, source_key), else: acc
+    end)
+  end
+
+  defp consume_entry_source_keys(entry, _settings, consumed) do
+    Enum.reduce(entry.source_keys, consumed, &MapSet.put(&2, &1))
   end
 
   defp build_token(entry, result, raw_value, source_metadata) do
@@ -1163,12 +1265,17 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       unit: unit
     }
 
-  defp derived(path, category, variable, inputs, references, calculation_group),
-    do: %{
+  defp derived(path, category, variable, inputs, references, calculation_group, opts \\ []) do
+    optional_inputs = Keyword.get(opts, :optional_inputs, [])
+    constants = Keyword.get(opts, :constants, %{})
+
+    %{
       path: path,
       category: category,
       strategy: :derived,
       source_keys: Enum.map(inputs, &elem(&1, 1)),
+      optional_inputs: optional_inputs,
+      constants: constants,
       inputs: inputs,
       references: references,
       recipe: "acss.clamp",
@@ -1176,6 +1283,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       calculation_group: calculation_group,
       metadata: %{"calculation_group" => calculation_group}
     }
+  end
 
   defp underscore(value), do: String.replace(value, "-", "_")
 end

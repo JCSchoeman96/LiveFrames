@@ -26,12 +26,15 @@
   --lf-color-heading-on-dark: light-dark(#fff, #000);
   --lf-color-text-on-dark: light-dark(#fff, #000);
   --lf-layout-container-max-width: 1366px;
+  --lf-radius-base: 5px;
   --lf-space-container-gap: clamp(2.6653335rem, calc(2.4706425447vw + 2.1094389274rem), 4.21875rem);
   --lf-space-content-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
+  --lf-space-grid-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   --lf-space-gutter: clamp(1rem, calc(6.3618290258vw + -0.4314115308rem), 5rem);
   --lf-space-section-padding-block: clamp(3rem, calc(4.1749502982vw + 2.0606361829rem), 5.625rem);
   --lf-typography-body-line-height: calc(6px + 2ex);
   --lf-typography-body-size: clamp(1rem, calc(0.1988071571vw + 0.9552683897rem), 1.125rem);
+  --lf-typography-body-size-small: clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem);
   --lf-typography-display-line-height: calc(4px + 2ex);
   --lf-typography-display-size: clamp(1.944rem, calc(1.6170835726vw + 1.5801561962rem), 2.9607412962rem);
   --lf-typography-display-weight: 700;

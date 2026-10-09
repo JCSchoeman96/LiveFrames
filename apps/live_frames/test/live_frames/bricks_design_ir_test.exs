@@ -1452,4 +1452,231 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert IR.encode!(first) == IR.encode!(second)
     assert first.root_nodes == second.root_nodes
   end
+
+  describe "R3 bounded radius canonicalization" do
+    defp radius_styles_document(settings \\ %{}) do
+      base = %{
+        "_border" => %{
+          "radius" => %{
+            "top" => "var(--radius)",
+            "right" => "var(--radius)",
+            "bottom" => "var(--radius)",
+            "left" => "var(--radius)"
+          }
+        }
+      }
+
+      assert {:ok, document} =
+               Bricks.to_ir(
+                 synthetic_source([
+                   source_element("root", "block", 0, Map.merge(base, settings))
+                 ]),
+                 component_id: "component-a",
+                 token_set: token_set()
+               )
+
+      document
+    end
+
+    test "maps var(--radius) on bounded radius properties to radius.base" do
+      document = radius_styles_document()
+
+      node = node_by_source_id(document, "root")
+
+      for property <- [
+            "border-top-left-radius",
+            "border-top-right-radius",
+            "border-bottom-right-radius",
+            "border-bottom-left-radius"
+          ] do
+        assert %StyleValue{kind: :token_ref, value: "radius.base"} = node.styles[property]
+      end
+    end
+
+    test "keeps var(--radius) ambiguous on unrelated properties" do
+      document = style_document("_width", "var(--radius)")
+
+      assert %StyleValue{
+               kind: :unresolved,
+               metadata: %{"resolution_reason" => "mapping_ambiguous"}
+             } =
+               node_by_source_id(document, "root").styles["width"]
+    end
+
+    test "fails closed when radius.base is unresolved" do
+      broken =
+        token_set()
+        |> update_in(
+          [Access.key!(:tokens), "radius.base", Access.key!(:resolution_status)],
+          fn _ ->
+            :unresolved
+          end
+        )
+        |> update_in([Access.key!(:tokens), "radius.base", Access.key!(:resolved_value)], fn _ ->
+          nil
+        end)
+
+      assert {:ok, document} =
+               Bricks.to_ir(
+                 synthetic_source([
+                   source_element("root", "block", 0, %{
+                     "_border" => %{
+                       "radius" => %{"top" => "var(--radius)"}
+                     }
+                   })
+                 ]),
+                 component_id: "component-a",
+                 token_set: broken
+               )
+
+      assert %StyleValue{kind: :unresolved} =
+               node_by_source_id(document, "root").styles["border-top-left-radius"]
+    end
+  end
+
+  describe "R3 bounded grid-gap calculation normalization" do
+    @structured_multiply %{
+      "operation" => "multiply",
+      "operands" => [
+        %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+        %{"kind" => "literal", "value" => 2.0}
+      ]
+    }
+
+    test "parses calc(var(--grid-gap) * 2) on gap into structured multiply" do
+      document = style_document("_gridGap", "calc(var(--grid-gap) * 2)")
+
+      assert %StyleValue{kind: :calculation, value: calculation} =
+               node_by_source_id(document, "root").styles["gap"]
+
+      assert calculation == @structured_multiply
+      refute Jason.encode!(calculation) =~ "--grid-gap"
+      refute Jason.encode!(calculation) =~ "--lf-"
+    end
+
+    test "unsupported grid-gap calculation shapes fail closed" do
+      for expression <- [
+            "calc(var(--grid-gap) + 2px)",
+            "calc(2 * var(--grid-gap))",
+            "calc(var(--grid-gap) * 0)",
+            "calc(var(--grid-gap) * -2)",
+            "calc(var(--grid-gap) * var(--other))"
+          ] do
+        document = style_document("_gridGap", expression)
+
+        assert %StyleValue{kind: :unresolved} =
+                 node_by_source_id(document, "root").styles["gap"]
+      end
+    end
+
+    test "legacy calculations without grid-gap stay opaque strings" do
+      document = style_document("_width", "calc(100% - 1rem)")
+
+      assert %StyleValue{kind: :calculation, value: "calc(100% - 1rem)"} =
+               node_by_source_id(document, "root").styles["width"]
+    end
+  end
+
+  test "maps font-size var(--text-s) to typography.body.scale.small" do
+    document =
+      style_document("_typography", %{
+        "font-size" => "var(--text-s)"
+      })
+
+    assert %StyleValue{kind: :token_ref, value: "typography.body.scale.small"} =
+             node_by_source_id(document, "root").styles["font-size"]
+  end
+
+  @cta_tango_reference_candidates [
+    Path.expand(
+      "../../../../../../private_reference/frames/staging-2026-09/cta-section-tango/bricks-component-hxambs-cta-section-tango.json",
+      __DIR__
+    ),
+    Path.expand(
+      "../../../../../private_reference/frames/staging-2026-09/cta-section-tango/bricks-component-hxambs-cta-section-tango.json",
+      __DIR__
+    )
+  ]
+
+  defp cta_tango_reference_path do
+    case Enum.find(@cta_tango_reference_candidates, &File.regular?/1) do
+      path when is_binary(path) -> path
+      nil -> flunk("CTA Tango reference missing")
+    end
+  end
+
+  test "CTA Tango R3 upstream proof (read-only reference)" do
+    settings =
+      Jason.decode!(File.read!(@token_fixture_path))
+      |> Map.merge(%{
+        "base-text-mob" => 16,
+        "base-text-desk" => 18,
+        "mob-text-scale" => 1.2,
+        "text-scale" => 1.333,
+        "vp-min" => 360,
+        "vp-max" => 1366,
+        "text-s-min" => 14,
+        "text-s-max" => 15
+      })
+
+    assert {:ok, cta_token_set, _} =
+             AutomaticCSS.normalize(settings,
+               strict: true,
+               profile: :hero_foundation,
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
+
+    assert {:ok, document} =
+             Bricks.to_ir(cta_tango_reference_path(),
+               component_id: "hxambs",
+               token_set: cta_token_set
+             )
+
+    inner = node_by_source_id(document, "775f40")
+
+    assert %StyleValue{kind: :calculation, value: gap_calculation} = inner.styles["gap"]
+    assert gap_calculation["operation"] == "multiply"
+
+    assert hd(gap_calculation["operands"]) == %{
+             "kind" => "token_ref",
+             "path" => "spacing.grid_gap"
+           }
+
+    assert List.last(gap_calculation["operands"]) == %{"kind" => "literal", "value" => 2.0}
+    refute Jason.encode!(gap_calculation) =~ "--grid-gap"
+
+    image_ids =
+      document.root_nodes
+      |> flatten()
+      |> Enum.filter(fn node -> node.semantic_type == "image" end)
+      |> Enum.map(& &1.source_trace.source_id)
+
+    radius_nodes =
+      document.root_nodes
+      |> flatten()
+      |> Enum.filter(fn node ->
+        Enum.any?(node.styles, fn {property, style} ->
+          property in [
+            "border-top-left-radius",
+            "border-top-right-radius",
+            "border-bottom-right-radius",
+            "border-bottom-left-radius"
+          ] and match?(%StyleValue{kind: :token_ref, value: "radius.base"}, style)
+        end)
+      end)
+
+    assert radius_nodes != []
+    assert Enum.all?(radius_nodes, fn node -> node.source_trace.source_id in image_ids end)
+
+    accent = node_by_source_id(document, "a29aa8")
+
+    assert %StyleValue{kind: :token_ref, value: "typography.body.scale.small"} =
+             accent.styles["font-size"]
+
+    small = cta_token_set.tokens["typography.body.scale.small"]
+
+    assert small.metadata["css_expression"] ==
+             "clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem)"
+  end
 end

@@ -8,6 +8,7 @@ defmodule Mix.Tasks.LiveFrames.Styling.Theme.Build do
   @app_root Path.expand("../../..", __DIR__)
 
   @default_fixture Path.expand("../../fixtures/automatic_css/acss_settings.json", @app_root)
+  @default_shared_mapping Path.join(@app_root, "priv/token_maps/native_shared_v1.json")
   @default_mapping Path.join(@app_root, "priv/token_maps/native_hero_v1.json")
   @default_output Path.join(@app_root, "assets/css/theme/lf_theme.css")
 
@@ -25,8 +26,19 @@ defmodule Mix.Tasks.LiveFrames.Styling.Theme.Build do
     if invalid != [], do: Mix.raise("invalid theme build options: #{inspect(invalid)}")
 
     fixture = path(options, :fixture, @default_fixture)
-    mapping_path = path(options, :mapping, @default_mapping)
     output = path(options, :output, @default_output)
+
+    mapping =
+      case Keyword.get(options, :mapping) do
+        nil ->
+          [
+            TokenBridge.load_mapping!(@default_shared_mapping),
+            TokenBridge.load_mapping!(@default_mapping)
+          ]
+
+        mapping_path ->
+          TokenBridge.load_mapping!(Path.expand(mapping_path, File.cwd!()))
+      end
 
     with {:ok, token_set, _diagnostics} <-
            AutomaticCSS.from_file(fixture,
@@ -35,7 +47,6 @@ defmodule Mix.Tasks.LiveFrames.Styling.Theme.Build do
              source_version: "4.0.1",
              source_version_status: "fixture_reference"
            ),
-         mapping <- TokenBridge.load_mapping!(mapping_path),
          {:ok, css} <- TokenBridge.generate(token_set, mapping),
          :ok <- write(output, css) do
       Mix.shell().info(["Generated ", output])
