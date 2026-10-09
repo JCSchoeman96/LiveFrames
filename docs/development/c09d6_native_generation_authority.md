@@ -1,10 +1,10 @@
 # C09D6-A — Native generation and review authority
 
-**Status:** active authority (C09D6-A + C09D6-C0 emission-surface freeze)
+**Status:** v6 / C09D6-C0 authority accepted; v7 / C09D6-D1A amendment is an authority candidate pending review, merge, and acceptance
 
 **Plan ID:** C09D6-A
 
-**Plan version:** v6
+**Plan version:** v7 candidate
 
 **Scope:** freeze native component generation boundaries, review-to-generation
 gates, styling split, result taxonomy, Catalogue/P10 separation, and repository
@@ -52,6 +52,11 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   static navigation, boundary-root Plan blockers, repository-truth reconciliation;
   static navigation emission via `LiveFrames.StaticNavigation.validate_navigation_map/1`
   (not `StaticMarkupContract` for `href`/`target`/`rel`)
+- `v7` — C09D6-D1A authority candidate: freezes path-validated private node
+  selector identity, native style-locus rules, mechanical StyleValue-to-CSS
+  emission, TokenBridge ownership, responsive ordering, primary-action source
+  isolation, stylesheet artifact paths, import-graph ownership, and the styling
+  lifecycle and terminal behavior. Pending review, merge, and acceptance.
 
 ---
 
@@ -1220,6 +1225,310 @@ by C0.
 
 | Deliverable | Status |
 | --- | --- |
-| `docs/development/c09d6_native_generation_authority.md` | this file (v6 includes C09D6-C0) |
+| `docs/development/c09d6_native_generation_authority.md` | this file (v6 accepted; §21 v7 candidate) |
 | `docs/17_ROADMAP.md` C09D6-C0 pointer | updated in C0 slice PR |
 | Generator production code | **out of scope** (PR #135 remains on hold) |
+
+---
+
+## 21. C09D6-D1A native styling selector and artifact authority (v7 candidate)
+
+**Authority status:** v6 / C09D6-C0 remains accepted. This §21 is the v7
+C09D6-D1A amendment candidate and remains pending review, merge, and acceptance.
+It freezes architecture for later D1 implementation; it does not implement or
+authorize that implementation by itself.
+
+### 21.1 Purpose and scope
+
+R5 established that required CTA Tango styling semantics survive in the
+approved source-independent Design IR, TokenSet, responsive IR, and package
+styling authority. D1A closes the remaining authority questions:
+
+1. how generated CSS mechanically selects nested DesignNodes without source
+   identity or semantic guessing; and
+2. which stylesheet artifact the pure generator returns, and which later step
+   owns package import-graph changes.
+
+R5 evidence remains accepted and unchanged. D1 is authorized but implementation
+has not started. C09D7-A remains unauthorized.
+
+### 21.2 Public package identity and private node selectors
+
+The §10.8 public package root class remains unchanged and is derived only from
+validated `category` and `module_intent`:
+
+```text
+.lf-<category>-<module_intent with "_" → "-">
+```
+
+Examples: `section + marketing_block` produces
+`.lf-section-marketing-block`; `component + card` produces
+`.lf-component-card`. This is the public package structural identity. D1 adds a
+separate private selector for each artifact-visible DesignNode that owns
+emitted native styling.
+
+Each such node receives exactly one deterministic private generator structural
+class. This class is not a public API, theme API, source identity, or semantic
+role. It is only the internal join between generated HEEx and generated CSS.
+It must not derive from `source_trace`, `source_id`, source classes,
+`globalClasses`, source labels, Bricks element names, `semantic_role`,
+`contract_id`, or arbitrary `node_id` text.
+
+The sole selector identity input is the node's canonical absolute Design IR
+traversal path. `DesignDocument.root_nodes` and each `children` list use
+one-based positions. The path is the same path contract consumed by
+`LiveFrames.IR.DesignNode.deterministic_id/1`. Before deriving a selector, the
+generator must prove:
+
+```text
+node.node_id == DesignNode.deterministic_id(path)
+```
+
+A mismatch blocks generation with the suggested stable diagnostic code
+`native_generator.styling.node_identity_mismatch`. The generator must not strip
+`node_` from an ID, replace arbitrary ID text, interpolate a raw ID into CSS,
+or accept an ID that does not match its traversal path.
+
+After validation, render each positive path segment as six-digit decimal and
+join segments with `-`. Append it to the public package root class as follows:
+
+```text
+<package-root-class>__n-<private_path_suffix>
+
+[1]       → 000001
+[1, 2]    → 000001-000002
+[1, 2, 3] → 000001-000002-000003
+```
+
+For example, the class for path `[1, 2]` below
+`.lf-section-marketing-block` is
+`.lf-section-marketing-block__n-000001-000002`. The boundary root receives
+both its existing public package root class and its private node class. Nested
+artifact-visible nodes receive their private class.
+
+Do not generate styling selectors for nodes that C09D6-C replaces completely
+with a `subtree_slot`. A collection repeat reuses the same node class for every
+emitted instance. Optional emission may leave a deterministic selector in CSS
+even when a runtime assign omits the element. Dynamic tag alternatives for one
+heading node share that node's class.
+
+### 21.3 Native style-locus rule
+
+Attach a node's private class to the native element that owns that node's
+normalized styles. Do not put it on a wrapper just because the renderer emits
+multiple elements. The first wave requires one mechanically proven native
+style locus per DesignNode. If compound markup leaves the style owner
+unprovable, stop with `STYLE_LOCUS_AUTHORITY_GAP`; do not guess or move styles
+to a wrapper. In particular, image `object-fit`, dimensions, radius, and other
+normalized image styles must not silently move to a `<figure>`. CTA Tango D1
+may proceed only for CTA nodes whose style loci are mechanically unambiguous.
+
+### 21.4 Mechanical StyleValue-to-CSS emission
+
+D serializes approved styling semantics. It does not learn ACSS or source
+syntax and does not invent missing visual meaning.
+
+| Design IR value | D1 emission |
+| --- | --- |
+| `literal` | Emit the value only after native CSS safety validation. |
+| `keyword` | Emit the value only after native CSS safety validation. |
+| `token_ref(path)` | Emit `var(<approved TokenBridge css_variable for path>)`. |
+| Structured `calculation` | Mechanically serialize only the approved structured multiply contract. |
+| `complex_css` | Block generation. |
+| `unresolved` | Block generation. |
+
+Opaque legacy calculation strings do not grant new D1 authority. Do not parse
+`source_expression`. If a required calculation cannot be emitted mechanically
+from the frozen structured contract, block generation.
+
+The approved grid-gap case is:
+
+```text
+StyleValue.calculation {
+  operation = "multiply"
+  operands = [token_ref("spacing.grid_gap"), literal(2)]
+}
+
+spacing.grid_gap → --lf-space-grid-gap
+CSS             → calc(var(--lf-space-grid-gap) * 2)
+```
+
+`--grid-gap`, Automatic.css, `source_expression`, and `source_trace` are
+forbidden semantic inputs.
+
+### 21.5 Token mapping ownership
+
+TokenSet owns values. Token mapping JSON owns mapping metadata. `TokenBridge`
+owns mapping validation and lookup. D consumes existing package-owned
+mapping authority through `LiveFrames.Styling.TokenBridge` or a narrowly added
+TokenBridge-owned validated lookup/index API. Existing accepted mapping layers,
+including shared and action-token authority, remain in force.
+
+D must not add a token map, infer CSS variable names from paths, change the
+generator tuple, or take a fourth mapping/semantic input. Missing, duplicate,
+ambiguous, or unsupported mapping for a required token blocks generation.
+
+### 21.6 Responsive CSS ordering
+
+D may use only resolved `ResponsiveOverride` records already present in Design
+IR. It must not parse Bricks breakpoint names or infer thresholds from source
+names. A responsive declaration requires `resolution_status == :resolved` and
+proven numeric width authority. Emit base declarations before responsive ones.
+Never use map enumeration order.
+
+For the CTA first-wave max-width cascade, emit broader max-width overrides
+before narrower ones, so a narrower matching rule wins. For example, emit the
+991px rule before the 767px rule. If available numeric authority cannot
+determine a required overlapping-rule order without adding semantics, stop with
+`RESPONSIVE_CASCADE_AUTHORITY_GAP`.
+
+### 21.7 Primary action styling and CSS safety
+
+Primary action presentation comes from normalized IR/native semantics, such as
+approved button `style = primary` evidence, and existing package
+`--lf-action-primary-*` tokens. Emit it against the generated private node
+selector. Hover and focus-visible are ordinary package CSS pseudo states on
+that selector. Do not use `btn--primary`, source classes in `source_trace`,
+`LiveFrames.Adapters.AutomaticCSS.FidelityResolver`, or
+`.lf-hero__action--primary` as generator inputs or selector reuse.
+
+Before materializing CSS, D must revalidate every property/value pair. A
+low-level declaration validator may be reused only when its input semantics
+are identical. Do not route generation through `LiveFrames.Fidelity`,
+`AutomaticCSS.FidelityResolver`, or Stage A CSS generation. Unsafe or
+unsupported normalized CSS blocks generation. Never silently drop a required
+declaration.
+
+### 21.8 Styling artifact and import-graph ownership
+
+Extend the conceptual artifact taxonomy with `:stylesheet` alongside
+`:elixir_module`. `NativeGenerator.generate/3` remains pure and in-memory and
+keeps the exact input tuple:
+
+```text
+ComponentContract, ComponentizationPlan, DesignDocument
+```
+
+Successful D1 generation returns an Elixir artifact and a component stylesheet
+artifact in `GeneratedArtifactBundle.artifacts`. Sort both by logical path
+using §13's canonical UTF-8 lexicographic artifact ordering.
+
+Derive stylesheet paths from validated category and `module_intent` only:
+
+| Category | Logical stylesheet path |
+| --- | --- |
+| `:section` | `assets/css/components/sections/<module_intent>.css` |
+| `:component` | `assets/css/components/<module_intent>.css` |
+| `:pattern` | `assets/css/components/patterns/<module_intent>.css` |
+| `:primitive` | `assets/css/components/primitives/<module_intent>.css` |
+
+Do not infer paths from source filenames or source paths. The generator owns
+the component stylesheet artifact. It must not read, discover, or mutate
+`apps/live_frames/assets/css/live_frames.css`. A later, explicitly reviewed
+package-integration step for a generated component owns deterministic import
+insertion. For CTA Tango, that step occurs only after componentization and
+generation have separate authorization.
+
+```text
+D1_GENERATOR_OWNS_COMPONENT_STYLESHEET=YES
+D1_GENERATOR_READS_IMPORT_GRAPH=NO
+D1_GENERATOR_MUTATES_IMPORT_GRAPH=NO
+IMPORT_GRAPH_CHANGE=EXPLICIT_REVIEWED_INTEGRATION
+```
+
+This narrows §10.8's package CSS/import requirement to pure artifact
+generation followed by explicit package integration. It does not authorize
+filesystem writes, Catalogue mutation, or consumer-project mutation.
+
+### 21.9 Lifecycle, blocking states, and performance
+
+D extends the existing §8 lifecycle. It does not add a second lifecycle:
+
+```text
+received
+→ gate_validated
+  guards: existing generation gates; styling inputs are representable
+  failure: generation_blocked
+→ render_model_built
+  guards: HEEx indexes built; canonical paths verified; private classes
+          derived; style loci proven; TokenBridge mapping index valid
+  failure: generation_blocked, or generation_failed for internal defects
+→ source_emitted
+  effect: materialize HEEx and stylesheet bytes in memory only
+  failure: generation_failed
+→ source_validated
+  guards: generated Elixir and CSS checks pass; no forbidden source dependency
+  failure: generation_failed
+→ generated
+  success: deterministic GeneratedArtifactBundle
+```
+
+Styling input failures are `generation_blocked`, including canonical
+node-ID/path mismatch, required `complex_css` or unresolved values, missing or
+ambiguous TokenBridge mappings, unsupported structured calculations,
+unresolved responsive overrides, unavailable responsive order, unsafe CSS,
+unprovable style loci, and any requirement for source-dependent selectors,
+source classes, or source IDs. Reserve `generation_failed` for internal
+defects after input gates pass.
+
+This is a cold compile/build-time path:
+
+```text
+HOT_DATA=N/A
+WARM_DATA=N/A
+REDIS=N/A
+POSTGRES=N/A
+PUBSUB=N/A
+OBAN=N/A
+PGBouncer=N/A
+100K_RUNTIME_CONCURRENCY=N/A
+PATH=cold compile/build-time
+RUNTIME_CSS_GENERATION=NO
+FILESYSTEM_DISCOVERY=NO
+NETWORK=NO
+DB=NO
+CACHE=NO
+```
+
+Preserve §13's deterministic complexity bound:
+
+```text
+O(boundary nodes + bindings + contract records + plan records + style records + responsive records)
+```
+
+Do not rescan the full IR tree per style or per projection, and do not make
+output depend on map order.
+
+### 21.10 D1A stop conditions and scope
+
+Do not repair architectural gaps in D1A. Stop on any applicable condition:
+
+```text
+STOP=MAIN_MOVED
+STOP=BASE_CI_NOT_GREEN
+STOP=AUTHORITY_CONFLICT
+STOP=R5_CONTRADICTION
+STOP=DESIGN_IR_SCHEMA_CHANGE_REQUIRED
+STOP=COMPONENT_CONTRACT_SCHEMA_CHANGE_REQUIRED
+STOP=COMPONENTIZATION_PLAN_SCHEMA_CHANGE_REQUIRED
+STOP=GENERATOR_TUPLE_CHANGE_REQUIRED
+STOP=NEW_RENDER_PROJECTION_ROLE_REQUIRED
+STOP=SEMANTIC_CHILD_NAMING_REQUIRED
+STOP=SOURCE_CLASS_REQUIRED
+STOP=SOURCE_ID_REQUIRED
+STOP=SOURCE_LABEL_REQUIRED
+STOP=FIDELITY_REQUIRED
+STOP=STYLE_LOCUS_AUTHORITY_GAP
+STOP=RESPONSIVE_CASCADE_AUTHORITY_GAP
+STOP=BEHAVIOR_IR_REQUIRED
+STOP=PRODUCTION_CHANGE_REQUIRED
+STOP=TEST_CHANGE_REQUIRED
+```
+
+Do not repair these conditions in D1A.
+
+D1A is architecture/documentation only. It does not implement the styling
+generator, CTA Tango, CSS, tests, schema changes, TokenBridge changes, mapping
+JSON changes, import edits, or C09D7-A. Its roadmap state remains pending review
+and acceptance until the amendment is reviewed, merged, and independently
+verified after merge.
