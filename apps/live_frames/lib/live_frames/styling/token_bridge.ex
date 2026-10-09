@@ -91,7 +91,7 @@ defmodule LiveFrames.Styling.TokenBridge.PackageMappingIndex do
 
   defp valid_compose?(%{"type" => "fluid_px_pair"} = compose) do
     Enum.all?(["min", "max", "viewport_min", "viewport_max"], fn key ->
-      is_binary(compose[key]) and compose[key] != ""
+      valid_direct_path?(compose[key])
     end)
   end
 

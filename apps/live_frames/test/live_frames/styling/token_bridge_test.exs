@@ -399,4 +399,28 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     assert {:error, {:ambiguous_mapping_entry, "spacing.gutter.min"}} =
              LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
   end
+
+  test "rejects noncanonical paths in package mapping compositions" do
+    mappings = [
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "invalid_compose_path",
+        "entries" => [
+          %{
+            "compose" => %{
+              "type" => "fluid_px_pair",
+              "min" => "../bad path",
+              "max" => "spacing.gutter.max",
+              "viewport_min" => "layout.viewport.min",
+              "viewport_max" => "layout.viewport.max"
+            },
+            "css_variable" => "--lf-space-gutter"
+          }
+        ]
+      }
+    ]
+
+    assert {:error, {:invalid_mapping_entry, _entry}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
+  end
 end
