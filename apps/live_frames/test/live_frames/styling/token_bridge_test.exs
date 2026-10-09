@@ -246,8 +246,8 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     hero = TokenBridge.load_mapping!(@mapping)
 
     assert {:ok, layered} = TokenBridge.generate(token_set, [shared, hero])
-    assert {:ok, reversed} = TokenBridge.generate(token_set, [shared, hero])
-    assert layered == reversed
+    assert {:ok, repeated} = TokenBridge.generate(token_set, [shared, hero])
+    assert layered == repeated
 
     assert layered =~ "--lf-typography-body-size-small:"
     assert layered =~ "--lf-radius-base:"
@@ -255,6 +255,30 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     refute layered =~ "--text-s:"
     refute layered =~ "--radius:"
     refute layered =~ "--grid-gap:"
+  end
+
+  test "allows the same token_set_path across layers when css variables differ" do
+    token_set = hero_token_set()
+
+    first_layer = %{
+      "schema_version" => "1.0.0",
+      "mapping_version" => "synthetic_layer_a",
+      "entries" => [
+        %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-shared-alias"}
+      ]
+    }
+
+    second_layer = %{
+      "schema_version" => "1.0.0",
+      "mapping_version" => "synthetic_layer_b",
+      "entries" => [
+        %{"token_set_path" => "radius.base", "css_variable" => "--lf-radius-hero-alias"}
+      ]
+    }
+
+    assert {:ok, css} = TokenBridge.generate(token_set, [first_layer, second_layer])
+    assert css =~ "--lf-radius-shared-alias:"
+    assert css =~ "--lf-radius-hero-alias:"
   end
 
   test "rejects duplicate css variables across mapping layers" do

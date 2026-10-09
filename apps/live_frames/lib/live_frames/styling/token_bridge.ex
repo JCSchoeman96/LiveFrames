@@ -57,24 +57,11 @@ defmodule LiveFrames.Styling.TokenBridge do
   end
 
   defp validate_cross_layer_duplicates(entries) do
-    paths =
-      entries
-      |> Enum.flat_map(fn
-        %{"token_set_path" => path} when is_binary(path) -> [path]
-        _ -> []
-      end)
-
     css_variables = Enum.map(entries, & &1["css_variable"])
 
-    case duplicate_values(paths) do
-      [] ->
-        case duplicate_values(css_variables) do
-          [] -> :ok
-          dupes -> {:error, {:duplicate_css_variables, dupes}}
-        end
-
-      dupes ->
-        {:error, {:duplicate_token_set_paths, dupes}}
+    case duplicate_values(css_variables) do
+      [] -> :ok
+      dupes -> {:error, {:duplicate_css_variables, dupes}}
     end
   end
 

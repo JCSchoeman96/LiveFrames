@@ -777,14 +777,6 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp optional_numeric(value) when is_integer(value), do: {:ok, value * 1.0}
   defp optional_numeric(value) when is_float(value), do: {:ok, value}
-
-  defp optional_numeric(value) when is_binary(value) do
-    case Float.parse(String.trim(value)) do
-      {number, ""} -> {:ok, number}
-      _ -> :error
-    end
-  end
-
   defp optional_numeric(_value), do: :error
 
   defp used_optional_source_keys(optional_inputs, settings) do
@@ -1269,11 +1261,13 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     optional_inputs = Keyword.get(opts, :optional_inputs, [])
     constants = Keyword.get(opts, :constants, %{})
 
+    optional_source_keys = Enum.map(optional_inputs, &elem(&1, 1))
+
     %{
       path: path,
       category: category,
       strategy: :derived,
-      source_keys: Enum.map(inputs, &elem(&1, 1)),
+      source_keys: Enum.map(inputs, &elem(&1, 1)) ++ optional_source_keys,
       optional_inputs: optional_inputs,
       constants: constants,
       inputs: inputs,

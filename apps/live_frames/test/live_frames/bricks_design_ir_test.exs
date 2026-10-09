@@ -1454,7 +1454,7 @@ defmodule LiveFrames.BricksDesignIRTest do
   end
 
   describe "R3 bounded radius canonicalization" do
-    defp radius_styles_document(settings \\ %{}) do
+    defp radius_styles_document(settings \\ %{}, tokens \\ nil) do
       base = %{
         "_border" => %{
           "radius" => %{
@@ -1472,7 +1472,7 @@ defmodule LiveFrames.BricksDesignIRTest do
                    source_element("root", "block", 0, Map.merge(base, settings))
                  ]),
                  component_id: "component-a",
-                 token_set: token_set()
+                 token_set: tokens || token_set()
                )
 
       document
@@ -1501,6 +1501,48 @@ defmodule LiveFrames.BricksDesignIRTest do
                metadata: %{"resolution_reason" => "mapping_ambiguous"}
              } =
                node_by_source_id(document, "root").styles["width"]
+    end
+
+    test "fails closed when an extra unrelated resolved --radius candidate is present" do
+      base_ts = token_set()
+
+      unrelated_authority = %{
+        "variable" => "--radius",
+        "kind" => "source_reference",
+        "authority_id" => "synthetic:unrelated-radius",
+        "source_key" => "unrelated-radius",
+        "source_version" => "4.0.1"
+      }
+
+      unrelated = %Token{
+        path: "layout.unrelated_radius",
+        category: :layout,
+        value: "4px",
+        resolved_value: "4px",
+        source_expression: "4px",
+        resolution_status: :resolved,
+        metadata: %{"variable_authorities" => [unrelated_authority]}
+      }
+
+      tokens = Map.put(base_ts.tokens, "layout.unrelated_radius", unrelated)
+      custom = %{base_ts | tokens: tokens}
+
+      document = radius_styles_document(%{}, custom)
+
+      node = node_by_source_id(document, "root")
+
+      for property <- [
+            "border-top-left-radius",
+            "border-top-right-radius",
+            "border-bottom-right-radius",
+            "border-bottom-left-radius"
+          ] do
+        assert %StyleValue{
+                 kind: :unresolved,
+                 metadata: %{"resolution_reason" => "mapping_ambiguous"}
+               } =
+                 node.styles[property]
+      end
     end
 
     test "fails closed when radius.base is unresolved" do
@@ -1574,6 +1616,75 @@ defmodule LiveFrames.BricksDesignIRTest do
 
       assert %StyleValue{kind: :calculation, value: "calc(100% - 1rem)"} =
                node_by_source_id(document, "root").styles["width"]
+    end
+
+    test "grid-gap calculations on non-gap properties fail closed" do
+      document = style_document("_width", "calc(var(--grid-gap) * 2)")
+
+      assert %StyleValue{kind: :unresolved} =
+               node_by_source_id(document, "root").styles["width"]
+    end
+
+    defp grid_gap_authority_token(path, status) do
+      authority = %{
+        "variable" => "--grid-gap",
+        "kind" => "source_output_alias",
+        "authority_id" => "synthetic:grid-gap:#{path}",
+        "source_key" => "contextual-grid-gap",
+        "source_version" => "4.0.1"
+      }
+
+      resolved_value = if status == :resolved, do: "16px", else: nil
+
+      %Token{
+        path: path,
+        category: :spacing,
+        value: resolved_value,
+        resolved_value: resolved_value,
+        source_expression: if(resolved_value, do: resolved_value, else: "var(--grid-gap)"),
+        resolution_status: status,
+        metadata: %{"variable_authorities" => [authority]}
+      }
+    end
+
+    defp grid_gap_calc_document(token_set) do
+      style_document("_gridGap", "calc(var(--grid-gap) * 2)", token_set)
+    end
+
+    defp assert_grid_gap_calc_unresolved(document, label) do
+      style = node_by_source_id(document, "root").styles["gap"]
+      assert %StyleValue{kind: :unresolved} = style, "expected unresolved for #{label}"
+      refute match?(%StyleValue{kind: :calculation, value: "calc(var(--grid-gap) * 2)"}, style)
+    end
+
+    test "grid-gap structured calculation requires unique resolved spacing.grid_gap authority" do
+      for {label, token_set} <- [
+            {"missing", TokenSet.new(tokens: %{})},
+            {"unresolved",
+             TokenSet.new(
+               tokens: %{
+                 "spacing.grid_gap" => grid_gap_authority_token("spacing.grid_gap", :unresolved)
+               }
+             )},
+            {"ambiguous",
+             TokenSet.new(
+               tokens: %{
+                 "spacing.grid_gap" => grid_gap_authority_token("spacing.grid_gap", :resolved),
+                 "spacing.container_gap" =>
+                   grid_gap_authority_token("spacing.container_gap", :resolved)
+               }
+             )},
+            {"wrong_path",
+             TokenSet.new(
+               tokens: %{
+                 "spacing.container_gap" =>
+                   grid_gap_authority_token("spacing.container_gap", :resolved)
+               }
+             )}
+          ] do
+        document = grid_gap_calc_document(token_set)
+        assert_grid_gap_calc_unresolved(document, label)
+      end
     end
   end
 

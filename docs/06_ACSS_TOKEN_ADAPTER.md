@@ -319,7 +319,7 @@ Base sizes are responsive pairs from the demonstrated mobile and desktop
 settings. `typography.body.scale.small` uses the `acss.clamp` recipe with
 frozen `scale_power = -1`, default mobile/desktop endpoints derived from the
 body scale settings, and independent optional overrides from `text-s-min` /
-`text-s-max` when those keys are present (numeric strings accepted). TokenSet
+`text-s-max` when those keys are present as JSON numbers. TokenSet
 remains **1.0.0**; `--text-s` is a calculated output alias only. Line-height
 expressions remain source CSS expressions. Heading font weight uses the
 exported `heading-weight` setting when present, otherwise the Automatic.css

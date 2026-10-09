@@ -1081,8 +1081,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp normalize_non_direct_style(value, property, authority_index, trace, metadata) do
     cond do
-      calculation?(value) and property == "gap" and grid_gap_expression?(value) ->
-        normalize_grid_gap_calculation(value, authority_index, trace, metadata)
+      calculation?(value) and grid_gap_expression?(value) ->
+        normalize_grid_gap_calculation(value, property, authority_index, trace, metadata)
 
       calculation?(value) ->
         StyleValue.calculation(value,
@@ -1407,31 +1407,40 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp grid_gap_expression?(value), do: String.contains?(value, "--grid-gap")
 
-  defp normalize_grid_gap_calculation(value, authority_index, trace, metadata) do
-    case parse_grid_gap_multiply(value) do
-      {:ok, factor} ->
-        case grid_gap_authority(authority_index) do
-          :ok ->
-            calculation = %{
-              "operation" => "multiply",
-              "operands" => [
-                %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
-                %{"kind" => "literal", "value" => factor}
-              ]
-            }
+  defp normalize_grid_gap_calculation(value, property, authority_index, trace, metadata) do
+    if property != "gap" do
+      unresolved_grid_gap_calculation(value, trace, metadata, "grid_gap_wrong_property")
+    else
+      case parse_grid_gap_multiply(value) do
+        {:ok, factor} ->
+          case grid_gap_authority(authority_index) do
+            :ok ->
+              calculation = %{
+                "operation" => "multiply",
+                "operands" => [
+                  %{"kind" => "token_ref", "path" => "spacing.grid_gap"},
+                  %{"kind" => "literal", "value" => factor}
+                ]
+              }
 
-            StyleValue.calculation(calculation,
-              source_expression: value,
-              source_trace: trace,
-              metadata: metadata
-            )
+              StyleValue.calculation(calculation,
+                source_expression: value,
+                source_trace: trace,
+                metadata: metadata
+              )
 
-          {:error, reason} ->
-            unresolved_grid_gap_calculation(value, trace, metadata, reason)
-        end
+            {:error, reason} ->
+              unresolved_grid_gap_calculation(value, trace, metadata, reason)
+          end
 
-      :error ->
-        unresolved_grid_gap_calculation(value, trace, metadata, "grid_gap_expression_unsupported")
+        :error ->
+          unresolved_grid_gap_calculation(
+            value,
+            trace,
+            metadata,
+            "grid_gap_expression_unsupported"
+          )
+      end
     end
   end
 

@@ -3,6 +3,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
+  alias LiveFrames.Adapters.AutomaticCSS.IconTokens
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.VariableAuthority
@@ -994,15 +995,18 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     unknown = Enum.find(diagnostics, &(&1.code == "acss.setting.unknown"))
     assert unknown.metadata["count"] > 0
 
-    present_optional_source_keys =
-      Normalizer.mapping()
-      |> Enum.flat_map(&Map.get(&1, :optional_inputs, []))
-      |> Enum.map(&elem(&1, 1))
-      |> Enum.filter(&Map.has_key?(fixture_settings(), &1))
+    recognized_keys =
+      Normalizer.source_keys()
+      |> Kernel.++(["option-icons"] ++ IconTokens.omitted_source_keys())
+      |> MapSet.new()
 
-    assert unknown.metadata["count"] ==
-             token_set.source_metadata["source_key_count"] -
-               length(Normalizer.source_keys()) - length(present_optional_source_keys)
+    expected_unknown_count =
+      fixture_settings()
+      |> Map.keys()
+      |> Enum.reject(&MapSet.member?(recognized_keys, &1))
+      |> length()
+
+    assert unknown.metadata["count"] == expected_unknown_count
 
     assert Enum.all?(unknown.metadata["sample_keys"], &is_binary/1)
     refute Map.has_key?(token_set.tokens, "overlay.background")
@@ -1029,6 +1033,12 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   end
 
   describe "typography.body.scale.small (text-s)" do
+    test "optional override source keys are included in Normalizer.source_keys/0" do
+      keys = Normalizer.source_keys()
+      assert "text-s-min" in keys
+      assert "text-s-max" in keys
+    end
+
     test "exists with acss.clamp recipe, text-s variable, and scale_power -1 defaults" do
       assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(d0e2_text_scale_settings())
       token = text_s_token(token_set)
@@ -1118,6 +1128,21 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       token = text_s_token(token_set)
       assert token.value["inputs"]["mobile_endpoint_override_px"] == 0.0
       assert token.resolution_status == :resolved
+    end
+
+    test "numeric string overrides fail closed with diagnostics" do
+      for {key, value} <- [{"text-s-min", "14"}, {"text-s-max", "15.0"}, {"text-s-min", " 14 "}] do
+        assert {:ok, token_set, diagnostics} =
+                 AutomaticCSS.normalize(d0e2_text_scale_settings(%{key => value}))
+
+        token = text_s_token(token_set)
+        assert token.resolution_status == :unresolved
+
+        assert Enum.any?(diagnostics, fn diagnostic ->
+                 diagnostic.path == "typography.body.scale.small" and
+                   diagnostic.code == "acss.value.unresolved"
+               end)
+      end
     end
 
     test "malformed present overrides fail closed with diagnostics" do
