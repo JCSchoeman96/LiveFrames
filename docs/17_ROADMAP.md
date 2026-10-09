@@ -2,7 +2,7 @@
 
 **Authoritative architecture roadmap:** [`00_LIVEFRAMES_MASTER_SPEC.md`](00_LIVEFRAMES_MASTER_SPEC.md)
 
-**Current repository checkpoint:** `fcbdb05512a4f33453a043be8b361e7d3abe921e` (R5 accepted on main; base CI run `37928670953` passed)
+**Current repository checkpoint:** `3e75c70433aac1f783221b0c6de3af43679598da` (D1D merged on main; post-merge CI run `37961704551` passed; tree `ea85c0adcaf484c8616e114a8680f5a82ac18ee1`)
 
 ## Execution status (post–Phase 6, C09 programme)
 
@@ -24,11 +24,12 @@
 - **R3 (shared token / value normalization):** complete / merged / accepted (PR #143 — `518b382c73418da97cd6908c84f49b1d03f78bfa`)
 - **R4 (G-CUSTOM-CSS bounded normalization):** complete / merged / accepted (PR #144; approved head `1e6e99615abcaab1d68f5aaa29376263bcdc526b`)
 - **R5 (CTA Tango full style-coverage rerun):** **complete / merged / accepted** (PR #147; merge `20a171bd35187354548eeaea4a58d631d37bd056`; post-merge CI `37920340234` PASS)
-- **D1 (C09D6-D native styling generator):** **authorized; implementation has not started**. D1 implementation is ready only after the D1A authority amendment is reviewed, merged, and accepted.
-- **D1A (native styling selector and artifact authority):** **authority freeze pending review and acceptance**; see §21 of [`docs/development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md)
-- **C09D7-A (componentization):** **not authorized** — downstream of the successful C09D6-D programme
+- **D1A–D1D (C09D6-D1 authority and styling implementation):** **complete / merged / accepted**. D1D merged as `3e75c70433aac1f783221b0c6de3af43679598da`; post-merge CI `37961704551` passed.
+- **C09D7-A (CTA Tango componentization):** **authorized to begin**. No component contract or plan decisions are accepted by this status.
+- **C09D7-B (CTA generation and browser verification):** **not authorized**
+- **C09D7-C (consumer proof and Catalogue handoff):** **not authorized**
 - **P10 consumer ejection:** **not implemented** / not authorized
-- **Next static native tracer (provisional):** CTA Tango — **provisional**; componentization (C09D7-A) **not authorized** until C09D6-D succeeds (sequence remains C → D → D7-A)
+- **Next static native tracer:** CTA Tango; its componentization phase may now begin under C09D7-A.
 
 ```text
 R5=COMPLETE_MERGED_ACCEPTED
@@ -36,17 +37,25 @@ R5_PR=147
 R5_MERGE_SHA=20a171bd35187354548eeaea4a58d631d37bd056
 R5_POST_MERGE_CI=37920340234
 R5_POST_MERGE_CI=PASS
-D1_AUTHORIZED=YES
-D1_IMPLEMENTATION_STARTED=NO
-D1_IMPLEMENTATION_READY=NO_UNTIL_D1A_ACCEPTED
-D1A=AUTHORITY_FREEZE_PENDING_REVIEW_AND_ACCEPTANCE
-C09D7_A_AUTHORIZED=NO
+D1A=ACCEPTED
+D1B=ACCEPTED
+D1C=ACCEPTED
+D1D=ACCEPTED
+D1D_MERGE_SHA=3e75c70433aac1f783221b0c6de3af43679598da
+D1D_POST_MERGE_CI=37961704551
+D1D_POST_MERGE_CI_RESULT=PASS
+D1=COMPLETE_MERGED_ACCEPTED
+C09D7_A_AUTHORIZED=YES
+C09D7_B_AUTHORIZED=NO
+C09D7_C_AUTHORIZED=NO
+P9_AUTHORIZED=NO
+P10_AUTHORIZED=NO
 ```
 
 ### Near-term sequence (pointer)
 
 ```text
-C09D6-A → C09D6-B → C09D6-C0 → C09D6-C → R5 accepted → D1A authority acceptance → D1 implementation → C09D7-A → C09D7-B → C09D7-C → P9 → P10
+C09D6-A → C09D6-B → C09D6-C0 → C09D6-C → R5 accepted → D1 accepted → C09D7-A → C09D7-B → C09D7-C → P9 → P10
 ```
 
 Details: C09D6-A authority §18.
