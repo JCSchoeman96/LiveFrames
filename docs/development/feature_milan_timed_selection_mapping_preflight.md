@@ -19,14 +19,15 @@ IMPLEMENTATION_AUTHORIZED=NO
 
 ## Evidence and authority basis
 
-This mapping uses the accepted repository authorities:
+This mapping relies on the accepted repository authorities below for source evidence and frontend and Behavior rules:
 
 - `docs/development/c07x_unsupported_surface_inventory.md` for the historical Feature Milan behavior summary and source-evidence limits.
 - `docs/development/c09a_query_dynamic_data_contract.md` for query-owner and dynamic-expression evidence.
 - `docs/development/c09b_frontend_binding_authority.md` and `docs/development/c09c2_bricks_binding_mapping_authority.md` for frontend-only bindings and exact admission outcomes.
 - `docs/09_INTERACTION_MODEL.md` for Tabs, TimerPolicy, focus, keyboard, accessibility, motion, runtime, and security rules.
-- `docs/development/p7_interaction_conversion_implementation_plan.md` for P7 plan status.
 - `docs/development/frames_native_conversion_matrix.md`, `docs/development/c07x_unsupported_surface_inventory.md`, `docs/development/c09d6_native_generation_authority.md`, and `docs/04_SOURCE_AND_PROVENANCE.md` for conversion boundaries and provenance.
+
+The current P7 implementation plan is used only to report its authority status. Version 1.0.6 is merged but remains a proposed authority amendment; version 1.0.5 is accepted. This preflight does not treat the 1.0.6 structure as accepted authority.
 
 The accepted historical evidence records dynamic feature data, tab-like ARIA markup, separate desktop/mobile media groups, interval-based active-feature changes, click effects on the active feature or rotation, selected/hidden changes, and media-position changes. It does not prove exact tab/panel relationships, a timer lifecycle, or cross-collection identity.
 
@@ -91,6 +92,7 @@ SOURCE_PAUSE_ON_FOCUS_POLICY=NOT_ESTABLISHED
 SOURCE_PAUSE_ON_HOVER_POLICY=NOT_ESTABLISHED
 SOURCE_REDUCED_MOTION_TIMER_POLICY=NOT_ESTABLISHED
 SOURCE_TIMER_CLEANUP=NOT_ESTABLISHED
+TIMER_RESOURCE_CLEANUP_OWNER=SHARED_RUNTIME_LIFECYCLE
 
 TIMER_POLICY_REQUIRED_IF_TIMED_ROTATION_RETAINED=YES
 FEATURE_MILAN_TIMER_MAPPING=PARTIAL
@@ -195,7 +197,9 @@ No `BehaviorBinding`, `PrimitiveRef`, `initial_state`, `primitive_policy_values`
 
 The source evidence establishes that the active feature advances on an interval and that a click stops or changes rotation. It does not establish the interval duration, startup, restart or reset rules, focus or hover pause behavior, reduced-motion behavior, or timer cleanup. The click condition remains ambiguous and cannot be converted into a permanent stop, pause, reset, or restart rule.
 
-The Behavior authority requires an explicit TimerPolicy when timed behavior is retained. That policy must define purpose, eligibility, start, stop, restart/reset, bounded interval, user interaction, focus interaction, reduced motion, and cleanup. Current Milan evidence does not supply enough of those values, so no TimerPolicy is populated and timed rotation remains partial.
+The Behavior authority requires an explicit TimerPolicy when timed behavior is retained. TimerPolicy owns purpose, bounded duration or interval, eligibility, start, stop, restart/reset, and reduced-motion interaction. Current Milan evidence does not supply enough of those values, so no TimerPolicy is populated and timed rotation remains partial.
+
+A later accepted Milan behavior mapping must decide whether focus, pointer hover, or explicit user interaction changes timer eligibility or triggers stop/restart transitions. Current source evidence does not establish those rules, and this preflight does not assign them to a specific serialized policy field. The shared RuntimeInstance lifecycle owns release of actual timer handles. Source timer cleanup remains unestablished.
 
 Do not borrow Slider/Carousel autoplay rules for Milan. The source does not prove that Milan is a Carousel. A later normalized design may combine selection semantics with TimerPolicy and MotionPolicy, after their requirements have authority.
 
