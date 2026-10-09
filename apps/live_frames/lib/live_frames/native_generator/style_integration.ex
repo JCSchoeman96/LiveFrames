@@ -39,8 +39,9 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     package_class = LiveFrames.NativeGenerator.Renderer.package_root_class(contract)
 
     with {:ok, identity} <- identity_index(doc, package_class),
-         {:ok, scope_nodes} <- boundary_nodes(plan.boundary_node_id, identity.nodes_by_id),
-         {:ok, styles, classes} <- collect_styles(scope_nodes, plan, identity.private_class_by_id),
+         {:ok, boundary_node} <- boundary_node(plan.boundary_node_id, identity.nodes_by_id),
+         {:ok, styles, classes} <-
+           collect_styles(boundary_node, plan, identity.private_class_by_id),
          {:ok, css} <- render_styles(styles),
          {:ok, stylesheet_path} <- stylesheet_path(contract) do
       {:ok,
@@ -64,59 +65,80 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
-  defp boundary_nodes(boundary_id, nodes_by_id) do
+  defp boundary_node(boundary_id, nodes_by_id) do
     case Map.fetch(nodes_by_id, boundary_id) do
-      {:ok, node} -> {:ok, flatten_nodes([node])}
+      {:ok, node} -> {:ok, node}
       :error -> {:error, :boundary_missing}
     end
   end
 
-  defp flatten_nodes(nodes) do
-    Enum.flat_map(nodes, fn node -> [node | flatten_nodes(node.children)] end)
-  end
-
-  defp collect_styles(nodes, plan, private_class_by_id) do
+  defp collect_styles(boundary_node, plan, private_class_by_id) do
     slot_targets =
       plan.render_projections
       |> Enum.filter(&(&1.render_role == :subtree_slot))
       |> MapSet.new(& &1.target_node_id)
 
-    Enum.reduce_while(nodes, {:ok, [], %{}}, fn node, {:ok, rendered, classes} ->
-      if MapSet.member?(slot_targets, node.node_id) do
-        {:cont, {:ok, rendered, classes}}
-      else
-        case node_style(node) do
-          {:ok, base_styles, pseudo_styles} ->
-            responsive = responsive_overrides(node.responsive)
-            styled? = node.styles != %{} or responsive != [] or pseudo_styles != %{}
-            root? = node.node_id == plan.boundary_node_id
+    case collect_node_styles(boundary_node, plan, slot_targets, private_class_by_id, {[], %{}}) do
+      {:ok, {rendered, classes}} -> {:ok, Enum.reverse(rendered), classes}
+      {:error, diagnostic} -> {:error, diagnostic}
+    end
+  end
 
-            cond do
-              figure_image?(node) and styled? ->
-                {:halt, {:error, style_locus_gap(node.node_id)}}
+  defp collect_node_styles(node, plan, slot_targets, private_class_by_id, acc) do
+    if MapSet.member?(slot_targets, node.node_id) do
+      {:ok, acc}
+    else
+      with {:ok, next_acc} <-
+             collect_node_style(node, plan.boundary_node_id, private_class_by_id, acc),
+           {:ok, descendant_acc} <-
+             collect_child_styles(
+               node.children,
+               plan,
+               slot_targets,
+               private_class_by_id,
+               next_acc
+             ) do
+        {:ok, descendant_acc}
+      end
+    end
+  end
 
-              true ->
-                class = Map.fetch!(private_class_by_id, node.node_id)
-
-                classes =
-                  if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
-
-                if styled? do
-                  {:cont,
-                   {:ok, [{class, base_styles, responsive, pseudo_styles} | rendered], classes}}
-                else
-                  {:cont, {:ok, rendered, classes}}
-                end
-            end
-
-          {:error, diagnostic} ->
-            {:halt, {:error, diagnostic}}
-        end
+  defp collect_child_styles(children, plan, slot_targets, private_class_by_id, acc) do
+    Enum.reduce_while(children, {:ok, acc}, fn child, {:ok, child_acc} ->
+      case collect_node_styles(child, plan, slot_targets, private_class_by_id, child_acc) do
+        {:ok, next_acc} -> {:cont, {:ok, next_acc}}
+        {:error, diagnostic} -> {:halt, {:error, diagnostic}}
       end
     end)
-    |> case do
-      {:ok, rendered, classes} -> {:ok, Enum.reverse(rendered), classes}
-      {:error, diagnostic} -> {:error, diagnostic}
+  end
+
+  defp collect_node_style(node, boundary_id, private_class_by_id, {rendered, classes}) do
+    case node_style(node) do
+      {:ok, base_styles, pseudo_styles} ->
+        responsive = responsive_overrides(node.responsive)
+        styled? = node.styles != %{} or responsive != [] or pseudo_styles != %{}
+        root? = node.node_id == boundary_id
+
+        cond do
+          figure_image?(node) and styled? ->
+            {:error, style_locus_gap(node.node_id)}
+
+          true ->
+            class = Map.fetch!(private_class_by_id, node.node_id)
+
+            classes =
+              if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
+
+            rendered =
+              if styled?,
+                do: [{class, base_styles, responsive, pseudo_styles} | rendered],
+                else: rendered
+
+            {:ok, {rendered, classes}}
+        end
+
+      {:error, diagnostic} ->
+        {:error, diagnostic}
     end
   end
 

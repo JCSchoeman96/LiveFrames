@@ -3,23 +3,26 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
 
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentContract.Attr
+  alias LiveFrames.ComponentContract.Slot
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.StyleValue
   alias LiveFrames.NativeGenerator
   alias LiveFrames.NativeGenerator.StyleIntegration
 
-  defp contract(category \\ :section, attrs \\ []) do
+  defp contract(category \\ :section, attrs \\ [], slots \\ []) do
     %ComponentContract{
       contract_id: "style-contract",
       category: category,
       module_intent: "style_fixture",
       function_intent: "render",
       approval_status: :approved,
-      public_attrs: attrs
+      public_attrs: attrs,
+      public_slots: slots
     }
   end
 
@@ -198,6 +201,90 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
 
     assert {:error, :generation_blocked, [diagnostic]} = StyleIntegration.build(c, plan, document)
     assert diagnostic.code == "native_generator.styling.node_identity_mismatch"
+  end
+
+  test "subtree slots prune styling on the target and all descendants" do
+    slot_target_id = DesignNode.deterministic_id([1, 1])
+
+    descendant = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1, 1]),
+      semantic_type: "container",
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    slot_target = %DesignNode{
+      node_id: slot_target_id,
+      semantic_type: "actions",
+      styles: %{"color" => StyleValue.keyword("red")},
+      children: [descendant]
+    }
+
+    document = %DesignDocument{root_nodes: [boundary([slot_target])]}
+
+    slots = [
+      %Slot{
+        name: "actions",
+        semantic_purpose: "actions",
+        consumer_responsibility: "caller"
+      }
+    ]
+
+    projection = %RenderProjection{
+      public_slot_name: "actions",
+      target_node_id: slot_target_id,
+      render_role: :subtree_slot
+    }
+
+    bundle = bundle!(generate(document, contract(:section, [], slots), [projection]))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    module = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
+    target_class = "lf-section-style-fixture__n-000001-000001"
+    descendant_class = target_class <> "-000001"
+
+    assert module =~ "render_slot(@actions)"
+    refute module =~ target_class
+    refute module =~ descendant_class
+    refute stylesheet =~ target_class
+    refute stylesheet =~ descendant_class
+    assert stylesheet == ""
+  end
+
+  test "an unresolved style inside a subtree slot does not block generation" do
+    slot_target_id = DesignNode.deterministic_id([1, 1])
+
+    descendant = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1, 1]),
+      semantic_type: "container",
+      styles: %{"display" => StyleValue.unresolved("var(--unresolved)")}
+    }
+
+    slot_target = %DesignNode{
+      node_id: slot_target_id,
+      semantic_type: "actions",
+      children: [descendant]
+    }
+
+    document = %DesignDocument{root_nodes: [boundary([slot_target])]}
+    assert :ok = IR.validate(document)
+
+    slots = [
+      %Slot{
+        name: "actions",
+        semantic_purpose: "actions",
+        consumer_responsibility: "caller"
+      }
+    ]
+
+    projection = %RenderProjection{
+      public_slot_name: "actions",
+      target_node_id: slot_target_id,
+      render_role: :subtree_slot
+    }
+
+    bundle = bundle!(generate(document, contract(:section, [], slots), [projection]))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert stylesheet == ""
   end
 
   test "ordinary styled image places its private class on img" do
