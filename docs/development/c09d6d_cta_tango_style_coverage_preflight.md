@@ -410,7 +410,7 @@ NORMALIZATION_PATH=Bricks.to_ir with ACSS 4.0.1 structural_variable_authority ex
 SEMANTIC_OUTPUT=grid-template-columns literal minmax(0, 3fr) minmax(0, 2fr)
 TARGET_NODE=775f40
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=R5 canonical IR; enabled authority has the accepted three structural recipes
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof asserts the private CTA grid literal with enabled structural authority
 LIMITATION=No CSS emission is part of R5.
 
 EVIDENCE_ID=R5-CTA-D0-004
@@ -422,7 +422,7 @@ NORMALIZATION_PATH=Bricks.to_ir structured calculation normalization plus native
 SEMANTIC_OUTPUT=calculation multiply with token_ref spacing.grid_gap and literal factor 2; no source --grid-gap operand
 TARGET_NODE=775f40.gap
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=CTA private-reference proof; normalized calculation and --lf-space-grid-gap mapping
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof asserts the calculation; native_shared_v1 contains --lf-space-grid-gap
 LIMITATION=R5 proves the operand and public mapping only; D1 CSS emission is not implemented.
 
 EVIDENCE_ID=R5-CTA-D0-006
@@ -434,7 +434,7 @@ NORMALIZATION_PATH=Bricks.to_ir with enabled ACSS structural authority and respo
 SEMANTIC_OUTPUT=tablet_portrait grid-template-columns literal repeat(1, minmax(0, 1fr))
 TARGET_NODE=775f40.responsive.tablet_portrait
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=R5 canonical IR; --grid-1 matches the accepted structural recipe
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof asserts the private responsive grid literal with enabled structural authority
 LIMITATION=No CSS emission is part of R5.
 
 EVIDENCE_ID=R5-CTA-D0-009
@@ -446,7 +446,7 @@ NORMALIZATION_PATH=Bricks.to_ir with enabled ACSS structural authority
 SEMANTIC_OUTPUT=columns repeat(2, minmax(0, 1fr)); rows repeat(1, minmax(0, 1fr)); gap token_ref spacing.content_gap
 TARGET_NODE=0531fc
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=R5 canonical IR; source grid variables are replaced by their accepted literal recipes
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof asserts the private image-group grid literals with enabled structural authority
 LIMITATION=No CSS emission is part of R5.
 
 EVIDENCE_ID=R5-CTA-D0-010
@@ -506,7 +506,7 @@ NORMALIZATION_PATH=Bricks token canonicalization to radius.base plus native_shar
 SEMANTIC_OUTPUT=four image corner values reference radius.base; public variable --lf-radius-base
 TARGET_NODE=0a0447, b3b3c9, b266bb
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=CTA private-reference proof checks each radius node and image identity
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof checks all four radius properties on each exact image ID
 LIMITATION=The normalization diagnostic retains ambiguous source-variable provenance; required StyleValue values are token references.
 
 EVIDENCE_ID=R5-CTA-D0-023
@@ -518,11 +518,11 @@ NORMALIZATION_PATH=In-memory D0E2 TokenSet overlay plus Bricks token canonicaliz
 SEMANTIC_OUTPUT=typography.body.scale.small with the accepted 14px/15px clamp
 TARGET_NODE=a29aa8.font-size
 REPRODUCTION_COMMAND=§14.1
-TEST_OR_PROOF=CTA private-reference proof asserts the token path and exact D0E2 CSS expression
+TEST_OR_PROOF=CTA Tango R5 full style-coverage proof asserts the token path and exact D0E2 CSS expression
 LIMITATION=The default fixture lacks endpoint overrides; R5 applies the accepted overlay in memory.
 ```
 
-The canonical CSS normalization proof covers `0531fc`, `1171e1`, `806d86`, and `fc5f68`. Bounded custom CSS tests passed: 33 tests, 0 failures. The tagged CTA private-reference proof passed: 1 test, 0 failures.
+The canonical CSS normalization proof covers `0531fc`, `1171e1`, `806d86`, and `fc5f68`. The tagged private-reference run passed both the historical R3 proof and the new R5 proof: 2 tests, 0 failures. The R5 assertions executed with the local private reference present. Bounded custom CSS tests passed: 33 tests, 0 failures.
 
 ### 14.6 R5 gate state
 
