@@ -9,8 +9,9 @@ A1 does not run ComponentizationProposer.propose/2, construct a ComponentContrac
 ## 2. Accepted authority chain
 
 - C09D7-A0 is accepted. Its canonical fragment-map DesignDocument digest is recorded below.
-- A1-G0 is accepted. It authorizes the explicit owner decision and validation slice only.
-- A1-G1 is accepted by PR #173. Approved head dfd8dfef70f035cb5bf3bd5f83597f89ca043493 was merged as bbb9f5248698b4ba59f3b92e2733113c34f46937, tree 6570f24cc9fdbc45acaa605a56446bbe3fc6c24e. Merge parents were d0fe1dc5804ee0d28a6982522a9e70e96b864b68 and the approved G1 head. The merge signature was valid. Post-merge CI run 38032967861 passed.
+- A1-G0 is accepted. It amended the C09D3/C09D6 authority so an accepted `rich_text` node may be replaced by the existing `subtree_slot` render role, without adding a new render role, Plan shape, raw-HTML path, or default tag.
+- A1-G1 is accepted by PR #173. Approved head dfd8dfef70f035cb5bf3bd5f83597f89ca043493 was merged as bbb9f5248698b4ba59f3b92e2733113c34f46937, tree 6570f24cc9fdbc45acaa605a56446bbe3fc6c24e. Merge parents were d0fe1dc5804ee0d28a6982522a9e70e96b864b68 and the approved G1 head. The merge signature was valid. Post-merge CI run 38032967861 passed. G1 implemented the accepted compatibility in `ReferenceValidation` and proved that the existing generic subtree-slot generation path remains sufficient.
+- The A1 owner semantic decisions were subsequently accepted and are the exact decisions validated and frozen by this document.
 - The exact current base for this work is bbb9f5248698b4ba59f3b92e2733113c34f46937, tree 6570f24cc9fdbc45acaa605a56446bbe3fc6c24e.
 
 These authorities do not accept a Contract or Plan and do not authorize A2, A3, or C09D7-B.
