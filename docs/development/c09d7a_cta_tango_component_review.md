@@ -1,30 +1,62 @@
-# C09D7-A3: CTA Tango component review
+# C09D7-A3-R: CTA Tango review authority reconciliation
 
 ## Objective and non-goals
 
-This record independently reviews the owner-accepted CTA Tango A2 `ComponentContract`, `ComponentizationPlan`, and `DesignDocument` tuple. It records whether the proposed Contract meets the current prerequisite and semantic review rules.
+This record reconciles the already-merged CTA Tango A3 review with the accepted A2 authority. The semantic review evidence below remains the evidence recorded by PR #182. This correction changes documentation provenance only.
 
 A3 does not change Contract status, call `ComponentReview.approve/3` or `reject/3`, run `NativeGenerator`, generate HEEx or CSS, resolve the known B risks, start C09D7-B, or authorize C09D7-C. No production or test file changed.
 
-## Owner authority and base
+## Owner authority and A3 merge context
 
 ```text
 C09D7_A0=ACCEPTED
 C09D7_A1=ACCEPTED
 C09D7_A2=ACCEPTED
-C09D7_A3=AUTHORIZED
+C09D7_A3=IN_PROGRESS
+C09D7_A3_ACCEPTED=NO
 C09D7_B=NOT_AUTHORIZED
 C09D7_C=NOT_AUTHORIZED
 
-BASE_SHA=5ea3b0b597eaeebec5524998db93a29e5f7225e8
-BASE_TREE=4a4edf77a826db6840407626155cd68bce39149d
-BASE_SIGNATURE=VALID
-BASE_CI=38044213077
-BASE_CI_STATUS=completed
-BASE_CI_CONCLUSION=success
+A3_BRANCH_CREATION_BASE=5ea3b0b597eaeebec5524998db93a29e5f7225e8
+A3_EFFECTIVE_MERGE_BASE=6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e
+A3_EFFECTIVE_MERGE_BASE_INCLUDES_A2_R=YES
+A3_EFFECTIVE_MERGE_BASE_INCLUDES_PARALLEL_P7_181=YES
+
+A2=ACCEPTED
+A2_ACCEPTANCE_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
+A2_ACCEPTANCE_POST_MERGE_CI=38045940063
+A2_ACCEPTANCE_POST_MERGE_CI_RESULT=PASS
+
+A3_PREFLIGHT_PR=182
+A3_PREFLIGHT_HEAD=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+A3_PREFLIGHT_HEAD_TREE=043e28eb859e6270a93a61e77c45d52e22025598
+A3_PREFLIGHT_MERGE=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+A3_PREFLIGHT_MERGE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+A3_PREFLIGHT_MERGE_PARENT_1=6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e
+A3_PREFLIGHT_MERGE_PARENT_2=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+A3_PREFLIGHT_MERGE_SIGNATURE=VALID
+A3_PREFLIGHT_POST_MERGE_CI=38045951757
+A3_PREFLIGHT_POST_MERGE_CI_RESULT=PASS
 ```
 
-The exact `origin/main` SHA and tree matched the supplied base before the cleanroom was created. CI run 38044213077 completed successfully on that base.
+PR #182 was authored from the pre-reconciliation branch creation base `5ea3b0b597eaeebec5524998db93a29e5f7225e8`. Its actual merge parent 1 was `6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e`, which already included accepted A2 reconciliation PR #180 and parallel P7 documentation PR #181. PR #181 is unrelated to CTA static componentization. The exact PR #182 merge passed post-merge CI run 38045951757.
+
+## Canonical A2 authority provenance
+
+```text
+CANONICAL_A2_PR=178
+CANONICAL_A2_MERGE=741c514f90d1fa72f905096bb21b40d22f11ae3d
+A2_AUTHORITY_RECONCILIATION_PR=180
+A2_AUTHORITY_RECONCILIATION_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
+SUPERSEDED_CONCURRENT_A2_PR=177
+
+A2_SEMANTIC_CANDIDATE_CONFLICT=NO
+A2_AUTHORITY_PROVENANCE_CONFLICT=RECONCILED
+```
+
+PR #178 is the sole canonical A2 proposer evidence record at `docs/development/c09d7a_cta_tango_proposer_output.md`. PR #177, recorded at `docs/development/c09d7a_cta_tango_proposer_run.md`, is historical and non-authoritative evidence only. PR #180 reconciled the concurrent A2 authority records, and its post-merge CI passed.
+
+The Contract and Plan hashes used by PR #182 match the canonical PR #178 hashes exactly. The A3 semantic review therefore inspected the canonical candidate, not a different candidate. The stale PR #177 wording in the original review record was an authority-description defect only.
 
 ## Accepted A2 candidate identity
 
@@ -50,7 +82,7 @@ CONTRACT_DIAGNOSTICS=[]
 PLAN_DIAGNOSTICS=[]
 ```
 
-PR #177 records the accepted proposer run. Merged PR #178 records a second A2 evidence output for the same candidate. Its Contract and Plan hashes match the accepted pair above, so it does not introduce a competing candidate. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in that output describe its historical state when written. Current authority is recorded at the top of this section.
+The canonical proposer evidence record is PR #178. PR #177 is superseded concurrent evidence and does not define A2 authority. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in the canonical evidence output describe its historical state when written. A2 acceptance and reconciliation are recorded above.
 
 ## DesignDocument recovery
 
@@ -197,18 +229,45 @@ RUNTIME_POLLING=0
 100K_RUNTIME_CONCURRENCY=N/A
 ```
 
+The A3-R correction itself changes documentation only and has no runtime effect.
+
+```text
+DATA_LAYER=DOCUMENTATION_ONLY
+RUNTIME_EFFECT=NONE
+
+PROPOSER_EXECUTIONS=0
+GENERATION_PREREQUISITE_EXECUTIONS=0
+REVIEW_TRANSITIONS=0
+NATIVE_GENERATION_EXECUTIONS=0
+
+REDIS=N/A
+POSTGRES=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+```
+
 ## Lifecycle
 
 ```text
-A3_AUTHORIZED
--> base_verified
--> accepted_A2_candidate_recovered
--> A2_candidate_identity_verified
--> structural_review
--> generation_prerequisites_review
--> reviewer_judgment
--> recommendation_approve
--> A3_HUMAN_DECISION_PENDING
+A2_accepted
+→ A3_preflight_merged
+→ stale_A2_authority_reference_detected
+→ canonical_A2_provenance_restored
+→ A3_preflight_evidence_reconciled
+→ A3_HUMAN_DECISION_PENDING
+```
+
+Terminal failures are:
+
+```text
+canonical_candidate_hash_mismatch
+A2_authority_ambiguous
+A3_review_evidence_changed
+approval_transition_executed
+generation_executed
+scope_drift
 ```
 
 ## Recommendation and human decision boundary
@@ -230,3 +289,38 @@ C09D7_C_STARTED=NO
 ```
 
 C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. This A3 record recommends that decision and stops before the state transition. A later explicit human approval is required before `ComponentReview.approve/3` may run.
+
+## A3-R correction run state
+
+The following flags describe this documentation reconciliation run, not the historical PR #182 preflight:
+
+```text
+DESIGN_DOCUMENT_RECONSTRUCTED=NO
+SEMANTIC_INPUT_RECONSTRUCTED=NO
+PROPOSER_EXECUTED=NO
+GENERATION_PREREQUISITES_EXECUTED=NO
+
+COMPONENT_REVIEW_APPROVE_EXECUTED=NO
+COMPONENT_REVIEW_REJECT_EXECUTED=NO
+NATIVE_GENERATOR_EXECUTED=NO
+```
+
+The historical PR #182 prerequisite result remains recorded above. This correction did not repeat the semantic review or prerequisite validation.
+
+```text
+A3_PREFLIGHT_REVIEW=RECONCILED
+A3_REVIEW_RECOMMENDATION=APPROVE
+
+A3_APPROVAL_TRANSITION_EXECUTED=NO
+A3_REJECTION_TRANSITION_EXECUTED=NO
+
+CONTRACT_APPROVAL_STATUS=proposed
+
+A3_HUMAN_DECISION_PENDING=YES
+A3_ACCEPTED=NO
+
+C09D7_B_AUTHORIZED=NO
+C09D7_C_AUTHORIZED=NO
+
+NATIVE_GENERATOR_EXECUTED=NO
+```
