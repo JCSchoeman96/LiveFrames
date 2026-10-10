@@ -615,11 +615,11 @@ Re-evaluate only the affected row when one of these events occurs:
 | ComponentContract, ComponentizationPlan or NativeGenerator changes | Component boundaries and output assumptions | C09D1/C09D3/C09D5/C09D6 authorities |
 | Browser/accessibility verification result | Only verified capabilities in tested scope | Browser evidence owner; record exact browser, state and artifact |
 
-Current required next authorities are: R5 for CTA Tango; Behavior Architecture for lifecycle-bearing families; focused C09C2 mapping for Header and Gallery; C08B/current implementation reconciliation for icon consumers; and separate external-dependency decisions only after exact requirements are accepted. This document does not authorize any of those later actions.
+At this matrix's original baseline, the required next authorities were R5 for CTA Tango; Behavior Architecture for lifecycle-bearing families; focused C09C2 mapping for Header and Gallery; C08B/current implementation reconciliation for icon consumers; and separate external-dependency decisions only after exact requirements were accepted. That baseline pointer is historical. The selected-template evidence closure below owns the current evidence-routing view. This document does not authorize any of those later actions.
 
 ## Selected-template evidence closure
 
-This section adds the current closure layer for the nine selected templates. Existing matrix rows remain historical observations for their stated evidence and baseline. This section does not rewrite or delete those rows. A newer reviewed preflight can supersede a historical row's current-status conclusion without changing the earlier observation.
+This section adds the current closure layer for the nine selected templates. Existing pre-closure matrix content above, including historical rows, status pointers, and programme recommendations, remains historical evidence for its stated baseline. This section does not rewrite or delete that content. A newer reviewed preflight can supersede a historical current-status conclusion without changing the earlier observation.
 
 ```text
 SELECTED_TEMPLATE_COUNT=9
