@@ -2,9 +2,9 @@
 
 ## Purpose and decision
 
-This preflight maps the accepted Feature Milan evidence to the current frontend-data and Behavior authorities. It does not authorize implementation. Unknown source behavior remains unknown, and no source script was executed or interpreted.
+This preflight maps the owner-reviewed Feature Milan evidence to the current frontend-data and Behavior authorities. It does not authorize implementation. Unknown source behavior remains unknown. The embedded source script was inspected as text only; it was not executed.
 
-Milan has two admitted frontend collections and three source query owners. Its title and primary media bindings are normalized. The `{post_content:16}` occurrence remains an evidence-insufficient `content.body` binding with an opaque modifier. The accepted evidence establishes selection, interval-based active-item changes, click effects, and selected/hidden presentation, but it does not establish complete Tabs semantics, timer policy, or the identity relationship between the feature and media collections.
+Milan has two admitted frontend collections and three source query owners. Its title and primary media bindings are normalized. The `{post_content:16}` occurrence remains an evidence-insufficient `content.body` binding with an opaque modifier. The owner-supplied Bricks export establishes positional synchronization, the interval occurrence, manual timer stop, and ordered wrap behavior. It does not establish durable cross-collection item identity, actual rendered cardinality equality, complete Tabs semantics, lifecycle timer/listener cleanup, or a Milan-specific responsive breakpoint.
 
 ```text
 STATIC=PARTIAL
@@ -27,9 +27,9 @@ This mapping relies on the accepted repository authorities below for source evid
 - `docs/09_INTERACTION_MODEL.md` for Tabs, TimerPolicy, focus, keyboard, accessibility, motion, runtime, and security rules.
 - `docs/development/frames_native_conversion_matrix.md`, `docs/development/c07x_unsupported_surface_inventory.md`, `docs/development/c09d6_native_generation_authority.md`, and `docs/04_SOURCE_AND_PROVENANCE.md` for conversion boundaries and provenance.
 
-The current P7 implementation plan is used only to report its authority status. Version 1.0.6 is merged but remains a proposed authority amendment; version 1.0.5 is accepted. This preflight does not treat the 1.0.6 structure as accepted authority.
+The current P7 plan is version 1.0.9, a proposed authority amendment. P7-B4 is implemented and accepted under PR #185. P7-C remains blocked pending acceptance of v1.0.9. This preflight records the tracer evidence and target authority; it does not authorize runtime implementation.
 
-The accepted historical evidence records dynamic feature data, tab-like ARIA markup, separate desktop/mobile media groups, interval-based active-feature changes, click effects on the active feature or rotation, selected/hidden changes, and media-position changes. It does not prove exact tab/panel relationships, a timer lifecycle, or cross-collection identity.
+The owner-supplied artifact is `private_reference/frames/staging-2026-09/feature-section-milan/bricks-component-ybsqrl-feature-section-milan.json`, SHA-256 `f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132`. It records dynamic feature data, tab-like ARIA markup, separate desktop/mobile media groups, a 5000 ms interval read from the root custom property `--animation-duration`, first-item selection, collection-order advance with wrap and no skips, and positional media synchronization. Its repeated feature-control template starts with the source animation data flag true. A feature-control click sets every such flag false and clears the interval. The timer callback returns without advancing if any control flag is false; that return does not clear an interval that is still active. The admitted mutation to false occurs on the click path that also clears the interval. The artifact has no false-to-true or restart path. It does not prove durable cross-collection identity, actual rendered cardinality equality, complete Tabs relationships, or lifecycle cleanup.
 
 ## Required evidence ledger
 
@@ -61,43 +61,85 @@ FEATURE_BODY_BASE_FIELD=SUPPORTED
 FEATURE_BODY_MODIFIER_SEMANTICS=NOT_ESTABLISHED
 FEATURE_BODY_BINDING=EVIDENCE_INSUFFICIENT
 
-FEATURE_TO_MEDIA_SYNCHRONIZATION_EXISTENCE=SUPPORTED_AT_PRESENTATION_LEVEL
-CROSS_COLLECTION_ITEM_CORRELATION=NOT_ESTABLISHED
+FEATURE_TO_MEDIA_SYNCHRONIZATION_EXISTENCE=SUPPORTED
+FEATURE_MEDIA_CORRELATION=POSITIONAL_INDEX
+POSITIONAL_SYNCHRONIZATION_SUPPORTED=YES
+CROSS_COLLECTION_ITEM_CORRELATION=POSITIONAL_INDEX
 CROSS_COLLECTION_STABLE_IDENTITY=NOT_ESTABLISHED
-POSITIONAL_INDEX_COUPLING_AS_TARGET=NOT_AUTHORIZED
+CROSS_COLLECTION_ONE_TO_ONE_IDENTITY=NOT_CLAIMED
+SOURCE_POSITIONAL_SYNCHRONIZATION=PROVEN
+SOURCE_CORRELATION_MECHANISM=NUMERIC_POSITION
+SOURCE_RENDERED_CARDINALITY_EQUALITY=NOT_PROVEN
+SOURCE_BOTH_QUERY_LIMITS=POSTS_PER_PAGE_4
+CALLER_ORDER_IS_SEMANTIC_FOR_MILAN_V1=YES
+STATE_PRESERVATION_ACROSS_REORDER=NO
 
+INITIAL_ACTIVE_ITEM=FIRST_ITEM
 FEATURE_SELECTION_EXISTENCE=SUPPORTED
 TAB_LIKE_ARIA_MARKUP_PRESENT=YES
-GENERIC_TABS_TARGET_FAMILY=AVAILABLE
-FEATURE_MILAN_TABS_CANDIDATE=YES
+TABLIST_ROLE=YES
+TAB_ROLE=YES
+ARIA_SELECTED=YES
+TABPANEL_ROLE=NO
+ARIA_CONTROLS=NO
+CONTROL_ID_TO_PANEL_ID_RELATION=NO
+ROVING_TABINDEX=NO
+KEYDOWN_HANDLER=NO
+ARROW_KEY_BEHAVIOR=NO
+SOURCE_CONTROL_ELEMENT=button
+SOURCE_CONTROL_TYPE=button
+ENTER_SPACE_ACTIVATION=NO_CUSTOM_HANDLER; BROWSER_BEHAVIOR_NOT_VERIFIED
+GENERIC_TABS_TARGET_FAMILY=NOT_SELECTED_FOR_MILAN_V1
+FEATURE_MILAN_TABS_CANDIDATE=NO
 TAB_TO_PANEL_RELATIONSHIP=NOT_ESTABLISHED
 ARIA_CONTROLS_RELATIONSHIP=NOT_PROVEN
 TAB_FOCUS_MODEL=NOT_ESTABLISHED
 TAB_KEYBOARD_MODEL=NOT_ESTABLISHED
 TAB_ACTIVATION_MODE=NOT_ESTABLISHED
 TAB_ORIENTATION=NOT_ESTABLISHED
-FEATURE_MILAN_TABS_MAPPING=PARTIAL
+FEATURE_MILAN_TABS_MAPPING=REJECTED_FOR_V1
 
 TIMED_ROTATION_EXISTENCE=SUPPORTED
 ACTIVE_FEATURE_INDEX_ADVANCES_ON_INTERVAL=SUPPORTED
 CLICK_AFFECTS_ACTIVE_FEATURE_OR_ROTATION=SUPPORTED
 MEDIA_POSITION_CHANGE_EXISTENCE=SUPPORTED
-CLICK_ROTATION_SIDE_EFFECT=SUPPORTED_BUT_CONDITION_AMBIGUOUS
+CLICK_ROTATION_SIDE_EFFECT=FEATURE_CONTROL_CLICK_CLEARS_TIMER
+ADVANCE_USES_COLLECTION_ORDER=YES
+WRAPS_LAST_TO_FIRST=YES
+SKIPS_ITEMS=NO
 
-SOURCE_TIMER_INTERVAL=NOT_ESTABLISHED
-SOURCE_TIMER_INITIAL_START_POLICY=NOT_ESTABLISHED
-SOURCE_TIMER_RESTART_POLICY=NOT_ESTABLISHED
-SOURCE_TIMER_RESET_POLICY=NOT_ESTABLISHED
+TIMER_INTERVAL_MS=5000
+TIMER_INTERVAL_SOURCE=ROOT_CUSTOM_CSS_PROPERTY_--animation-duration
+TIMER_START_POLICY=ON_INITIALIZATION
+MANUAL_TRIGGER_SET=FEATURE_CONTROL_CLICK
+TIMER_CLEARED=YES_ON_CONTROL_CLICK
+TIMER_RESTART_PATH=NONE_IN_ARTIFACT
+TIMER_RESET_PATH=NONE_IN_ARTIFACT
+ROTATION_CAN_RESUME_WITHOUT_REMOUNT=NO
+SOURCE_TIMER_ELIGIBILITY_FLAG=data-should-animate
+SOURCE_INITIAL_ELIGIBILITY=ALL_REPEATED_FEATURE_CONTROLS_TRUE
+SOURCE_MANUAL_ACTIVATION_EFFECT=ALL_FEATURE_CONTROLS_FALSE_AND_INTERVAL_CLEARED
+SOURCE_TIMER_CALLBACK_GUARD=ADVANCE_ONLY_IF_ALL_CONTROL_FLAGS_EXACTLY_TRUE
+SOURCE_INELIGIBLE_CALLBACK=RETURNS_WITHOUT_SELECTION_ADVANCE
+SOURCE_INTERVAL_CAN_EXIST_WHILE_GUARD_FALSE=YES_CALLBACK_RETURN_DOES_NOT_CLEAR_INTERVAL
+ADMITTED_SOURCE_MUTATION_PATH_TO_FALSE=MANUAL_CLICK_ALSO_CLEARS_INTERVAL
+SOURCE_FALSE_TO_TRUE_PATH=NOT_PRESENT
 SOURCE_PAUSE_ON_FOCUS_POLICY=NOT_ESTABLISHED
 SOURCE_PAUSE_ON_HOVER_POLICY=NOT_ESTABLISHED
-SOURCE_REDUCED_MOTION_TIMER_POLICY=NOT_ESTABLISHED
-SOURCE_TIMER_CLEANUP=NOT_ESTABLISHED
+SOURCE_REDUCED_MOTION_COMPLIANCE=NOT_CLAIMED
+SOURCE_TIMER_CLEANUP=CLICK_HANDLER_CLEAR_ONLY; LIFECYCLE_CLEANUP_NOT_PROVEN
+SOURCE_LISTENER_CLEANUP=NO_EXPLICIT_REMOVAL_PATH_IN_ARTIFACT
 TIMER_RESOURCE_CLEANUP_OWNER=SHARED_RUNTIME_LIFECYCLE
 
 TIMER_POLICY_REQUIRED_IF_TIMED_ROTATION_RETAINED=YES
-FEATURE_MILAN_TIMER_MAPPING=PARTIAL
-FEATURE_MILAN_CAROUSEL_MAPPING=NOT_ESTABLISHED
-FEATURE_MILAN_AUTOMATIC_TABS_MAPPING=NOT_ESTABLISHED
+FEATURE_MILAN_TIMER_MAPPING=EXACT_OCCURRENCE_PROPOSED
+FEATURE_MILAN_CAROUSEL_MAPPING=REJECTED_FOR_V1
+FEATURE_MILAN_AUTOMATIC_TABS_MAPPING=NOT_SELECTED_FOR_V1
+SOURCE_TIMER_ELIGIBILITY_FLAG_RUNTIME_AUTHORITY=NO
+SOURCE_DATA_ATTRIBUTE_IN_BEHAVIOR_CONTRACT=NO
+TIMER_ELIGIBILITY_SERIALIZED_FIELD=NO
+NORMALIZED_TIMER_ADVANCE_ELIGIBILITY=timer_lifecycle_running
+TARGET_EQUAL_CARDINALITY_RULE=FAIL_CLOSED_RUNTIME_INVARIANT
 
 DESKTOP_MEDIA_GROUP_PRESENT=YES
 MOBILE_MEDIA_GROUP_PRESENT=YES
@@ -106,11 +148,14 @@ FEATURE_MILAN_RESPONSIVE_BREAKPOINT=NOT_ESTABLISHED
 GENERIC_NATIVE_STYLING_INTEGRATION=PRESENT_ON_MAIN
 FEATURE_MILAN_SPECIFIC_STYLE_MAPPING=PARTIAL
 
-P7_PLAN_VERSION_PRESENT_ON_MAIN=1.0.6
-P7_1_0_6_STATUS=PROPOSED_AUTHORITY_AMENDMENT
-P7_1_0_6_MERGED=YES
-P7_1_0_6_OWNER_ACCEPTANCE=NOT_ESTABLISHED_BY_THIS_PREFLIGHT
-P7_1_0_5_STATUS=ACCEPTED
+P7_PLAN_VERSION=1.0.9
+P7_1_0_9_STATUS=PROPOSED_AUTHORITY_AMENDMENT
+P7_B4=IMPLEMENTED_ACCEPTED
+P7_B4_PR=185
+P7_B4_MERGE_SHA=777762c6aec915d7fc6b3f1f33ce3b7241fd3b82
+P7_B4_POST_MERGE_CI=38051474138
+P7_B4_POST_MERGE_CI_RESULT=PASS
+P7_C=BLOCKED_PENDING_V1_0_9_ACCEPTANCE
 
 FEATURE_SELECTION_STATE_LAYER=browser_local
 FEATURE_TIMER_STATE_LAYER=browser_local
@@ -151,9 +196,21 @@ The base field for `b41076` is known. The meaning of `:16` is not. Do not interp
 
 ### Cross-collection synchronization
 
-The accepted evidence says active selection changes media position. That establishes a presentation-level synchronization effect only. It does not establish correspondence between items in `ebbb6e` and `b71f5d`.
+The source script uses one numeric index for the feature controls, descriptions, and slides. Both repeated feature and media queries request four posts. This establishes positional synchronization as the source mechanism, but it does not prove durable identity, one-to-one domain identity, or equal actual rendered cardinality. Milan v1 proposes using `selected_position` against caller-ordered collections without treating position as identity.
 
-Do not infer equal indexes, matching post IDs, matching order or cardinality, a one-to-one pairing, or a shared stable key. If native reproduction requires one of those assumptions, stop with `STOP=CROSS_COLLECTION_IDENTITY_INVENTION_REQUIRED` and route the gap to frontend-data and componentization authority.
+As a LiveFrames architectural decision, every synchronized rendered collection must be non-empty and have equal cardinality. A mismatch makes the RuntimeInstance unavailable and releases its owned timer. Do not repair the mismatch by sorting, joining IDs, truncating, padding, zipping, or guessing correspondence. Same-cardinality reorder retains the same numeric selected position and does not preserve item identity.
+
+```text
+FEATURE_MEDIA_CORRELATION=POSITIONAL_INDEX
+POSITIONAL_SYNCHRONIZATION_SUPPORTED=YES
+CROSS_COLLECTION_STABLE_IDENTITY=NOT_ESTABLISHED
+SOURCE_RENDERED_CARDINALITY_EQUALITY=NOT_PROVEN
+TARGET_EQUAL_CARDINALITY_RULE=FAIL_CLOSED_RUNTIME_INVARIANT
+STATE_PRESERVATION_ACROSS_REORDER=NO
+RUNTIME_EQUAL_CARDINALITY_REQUIRED=YES
+POSITIONAL_CARDINALITY_MISMATCH=UNAVAILABLE
+POSITIONAL_CARDINALITY_SILENT_REPAIR=NO
+```
 
 ### Query ownership
 
@@ -168,58 +225,59 @@ The host Phoenix application owns fetching, Ash/database/API/CMS access, authori
 
 ## Selection and Tabs fit
 
-Feature selection exists, and the source has tab-like ARIA markup. Those facts make generic Tabs a candidate target family; they do not establish a complete Tabs binding. The accepted evidence does not prove tab-to-panel identity, `aria-controls`, ordered tab membership, selected/focused state separation, activation mode, orientation, roving tab stop, or keyboard behavior.
-
-The canonical Tabs target requires distinct `selected_tab_id` and `focused_tab_id`, an ordered tab set, one panel per tab, explicit activation and orientation, and keyboard behavior. ARIA role-like markup does not supply those semantics. Do not create tab/panel relationships or infer keyboard behavior from attributes.
+The proposed Milan mapping is Selection 1.0.0, not Tabs. The source contains `tablist`, `tab`, and `aria-selected`, but has no `tabpanel`, `aria-controls`, control/panel ID relation, roving tabindex, keydown handler, or arrow-key behavior. Do not create tab/panel relationships or infer keyboard behavior from attributes. Manual selection remains available through operable controls; the exact generated HTML element and activation realization are selected in the realization slice.
 
 ```text
-FEATURE_MILAN_TABS_MAPPING=PARTIAL
+FEATURE_MILAN_TABS_MAPPING=REJECTED_FOR_V1
 ```
 
-Keep these concepts separate until accepted evidence and authority resolve them:
+Keep these as distinct concerns. Selection and timer transitions synchronize the ordered presentation groups. Keyboard focus remains outside Selection v1.0.0, and presentation animation remains in the static styling lane.
 
-- user selection;
-- keyboard focus;
-- timed active-item changes;
-- media synchronization;
-- presentation animation.
+Timed sequential selection does not establish Carousel or automatic-activation Tabs semantics. Those mappings are rejected for Milan v1.
 
-The evidence does not establish Carousel autoplay semantics or automatic-activation Tabs:
-
-```text
-FEATURE_MILAN_CAROUSEL_MAPPING=NOT_ESTABLISHED
-FEATURE_MILAN_AUTOMATIC_TABS_MAPPING=NOT_ESTABLISHED
-```
-
-No `BehaviorBinding`, `PrimitiveRef`, `initial_state`, `primitive_policy_values`, `FocusPolicy`, or `KeyboardPolicy` is created by this preflight.
+The M1-A authority records the eventual `PrimitiveRef` and occurrence values; it does not create a `BehaviorBinding` or authorize runtime implementation.
 
 ## Timed rotation boundary
 
-The source evidence establishes that the active feature advances on an interval and that a click stops or changes rotation. It does not establish the interval duration, startup, restart or reset rules, focus or hover pause behavior, reduced-motion behavior, or timer cleanup. The click condition remains ambiguous and cannot be converted into a permanent stop, pause, reset, or restart rule.
+The source export defines `--animation-duration: 5000ms` in root custom CSS. Its embedded script reads that property and uses the parsed value as the interval delay. On initialization it starts the interval. A feature-control click clears the interval, and the artifact has no restart or reset path. Rotation cannot resume before a new mount. Focus and hover pause behavior, lifecycle cleanup, and source reduced-motion behavior remain unproven.
 
-The Behavior authority requires an explicit TimerPolicy when timed behavior is retained. TimerPolicy owns purpose, bounded duration or interval, eligibility, start, stop, restart/reset, and reduced-motion interaction. Current Milan evidence does not supply enough of those values, so no TimerPolicy is populated and timed rotation remains partial.
+The source also gates each interval callback on every feature control's animation data value being exactly true. If the guard is false, the callback returns without selection advance and does not itself clear the interval. The admitted path that changes the values to false is a feature-control click, which also clears the interval. The source does not restore the values to true.
 
-A later accepted Milan behavior mapping must decide whether focus, pointer hover, or explicit user interaction changes timer eligibility or triggers stop/restart transitions. Current source evidence does not establish those rules, and this preflight does not assign them to a specific serialized policy field. The shared RuntimeInstance lifecycle owns release of actual timer handles. Source timer cleanup remains unestablished.
+For target semantics, normalize this source mechanism to the derived timer lifecycle. `timer_advance` is eligible only when `timer_lifecycle == running`. Reduced motion prevents automatic entry into `running`; manual selection remains available. Manual activation changes `running` to `stopped_by_user`. Updates and reconciliation do not restart, reset, or resume it. Remount begins a new timer lifecycle. The source flag is provenance only and is not serialized in BehaviorContract, primitive policy, or TimerPolicy.
 
-Do not borrow Slider/Carousel autoplay rules for Milan. The source does not prove that Milan is a Carousel. A later normalized design may combine selection semantics with TimerPolicy and MotionPolicy, after their requirements have authority.
+The exact target TimerPolicy is:
+
+```text
+{
+  "purpose": "advance_selection",
+  "interval_ms": 5000,
+  "start": "on_initialization",
+  "manual_activation": "stop",
+  "restart": "never",
+  "reset": "none",
+  "reduced_motion": "disable_automatic_advance"
+}
+```
+
+This is the proposed target policy. Reduced motion is LiveFrames accessibility policy, not an observation of source compliance. It suppresses automatic advance but keeps manual selection available. Manual activation moves the timer from running to stopped_by_user. Updates and reconciliation do not restart, reset, or resume it; remount begins a new timer lifecycle. The runtime releases its browser-local interval on unavailable or destroyed. Source lifecycle timer/listener cleanup remains unproven and does not weaken target cleanup.
 
 ## Focus, keyboard, and accessibility
 
-P7 plan 1.0.6 is present on main and marked `proposed authority amendment`; 1.0.5 is marked accepted, and P7-B1 is recorded as authorized but blocked pending 1.0.6 acceptance. Merge status does not establish owner acceptance. This preflight does not treat the 1.0.6 FocusPolicy reference shape as accepted Milan authority.
+P7 plan v1.0.9 records the Selection semantic accessibility boundary. It does not claim that partial source Tabs markup forms an accessible Tabs widget.
 
 The accessibility evidence remains partial. Review each item independently:
 
 | Area | Evidence status |
 | --- | --- |
-| Tab-like roles and attributes | Present, exact relationships unproven |
-| Selected state exposure | Selected presentation changes; complete state exposure is unproven |
-| Hidden state exposure | Hidden presentation changes; focus exclusion is unproven |
-| Tab-to-panel relationship | Not established |
-| Keyboard activation and focus movement | Not established |
-| Roving tab stop | Not established |
-| Timer behavior while focus is within the feature | Not established |
-| Timed changes under reduced motion | Not established |
-| Desktop/mobile content duplication and its accessibility effects | Separate media groups exist; relationship and duplication consequences are unproven |
+| Source tab-like roles and attributes | `tablist`, `tab`, and `aria-selected` occur; full Tabs relationships are absent |
+| `tabpanel`, `aria-controls`, control/panel IDs | Absent |
+| Roving tabindex and arrow-key behavior | Absent |
+| Control element | Source config requests a `button` with `type="button"`; no browser verification was performed |
+| Enter/Space behavior | No custom key handler is present; exact generated element and activation realization are selected in the realization slice |
+| Selected presentation | Target keeps exactly one selected position and exposed selected state synchronized |
+| Inactive hidden content | Target must not leave hidden content accidentally interactive or focusable |
+| Reduced motion | Target TimerPolicy disables automatic advance; manual selection remains available |
+| Desktop/mobile content duplication | Separate media groups exist; their relationship and duplication consequences remain unproven |
 
 Do not claim APG Tabs compliance. ARIA-like attributes do not prove the behavior contract, and tab markup alone does not establish that timed content changes are accessible. Do not invent `aria-controls` or focus rules.
 
@@ -279,9 +337,9 @@ PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 | --- | --- |
 | `05e604` non-loop query | Existing C09C2 fail-closed authority; no new collection |
 | `{post_content:16}` modifier | Frontend-data/binding authority |
-| Cross-collection item correlation | Frontend-data and componentization |
-| Exact Tabs semantic fit | Behavior/P7 |
-| Timer lifecycle and click/timer interaction | Behavior/P7 |
+| Durable cross-collection identity, if a future feature requires it | Frontend-data and componentization |
+| Partial source Tabs markup | Not selected for Milan v1; Selection semantic boundary is frozen in P7-C/Milan |
+| Timer lifecycle and click stop | Selection TimerPolicy in P7-C/Milan; browser cleanup in the later runtime slice |
 | Focus and keyboard semantics | Behavior/P7 and accessibility |
 | Active/hidden and responsive styles | Static lane |
 | Final caller-data API | Componentization |
@@ -289,8 +347,48 @@ PRIVATE_SOURCE_NEW_SEMANTICS=NONE
 
 ## Stop conditions
 
-The evidence gaps above remain recorded as partial or not established; they do not require new source inspection. Stop if satisfying the mapping would require inventing a collection boundary, body modifier semantics, cross-collection identity, Tabs relationships, keyboard policy, or TimerPolicy values. Also stop if work enters Behavior, static styling, data architecture, or componentization implementation.
+The evidence gaps above do not block positional synchronization. Stop if implementation requires durable cross-collection identity, Tabs/Carousel semantics, an invented responsive breakpoint, or invented body modifier semantics. Cardinality mismatch must fail closed as unavailable. This authority slice does not implement runtime, styling, data access, or componentization.
 
 ```text
 STOP_CONDITIONS_TRIGGERED=NONE
+M1_A_AUTHORITY=PROPOSED_IN_THIS_SLICE
+P7_C_IMPLEMENTED=NO
+```
+
+
+## Proposed Milan v1 semantic closure
+
+The proposed first Milan Behavior binding uses `PrimitiveRef{kind="selection", definition_version="1.0.0"}`. State is `selected_position`, initially zero, with a P7-C static domain of non-negative safe integers and a realization-owned membership invariant `selected_position < rendered_item_count`. It is positional state only.
+
+```text
+MILAN_V1_DURABLE_ITEM_IDENTITY=NO
+MILAN_V1_POSITIONAL_SYNCHRONIZATION=YES
+STATE_PRESERVATION_ACROSS_REORDER=NO
+CONTROL_COLLECTION_CARDINALITY=1
+PRESENTATION_COLLECTION_CARDINALITY=1_OR_MORE
+RUNTIME_EQUAL_CARDINALITY_REQUIRED=YES
+POSITIONAL_CARDINALITY_MISMATCH=UNAVAILABLE
+POSITIONAL_CARDINALITY_SILENT_REPAIR=NO
+P7_C_VALIDATES_STATIC_STATE_DOMAIN=YES
+P7_C_VALIDATES_RENDERED_CARDINALITY=NO
+RUNTIME_VALIDATES_POSITION_MEMBERSHIP=YES
+```
+
+The caller supplies synchronized lists in intended order. A runtime requires each rendered collection to be non-empty and equal in cardinality. On mismatch it becomes unavailable and releases the timer. No sorting, guessed join, truncation, padding, zip, or correspondence inference is allowed. If cardinalities remain equal through reorder, keep the numeric selected position; do not claim identity or reset selection. Remount initializes position zero.
+
+Selection allows only `activate` and `timer` triggers. With `timer_policy=nil`, exactly one `activate` trigger and no `timer` trigger are required. With a TimerPolicy, exactly one of each is required. Activate's origin must equal the node ID of the single `control_collection` target. Timer's origin must be nil. Duplicates, unknown kinds, wrong or missing activate origin, timer origin, timer without policy, and policy without timer trigger reject. Activate(position) requires a position in the static domain and valid runtime membership, sets the position, synchronizes selected/active/hidden presentation, and applies the timer manual-activation effect. Timer advance requires `timer_lifecycle == running` and valid runtime collection membership; it advances in caller order with wrap and no skipped items. No other Selection 1.0.0 transition exists.
+
+The exact proposed TimerPolicy is the map shown above. Its eligibility is derived realization state, not a serialized field. `not_started` becomes `running` at mount/init unless reduced motion suppresses autoplay, in which case it becomes `suppressed`. Manual activation moves `running` to `stopped_by_user`. Unavailable or destroyed runtime releases the mounted timer resource. The manual-stop state survives ordinary updates and reconciliation; remount begins a new timer lifecycle. The browser timer handle remains ephemeral.
+
+Selection does not require tab roles, tabpanel, `aria-controls`, roving tabindex, a custom keyboard policy, or automatic Tabs activation. Exact markup and ARIA are selected and verified during runtime realization.
+
+```text
+PRIVATE_SOURCE_EXECUTED=NO
+SOURCE_RUNTIME_ADOPTED=NO
+SOURCE_JS_EXECUTION=NO
+SOURCE_SELECTOR_RUNTIME_AUTHORITY=NO
+UNTRUSTED_STRING_TO_ATOM=NO
+ARBITRARY_EVENT_NAME_FROM_SOURCE=NO
+SOURCE_TIMER_CLEANUP=NOT_PROVEN
+SOURCE_LISTENER_CLEANUP=NOT_PROVEN
 ```
