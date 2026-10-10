@@ -130,9 +130,29 @@ open(item) --previous(valid_collection_transition)--> open(previous_item)
 open(item) --jump(valid_target_item)--> open(target_item)
 open(item) --close--> closed
 open(item) --Escape--> closed
+open(active_item) --collection update removes active_item--> closed
 ```
 
 Next, previous, and jump stay within the owning collection. Collection boundary policy is `clamp | wrap`, with canonical default `clamp` when an occurrence does not select a policy. Gallery has not selected one. Guards require a valid collection item, membership in the owning collection, a valid Dialog relationship, and valid target references. Effects open or close the Dialog, synchronize its active media item, apply Dialog accessibility state, and manage focus and inertness through Dialog ownership.
+
+The accepted Lightbox reconciliation rule also applies when caller data changes while the Lightbox is open. If an update removes the active item from its owning collection, the composed Lightbox closes, clears active-item presentation state, restores focus to the originating control when present, and releases navigation state or resources that are no longer valid. This is a target requirement; source Gallery evidence does not prove this behavior.
+
+```text
+guard:
+  previously active item no longer belongs to the owning collection
+effects:
+  close composed Lightbox/Dialog
+  clear active-item presentation state
+  restore focus to originating control when present
+  release invalid navigation state/resources
+```
+
+```text
+ACTIVE_ITEM_REMOVED_RECONCILIATION=SUPPORTED_BY_AUTHORITY
+ACTIVE_ITEM_REMOVED_RESULT=CLOSE_LIGHTBOX
+ACTIVE_ITEM_REMOVED_FOCUS_EFFECT=RESTORE_TO_ORIGINATING_CONTROL_IF_PRESENT
+SOURCE_ACTIVE_ITEM_REMOVAL_BEHAVIOR=NOT_PROVEN
+```
 
 ```text
 LIGHTBOX_COLLECTION_CANDIDATE=c74cb5
@@ -173,6 +193,18 @@ SOURCE_ARROW_KEY_NAVIGATION=NOT_PROVEN
 ```
 
 Separately, accepted target Dialog authority requires an accessible name, a focus destination, Escape dismissal, focus containment, focus restoration, and modal background inertness. Do not treat target requirements as proof of source compliance.
+
+The composed Lightbox behavior requires an item relationship, Dialog semantics, and an accessible label. If any is missing, reject the composed behavior. Gallery has no accepted label source, so this does not authorize inventing a label or inferring source accessibility behavior.
+
+```text
+LIGHTBOX_ITEM_RELATIONSHIP_REQUIRED=YES
+LIGHTBOX_DIALOG_SEMANTICS_REQUIRED=YES
+LIGHTBOX_ACCESSIBLE_LABEL_REQUIRED=YES
+
+MISSING_LIGHTBOX_ITEM_RELATIONSHIP_RESULT=REJECT_COMPOSED_BEHAVIOR
+MISSING_LIGHTBOX_DIALOG_SEMANTICS_RESULT=REJECT_COMPOSED_BEHAVIOR
+MISSING_LIGHTBOX_LABEL_RESULT=REJECT_COMPOSED_BEHAVIOR
+```
 
 ```text
 TARGET_DIALOG_ESCAPE_REQUIREMENT=SUPPORTED_BY_AUTHORITY
@@ -343,6 +375,10 @@ CURRENT_ACCEPTED_BEHAVIOR_LIGHTBOX_COMPOSITION=DIALOG_PLUS_COLLECTION_NAVIGATION
 LIGHTBOX_COLLECTION_CANDIDATE=c74cb5
 LIGHTBOX_OPEN_TRIGGER_CONFIGURATION_EXISTENCE=SUPPORTED
 LIGHTBOX_OPEN_TRIGGER_NORMALIZED_MAPPING=PARTIAL
+ACTIVE_ITEM_REMOVED_RECONCILIATION=SUPPORTED_BY_AUTHORITY
+ACTIVE_ITEM_REMOVED_RESULT=CLOSE_LIGHTBOX
+ACTIVE_ITEM_REMOVED_FOCUS_EFFECT=RESTORE_TO_ORIGINATING_CONTROL_IF_PRESENT
+SOURCE_ACTIVE_ITEM_REMOVAL_BEHAVIOR=NOT_PROVEN
 
 SOURCE_NEXT_CONTROL_EXISTENCE=NOT_PROVEN
 SOURCE_PREVIOUS_CONTROL_EXISTENCE=NOT_PROVEN
@@ -359,6 +395,12 @@ TARGET_DIALOG_ESCAPE_REQUIREMENT=SUPPORTED_BY_AUTHORITY
 TARGET_DIALOG_FOCUS_CONTAINMENT=SUPPORTED_BY_AUTHORITY
 TARGET_DIALOG_FOCUS_RESTORATION=SUPPORTED_BY_AUTHORITY
 TARGET_DIALOG_MODALITY_INERTNESS=SUPPORTED_BY_AUTHORITY
+LIGHTBOX_ITEM_RELATIONSHIP_REQUIRED=YES
+LIGHTBOX_DIALOG_SEMANTICS_REQUIRED=YES
+LIGHTBOX_ACCESSIBLE_LABEL_REQUIRED=YES
+MISSING_LIGHTBOX_ITEM_RELATIONSHIP_RESULT=REJECT_COMPOSED_BEHAVIOR
+MISSING_LIGHTBOX_DIALOG_SEMANTICS_RESULT=REJECT_COMPOSED_BEHAVIOR
+MISSING_LIGHTBOX_LABEL_RESULT=REJECT_COMPOSED_BEHAVIOR
 
 SOURCE_COLLECTION_BOUNDARY_POLICY=NOT_ESTABLISHED
 CANONICAL_LIGHTBOX_DEFAULT_BOUNDARY_POLICY=CLAMP
