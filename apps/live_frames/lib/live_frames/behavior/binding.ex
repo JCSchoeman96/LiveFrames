@@ -106,8 +106,8 @@ defmodule LiveFrames.Behavior.Binding do
           | %{optional(String.t()) => canonical_value()}
   @type cross_cutting_policy_values :: %{optional(String.t()) => canonical_value()}
   @type t :: %__MODULE__{
-          binding_id: nil,
-          ordinal: nil,
+          binding_id: String.t() | nil,
+          ordinal: non_neg_integer() | nil,
           primitive_ref: PrimitiveRef.t() | nil,
           owner_node_id: String.t() | nil,
           binding_role: String.t() | nil,
