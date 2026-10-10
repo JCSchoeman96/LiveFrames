@@ -887,6 +887,85 @@ defmodule LiveFrames.NativeGeneratorTest do
     refute source =~ "type=\"button\""
   end
 
+  test "replaces a rich_text subtree slot without emitting source or native style" do
+    rich_text_id = DesignNode.deterministic_id([1, 5])
+
+    rich_text = %DesignNode{
+      node_id: rich_text_id,
+      semantic_type: "rich_text",
+      content: "<p>LF_RICH_TEXT_SOURCE_SENTINEL</p>",
+      styles: %{"color" => StyleValue.literal("red")}
+    }
+
+    %DesignNode{} = boundary = hd(rich_document().root_nodes)
+
+    document = %{
+      rich_document()
+      | root_nodes: [%{boundary | children: boundary.children ++ [rich_text]}]
+    }
+
+    assert :ok = IR.validate(document)
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: rich_text_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    bundle = generate!(c, p, document)
+    source = elixir_artifact(bundle).content
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert source =~ "render_slot(@body)"
+    refute source =~ "LF_RICH_TEXT_SOURCE_SENTINEL"
+    refute source =~ "<p>LF_RICH_TEXT_SOURCE_SENTINEL</p>"
+    refute source =~ "Phoenix.HTML.raw"
+    refute source =~ "raw("
+    refute stylesheet =~ "lf-section-marketing-block__n-000001-000005"
+  end
+
+  test "non-slotted rich_text without a normalized tag remains generation_blocked" do
+    rich_text_id = DesignNode.deterministic_id([1, 5])
+
+    rich_text = %DesignNode{
+      node_id: rich_text_id,
+      semantic_type: "rich_text",
+      content: "Visible rich text"
+    }
+
+    %DesignNode{} = boundary = hd(rich_document().root_nodes)
+
+    document = %{
+      rich_document()
+      | root_nodes: [%{boundary | children: boundary.children ++ [rich_text]}]
+    }
+
+    c = contract()
+    p = plan(c, document)
+
+    assert {:error, :generation_blocked, diagnostics} = NativeGenerator.generate(c, p, document)
+
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_plan.native_generation.tag_unsupported"
+           end)
+  end
+
   test "structured rich_text is generation_blocked before renderer" do
     node =
       %DesignNode{

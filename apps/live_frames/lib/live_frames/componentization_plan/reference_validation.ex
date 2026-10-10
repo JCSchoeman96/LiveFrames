@@ -635,7 +635,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         :asset_alt -> node.semantic_type == "image"
         :link_url -> node.semantic_type == "link"
         :heading_level -> node.semantic_type == "heading"
-        :subtree_slot -> node.semantic_type in ["actions", "button", "link"]
+        :subtree_slot -> node.semantic_type in ["actions", "button", "link", "rich_text"]
         _ -> false
       end
 
@@ -937,9 +937,11 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   defp semantic_allowed_roles(%DesignNode{semantic_type: "heading"}),
     do: [:text_content, :heading_level]
 
-  defp semantic_allowed_roles(%DesignNode{semantic_type: type})
-       when type in ["paragraph", "rich_text"],
-       do: [:text_content]
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "paragraph"}),
+    do: [:text_content]
+
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "rich_text"}),
+    do: [:text_content, :subtree_slot]
 
   defp semantic_allowed_roles(%DesignNode{semantic_type: "image"}),
     do: [:asset_src, :asset_alt]

@@ -429,6 +429,110 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
            ) == :ok
   end
 
+  test "allows a rich_text node to be replaced by a subtree slot" do
+    rich_text_id = DesignNode.deterministic_id([1, 1])
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: rich_text_id,
+              semantic_type: "rich_text",
+              content: "Static rich text"
+            }
+          ]
+        }
+      ]
+    }
+
+    assert :ok = IR.validate(design_document)
+    assert {:ok, _fingerprint} = ComponentizationPlan.design_document_sha256(design_document)
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: rich_text_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+
+    assert ComponentizationPlan.validate_generation_prerequisites(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "rejects a paragraph node as a subtree slot" do
+    paragraph_id = DesignNode.deterministic_id([1, 1])
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [%DesignNode{node_id: paragraph_id, semantic_type: "paragraph"}]
+        }
+      ]
+    }
+
+    assert :ok = IR.validate(design_document)
+    assert {:ok, _fingerprint} = ComponentizationPlan.design_document_sha256(design_document)
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: paragraph_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert "componentization_plan.render_projection.role_node_mismatch" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
   test "rejects mixed root and semantic render roles on a boundary" do
     heading_document = semantic_boundary_document("heading")
     heading_contract = contract(public_attrs: [attr("id"), attr("title")])
