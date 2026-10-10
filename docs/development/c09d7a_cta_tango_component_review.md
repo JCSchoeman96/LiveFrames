@@ -50,7 +50,7 @@ CONTRACT_DIAGNOSTICS=[]
 PLAN_DIAGNOSTICS=[]
 ```
 
-PR #178 is the canonical, reviewed A2 record. PR #177 is historical, non-authoritative evidence; its recorded Contract and Plan hashes match the accepted pair above, so it does not introduce a competing candidate. PR #178's `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values describe its historical state when written. Current authority is recorded at the top of this section.
+PR #177 records the owner-reviewed A2 proposer candidate that was subsequently accepted by the owner. Merged PR #178 records corroborating A2 evidence for the same candidate. Its Contract and Plan hashes match the accepted #177 candidate, so it does not introduce a competing candidate or supersede the #177 owner acceptance. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe the historical state when that record was written. Current authority is recorded at the top of this section.
 
 ## DesignDocument recovery
 
