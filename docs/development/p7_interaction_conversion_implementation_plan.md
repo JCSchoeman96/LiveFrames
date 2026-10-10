@@ -1,18 +1,18 @@
 # P7 interaction conversion implementation plan
 
-**Plan version:** 1.0.7
+**Plan version:** 1.0.8
 **Date:** 2026-10-10
-**Status:** proposed authority amendment; P7-B1 and P7-B2 are implemented and accepted; P7-B3 is blocked pending v1.0.7 acceptance
+**Status:** proposed authority amendment; P7-B1, P7-B2, and P7-B3 are implemented and accepted; P7-B4 is blocked pending v1.0.8 acceptance
 **Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `bbb9f5248698b4ba59f3b92e2733113c34f46937`
-**Tree:** `6570f24cc9fdbc45acaa605a56446bbe3fc6c24e`
-**Base CI:** `38032967861 PASS`
+**Base:** `5ea3b0b597eaeebec5524998db93a29e5f7225e8`
+**Tree:** `4a4edf77a826db6840407626155cd68bce39149d`
+**Base CI:** `38044213077 PASS`
 
 ## 1. Purpose and authority
 
 P7 establishes a source-neutral behavior contract and turns accepted behavior evidence into accessible Phoenix-native interactions. It must preserve the accepted C09D6 static generation path, bind behavior to one exact DesignDocument, and keep source runtimes and executable source material out of generated components.
 
-This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. P7-B1 and P7-B2 are implemented and accepted. This v1.0.7 amendment freezes B3 persistence and structural validation authority. B3 remains blocked until this amendment is independently accepted and merged with passing post-merge CI. Each later issue still needs separate owner authorization.
+This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. P7-B1, P7-B2, and P7-B3 are implemented and accepted. PR #179 merged at `5ea3b0b597eaeebec5524998db93a29e5f7225e8` with a valid signature and passing post-merge CI. The drift from B3's reviewed base was limited to non-overlapping CTA Tango proposer-run/proposer-output documentation. This v1.0.8 amendment freezes the remaining B4 review-result authority. B4 remains blocked until this amendment is independently accepted and merged with passing post-merge CI. Each later issue still needs separate owner authorization.
 
 ```text
 P7_A1_STATUS=IMPLEMENTED_ACCEPTED
@@ -21,15 +21,22 @@ P7_A2_STATUS=IMPLEMENTED_ACCEPTED
 P7_A2_PR=157
 P7_B1=IMPLEMENTED_ACCEPTED
 P7_B2=IMPLEMENTED_ACCEPTED
-P7_B3=BLOCKED_PENDING_V1_0_7_ACCEPTANCE
-P7_B3_PREREQUISITES=SATISFIED
-P7_B3_AUTHORIZED=NO
-P7_B3_IMPLEMENTED=NO
+P7_B3=IMPLEMENTED_ACCEPTED
+P7_B3_PR=179
+P7_B3_APPROVED_HEAD=5a64f6330d8376a84b17893ebf22e93352abe5e7
+P7_B3_MERGE_SHA=5ea3b0b597eaeebec5524998db93a29e5f7225e8
+P7_B3_MERGE_TREE=4a4edf77a826db6840407626155cd68bce39149d
+P7_B3_MERGE_SIGNATURE=VALID
+P7_B3_POST_MERGE_CI=38044213077
+P7_B3_POST_MERGE_CI_RESULT=PASS
+B3_MERGE_DRIFT=SAFE_NON_OVERLAPPING_DOCUMENTATION
+P7_B4=BLOCKED_PENDING_V1_0_8_ACCEPTANCE
+P7_B4_PREREQUISITES=SATISFIED
+P7_B4_IMPLEMENTED=NO
 P7_C_STARTED=NO
-MAIN_DRIFT_PR173=SAFE_NON_OVERLAPPING_WITH_P7_B3_AUTHORITY
 ```
 
-Versions 1.0.5 and 1.0.6 are accepted. Version 1.0.6 froze the FocusPolicy typed DesignNode references, their cardinality, the B1 structural model, and B2 deterministic binding identity. This 1.0.7 amendment freezes BehaviorContract persistence, canonical serialization, and structural/reference validation. It does not change `docs/09_INTERACTION_MODEL.md`, the BehaviorContract format version, Design IR, or the accepted B2 binding-ID formula. It authorizes no implementation.
+Versions 1.0.5 and 1.0.6 are accepted. Version 1.0.6 froze the FocusPolicy typed DesignNode references, their cardinality, the B1 structural model, and B2 deterministic binding identity. The accepted 1.0.7 amendment froze BehaviorContract persistence, canonical serialization, and structural/reference validation. This 1.0.8 amendment freezes B4 review-result authority. Neither amendment changes `docs/09_INTERACTION_MODEL.md`, the BehaviorContract format version, Design IR, or the accepted B2 binding-ID formula. This amendment authorizes no implementation.
 
 The target flow is:
 
@@ -670,26 +677,105 @@ BehaviorContract remains a separate versioned artifact linked to the exact Desig
 
 No Design IR migration is required for P7-A1 through P7-L. A future proposal to add a `behaviors` field, reinterpret `interaction_refs`, or point existing interaction refs at BehaviorBinding IDs must be a separate Design IR migration decision with a version and migration plan. P7 does not assume that such a migration is necessary.
 
-BehaviorContract has no mutable approval lifecycle. Validation returns deterministic diagnostics. Human review produces a separate immutable `BehaviorReviewResult` with these fields:
+BehaviorContract has no mutable approval lifecycle. Validation returns deterministic diagnostics. A trusted review process issues one complete, intrinsically valid `BehaviorReviewResult`. The result is immutable and terminal once issued. A later human decision creates a new result. There is no database-backed current-review state and no mutable `approved`, `rejected`, or `needs_review` status transition.
+
+The persisted `BehaviorReviewResult` has exactly these fields, with no inferred defaults:
 
 ```text
-review_format_version = "1.0.0"
+review_format_version
 design_document_identity
 behavior_contract_digest_algorithm
 behavior_contract_digest
-decision = "approved" | "needs_review" | "rejected"
+decision
 reviewer_identity
 reviewed_at
-review_note = string | null
-evidence_refs = sorted list of stable typed evidence IDs
+review_note
+evidence_refs
 ```
 
-The serializer emits every field, uses `null` for absent `review_note`, sorts and rejects duplicate `evidence_refs` by Unicode scalar value, and encodes the object with `LiveFrames.CanonicalJSON`. `reviewer_identity` is a non-empty stable identity from the trusted review process, not imported source data. `reviewed_at` is UTC RFC 3339 with exactly six fractional digits and a trailing `Z`. `review_note` is valid Unicode inert review text. The result identity is lowercase SHA-256 of those JCS bytes, algorithm `lf-behavior-review-v1-jcs-sha256`, prefix `brv_`. The contract diagnostics and provenance are already included in the BehaviorContract digest, so the review result does not duplicate a diagnostic set. A changed contract digest makes the review result unusable for that contract. A later decision creates a new immutable result.
+Every valid value supplies every field. `review_format_version` is exactly `"1.0.0"`. The result reuses `LiveFrames.IR.Identity` as `design_document_identity`, with exactly `ir_version`, `canonicalization_id`, `digest_algorithm`, and `digest`. B4 checks that structure but does not recompute the DesignDocument identity. The contract digest algorithm is exactly `"lf-behavior-v1-jcs-sha256"`, equal to `LiveFrames.Behavior.Serializer.algorithm()`. Its digest has exactly 64 lowercase hexadecimal SHA-256 characters. The only decisions are the safe strings `approved`, `needs_review`, and `rejected`; imported strings are never converted to atoms.
 
-Downstream code receives exactly one explicit result. It never searches stored results, selects the latest timestamp, or infers authority from ordering. Supplying zero results fails the gate; supplying more than one result fails as ambiguous; supplying one result with a non-approved decision or mismatched identity/digest fails the gate. No database-backed status service is required.
+`reviewer_identity` is a non-empty safe Unicode string supplied by the trusted review process. It is opaque, is not looked up or normalized, and its exact bytes affect the review identity. `review_note` is a safe Unicode string or `null`; an empty string remains distinct from `null`. It is inert content. B4 does not interpret Markdown or HTML.
 
-`approved` means the reviewer accepts the normalized behavior semantics and known diagnostics for downstream behavior-aware componentization and projection consideration. It does not approve a ComponentContract, prove source redistribution rights, authorize generation, or bypass C09D6 prerequisites. Interactive generation requires both an approved BehaviorReviewResult and the existing approved ComponentContract plus matching plan and DesignDocument validations.
+`reviewed_at` uses exactly `YYYY-MM-DDTHH:MM:SS.ffffffZ`. It must use UTC, a literal trailing `Z`, six fractional digits, and a valid Gregorian date/time. Validation checks both this lexical form and successful UTC `DateTime` parsing. Offset forms, missing or other-width fractions, timezone names, and impossible dates/times fail. B4 does not normalize timestamps and never reads the system clock.
 
+`evidence_refs` is a list of non-empty safe Unicode strings that serve as stable opaque evidence IDs. B4 defines no prefix vocabulary or evidence registry. Duplicate refs fail. Canonical serialization sorts them in ascending string/binary Unicode-scalar order, so input order does not affect identity. B4 never looks them up, searches provenance, opens paths, resolves selectors, interprets them as DesignNode IDs, or infers source ownership.
+
+The canonical JSON object contains every persisted field listed above. `review_note: nil` encodes as JSON `null`; an empty evidence list encodes as `[]`. `LiveFrames.CanonicalJSON` is the only JCS implementation. The persisted struct has no `review_id`, `id`, `digest`, `status`, or `version_counter` field. Identity is derived on demand from the encoded canonical bytes, and the derived ID is never included in its own payload. Downstream artifacts may carry the computed ID.
+
+The identity algorithm is `lf-behavior-review-v1-jcs-sha256`. `id/1` prefixes lowercase SHA-256 of the exact bytes returned by `encode/1` with `brv_`. `encode/1` first runs intrinsic validation, then maps the result to the exact canonical object and sorts only `evidence_refs`. It does not mutate the struct or normalize other fields. `id/1` calls `encode/1` and hashes those returned bytes; it does not rebuild the mapping.
+
+The sole production module is `LiveFrames.Behavior.ReviewResult`, with exactly this public API:
+
+```text
+algorithm/0
+validate/1
+encode/1
+id/1
+validate_against_contract/2
+require_approved/2
+```
+
+The contracts are:
+
+```text
+algorithm() -> "lf-behavior-review-v1-jcs-sha256"
+validate(review_result) -> :ok | {:error, [BehaviorDiagnostic]}
+encode(review_result) -> {:ok, canonical_bytes} | {:error, [BehaviorDiagnostic]}
+id(review_result) -> {:ok, "brv_" <> lowercase_sha256_hex} | {:error, [BehaviorDiagnostic]}
+validate_against_contract(review_result, behavior_contract) -> :ok | {:error, [BehaviorDiagnostic]}
+require_approved(review_results, behavior_contract) -> {:ok, BehaviorReviewResult} | {:error, [BehaviorDiagnostic]}
+```
+
+`validate/1` checks the exact struct field set, format version, DesignDocumentIdentity shape, contract digest algorithm and syntax, decision, reviewer identity, timestamp, note, and evidence refs. It needs no BehaviorContract and performs no P7-C validation. `encode/1` calls it first. No `latest/1`, `current/1`, `find_approved/1`, `approve!/1`, `mutate/2`, `save/1`, `load/1`, or other bang API is exposed.
+
+`validate_against_contract/2` accepts exactly one result and one BehaviorContract. It calls `validate/1`, recomputes the supplied contract digest through `LiveFrames.Behavior.Serializer.digest/1`, and requires exact equality between the result and contract `design_document_identity`, between the result algorithm and `LiveFrames.Behavior.Serializer.algorithm()`, and between the result digest and the recomputed contract digest. If the serializer cannot digest the supplied contract, B4 returns `behavior.review.contract_digest_mismatch` in category `identity`. It takes no DesignDocument argument and does not call `Behavior.Validation.validate_structure/2`. Consumers that possess a DesignDocument, including later D0/D1, own those checks. B4 recomputes the BehaviorContract digest but does not recompute the DesignDocument identity.
+
+`require_approved/2` accepts a proper list of explicit results and one BehaviorContract. Exactly one result is allowed: an empty list returns `behavior.review.result_missing`; a list with two or more results returns `behavior.review.result_ambiguous`, without sorting or choosing one. An improper list or a singleton that is not a `BehaviorReviewResult` fails intrinsic input validation with `behavior.review.invalid`. For a valid singleton it calls `validate_against_contract/2`, then requires `decision == "approved"`. A non-approved decision returns `behavior.review.not_approved`. It returns that exact result on success. Timestamps never select a result, and approval is never selected from a larger list.
+
+All B4 failures use `LiveFrames.Behavior.Diagnostic`, existing categories, and severity `error`. The complete B4 code set is:
+
+```text
+behavior.review.invalid
+behavior.review.format_unsupported
+behavior.review.document_identity_mismatch
+behavior.review.contract_digest_algorithm_mismatch
+behavior.review.contract_digest_mismatch
+behavior.review.result_missing
+behavior.review.result_ambiguous
+behavior.review.not_approved
+```
+
+Invalid shape/value and unsupported format use category `structure`; document/digest mismatches use `identity`; missing or ambiguous results use `structure`; a non-approved decision uses `semantic`. B4 adds no diagnostic type or category. If a required failure cannot use this set without misclassification, implementation stops with `STOP=B4_DIAGNOSTIC_AUTHORITY_REQUIRED`.
+
+An `approved` decision means only that the human reviewer approved that exact BehaviorContract artifact. It does not mean P7-C semantic validation passed, that the contract is generation-ready, or that a ComponentContract, componentization, generation, or runtime realization is approved. B4 calls none of `PrimitiveRegistry`, `validate_semantics/2`, or `Behavior.Validation.validate/2`. P7-C remains separately unauthorized.
+
+```text
+REVIEW_RESULT_MUTABLE_STATUS=NO
+REVIEW_RESULT_TERMINAL_STATE=ISSUED
+LATER_DECISION_CREATES_NEW_RESULT=YES
+BEHAVIOR_REVIEW_RESULT_HAS_REVIEW_ID_FIELD=NO
+REVIEW_ID_DERIVATION=ON_DEMAND
+REVIEW_ID_INCLUDED_IN_OWN_PAYLOAD=NO
+REVIEW_DECISION_VOCABULARY_CLOSED=YES
+REVIEW_TIMESTAMP_AUTO_GENERATED=NO
+REVIEW_TIMESTAMP_NORMALIZED=NO
+B4_EVIDENCE_LOOKUP=NO
+B4_RECOMPUTES_BEHAVIOR_CONTRACT_DIGEST=YES
+B4_RECOMPUTES_DESIGN_DOCUMENT_IDENTITY=NO
+B4_TAKES_DESIGN_DOCUMENT=NO
+LATEST_REVIEW_SELECTION=NO
+TIMESTAMP_AUTHORITY_SELECTION=NO
+MULTIPLE_REVIEW_RESULTS=REJECT
+ZERO_REVIEW_RESULTS=REJECT
+P7_C_SEMANTICS_INCLUDED=NO
+```
+
+B4 treats all review strings as inert data. It never converts untrusted strings to atoms, looks up reviewer or evidence identities, executes source paths, or performs arbitrary module lookup. Its classification is `DATA_LAYER=COLD_COMPILE_REVIEW_TIME`; ETS, Cachex, Redis, Postgres, PgBouncer, read replicas, GenServer, PubSub, Oban, TTL, and database indexes are `N/A`. Runtime database and network calls are zero; server polling is disabled. No infrastructure is introduced.
+
+Future B4 tests freeze one fully populated result fixture, literal canonical JSON bytes, and a `brv_` ID independently computed from those bytes. They prove that evidence input order does not affect bytes or ID; changes to decision, reviewer, timestamp, or evidence set do; `null` and empty note differ; and duplicate evidence rejects. Timestamp tests reject missing, three-digit, or seven-or-more-digit fractions, `+00:00`, and impossible dates/times. Matching tests cover an exact contract, a changed contract digest, a changed DesignDocumentIdentity, and a wrong digest algorithm. Gate tests cover zero, singleton approved, `needs_review`, `rejected`, two-result rejection regardless of approval/timestamp ordering, and prove that a newer timestamp never selects a result. Lifecycle tests prove decisions are immutable and later decisions use new results. These are future B4 requirements, not implementation work in this amendment.
+
+Future B4 implementation is limited to `apps/live_frames/lib/live_frames/behavior/review_result.ex` and `apps/live_frames/test/live_frames/behavior/review_result_test.exs`. Do not modify B3 serializer or validation. If another file is required, stop with `STOP=UNEXPECTED_CHANGED_FILE_REQUIRED`.
 ## 4. Domain and resource map
 
 Every reference is typed, document-local or contract-local, and validated by its owning layer. These are planning boundaries, not implementation structs.
@@ -717,7 +803,7 @@ Every reference is typed, document-local or contract-local, and validated by its
 | `ResponsiveBehaviorOverride` | Owned by a binding; zero or more named mode mappings | Stable semantic `authority_ref`, source-independent mode, and reversible state map; evidence citations remain in provenance/source trace | P7-C and responsive authority resolver validate semantic authority and mapping | Persisted semantic mapping, not style override; `authority_ref` participates in B2 identity and the contract digest | Projection and runtime mode reconciliation |
 | `BehaviorDiagnostic` | Owned by a contract; may link one binding, node, or stable evidence record; zero or more | Stable code, severity, category, typed IDs, message, action and provenance evidence | Behavior validator/normalizer; reviewer resolves meaning | Persisted within contract and included in its digest | Review gate; unsupported bindings fail closed |
 | `RuntimeInstance` | Runtime owner creates zero or more per binding and repeated item | `(binding_id, approved component instance scope, stable caller item key)`; DOM nodes/handles are references only at runtime | Runtime lifecycle manager | Ephemeral browser state; never serialized or persisted across page lifetime unless primitive semantics explicitly require it | RuntimeRealization and lifecycle cleanup |
-| `BehaviorReviewResult` | Each human decision creates a separate immutable artifact; consumers receive exactly one explicit result for a gate | `brv_` ID over exact JCS result fields, including decision and exact BehaviorContract digest | P7-B4 review serializer/validator checks field shape, decision, and exact contract/document match. No latest-result selector exists. | Persisted compile-time review evidence; no mutable lifecycle | P7-D0 and P7-D1 gates; never substitutes for ComponentReview |
+| `BehaviorReviewResult` | Each human decision creates one immutable terminal `issued` artifact; consumers pass exactly one explicit result to a gate | `LiveFrames.Behavior.ReviewResult.id/1` derives `brv_` from all nine exact persisted fields; no ID field is stored | P7-B4 exposes `algorithm/0`, `validate/1`, `encode/1`, `id/1`, `validate_against_contract/2`, and `require_approved/2`; exact contract matching uses `Behavior.Serializer.digest/1`; zero or multiple results reject | Persisted compile-time review evidence; no mutable status or current-review state | P7-D0 and P7-D1 gates; never substitutes for ComponentReview or P7-C |
 | `BehaviorComponentizationDecision` | One ephemeral gate result per exact DesignDocument, contract, review, and candidate semantic input | Exact input identities and candidate boundary plus ordered binding-containment outcomes; no independent ID | P7-D0 validates review/contract/document equality, existing SemanticInput validity, and full binding containment before proposer invocation | Ephemeral compile-time value; no serialization or persistence | Gates the existing ComponentizationProposer for the interactive path |
 | `BehaviorProjection` | Projection operation returns one artifact per exact five-input tuple; zero or more projected bindings | `bpr_` identity over exact projection payload, including review result and plan fingerprint | P7-D1 projection structural/reference validator plus full BehaviorContract validation and C09D6 checks | Persisted compile-time sidecar artifact; deterministic JCS serializer/digest | Interactive generator prerequisites and RuntimeRealization |
 | `RuntimeRealization` | Compile-time selector returns one plan per projected binding or an explicit unsupported result | Binding ID, exact BehaviorProjection ID, trusted realization kind/version; references semantic policy only | Selector validates only after full semantic validation and projection. Runtime validators are primitive-specific. | Compile-time artifact; executable functions/handles are runtime-only and not serialized | HEEx/CSS/JS/hook/server output and browser verification |
@@ -1003,7 +1089,7 @@ Every implementation issue follows TDD: add a focused failing test, confirm the 
 | P7-B1 | Typed contract/binding shapes for primitive references, triggers, controlled targets, optional occurrence initial-state assignments, `primitive_policy_values` with default `{}`, the eight exact FocusPolicy fields and their cardinality, diagnostics, provenance, and the complete occurrence field list. Evidence confirms all four FocusPolicy references are enumerable, null scope means binding owner, explicit owner-valued scope is rejected as noncanonical, runtime invoker and roving-target references are not duplicated, other cross-cutting policies carry no node references, state and policy assignments remain distinct, arrays are ordered, and primitive-definition/state-machine fields remain absent. Also prove the three null policy defaults, empty responsive list, recursive safe string-keyed values, ordered arrays, exact ResponsiveBehaviorOverride fields, unique modes, and no generic node-reference channel. |
 | P7-B2 | Binding-ID golden vectors prove occurrence-only discriminators; changing `primitive_policy_values` changes the discriminator; different object insertion order with the same values yields the same discriminator; `['a', 'b']` and `['b', 'a']` yield different discriminators; equivalent stable-key objects with different insertion order yield the same discriminator. Also test source traversal noise, duplicate occurrence rejection, stable zero-based ordinals, and that primitive-definition body changes do not affect binding IDs. B2 tests prove structural determinism, not primitive policy validity. Also prove nested policy arrays retain order, reordered unique responsive records yield the same discriminator, duplicate modes reject before identity assignment without P7-C lookup, B2 receives no redundant owner scope, changing semantic `authority_ref` changes the discriminator, and evidence-only provenance/source-trace references do not. |
 | P7-B3 | Golden bytes/digest cover every canonical contract and binding field, diagnostics, provenance, and SourceTrace. Test deterministic diagnostic order and complete-JCS tie-break, provenance ordered arrays, SourceTrace class sorting/duplicate rejection, full PrimitiveRef participation, all binding-owned references and owner-subtree checks, exact DesignDocument identity, and full-set B2 ID/ordinal recomputation. Prove binding-owned diagnostics accept only `binding_id=null`; contract diagnostics accept null or an existing ID and reject unknown IDs. Prove diagnostic nodes inside and outside a binding subtree are valid when present in the exact document, while unknown nodes reject. Reject empty non-null evidence IDs and prove opaque IDs trigger no provenance lookup. `validate_structure/2` is the only validation API; no primitive semantics are included. |
-| P7-B4 | Same fields yield same `brv_` ID; changed decision changes ID; changed contract digest or DesignDocumentIdentity rejects; duplicate evidence refs reject; zero/multiple results reject; `needs_review`/`rejected` fail the downstream approval gate; timestamps never select authority. |
+| P7-B4 | Freeze a literal full-result fixture, canonical JSON bytes, and independently computed `brv_` ID. Prove evidence input-order invariance; ID changes for decision, reviewer, timestamp, evidence set, and null-versus-empty note; duplicate evidence rejects. Reject noncanonical/impossible timestamps. Exact contract, digest, identity, and algorithm matches pass; mismatches reject. Gate tests prove zero/multiple-result rejection, exact singleton approved success, non-approved rejection, and no timestamp selection. Lifecycle tests prove immutable decisions and new results for later decisions. |
 | P7-C | Registry rejects unknown/unimplemented exact `(kind, definition_version)` pairs without fallback; validates occurrence initial-state assignments and `primitive_policy_values` keys, value types/shapes, domains, required/optional status, defaults, and invariants against the exact definition. Evidence proves an array is semantically rejected when that definition requires a stable-key object, while a permitted stable-key object may pass; permitted arrays retain their exact order. P7-C never reinterprets or reorders arrays. `validate/2` calls both `validate_structure/2` and `validate_semantics/2`; semantic diagnostics are deterministic. P7-C owns Timer/Keyboard/Motion/Responsive semantic vocabularies, applicability, domains, defaults, invariants, mode/authority checks, reversibility, and primitive-specific combinations. |
 | P7-D0 | Exact document/contract/review matching; structural validation; candidate boundary and every binding-owned behavior reference checked, including all four FocusPolicy references; contained, irrelevant, split, and unresolved bindings classified deterministically; proposer is not called on rejection and receives unchanged validated semantic input on acceptance. Diagnostic node IDs are excluded from candidate-boundary containment. Unsupported primitive semantics remain blocked at the later full validation gate. Generic policy values add no node-reference channel. |
 | Existing ComponentizationProposer + ComponentReview | Existing proposer still creates only a proposed tuple; its existing ComponentReview and C09D6 gates remain mandatory before the post-review projection. |
@@ -1021,7 +1107,7 @@ Every applicable slice also checks that no imported source code executes, no dyn
 
 ## 11. Ordered future issue tree
 
-P7-A1, P7-A2, P7-B1, and P7-B2 are implemented and accepted. P7-B3 is blocked until this v1.0.7 amendment is independently accepted and merged with passing post-merge CI. P7-B4 through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each later issue is independently reviewable and requires explicit owner authorization before work begins.
+P7-A1, P7-A2, P7-B1, and P7-B2 are implemented and accepted. P7-B3 is implemented and accepted on PR #179 with valid signature and passing post-merge CI. P7-B4 is blocked until this v1.0.8 amendment is independently accepted and merged with passing post-merge CI. P7-C through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each later issue is independently reviewable and requires explicit owner authorization before work begins.
 
 ```text
 P7_ISSUE_COUNT=17
@@ -1029,10 +1115,11 @@ FUTURE_ISSUE_COUNT=13
 FUTURE_ISSUES_CREATED=NO
 P7_B1=IMPLEMENTED_ACCEPTED
 P7_B2=IMPLEMENTED_ACCEPTED
-P7_B3=BLOCKED_PENDING_V1_0_7_ACCEPTANCE
-P7_B3_IMPLEMENTED=NO
+P7_B3=IMPLEMENTED_ACCEPTED
+P7_B4=BLOCKED_PENDING_V1_0_8_ACCEPTANCE
+P7_B4_PREREQUISITES=SATISFIED
+P7_B4_IMPLEMENTED=NO
 P7_C_STARTED=NO
-P7_B3_PREREQUISITES=SATISFIED
 ```
 
 | Order | Issue | Scope and required result | Dependency and hard gate |
@@ -1041,8 +1128,8 @@ P7_B3_PREREQUISITES=SATISFIED
 | 2 | **IMPLEMENTED / ACCEPTED** P7-A2 — Source-neutral JCS utility | `LiveFrames.CanonicalJSON` owns the tested JCS encoder; Catalogue compatibility wrapper preserves bytes and diagnostics. | Separately owner-authorized after P7-0. No Behavior → Catalogue dependency or Catalogue contract changes. |
 | 3 | **IMPLEMENTED / ACCEPTED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for versioned primitive references, triggers, targets, occurrence initial-state assignments, source-neutral `primitive_policy_values` defaulting to `{}`, cross-cutting policies including FocusPolicy, diagnostics, and provenance. | Accepted B1 structural authority. No primitive semantic validation or runtime. |
 | 4 | **IMPLEMENTED / ACCEPTED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Accepted B2 identity authority. The formula uses `primitive_ref.kind`, excludes definition version and primitive-definition bodies, and preserves ordered policy arrays. |
-| 5 | **BLOCKED PENDING V1.0.7 ACCEPTANCE** P7-B3 — BehaviorContract serializer and structural validation | Implement the canonical contract serializer/digest and structural/reference validation. | Requires accepted v1.0.7 authority and passing post-merge CI. Expose only `validate_structure/2`; perform complete-set B2 ID verification; validate exact DesignDocument identity and all §2.7 references. Apply owner-subtree containment only to binding-owned behavior references; diagnostic node IDs resolve against the exact document only and are excluded from D0/D1 boundaries. No P7-C semantic checks. |
-| 6 | **PLANNED — NOT AUTHORIZED** P7-B4 — BehaviorReviewResult artifact | Implement the immutable review model, exact JCS serializer, `brv_` identity, matching validator, and explicit-result approval gate. | Depends on P7-B3. No latest/timestamp selection, database, mutable status, or ComponentReview authority. |
+| 5 | **IMPLEMENTED / ACCEPTED** P7-B3 — BehaviorContract serializer and structural validation | Implemented under PR #179 and accepted on merge `5ea3b0b597eaeebec5524998db93a29e5f7225e8`; post-merge CI `38044213077` passed on that SHA. | Validated with the accepted v1.0.7 authority. No P7-C semantic checks. Merge drift was limited to non-overlapping CTA Tango proposer-run/proposer-output documentation. |
+| 6 | **BLOCKED PENDING V1.0.8 ACCEPTANCE** P7-B4 — BehaviorReviewResult artifact | Implement the exact immutable nine-field review model, canonical JCS serializer, derived `brv_` identity, intrinsic validator, contract matcher, and exact-one approval gate specified in §3. | P7-B3 is accepted and prerequisites are satisfied. This v1.0.8 amendment does not authorize B4; no latest/timestamp selection, storage service, mutable status, or P7-C authority. |
 | 7 | **PLANNED — NOT AUTHORIZED** P7-C — Primitive registry and validation composition | Implement the trusted registry and primitive-definition ownership of StateModels, Transitions, Guards, Effects, cardinality, invariants, and semantic validation. Compose `validate/2 = validate_structure/2 AND validate_semantics/2`. | Depends on P7-B4. Validate state assignments and each exact primitive definition's allowed policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Own FocusPolicy strategy vocabularies, strategy/reference combinations, and primitive-specific focus invariants. Reject mismatching structural shapes, such as an array where the exact definition requires a stable-key object; preserve the exact order of every permitted array. Never reinterpret or reorder arrays. Do not implement every primitive; each tracer adds its own definition. P7-C owns semantic policy values and combinations for Timer/Keyboard/Motion/Responsive. |
 | 8 | **PLANNED — NOT AUTHORIZED** P7-D0 — BehaviorComponentizationDecision | Validate the exact reviewed behavior against the explicit candidate `ComponentizationSemanticInput`; gate the existing proposer call on whole-binding containment. | Depends on P7-C and P7-B4. Ephemeral result only. Reject split/uncertain boundaries with `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`; do not bypass or change the proposer. |
 | Existing stage | EXISTING — ComponentizationProposer + ComponentReview | Existing authorities create a proposed ComponentContract/Plan and require explicit human ComponentReview plus C09D6 prerequisites. | This is an existing pipeline stage, not a new P7 issue. P7-D1 cannot proceed before its exact approved tuple exists. |
@@ -1056,17 +1143,17 @@ P7_B3_PREREQUISITES=SATISFIED
 | 16 | **PLANNED — NOT AUTHORIZED** P7-K — Carousel | Add Carousel semantics and opt-in timer/control realization. | Depends on P7-J; timer and cleanup remain primitive-scoped. |
 | 17 | **PLANNED — NOT AUTHORIZED** P7-L — One source integration tracer | Integrate one separately selected source fixture and one approved behavior through the complete reviewed pipeline. | Depends on preceding primitive/pipeline gates. Additional sources or behaviors require separate authorization. |
 
-P7-B1 and P7-B2 are implemented and accepted. P7-B3 remains blocked until this v1.0.7 amendment is independently accepted and merged with passing post-merge CI. P7-B4 through P7-L remain unauthorized and depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
+P7-B1, P7-B2, and P7-B3 are implemented and accepted. P7-B3 was accepted on PR #179, merge `5ea3b0b597eaeebec5524998db93a29e5f7225e8`, with valid signature and passing post-merge CI. Its only merge drift from the reviewed base was non-overlapping CTA Tango proposer-run/proposer-output documentation. P7-B4 remains blocked until this v1.0.8 amendment is independently accepted and merged with passing post-merge CI. P7-C through P7-L remain unauthorized and depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
 
 P7-0 itself authorized no implementation. P7-A1, P7-A2, P7-B1, and P7-B2 were separately owner-authorized and are implemented/accepted.
 
-This v1.0.7 authority amendment does not itself authorize P7-B3 or any successor.
+This v1.0.8 authority amendment does not itself authorize P7-B4 or any successor.
 
 Approval of any issue does not authorize its successor.
 
 ## 12. TOON micro-prompts
 
-P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future prompts. P7-B3 is blocked pending v1.0.7 acceptance and merge. P7-B4 through P7-L remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
+P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future prompts. P7-B3 is implemented and accepted. P7-B4 is blocked pending v1.0.8 acceptance and merge. P7-C through P7-L remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
 
 ### P7-A1 — DesignDocument identity
 
@@ -1108,19 +1195,19 @@ P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future 
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **BLOCKED PENDING V1.0.7 ACCEPTANCE** Implement BehaviorContract serialization/digest and structural/reference validation only after this authority is accepted and merged with passing post-merge CI. |
+| Task      | **IMPLEMENTED / ACCEPTED** Historical slice, implemented under PR #179 after v1.0.7 acceptance. |
 | Objective | Create the persisted source-neutral contract linked to one exact DesignDocument and verify assigned binding identities. |
 | Output    | `apps/live_frames/lib/live_frames/behavior/serializer.ex`, `diagnostic.ex`, and `validation.ex`; golden bytes/digest and malformed-reference tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on accepted P7-B2 and v1.0.7 acceptance. Use the §2.7 diagnostic shape/order, container-only binding diagnostic association (`binding_id` MUST be null), contract diagnostic binding reference rules, canonical provenance object, `LiveFrames.IR.SourceTrace` mapping, BehaviorContract/Binding mappings, collection ordering, and digest participation exactly. Diagnostic `node_id` resolves against the exact DesignDocument only, not behavior-owner or component-boundary containment. `evidence_id` is opaque, non-empty safe Unicode when present, and is not resolved through generic provenance. Use only `LiveFrames.CanonicalJSON` for JCS. Expose `LiveFrames.Behavior.Validation.validate_structure/2` only. Validate the exact DesignDocument identity, all references in §2.7, binding-owned owner-subtree containment, diagnostic ownership/references, and binding IDs/ordinals by one full-set call to accepted `BindingIdentity.assign/1`. No registry lookup or semantic vocabulary checks. Do not expose `validate_semantics/2` or `validate/2`; those remain P7-C. Preserve BehaviorContract `1.0.0`, Design IR, and the accepted B2 identity formula. |
+| Note      | Depends on accepted P7-B2 and accepted v1.0.7 authority. Use the §2.7 diagnostic shape/order, container-only binding diagnostic association (`binding_id` MUST be null), contract diagnostic binding reference rules, canonical provenance object, `LiveFrames.IR.SourceTrace` mapping, BehaviorContract/Binding mappings, collection ordering, and digest participation exactly. Diagnostic `node_id` resolves against the exact DesignDocument only, not behavior-owner or component-boundary containment. `evidence_id` is opaque, non-empty safe Unicode when present, and is not resolved through generic provenance. Use only `LiveFrames.CanonicalJSON` for JCS. Expose `LiveFrames.Behavior.Validation.validate_structure/2` only. Validate the exact DesignDocument identity, all references in §2.7, binding-owned owner-subtree containment, diagnostic ownership/references, and binding IDs/ordinals by one full-set call to accepted `BindingIdentity.assign/1`. No registry lookup or semantic vocabulary checks. Do not expose `validate_semantics/2` or `validate/2`; those remain P7-C. Preserve BehaviorContract `1.0.0`, Design IR, and the accepted B2 identity formula. |
 
 ### P7-B4 — BehaviorReviewResult artifact
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **PLANNED — NOT AUTHORIZED** Implement the immutable BehaviorReviewResult model, serializer, identity, and explicit-result gate. |
-| Objective | Give every downstream behavior-aware decision an exact, reviewable approval artifact before it consumes the BehaviorContract. |
-| Output    | `apps/live_frames/lib/live_frames/behavior/review_result.ex` with its exact JCS serializer/validator; `lf-behavior-review-v1-jcs-sha256`; `brv_` IDs; focused tests under `apps/live_frames/test/live_frames/behavior/`. |
-| Note      | Depends on P7-B3. Test same fields/same ID, changed decision/different ID, changed contract digest/DesignDocumentIdentity rejection, duplicate evidence refs, zero/multiple result rejection, `needs_review`/`rejected` gate rejection, and timestamp-independent selection. This artifact alone does not authorize review consumption before P7-C full semantic validation. No DB, mutable status, or ComponentReview substitution. |
+| Task      | **BLOCKED PENDING V1.0.8 ACCEPTANCE** Implement only after this exact authority is accepted and merged with passing post-merge CI. |
+| Objective | Represent one immutable human decision about one exact BehaviorContract and let consumers require that explicit result. |
+| Output    | Only `apps/live_frames/lib/live_frames/behavior/review_result.ex` and `apps/live_frames/test/live_frames/behavior/review_result_test.exs`. Production module `LiveFrames.Behavior.ReviewResult`; public API exactly `algorithm/0`, `validate/1`, `encode/1`, `id/1`, `validate_against_contract/2`, `require_approved/2`. |
+| Note      | Exact persisted fields, with no defaults: `review_format_version`, `design_document_identity`, `behavior_contract_digest_algorithm`, `behavior_contract_digest`, `decision`, `reviewer_identity`, `reviewed_at`, `review_note`, `evidence_refs`. Version `1.0.0`. No persisted `review_id`, `id`, `digest`, `status`, `latest`, or `version_counter`; derive `brv_` plus lowercase SHA-256 on demand from `LiveFrames.CanonicalJSON` bytes. Sort evidence refs by ascending Unicode-scalar string order; reject duplicates; input order is not identity-significant. Require UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`, exact lexical validation and valid UTC `DateTime` parsing; no normalization or system clock. Reuse `LiveFrames.IR.Identity` and `LiveFrames.Behavior.Diagnostic`. Match exact document identity, `LiveFrames.Behavior.Serializer.algorithm()`, and recomputed `Serializer.digest/1`; no DesignDocument argument or B3 structural-validation call. `require_approved/2` accepts a proper list, rejects zero and multiple results, validates the singleton against the contract, then returns that exact result only if decision is `approved`; never select by time/order. Use the eight `behavior.review.*` codes and existing categories in §3. No P7-C semantics, database/current-review state, registry lookup, infrastructure, B3 changes, or other changed files. See §3 for golden bytes/ID, field validation, gate, lifecycle, boundary, diagnostics, security, and scaling tests. This amendment does not authorize implementation. |
 
 ### P7-C — Primitive registry and validation composition
 
