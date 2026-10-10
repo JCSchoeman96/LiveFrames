@@ -2,9 +2,9 @@
 
 ## Objective and non-goals
 
-This record reconciles the already-merged CTA Tango A3 review with the accepted A2 authority. The semantic review evidence below remains the evidence recorded by PR #182. This correction changes documentation provenance only.
+This record preserves the CTA Tango A3 review evidence from PR #182 and the A2 authority reconciliation from PR #183, then records the owner-authorized approval continuation from PR #184. The continuation changes only `ComponentContract.approval_status` from `proposed` to `approved`.
 
-A3 does not change Contract status, call `ComponentReview.approve/3` or `reject/3`, run `NativeGenerator`, generate HEEx or CSS, resolve the known B risks, start C09D7-B, or authorize C09D7-C. No production or test file changed.
+The PR #182 preflight and PR #183 reconciliation did not call `ComponentReview.approve/3` or `reject/3`. The later owner-authorized continuation called `approve/3` once. No rejection, native generation, HEEx or CSS generation, B-risk resolution, C09D7-B work, or C09D7-C authorization occurred. No production or test file was added by PR #184.
 
 ## Owner authority and A3 merge context
 
@@ -12,7 +12,7 @@ A3 does not change Contract status, call `ComponentReview.approve/3` or `reject/
 C09D7_A0=ACCEPTED
 C09D7_A1=ACCEPTED
 C09D7_A2=ACCEPTED
-C09D7_A3=IN_PROGRESS
+C09D7_A3=APPROVAL_TRANSITION_REVIEW_READY
 C09D7_A3_ACCEPTED=NO
 C09D7_B=NOT_AUTHORIZED
 C09D7_C=NOT_AUTHORIZED
@@ -23,9 +23,13 @@ A3_EFFECTIVE_MERGE_BASE_INCLUDES_A2_R=YES
 A3_EFFECTIVE_MERGE_BASE_INCLUDES_PARALLEL_P7_181=YES
 
 A2=ACCEPTED
-A2_ACCEPTANCE_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
-A2_ACCEPTANCE_POST_MERGE_CI=38045940063
-A2_ACCEPTANCE_POST_MERGE_CI_RESULT=PASS
+A2_OWNER_ACCEPTANCE_PR=177
+A2_OWNER_ACCEPTANCE_MERGE=fe1689555cd3d44ade7c35e5b0d4e720a6df713d
+A2_OWNER_ACCEPTANCE_POST_MERGE_VERIFIED=YES
+A2_AUTHORITY_RECONCILIATION_PR=180
+A2_AUTHORITY_RECONCILIATION_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
+A2_AUTHORITY_RECONCILIATION_POST_MERGE_CI=38045940063
+A2_AUTHORITY_RECONCILIATION_POST_MERGE_CI_RESULT=PASS
 
 A3_PREFLIGHT_PR=182
 A3_PREFLIGHT_HEAD=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
@@ -44,19 +48,26 @@ PR #182 was authored from the pre-reconciliation branch creation base `5ea3b0b59
 ## Canonical A2 authority provenance
 
 ```text
-CANONICAL_A2_PR=178
-CANONICAL_A2_MERGE=741c514f90d1fa72f905096bb21b40d22f11ae3d
+OWNER_REVIEWED_A2_PR=177
+OWNER_ACCEPTED_A2_PR=177
+PR_177_MERGE=fe1689555cd3d44ade7c35e5b0d4e720a6df713d
+PR_177_POST_MERGE_VERIFIED=YES
+
+CORROBORATING_A2_PR=178
+CORROBORATING_A2_MERGE=741c514f90d1fa72f905096bb21b40d22f11ae3d
+PR_178_SUPERSEDES_PR_177=NO
+A2_CANDIDATE_IDENTITY_CONFLICT=NO
+
 A2_AUTHORITY_RECONCILIATION_PR=180
 A2_AUTHORITY_RECONCILIATION_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
-SUPERSEDED_CONCURRENT_A2_PR=177
 
 A2_SEMANTIC_CANDIDATE_CONFLICT=NO
 A2_AUTHORITY_PROVENANCE_CONFLICT=RECONCILED
 ```
 
-PR #178 is the sole canonical A2 proposer evidence record at `docs/development/c09d7a_cta_tango_proposer_output.md`. PR #177, recorded at `docs/development/c09d7a_cta_tango_proposer_run.md`, is historical and non-authoritative evidence only. PR #180 reconciled the concurrent A2 authority records, and its post-merge CI passed.
+PR #177 records the owner-reviewed A2 proposer candidate. After PR #177 merged and its post-merge checks passed, the owner accepted A2. PR #178 records corroborating output for the same candidate. Its Contract and Plan hashes match the accepted #177 candidate, so it neither introduces a competing candidate nor supersedes the #177 owner acceptance. PR #180 later reconciled the A2 evidence records; it did not replace the owner's acceptance decision.
 
-The Contract and Plan hashes used by PR #182 match the canonical PR #178 hashes exactly. The A3 semantic review therefore inspected the canonical candidate, not a different candidate. The stale PR #177 wording in the original review record was an authority-description defect only.
+The Contract and Plan hashes used by PR #182 match the candidate hashes recorded by both PRs #177 and #178. The A3 semantic review therefore inspected the same owner-accepted candidate. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe the historical state when that record was written.
 
 ## Accepted A2 candidate identity
 
@@ -82,7 +93,7 @@ CONTRACT_DIAGNOSTICS=[]
 PLAN_DIAGNOSTICS=[]
 ```
 
-The canonical proposer evidence record is PR #178. PR #177 is superseded concurrent evidence and does not define A2 authority. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in the canonical evidence output describe its historical state when written. A2 acceptance and reconciliation are recorded above.
+PR #177 is the owner-reviewed and owner-accepted A2 candidate record. PR #178 is corroborating evidence for the same candidate and does not supersede PR #177. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe its historical state when written. A2 acceptance and reconciliation are recorded above.
 
 ## DesignDocument recovery
 
@@ -248,7 +259,9 @@ PUBSUB=N/A
 OBAN=N/A
 ```
 
-## Lifecycle
+## Historical lifecycle through the PR #183 reconciliation
+
+This lifecycle records the state at the end of PR #183, before the owner-authorized approval continuation in PR #184.
 
 ```text
 A2_accepted
@@ -270,7 +283,7 @@ generation_executed
 scope_drift
 ```
 
-## Recommendation and human decision boundary
+## Historical recommendation and human decision boundary at PR #183
 
 ```text
 REVIEW_RECOMMENDATION=APPROVE
@@ -288,11 +301,11 @@ C09D7_B_STARTED=NO
 C09D7_C_STARTED=NO
 ```
 
-C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. This A3 record recommends that decision and stops before the state transition. A later explicit human approval is required before `ComponentReview.approve/3` may run.
+C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. The PR #182 preflight recommended approval and stopped before the state transition. The owner later approved the recommendation and authorized the single transition recorded below.
 
-## A3-R correction run state
+## Historical A3-R correction run state from PR #183
 
-The following flags describe this documentation reconciliation run, not the historical PR #182 preflight:
+The following flags describe the PR #183 documentation reconciliation run, before the later owner-authorized approval continuation in PR #184:
 
 ```text
 DESIGN_DOCUMENT_RECONSTRUCTED=NO
@@ -324,3 +337,120 @@ C09D7_C_AUTHORIZED=NO
 
 NATIVE_GENERATOR_EXECUTED=NO
 ```
+
+## Owner approval transition
+
+The owner approved the review recommendation and authorized this continuation. The transition used the recovered A2 tuple, rechecked the shared prerequisites, and called `LiveFrames.ComponentReview.approve/3` once. No candidate semantic field or downstream authority was changed.
+
+```text
+A3_AUTHORIZED
+-> review_preflight
+-> recommendation_approve
+-> human_decision_pending
+-> human_approval_granted
+-> ComponentReview.approve/3
+-> contract_approved
+-> approved_contract_identity_frozen
+-> A3_APPROVAL_TRANSITION_REVIEW_READY
+```
+
+```text
+OWNER_REVIEW_DECISION=APPROVE
+COMPONENT_CONTRACT_APPROVAL_TRANSITION=AUTHORIZED
+C09D7_A3_APPROVAL_TRANSITION=AUTHORIZED
+A3_APPROVAL_TRANSITION_EXECUTED=YES
+C09D7_B=NOT_AUTHORIZED
+C09D7_C=NOT_AUTHORIZED
+
+EXECUTION_BASE_SHA=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+EXECUTION_BASE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+BASE_MERGE_SIGNATURE=VALID
+PR_182=MERGED
+PR_182_APPROVED_HEAD=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+PR_182_MERGE_SHA=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+PR_182_MERGE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+PR_182_POST_MERGE_CI=38045951757
+PR_182_POST_MERGE_CI_STATUS=completed
+PR_182_POST_MERGE_CI_CONCLUSION=success
+
+PRIVATE_ARTIFACT_SHA256=73f866a27070c010584babe230b5ffd0c78dc704388fd8b6c286e149a3d93a87
+PRIVATE_ARTIFACT_BYTES=10224
+SOURCE_COMPONENT_ID=hxambs
+DESIGN_DOCUMENT_SHA256=4b90b3ce32f8fcec640cea40499e861951137e3c2466931ead3c4436e2c6c9c5
+
+RECOVERY_PROPOSER_OUTCOME=proposed
+RECOVERED_PROPOSED_CONTRACT_SHA256=cc62191c5f154e20a9abb9091693b56b59d4595662adabfbb82334babf8caf9c
+RECOVERED_CONTRACT_STATUS=proposed
+RECOVERED_PLAN_SHA256=19d3a3cc31919239b4cb05e7b3ab37e06820bc514d17ee6edc27dea4a2719c8f
+
+CONTRACT_ID=section_media_call_to_action
+PUBLIC_ATTR_COUNT=11
+PUBLIC_SLOT_COUNT=2
+COLLECTION_INPUT_COUNT=0
+BINDING_PROJECTION_COUNT=0
+RENDER_PROJECTION_COUNT=13
+CONTRACT_DIAGNOSTICS=[]
+PLAN_DIAGNOSTICS=[]
+
+PROPOSED_COMPONENT_CONTRACT_SHA256=cc62191c5f154e20a9abb9091693b56b59d4595662adabfbb82334babf8caf9c
+PROPOSED_CONTRACT_APPROVAL_STATUS=proposed
+COMPONENTIZATION_PLAN_SHA256=19d3a3cc31919239b4cb05e7b3ab37e06820bc514d17ee6edc27dea4a2719c8f
+PRE_APPROVAL_GENERATION_PREREQUISITES=PASS
+PRE_APPROVAL_DIAGNOSTICS=[]
+COMPONENT_REVIEW_APPROVE_RESULT={:ok, approved_contract}
+COMPONENT_REVIEW_APPROVE_EXECUTION_COUNT=1
+APPROVED_CONTRACT_APPROVAL_STATUS=approved
+CONTRACT_NON_STATUS_FIELDS_UNCHANGED=YES
+PLAN_UNCHANGED=YES
+DESIGN_DOCUMENT_UNCHANGED=YES
+APPROVED_COMPONENT_CONTRACT_SHA256=8cb4a8361711f31b7ad428fbd8e8198ef91ed96396bed69c137daa471083856a
+APPROVED_COMPONENT_CONTRACT_BYTES=2970
+APPROVED_CONTRACT_SERIALIZATION_DETERMINISTIC=YES
+
+APPROVAL_SIDE_EFFECTS=returned approved ComponentContract struct only
+FILESYSTEM_WRITE_BY_COMPONENT_REVIEW=NO
+DATABASE_WRITE=NO
+REDIS_WRITE=NO
+PUBSUB_BROADCAST=NO
+GENSERVER_WRITE=NO
+NETWORK_CALL=NO
+
+B_RISK_01=primary_action subtree-slot presentation/style ownership
+B_RISK_02=image/figure native style locus
+B_RISK_01_RESOLVED_BY_A3_APPROVAL=NO
+B_RISK_02_RESOLVED_BY_A3_APPROVAL=NO
+
+DATA_LAYER=COLD_BUILD_TIME
+HOT_DATA=N/A
+WARM_DATA=N/A
+REDIS=N/A
+POSTGRES=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+CACHE_TTL=N/A
+RUNTIME_DB_CALLS=0
+RUNTIME_NETWORK_CALLS=0
+RUNTIME_POLLING=0
+100K_RUNTIME_CONCURRENCY=N/A
+
+NATIVE_GENERATOR_EXECUTED=NO
+HEEX_GENERATION_EXECUTED=NO
+CSS_GENERATION_EXECUTED=NO
+BROWSER_VERIFICATION_EXECUTED=NO
+CATALOGUE_ADMISSION_AUTHORIZED=NO
+C09D7_B_STARTED=NO
+C09D7_C_STARTED=NO
+A3_APPROVAL_TRANSITION_REVIEW_READY=YES
+```
+
+`ComponentReview.approve/3` returned the approved Contract struct. A term comparison after removing `approval_status` found the other Contract fields unchanged: `contract_format_version`, `contract_id`, `category`, `module_intent`, `function_intent`, `public_attrs`, `public_slots`, `collection_inputs`, `binding_projections`, `diagnostics`, and `provenance`. The original Plan and DesignDocument terms also remained equal to their pre-call values. The existing review function performed no persistence, messaging, network, or filesystem write.
+
+The approved Contract's exact canonical JSON is:
+
+```json
+{"approval_status":"approved","binding_projections":[],"category":"section","collection_inputs":[],"contract_format_version":"1.0.0","contract_id":"section_media_call_to_action","diagnostics":[],"function_intent":"media_call_to_action","module_intent":"media_call_to_action","provenance":{},"public_attrs":[{"accessibility":{},"default":null,"name":"class","provenance":{},"required":false,"semantic_purpose":"additive root CSS class","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"eyebrow","provenance":{},"required":false,"semantic_purpose":"eyebrow text","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"heading","provenance":{},"required":true,"semantic_purpose":"primary heading text","type":"string","validation":{}},{"accessibility":{},"default":2,"name":"heading_level","provenance":{},"required":false,"semantic_purpose":"heading semantic level","type":"integer","validation":{"values":[1,2,3,4,5,6]}},{"accessibility":{},"default":null,"name":"image_1_alt","provenance":{},"required":true,"semantic_purpose":"first collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_1_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_1_src","provenance":{},"required":true,"semantic_purpose":"first collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"image_2_alt","provenance":{},"required":true,"semantic_purpose":"second collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_2_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_2_src","provenance":{},"required":true,"semantic_purpose":"second collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"image_3_alt","provenance":{},"required":true,"semantic_purpose":"third collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_3_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_3_src","provenance":{},"required":true,"semantic_purpose":"third collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"rest","provenance":{},"required":false,"semantic_purpose":"additional root global attributes","type":"global","validation":{}}],"public_slots":[{"accessibility":{},"cardinality":"0..1","consumer_responsibility":"caller","name":"body","provenance":{},"required":false,"semantic_purpose":"consumer-owned rich body markup","validation":{}},{"accessibility":{},"cardinality":"0..1","consumer_responsibility":"caller owns action element, label, destination, navigation, and events","name":"primary_action","provenance":{},"required":true,"semantic_purpose":"primary call-to-action markup","validation":{}}]}
+```
+
+Approval does not settle either downstream B risk. C09D7-B and C09D7-C remain unauthorized. This record ends at `A3_APPROVAL_TRANSITION_REVIEW_READY`; it does not authorize native generation, browser verification, or Catalogue admission.
