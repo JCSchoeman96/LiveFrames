@@ -2,11 +2,11 @@
 
 ## Objective and non-goals
 
-This record independently reviews the owner-accepted CTA Tango A2 `ComponentContract`, `ComponentizationPlan`, and `DesignDocument` tuple. It records whether the proposed Contract meets the current prerequisite and semantic review rules.
+This record documents the review and the owner-authorized approval transition for the accepted CTA Tango A2 `ComponentContract`, `ComponentizationPlan`, and `DesignDocument` tuple. The transition changes only `ComponentContract.approval_status` from `proposed` to `approved`.
 
-A3 does not change Contract status, call `ComponentReview.approve/3` or `reject/3`, run `NativeGenerator`, generate HEEx or CSS, resolve the known B risks, start C09D7-B, or authorize C09D7-C. No production or test file changed.
+A3 does not call `ComponentReview.reject/3`, run `NativeGenerator`, generate HEEx or CSS, resolve the known B risks, start C09D7-B, or authorize C09D7-C. No production or test file changed.
 
-## Owner authority and base
+## Owner authority and historical A3 preflight base
 
 ```text
 C09D7_A0=ACCEPTED
@@ -16,15 +16,15 @@ C09D7_A3=AUTHORIZED
 C09D7_B=NOT_AUTHORIZED
 C09D7_C=NOT_AUTHORIZED
 
-BASE_SHA=5ea3b0b597eaeebec5524998db93a29e5f7225e8
-BASE_TREE=4a4edf77a826db6840407626155cd68bce39149d
-BASE_SIGNATURE=VALID
-BASE_CI=38044213077
-BASE_CI_STATUS=completed
-BASE_CI_CONCLUSION=success
+A3_PREFLIGHT_BASE_SHA=5ea3b0b597eaeebec5524998db93a29e5f7225e8
+A3_PREFLIGHT_BASE_TREE=4a4edf77a826db6840407626155cd68bce39149d
+A3_PREFLIGHT_BASE_SIGNATURE=VALID
+A3_PREFLIGHT_BASE_CI=38044213077
+A3_PREFLIGHT_BASE_CI_STATUS=completed
+A3_PREFLIGHT_BASE_CI_CONCLUSION=success
 ```
 
-The exact `origin/main` SHA and tree matched the supplied base before the cleanroom was created. CI run 38044213077 completed successfully on that base.
+For the original A3 review preflight, the exact `origin/main` SHA and tree matched that supplied historical base before its cleanroom was created. CI run 38044213077 completed successfully on that base. The owner-authorized approval continuation ran later on the PR #182 merge base recorded in the Owner approval transition section.
 
 ## Accepted A2 candidate identity
 
@@ -50,7 +50,7 @@ CONTRACT_DIAGNOSTICS=[]
 PLAN_DIAGNOSTICS=[]
 ```
 
-PR #177 records the accepted proposer run. Merged PR #178 records a second A2 evidence output for the same candidate. Its Contract and Plan hashes match the accepted pair above, so it does not introduce a competing candidate. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in that output describe its historical state when written. Current authority is recorded at the top of this section.
+PR #178 is the canonical, reviewed A2 record. PR #177 is historical, non-authoritative evidence; its recorded Contract and Plan hashes match the accepted pair above, so it does not introduce a competing candidate. PR #178's `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values describe its historical state when written. Current authority is recorded at the top of this section.
 
 ## DesignDocument recovery
 
@@ -201,26 +201,32 @@ RUNTIME_POLLING=0
 
 ```text
 A3_AUTHORIZED
--> base_verified
--> accepted_A2_candidate_recovered
--> A2_candidate_identity_verified
--> structural_review
--> generation_prerequisites_review
--> reviewer_judgment
+-> review_preflight
 -> recommendation_approve
--> A3_HUMAN_DECISION_PENDING
+-> human_decision_pending
+-> human_approval_granted
+-> ComponentReview.approve/3
+-> contract_approved
+-> approved_contract_identity_frozen
+-> A3_APPROVAL_TRANSITION_REVIEW_READY
 ```
 
 ## Recommendation and human decision boundary
 
 ```text
 REVIEW_RECOMMENDATION=APPROVE
+REVIEW_RECOMMENDATION_PHASE=historical_pre_transition_evidence
 HUMAN_APPROVAL_REQUIRED=YES
-COMPONENT_REVIEW_APPROVE_EXECUTED=NO
+HUMAN_REVIEW_DECISION=APPROVE
+COMPONENT_REVIEW_APPROVE_EXECUTED=YES
 COMPONENT_REVIEW_REJECT_EXECUTED=NO
 CONTRACT_APPROVAL_STATUS_BEFORE_REVIEW=proposed
-CONTRACT_APPROVAL_STATUS_AFTER_A3_PREFLIGHT=proposed
-A3_HUMAN_DECISION_PENDING=YES
+CONTRACT_APPROVAL_STATUS_AFTER_A3_APPROVAL=approved
+A3_HUMAN_DECISION_PENDING=NO
+OWNER_REVIEW_DECISION=APPROVE
+C09D7_A3_APPROVAL_TRANSITION=AUTHORIZED
+C09D7_B=NOT_AUTHORIZED
+C09D7_C=NOT_AUTHORIZED
 
 NATIVE_GENERATION_EXECUTED=NO
 HEEX_GENERATION_EXECUTED=NO
@@ -229,4 +235,109 @@ C09D7_B_STARTED=NO
 C09D7_C_STARTED=NO
 ```
 
-C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. This A3 record recommends that decision and stops before the state transition. A later explicit human approval is required before `ComponentReview.approve/3` may run.
+C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. The pre-transition recommendation above remains historical evidence. The owner decision and the single authorized transition are recorded below.
+
+## Owner approval transition
+
+The owner approved the review recommendation and authorized this continuation. The transition used the recovered A2 tuple, rechecked the shared prerequisites, and called `LiveFrames.ComponentReview.approve/3` once. No candidate semantic field or downstream authority was changed.
+
+```text
+OWNER_REVIEW_DECISION=APPROVE
+COMPONENT_CONTRACT_APPROVAL_TRANSITION=AUTHORIZED
+C09D7_A3_APPROVAL_TRANSITION=AUTHORIZED
+A3_APPROVAL_TRANSITION_EXECUTED=YES
+C09D7_B=NOT_AUTHORIZED
+C09D7_C=NOT_AUTHORIZED
+
+EXECUTION_BASE_SHA=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+EXECUTION_BASE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+BASE_MERGE_SIGNATURE=VALID
+PR_182=MERGED
+PR_182_APPROVED_HEAD=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+PR_182_MERGE_SHA=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+PR_182_MERGE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+PR_182_POST_MERGE_CI=38045951757
+PR_182_POST_MERGE_CI_STATUS=completed
+PR_182_POST_MERGE_CI_CONCLUSION=success
+
+PRIVATE_ARTIFACT_SHA256=73f866a27070c010584babe230b5ffd0c78dc704388fd8b6c286e149a3d93a87
+PRIVATE_ARTIFACT_BYTES=10224
+SOURCE_COMPONENT_ID=hxambs
+DESIGN_DOCUMENT_SHA256=4b90b3ce32f8fcec640cea40499e861951137e3c2466931ead3c4436e2c6c9c5
+
+RECOVERY_PROPOSER_OUTCOME=proposed
+RECOVERED_PROPOSED_CONTRACT_SHA256=cc62191c5f154e20a9abb9091693b56b59d4595662adabfbb82334babf8caf9c
+RECOVERED_CONTRACT_STATUS=proposed
+RECOVERED_PLAN_SHA256=19d3a3cc31919239b4cb05e7b3ab37e06820bc514d17ee6edc27dea4a2719c8f
+
+CONTRACT_ID=section_media_call_to_action
+PUBLIC_ATTR_COUNT=11
+PUBLIC_SLOT_COUNT=2
+COLLECTION_INPUT_COUNT=0
+BINDING_PROJECTION_COUNT=0
+RENDER_PROJECTION_COUNT=13
+CONTRACT_DIAGNOSTICS=[]
+PLAN_DIAGNOSTICS=[]
+
+PROPOSED_COMPONENT_CONTRACT_SHA256=cc62191c5f154e20a9abb9091693b56b59d4595662adabfbb82334babf8caf9c
+PROPOSED_CONTRACT_APPROVAL_STATUS=proposed
+COMPONENTIZATION_PLAN_SHA256=19d3a3cc31919239b4cb05e7b3ab37e06820bc514d17ee6edc27dea4a2719c8f
+PRE_APPROVAL_GENERATION_PREREQUISITES=PASS
+PRE_APPROVAL_DIAGNOSTICS=[]
+COMPONENT_REVIEW_APPROVE_RESULT={:ok, approved_contract}
+COMPONENT_REVIEW_APPROVE_EXECUTION_COUNT=1
+APPROVED_CONTRACT_APPROVAL_STATUS=approved
+CONTRACT_NON_STATUS_FIELDS_UNCHANGED=YES
+PLAN_UNCHANGED=YES
+DESIGN_DOCUMENT_UNCHANGED=YES
+APPROVED_COMPONENT_CONTRACT_SHA256=8cb4a8361711f31b7ad428fbd8e8198ef91ed96396bed69c137daa471083856a
+APPROVED_COMPONENT_CONTRACT_BYTES=2970
+APPROVED_CONTRACT_SERIALIZATION_DETERMINISTIC=YES
+
+APPROVAL_SIDE_EFFECTS=returned approved ComponentContract struct only
+FILESYSTEM_WRITE_BY_COMPONENT_REVIEW=NO
+DATABASE_WRITE=NO
+REDIS_WRITE=NO
+PUBSUB_BROADCAST=NO
+GENSERVER_WRITE=NO
+NETWORK_CALL=NO
+
+B_RISK_01=primary_action subtree-slot presentation/style ownership
+B_RISK_02=image/figure native style locus
+B_RISK_01_RESOLVED_BY_A3_APPROVAL=NO
+B_RISK_02_RESOLVED_BY_A3_APPROVAL=NO
+
+DATA_LAYER=COLD_BUILD_TIME
+HOT_DATA=N/A
+WARM_DATA=N/A
+REDIS=N/A
+POSTGRES=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+CACHE_TTL=N/A
+RUNTIME_DB_CALLS=0
+RUNTIME_NETWORK_CALLS=0
+RUNTIME_POLLING=0
+100K_RUNTIME_CONCURRENCY=N/A
+
+NATIVE_GENERATOR_EXECUTED=NO
+HEEX_GENERATION_EXECUTED=NO
+CSS_GENERATION_EXECUTED=NO
+BROWSER_VERIFICATION_EXECUTED=NO
+CATALOGUE_ADMISSION_AUTHORIZED=NO
+C09D7_B_STARTED=NO
+C09D7_C_STARTED=NO
+A3_APPROVAL_TRANSITION_REVIEW_READY=YES
+```
+
+`ComponentReview.approve/3` returned the approved Contract struct. A term comparison after removing `approval_status` found the other Contract fields unchanged: `contract_format_version`, `contract_id`, `category`, `module_intent`, `function_intent`, `public_attrs`, `public_slots`, `collection_inputs`, `binding_projections`, `diagnostics`, and `provenance`. The original Plan and DesignDocument terms also remained equal to their pre-call values. The existing review function performed no persistence, messaging, network, or filesystem write.
+
+The approved Contract's exact canonical JSON is:
+
+```json
+{"approval_status":"approved","binding_projections":[],"category":"section","collection_inputs":[],"contract_format_version":"1.0.0","contract_id":"section_media_call_to_action","diagnostics":[],"function_intent":"media_call_to_action","module_intent":"media_call_to_action","provenance":{},"public_attrs":[{"accessibility":{},"default":null,"name":"class","provenance":{},"required":false,"semantic_purpose":"additive root CSS class","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"eyebrow","provenance":{},"required":false,"semantic_purpose":"eyebrow text","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"heading","provenance":{},"required":true,"semantic_purpose":"primary heading text","type":"string","validation":{}},{"accessibility":{},"default":2,"name":"heading_level","provenance":{},"required":false,"semantic_purpose":"heading semantic level","type":"integer","validation":{"values":[1,2,3,4,5,6]}},{"accessibility":{},"default":null,"name":"image_1_alt","provenance":{},"required":true,"semantic_purpose":"first collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_1_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_1_src","provenance":{},"required":true,"semantic_purpose":"first collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"image_2_alt","provenance":{},"required":true,"semantic_purpose":"second collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_2_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_2_src","provenance":{},"required":true,"semantic_purpose":"second collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"image_3_alt","provenance":{},"required":true,"semantic_purpose":"third collage image alternative text","type":"string","validation":{}},{"accessibility":{"alt_attr_name":"image_3_alt","image_alt_policy":"consumer_supplied","required_when_source_present":true},"default":null,"name":"image_3_src","provenance":{},"required":true,"semantic_purpose":"third collage image source","type":"string","validation":{}},{"accessibility":{},"default":null,"name":"rest","provenance":{},"required":false,"semantic_purpose":"additional root global attributes","type":"global","validation":{}}],"public_slots":[{"accessibility":{},"cardinality":"0..1","consumer_responsibility":"caller","name":"body","provenance":{},"required":false,"semantic_purpose":"consumer-owned rich body markup","validation":{}},{"accessibility":{},"cardinality":"0..1","consumer_responsibility":"caller owns action element, label, destination, navigation, and events","name":"primary_action","provenance":{},"required":true,"semantic_purpose":"primary call-to-action markup","validation":{}}]}
+```
+
+Approval does not settle either downstream B risk. C09D7-B and C09D7-C remain unauthorized. This record ends at `A3_APPROVAL_TRANSITION_REVIEW_READY`; it does not authorize native generation, browser verification, or Catalogue admission.
