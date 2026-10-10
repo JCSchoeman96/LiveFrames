@@ -616,3 +616,172 @@ Re-evaluate only the affected row when one of these events occurs:
 | Browser/accessibility verification result | Only verified capabilities in tested scope | Browser evidence owner; record exact browser, state and artifact |
 
 Current required next authorities are: R5 for CTA Tango; Behavior Architecture for lifecycle-bearing families; focused C09C2 mapping for Header and Gallery; C08B/current implementation reconciliation for icon consumers; and separate external-dependency decisions only after exact requirements are accepted. This document does not authorize any of those later actions.
+
+## Selected-template evidence closure
+
+This section adds the current closure layer for the nine selected templates. Existing matrix rows remain historical observations for their stated evidence and baseline. This section does not rewrite or delete those rows. A newer reviewed preflight can supersede a historical row's current-status conclusion without changing the earlier observation.
+
+```text
+SELECTED_TEMPLATE_COUNT=9
+SELECTED_TEMPLATE_PREFLIGHT_COVERAGE=COMPLETE
+SELECTED_TEMPLATE_NATIVE_READY_COUNT=0
+
+SOURCE_ONLY_WIDGET_PASS_NEXT=NO
+SOURCE_ONLY_WIDGET_POLICY=DEFER_UNTIL_APPROVED_CONSUMER_OR_LEVERAGE_CASE
+
+IMPLEMENTATION_AUTHORIZED_BY_THIS_CLOSURE=NO
+```
+
+`PREFLIGHT_COVERAGE=COMPLETE` means every selected template has a reviewed repository evidence path. It does not mean that every authority accepted the evidence, every blocker is resolved, every template is implementation-ready, or any template is `NATIVE_READY`. `MERGED_REVIEWED_PREFLIGHT` records the preflight's repository review/merge state only. It does not establish owner acceptance of a conversion or implementation decision. Where the relevant preflight does not record owner acceptance, the table says `NOT_RECORDED`.
+
+```text
+MERGED != ACCEPTED
+CI_GREEN != ACCEPTED
+CODE_PRESENT != ACCEPTED_AUTHORITY
+```
+
+| Template | Current evidence/preflight | Merge/review state | Owner-acceptance state | Current outcome | Primary unresolved blockers | Owning lane | `NATIVE_READY` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| CTA Tango | `c09d6d_cta_tango_style_coverage_preflight.md`; `c09d6_native_generation_authority.md` | `MERGED_REVIEWED_PREFLIGHT`; R5 and D1 are explicitly complete/accepted in the generation authority | R5/D1 accepted; C09D7-A component contract/plan decisions are not recorded as accepted | `CTA_STYLE_COVERAGE_R5=COMPLETE`; `D1_NATIVE_STYLING_IMPLEMENTATION=COMPLETE`; `CTA_COMPONENTIZATION_LANE=C09D7_A`; `CTA_NATIVE_READY=NO` | Exact caller-facing component API, component contract and plan review, then separately authorized B/C work | Static; Componentization/C09D7-A | NO |
+| Feature Romeo | `feature_romeo_css_sufficiency_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `MANAGED_BEHAVIOR_REQUIRED=NOT_PROVEN`; `CSS_ONLY_CANDIDATE=NOT_PROVEN`; `OVERALL_EVIDENCE=INSUFFICIENT_FOR_MANAGED_BEHAVIOR_DECISION` | CSS/focus fidelity path and accessibility evidence; missing `:focus-within` fidelity does not prove managed behavior is required | Static + Accessibility; Evidence before Behavior | NO |
+| Slide Menu Alpha | `slide_menu_alpha_disclosure_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `CORE_DISCLOSURE_MAPPING=SUPPORTED`; `NESTED_DISCLOSURE_MAPPING=PARTIAL`; `CURRENT_PAGE_IDENTITY_INPUT=EVIDENCE_INSUFFICIENT`; `CURRENT_PAGE_TIMING_LIFECYCLE=UNRESOLVED`; `OVERALL=PARTIAL_BEHAVIOR_CONTRACT_MAPPING` | Nested disclosure mapping; current-page identity, timing and update lifecycle; accessibility details | Behavior/P7; Accessibility; Frontend-data only if a later input is established | NO |
+| Pricing Echo | `pricing_echo_responsive_behavior_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `TABS_CORE=SUPPORTED`; `RESPONSIVE_TABS_TO_ACCORDION_DIRECTION=SUPPORTED`; `PRICING_OCCURRENCE_MAPPING=PARTIAL`; `STABLE_TYPED_ITEM_IDENTITY=NOT_ESTABLISHED`; `ACCESSIBILITY_AND_CROSS_MODE_CONTINUITY=PARTIAL` | Occurrence mapping, stable typed identity, cross-mode focus/state continuity, icon renderability | Behavior/P7; Componentization; Icon/asset authority | NO |
+| Header Basel | `header_basel_navigation_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `SITE_URL_BINDING=SUPPORTED`; `MENU_REPEAT_BOUNDARY=NOT_PROVEN`; `MENU_LABEL_BINDING=NOT_PROVEN`; `MENU_DESTINATION_BINDING=NOT_PROVEN`; `NAVIGATION_HIERARCHY_DATA=NOT_PROVEN`; `HEADER_DROPDOWN_MAPPING=PARTIAL` | Menu repeat root and label/destination/hierarchy inputs; dropdown lifecycle; icon/renderability | Frontend-data/C09; Behavior/P7; Icon/asset authority | NO |
+| Slider Basel | `slider_basel_carousel_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `SLIDE_COLLECTION_BINDING=SUPPORTED`; `SLIDE_TITLE_BINDING=SUPPORTED`; `SLIDE_MEDIA_BINDING=SUPPORTED`; `STABLE_SLIDE_IDENTITY=NOT_ESTABLISHED`; `CAROUSEL_INSTANCE_MAPPING=PARTIAL`; `SPLIDE_TARGET_DEPENDENCY=NO`; `AUTO_SCROLL_TARGET_DEPENDENCY=NO`; `EXTERNAL_DEPENDENCY=NONE` | Stable slide identity, carousel occurrence/lifecycle mapping, icons, accessibility and exact component API | Frontend-data; Behavior/P7; Icon/asset authority; Componentization | NO |
+| Hero Barcelona | `hero_barcelona_decorative_motion_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `HERO_COLLECTION_BINDING_COUNT=6`; `HERO_MEDIA_VALUE_BINDING=NOT_ESTABLISHED`; `HERO_DECORATIVE_MOTION_EXISTENCE=SUPPORTED`; `HERO_DISCRETE_CAROUSEL_SEMANTICS=NOT_PROVEN`; `HERO_CAROUSEL_MAPPING=NOT_ESTABLISHED`; `GENERIC_DECORATIVE_MOTION_CAPABILITY=UNMODELED` | Renderable media value; decorative-motion behavior capability; duplicate-content accessibility and focus handling | Frontend-data/C09; Behavior/P7; Static/Accessibility | NO |
+| Feature Milan | `feature_milan_timed_selection_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `FEATURE_MILAN_COLLECTION_BINDING_COUNT=2`; `QS03_05E604_COLLECTION_BINDING=NO`; `FEATURE_BODY_MODIFIER_SEMANTICS=NOT_ESTABLISHED`; `CROSS_COLLECTION_ITEM_CORRELATION=NOT_ESTABLISHED`; `FEATURE_MILAN_TABS_MAPPING=PARTIAL`; `FEATURE_MILAN_TIMER_MAPPING=PARTIAL`; `FEATURE_MILAN_CAROUSEL_MAPPING=NOT_ESTABLISHED` | Opaque body modifier; cross-collection identity/correlation; tabs and timer lifecycle; accessibility | Frontend-data/C09; Behavior/P7; Static/Accessibility; Componentization | NO |
+| Gallery Bravo | `gallery_bravo_lightbox_mapping_preflight.md` | `MERGED_REVIEWED_PREFLIGHT` | `NOT_RECORDED` | `GALLERY_COLLECTION_BINDING_COUNT=1`; `GALLERY_ASSET_VALUE_BINDING=NO`; `GALLERY_STABLE_ITEM_IDENTITY=NOT_ESTABLISHED`; `RESULT_COUNT_VALUE_BINDING=NO`; `CURRENT_ACCEPTED_BEHAVIOR_LIGHTBOX_COMPOSITION=DIALOG_PLUS_COLLECTION_NAVIGATION`; `GALLERY_LIGHTBOX_OCCURRENCE_INPUTS=INCOMPLETE`; `EXTERNAL_DEPENDENCY=NONE` | Renderable media, stable item identity, result count, lightbox occurrence inputs and accessible label | Frontend-data/C09; Behavior/P7; Componentization; Icon/asset authority if required by accepted inputs | NO |
+
+### Historical and current status relationship
+
+The historical fields below retain the conclusion recorded by the earlier matrix row. The current closure column names only a later conclusion from the reviewed preflight; it does not revise the historical evidence or declare every related issue resolved.
+
+| Template | Historical matrix status | Current reviewed status | `superseded_for_current_status_by` |
+| --- | --- | --- | --- |
+| CTA Tango | `STATIC_BLOCKED` pending R5/D1 | R5 and D1 complete/accepted; C09D7-A is a separate authorized lane; native-ready remains NO | `c09d6d_cta_tango_style_coverage_preflight.md`; `c09d6_native_generation_authority.md` |
+| Feature Romeo | `BEHAVIOR_REQUIRED` pending CSS-versus-managed-state decision | Managed behavior and CSS-only sufficiency both remain unproven; decision evidence is insufficient | `feature_romeo_css_sufficiency_preflight.md` |
+| Slide Menu Alpha | `BEHAVIOR_REQUIRED` with incomplete disclosure/current-page mapping | Core disclosure is supported; nested mapping is partial; current-page input and lifecycle remain unresolved | `slide_menu_alpha_disclosure_mapping_preflight.md` |
+| Pricing Echo | `BEHAVIOR_REQUIRED`; static feature rows and responsive continuity incomplete | Tabs core and responsive direction are supported; occurrence identity and accessibility/cross-mode continuity remain partial | `pricing_echo_responsive_behavior_mapping_preflight.md` |
+| Header Basel | `QUERY_PARTIAL` / menu `EVIDENCE_INSUFFICIENT`; `BEHAVIOR_REQUIRED` | Site URL is supported; menu repetition and menu bindings remain unproven; dropdown mapping is partial | `header_basel_navigation_mapping_preflight.md`; C09C2 keeps QS-01 fail-closed |
+| Slider Basel | `QUERY_PARTIAL`; `BEHAVIOR_REQUIRED`; `EXTERNAL_DECISION_REQUIRED` | Slide bindings are supported, identity and instance mapping remain incomplete, and current target `EXTERNAL_DEPENDENCY=NONE` | `slider_basel_carousel_mapping_preflight.md` |
+| Hero Barcelona | `QUERY_PARTIAL`; `BEHAVIOR_REQUIRED`; shared carousel external decision | Six collections are supported, media value and carousel mapping are not established, decorative motion remains unmodeled, and `EXTERNAL_DEPENDENCY=NONE` | `hero_barcelona_decorative_motion_mapping_preflight.md` |
+| Feature Milan | `QUERY_PARTIAL`; `BEHAVIOR_REQUIRED` | Two collections are supported; the QS03 occurrence is not; body modifier, collection correlation, tabs and timer remain incomplete | `feature_milan_timed_selection_mapping_preflight.md` |
+| Gallery Bravo | `QUERY_PARTIAL`; `BEHAVIOR_REQUIRED`; `EXTERNAL_DECISION_REQUIRED` | One collection is supported; media/count values and stable identity are not; generic Lightbox composition is accepted and current `EXTERNAL_DEPENDENCY=NONE` | `gallery_bravo_lightbox_mapping_preflight.md` |
+
+The current outcomes do not erase the source-era facts or earlier programme baseline. In particular, historical Splide and Auto Scroll evidence remains provenance; it does not create a current Slider Basel dependency. The Gallery active-item-removal reconciliation and rejection guards remain accepted generic Lightbox requirements. They do not fill the missing asset, count, stable identity or label inputs.
+
+### Cross-cutting blocker routing
+
+This register routes unresolved claims to their existing owners. It does not authorize work in any lane.
+
+| Blocker family | Affected selected templates | Owner |
+| --- | --- | --- |
+| Existing Behavior primitive occurrence mapping incomplete | Slide Menu, Pricing, Header, Slider, Milan, Gallery | Behavior/P7 |
+| Generic decorative-motion capability absent | Hero | Behavior/P7 |
+| Managed behavior need not established | Romeo | Evidence + Static/Accessibility before Behavior |
+| Stable repeated-item identity | Slider; Milan where correlation requires it; Gallery | Frontend-data + Componentization |
+| Missing renderable media/value mapping | Hero, Gallery | Frontend-data / binding authority |
+| Menu repeat, label, destination and hierarchy | Header | Frontend-data / C09 |
+| Wrapped/opaque data expressions | Milan body modifier; Gallery result count | Frontend-data / Componentization |
+| Template-specific styles | Romeo, Pricing, Header, Slider, Hero, Milan, Gallery | Static lane |
+| Icon/renderability | Pricing, Header, Slider | C08B / icon authority |
+| Exact caller-facing component APIs | Data-driven templates | Componentization |
+| P7 plan/code governance discrepancy | Behavior programme | P7 governance owner |
+
+### P7 governance discrepancy
+
+The current repository contains P7-B1 and P7-B2 code, including the Behavior contract/binding files on `main`. The P7 plan ledger retains its own stated authority and implementation status:
+
+```text
+P7_B1_CODE_PRESENT_ON_MAIN=YES
+P7_B2_CODE_PRESENT_ON_MAIN=YES
+
+P7_PLAN_VERSION=1.0.6
+P7_1_0_6_STATUS=PROPOSED_AUTHORITY_AMENDMENT
+P7_B1_STATUS=AUTHORIZED_BUT_BLOCKED
+P7_B1_IMPLEMENTED=NO
+P7_B2_AND_LATER=PLANNED_NOT_AUTHORIZED
+
+P7_CODE_VS_PLAN_LEDGER_DISCREPANCY=PRESENT
+```
+
+These repository facts conflict. This closure does not decide which record controls, edit the P7 plan, call B1/B2 accepted because code is merged, or authorize P7-C or later. Route reconciliation to the P7 governance owner.
+
+### C09D7 lane boundary
+
+```text
+C09D7_A_LANE_ACTIVE=YES
+C09D7_B_AUTHORIZED=NO
+C09D7_C_AUTHORIZED=NO
+```
+
+C09D7-A is a separate CTA componentization lane. Current A0/A1 code presence does not authorize C09D7-B or C09D7-C. This closure does not assess whether current substeps are accepted and does not review PR #173 implementation.
+
+### Source-only widget disposition
+
+Source widget presence is not consumer evidence:
+
+```text
+SOURCE_WIDGET_PRESENCE_IS_NOT_CONSUMER_EVIDENCE=YES
+SOURCE_ONLY_WIDGET_BLANKET_CONVERSION=NOT_AUTHORIZED
+SELECTED_TEMPLATE_CONSUMER_FOR_COLOR_SCHEME=NOT_ESTABLISHED
+SELECTED_TEMPLATE_CONSUMER_FOR_TABLE_OF_CONTENTS=NOT_ESTABLISHED
+SELECTED_TEMPLATE_CONSUMER_FOR_SWITCH=NOT_ESTABLISHED
+IMPLEMENTATION_PRIORITY_FOR_COLOR_SCHEME=DEFERRED
+IMPLEMENTATION_PRIORITY_FOR_TABLE_OF_CONTENTS=DEFERRED
+IMPLEMENTATION_PRIORITY_FOR_SWITCH=DEFERRED
+
+W_NOTES_CURRENT_FRONTEND_TARGET=NONE
+W_NOTES_CLASS=BUILDER_METADATA
+```
+
+Modal, Trigger, Slider, Slider Controls, Tabs and Accordion conceptually overlap generic target capabilities already covered by selected-template evidence. Their separate source files do not justify a separate conversion pass.
+
+```text
+DIRECT_SOURCE_WIDGET_PREFLIGHT_REQUIRED=
+ONLY_IF_A_SPECIFIC_APPROVED_CONSUMER_HAS_AN_UNRESOLVED_CLAIM
+THAT_CURRENT_TEMPLATE_AND_GENERIC_AUTHORITIES_CANNOT_ESTABLISH
+```
+
+### Source and runtime boundaries
+
+```text
+PRIVATE_SOURCE_INSPECTION_REQUIRED=NO
+PRIVATE_SOURCE_EXECUTION=NO
+PRIVATE_SOURCE_NEW_SEMANTICS=NONE
+```
+
+This reconciliation uses repository evidence only. It adds no runtime architecture. Existing runtime ownership remains `caller_data` for caller-supplied values and collections, `browser_local` for presentation state, and the host application for query/data execution. No server polling is introduced for presentation behavior.
+
+```text
+POSTGRES=N/A
+REDIS=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+CACHE_TTL=N/A
+```
+
+### Evidence closure conclusion
+
+```text
+SELECTED_TEMPLATE_PREFLIGHT_COVERAGE=COMPLETE
+SELECTED_TEMPLATE_NATIVE_READY_COUNT=0
+
+NEXT_EVIDENCE_ACTION=NO_BLANKET_SOURCE_WIDGET_PASS
+
+UNRESOLVED_WORK_IS_NOW_ROUTED_TO=
+  Static
+  Behavior/P7
+  Frontend-data/C09
+  Componentization
+  Icon/asset authority
+  P7 governance
+
+EVIDENCE_LANE_CAN_CLOSE_AFTER_THIS_RECONCILIATION=YES
+
+IMPLEMENTATION_AUTHORIZED_BY_THIS_DOCUMENT=NO
+```
+
+This closes selected-template evidence coverage. It does not close the Frames conversion programme.
