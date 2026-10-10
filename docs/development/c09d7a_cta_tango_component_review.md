@@ -1,30 +1,73 @@
-# C09D7-A3: CTA Tango component review
+# C09D7-A3-R: CTA Tango review authority reconciliation
 
 ## Objective and non-goals
 
-This record documents the review and the owner-authorized approval transition for the accepted CTA Tango A2 `ComponentContract`, `ComponentizationPlan`, and `DesignDocument` tuple. The transition changes only `ComponentContract.approval_status` from `proposed` to `approved`.
+This record preserves the CTA Tango A3 review evidence from PR #182 and the A2 authority reconciliation from PR #183, then records the owner-authorized approval continuation from PR #184. The continuation changes only `ComponentContract.approval_status` from `proposed` to `approved`.
 
-A3 does not call `ComponentReview.reject/3`, run `NativeGenerator`, generate HEEx or CSS, resolve the known B risks, start C09D7-B, or authorize C09D7-C. No production or test file changed.
+The PR #182 preflight and PR #183 reconciliation did not call `ComponentReview.approve/3` or `reject/3`. The later owner-authorized continuation called `approve/3` once. No rejection, native generation, HEEx or CSS generation, B-risk resolution, C09D7-B work, or C09D7-C authorization occurred. No production or test file was added by PR #184.
 
-## Owner authority and historical A3 preflight base
+## Owner authority and A3 merge context
 
 ```text
 C09D7_A0=ACCEPTED
 C09D7_A1=ACCEPTED
 C09D7_A2=ACCEPTED
-C09D7_A3=AUTHORIZED
+C09D7_A3=APPROVAL_TRANSITION_REVIEW_READY
+C09D7_A3_ACCEPTED=NO
 C09D7_B=NOT_AUTHORIZED
 C09D7_C=NOT_AUTHORIZED
 
-A3_PREFLIGHT_BASE_SHA=5ea3b0b597eaeebec5524998db93a29e5f7225e8
-A3_PREFLIGHT_BASE_TREE=4a4edf77a826db6840407626155cd68bce39149d
-A3_PREFLIGHT_BASE_SIGNATURE=VALID
-A3_PREFLIGHT_BASE_CI=38044213077
-A3_PREFLIGHT_BASE_CI_STATUS=completed
-A3_PREFLIGHT_BASE_CI_CONCLUSION=success
+A3_BRANCH_CREATION_BASE=5ea3b0b597eaeebec5524998db93a29e5f7225e8
+A3_EFFECTIVE_MERGE_BASE=6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e
+A3_EFFECTIVE_MERGE_BASE_INCLUDES_A2_R=YES
+A3_EFFECTIVE_MERGE_BASE_INCLUDES_PARALLEL_P7_181=YES
+
+A2=ACCEPTED
+A2_OWNER_ACCEPTANCE_PR=177
+A2_OWNER_ACCEPTANCE_MERGE=fe1689555cd3d44ade7c35e5b0d4e720a6df713d
+A2_OWNER_ACCEPTANCE_POST_MERGE_VERIFIED=YES
+A2_AUTHORITY_RECONCILIATION_PR=180
+A2_AUTHORITY_RECONCILIATION_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
+A2_AUTHORITY_RECONCILIATION_POST_MERGE_CI=38045940063
+A2_AUTHORITY_RECONCILIATION_POST_MERGE_CI_RESULT=PASS
+
+A3_PREFLIGHT_PR=182
+A3_PREFLIGHT_HEAD=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+A3_PREFLIGHT_HEAD_TREE=043e28eb859e6270a93a61e77c45d52e22025598
+A3_PREFLIGHT_MERGE=341807144ba5c7e5e75a9f5c5cc301d6675c708c
+A3_PREFLIGHT_MERGE_TREE=a6f9ae2aa81abbb5c735cdd576a7c5e8607005f6
+A3_PREFLIGHT_MERGE_PARENT_1=6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e
+A3_PREFLIGHT_MERGE_PARENT_2=d1f26154c4c2d40c72b1ebff60a4bbc0f435947d
+A3_PREFLIGHT_MERGE_SIGNATURE=VALID
+A3_PREFLIGHT_POST_MERGE_CI=38045951757
+A3_PREFLIGHT_POST_MERGE_CI_RESULT=PASS
 ```
 
-For the original A3 review preflight, the exact `origin/main` SHA and tree matched that supplied historical base before its cleanroom was created. CI run 38044213077 completed successfully on that base. The owner-authorized approval continuation ran later on the PR #182 merge base recorded in the Owner approval transition section.
+PR #182 was authored from the pre-reconciliation branch creation base `5ea3b0b597eaeebec5524998db93a29e5f7225e8`. Its actual merge parent 1 was `6ec54c458bab0f9b3ce94fa6bb2d5ce2abbcf02e`, which already included accepted A2 reconciliation PR #180 and parallel P7 documentation PR #181. PR #181 is unrelated to CTA static componentization. The exact PR #182 merge passed post-merge CI run 38045951757.
+
+## Canonical A2 authority provenance
+
+```text
+OWNER_REVIEWED_A2_PR=177
+OWNER_ACCEPTED_A2_PR=177
+PR_177_MERGE=fe1689555cd3d44ade7c35e5b0d4e720a6df713d
+PR_177_POST_MERGE_VERIFIED=YES
+
+CORROBORATING_A2_PR=178
+CORROBORATING_A2_MERGE=741c514f90d1fa72f905096bb21b40d22f11ae3d
+PR_178_SUPERSEDES_PR_177=NO
+A2_CANDIDATE_IDENTITY_CONFLICT=NO
+
+A2_AUTHORITY_RECONCILIATION_PR=180
+A2_AUTHORITY_RECONCILIATION_MERGE=23f5f58c1cc7b2b12b8a43b117087e660835bfdf
+
+A2_SEMANTIC_CANDIDATE_CONFLICT=NO
+A2_AUTHORITY_PROVENANCE_CONFLICT=RECONCILED
+```
+
+PR #177 records the owner-reviewed A2 proposer candidate. After PR #177 merged and its post-merge checks passed, the owner accepted A2. PR #178 records corroborating output for the same candidate. Its Contract and Plan hashes match the accepted #177 candidate, so it neither introduces a competing candidate nor supersedes the #177 owner acceptance. PR #180 later reconciled the A2 evidence records; it did not replace the owner's acceptance decision.
+
+The Contract and Plan hashes used by PR #182 match the candidate hashes recorded by both PRs #177 and #178. The A3 semantic review therefore inspected the same owner-accepted candidate. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe the historical state when that record was written.
 
 ## Accepted A2 candidate identity
 
@@ -50,7 +93,7 @@ CONTRACT_DIAGNOSTICS=[]
 PLAN_DIAGNOSTICS=[]
 ```
 
-PR #177 records the owner-reviewed A2 proposer candidate that was subsequently accepted by the owner. Merged PR #178 records corroborating A2 evidence for the same candidate. Its Contract and Plan hashes match the accepted #177 candidate, so it does not introduce a competing candidate or supersede the #177 owner acceptance. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe the historical state when that record was written. Current authority is recorded at the top of this section.
+PR #177 is the owner-reviewed and owner-accepted A2 candidate record. PR #178 is corroborating evidence for the same candidate and does not supersede PR #177. The `A2_ACCEPTED=NO` and `A3_AUTHORIZED=NO` values in PR #178 describe its historical state when written. A2 acceptance and reconciliation are recorded above.
 
 ## DesignDocument recovery
 
@@ -197,7 +240,107 @@ RUNTIME_POLLING=0
 100K_RUNTIME_CONCURRENCY=N/A
 ```
 
-## Lifecycle
+The A3-R correction itself changes documentation only and has no runtime effect.
+
+```text
+DATA_LAYER=DOCUMENTATION_ONLY
+RUNTIME_EFFECT=NONE
+
+PROPOSER_EXECUTIONS=0
+GENERATION_PREREQUISITE_EXECUTIONS=0
+REVIEW_TRANSITIONS=0
+NATIVE_GENERATION_EXECUTIONS=0
+
+REDIS=N/A
+POSTGRES=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+```
+
+## Historical lifecycle through the PR #183 reconciliation
+
+This lifecycle records the state at the end of PR #183, before the owner-authorized approval continuation in PR #184.
+
+```text
+A2_accepted
+→ A3_preflight_merged
+→ stale_A2_authority_reference_detected
+→ canonical_A2_provenance_restored
+→ A3_preflight_evidence_reconciled
+→ A3_HUMAN_DECISION_PENDING
+```
+
+Terminal failures are:
+
+```text
+canonical_candidate_hash_mismatch
+A2_authority_ambiguous
+A3_review_evidence_changed
+approval_transition_executed
+generation_executed
+scope_drift
+```
+
+## Historical recommendation and human decision boundary at PR #183
+
+```text
+REVIEW_RECOMMENDATION=APPROVE
+HUMAN_APPROVAL_REQUIRED=YES
+COMPONENT_REVIEW_APPROVE_EXECUTED=NO
+COMPONENT_REVIEW_REJECT_EXECUTED=NO
+CONTRACT_APPROVAL_STATUS_BEFORE_REVIEW=proposed
+CONTRACT_APPROVAL_STATUS_AFTER_A3_PREFLIGHT=proposed
+A3_HUMAN_DECISION_PENDING=YES
+
+NATIVE_GENERATION_EXECUTED=NO
+HEEX_GENERATION_EXECUTED=NO
+CSS_GENERATION_EXECUTED=NO
+C09D7_B_STARTED=NO
+C09D7_C_STARTED=NO
+```
+
+C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. The PR #182 preflight recommended approval and stopped before the state transition. The owner later approved the recommendation and authorized the single transition recorded below.
+
+## Historical A3-R correction run state from PR #183
+
+The following flags describe the PR #183 documentation reconciliation run, before the later owner-authorized approval continuation in PR #184:
+
+```text
+DESIGN_DOCUMENT_RECONSTRUCTED=NO
+SEMANTIC_INPUT_RECONSTRUCTED=NO
+PROPOSER_EXECUTED=NO
+GENERATION_PREREQUISITES_EXECUTED=NO
+
+COMPONENT_REVIEW_APPROVE_EXECUTED=NO
+COMPONENT_REVIEW_REJECT_EXECUTED=NO
+NATIVE_GENERATOR_EXECUTED=NO
+```
+
+The historical PR #182 prerequisite result remains recorded above. This correction did not repeat the semantic review or prerequisite validation.
+
+```text
+A3_PREFLIGHT_REVIEW=RECONCILED
+A3_REVIEW_RECOMMENDATION=APPROVE
+
+A3_APPROVAL_TRANSITION_EXECUTED=NO
+A3_REJECTION_TRANSITION_EXECUTED=NO
+
+CONTRACT_APPROVAL_STATUS=proposed
+
+A3_HUMAN_DECISION_PENDING=YES
+A3_ACCEPTED=NO
+
+C09D7_B_AUTHORIZED=NO
+C09D7_C_AUTHORIZED=NO
+
+NATIVE_GENERATOR_EXECUTED=NO
+```
+
+## Owner approval transition
+
+The owner approved the review recommendation and authorized this continuation. The transition used the recovered A2 tuple, rechecked the shared prerequisites, and called `LiveFrames.ComponentReview.approve/3` once. No candidate semantic field or downstream authority was changed.
 
 ```text
 A3_AUTHORIZED
@@ -210,36 +353,6 @@ A3_AUTHORIZED
 -> approved_contract_identity_frozen
 -> A3_APPROVAL_TRANSITION_REVIEW_READY
 ```
-
-## Recommendation and human decision boundary
-
-```text
-REVIEW_RECOMMENDATION=APPROVE
-REVIEW_RECOMMENDATION_PHASE=historical_pre_transition_evidence
-HUMAN_APPROVAL_REQUIRED=YES
-HUMAN_REVIEW_DECISION=APPROVE
-COMPONENT_REVIEW_APPROVE_EXECUTED=YES
-COMPONENT_REVIEW_REJECT_EXECUTED=NO
-CONTRACT_APPROVAL_STATUS_BEFORE_REVIEW=proposed
-CONTRACT_APPROVAL_STATUS_AFTER_A3_APPROVAL=approved
-A3_HUMAN_DECISION_PENDING=NO
-OWNER_REVIEW_DECISION=APPROVE
-C09D7_A3_APPROVAL_TRANSITION=AUTHORIZED
-C09D7_B=NOT_AUTHORIZED
-C09D7_C=NOT_AUTHORIZED
-
-NATIVE_GENERATION_EXECUTED=NO
-HEEX_GENERATION_EXECUTED=NO
-CSS_GENERATION_EXECUTED=NO
-C09D7_B_STARTED=NO
-C09D7_C_STARTED=NO
-```
-
-C09D6-A §6.5 permits a reviewer to approve a `proposed` candidate when the shared generation prerequisites return `:ok`. The pre-transition recommendation above remains historical evidence. The owner decision and the single authorized transition are recorded below.
-
-## Owner approval transition
-
-The owner approved the review recommendation and authorized this continuation. The transition used the recovered A2 tuple, rechecked the shared prerequisites, and called `LiveFrames.ComponentReview.approve/3` once. No candidate semantic field or downstream authority was changed.
 
 ```text
 OWNER_REVIEW_DECISION=APPROVE
