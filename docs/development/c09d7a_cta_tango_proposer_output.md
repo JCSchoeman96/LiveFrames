@@ -87,11 +87,13 @@ The first execution returned `:proposed`, with zero input diagnostics, zero cons
 The accepted proposer authority defines deterministic, side-effect-free construction for identical canonical inputs. The user authorized one replay solely to recover evidence. The replay reproduced the retained first-run outcome and result shape. The first candidate bytes were unavailable, so a direct byte comparison is not claimed.
 
 ```ini
-INITIAL_PROPOSER_EXECUTION_COUNT=1
+CANONICAL_REVIEWED_A2_INITIAL_EXECUTION_COUNT=1
 INITIAL_PROPOSER_OUTCOME=proposed
-RECOVERY_PROPOSER_EXECUTION_COUNT=1
-TOTAL_PROPOSER_EXECUTION_COUNT=2
+CANONICAL_REVIEWED_A2_RECOVERY_EXECUTION_COUNT=1
+CANONICAL_REVIEWED_A2_EXECUTION_COUNT=2
 RECOVERY_PROPOSER_OUTCOME=proposed
+CONCURRENT_PR_177_EXECUTION_HISTORY_INCLUDED_IN_CANONICAL_COUNT=NO
+GLOBAL_PROPOSER_EXECUTION_COUNT=NOT_ASSERTED
 
 INITIAL_VS_RECOVERY_OUTCOME_MATCH=YES
 INITIAL_VS_RECOVERY_RESULT_SHAPE_MATCH=YES
@@ -254,9 +256,11 @@ RUNTIME_CSS_GENERATION=0
 100K_RUNTIME_CONCURRENCY=N/A
 
 PROPOSER_SIDE_EFFECTS=NONE
-INITIAL_PROPOSER_EXECUTION_COUNT=1
-RECOVERY_PROPOSER_EXECUTION_COUNT=1
-TOTAL_PROPOSER_EXECUTION_COUNT=2
+CANONICAL_REVIEWED_A2_INITIAL_EXECUTION_COUNT=1
+CANONICAL_REVIEWED_A2_RECOVERY_EXECUTION_COUNT=1
+CANONICAL_REVIEWED_A2_EXECUTION_COUNT=2
+CONCURRENT_PR_177_EXECUTION_HISTORY_INCLUDED_IN_CANONICAL_COUNT=NO
+GLOBAL_PROPOSER_EXECUTION_COUNT=NOT_ASSERTED
 NO_NEW_WHOLE_TREE_SCAN=YES
 ```
 
@@ -286,3 +290,65 @@ NATIVE_GENERATOR_EXECUTED=NO
 ```
 
 This record captures proposer output only. A3 owns the later reviewer gate and any decision to change `approval_status` from `proposed`.
+
+## Concurrent A2 evidence reconciliation
+
+PR #177 raced onto `main` immediately before PR #178. PR #177 was not independently accepted by the critical-path review gate. Its recorded Contract and Plan hashes equal the reviewed #178 hashes, so there is no candidate semantic disagreement.
+
+PR #178 is the exact A2 record reviewed and approved by the critical-path gate before merge. It is the sole canonical A2 evidence record for acceptance and downstream authorization. PR #177 remains historical evidence only and is not authority for A2 lifecycle counts, acceptance, or downstream authorization.
+
+```ini
+CONCURRENT_PR=177
+CONCURRENT_MERGE=fe1689555cd3d44ade7c35e5b0d4e720a6df713d
+
+REVIEWED_CANONICAL_PR=178
+REVIEWED_CANONICAL_MERGE=741c514f90d1fa72f905096bb21b40d22f11ae3d
+
+CANONICAL_A2_RECORD=c09d7a_cta_tango_proposer_output.md
+SUPERSEDED_A2_RECORD=c09d7a_cta_tango_proposer_run.md
+
+SEMANTIC_CANDIDATE_CONFLICT=NO
+AUTHORITY_PROVENANCE_CONFLICT=RECONCILED
+```
+
+The count fields above describe only the reviewed #178 execution path. They exclude the execution history recorded by concurrent PR #177. The repository-wide proposer execution count is not asserted.
+
+```text
+A2_reviewed
+→ concurrent_A2_merge_detected
+→ semantic_candidate_equivalence_confirmed
+→ canonical_record_selected
+→ concurrent_record_superseded
+→ A2_reconciliation_review_ready
+```
+
+Failure terminals:
+
+```text
+candidate_hash_conflict
+candidate_semantic_conflict
+canonical_record_ambiguous
+unexpected_componentization_change
+scope_drift
+```
+
+```ini
+DESIGN_DOCUMENT_RECONSTRUCTED=NO
+SEMANTIC_INPUT_RECONSTRUCTED=NO
+PROPOSER_EXECUTED=NO
+COMPONENT_REVIEW_EXECUTED=NO
+GENERATION_PREREQUISITES_EXECUTED=NO
+NATIVE_GENERATOR_EXECUTED=NO
+
+DATA_LAYER=DOCUMENTATION_ONLY
+RUNTIME_EFFECT=NONE
+
+REDIS=N/A
+POSTGRES=N/A
+ETS=N/A
+GENSERVER=N/A
+PUBSUB=N/A
+OBAN=N/A
+
+PROPOSER_EXECUTIONS=0
+```
