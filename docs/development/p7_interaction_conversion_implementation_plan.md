@@ -1,18 +1,18 @@
 # P7 interaction conversion implementation plan
 
-**Plan version:** 1.0.8
+**Plan version:** 1.0.9
 **Date:** 2026-10-10
-**Status:** proposed authority amendment; P7-B1, P7-B2, and P7-B3 are implemented and accepted; P7-B4 is blocked pending v1.0.8 acceptance
-**Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.1
-**Base:** `5ea3b0b597eaeebec5524998db93a29e5f7225e8`
-**Tree:** `4a4edf77a826db6840407626155cd68bce39149d`
-**Base CI:** `38044213077 PASS`
+**Status:** proposed authority amendment; P7-B1 through P7-B4 are implemented and accepted; P7-C is blocked pending v1.0.9 acceptance
+**Authority:** `docs/09_INTERACTION_MODEL.md` revision 1.0.2
+**Base:** `7a3ad515b14df3bc5e321745f0e89045a4742fe7`
+**Tree:** `6fb905c02e2c3ea3da641ab214fc5fd884dd3801`
+**Base CI:** `38054646886 PASS`
 
 ## 1. Purpose and authority
 
 P7 establishes a source-neutral behavior contract and turns accepted behavior evidence into accessible Phoenix-native interactions. It must preserve the accepted C09D6 static generation path, bind behavior to one exact DesignDocument, and keep source runtimes and executable source material out of generated components.
 
-This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. P7-B1, P7-B2, and P7-B3 are implemented and accepted. PR #179 merged at `5ea3b0b597eaeebec5524998db93a29e5f7225e8` with a valid signature and passing post-merge CI. The drift from B3's reviewed base was limited to non-overlapping CTA Tango proposer-run/proposer-output documentation. This v1.0.8 amendment freezes the remaining B4 review-result authority. B4 remains blocked until this amendment is independently accepted and merged with passing post-merge CI. Each later issue still needs separate owner authorization.
+This document resolves the implementation decisions that `docs/09_INTERACTION_MODEL.md` left open. It is an implementation plan and issue decomposition only. P7-0 itself authorized no implementation. P7-A1 and P7-A2 were separately owner-authorized, implemented, reviewed, merged, and accepted. P7-B1, P7-B2, and P7-B3 are implemented and accepted. PR #179 merged at `5ea3b0b597eaeebec5524998db93a29e5f7225e8` with a valid signature and passing post-merge CI. The drift from B3's reviewed base was limited to non-overlapping CTA Tango proposer-run/proposer-output documentation. P7-B4 merged in PR #185 at `777762c6aec915d7fc6b3f1f33ce3b7241fd3b82`; post-merge CI `38051474138` passed. This v1.0.9 amendment freezes the Milan-driven `selection@1.0.0` definition and minimum P7-C validation boundary. P7-C remains blocked until this amendment is independently accepted and merged with passing CI. Each later issue still needs separate owner authorization.
 
 ```text
 P7_A1_STATUS=IMPLEMENTED_ACCEPTED
@@ -30,13 +30,17 @@ P7_B3_MERGE_SIGNATURE=VALID
 P7_B3_POST_MERGE_CI=38044213077
 P7_B3_POST_MERGE_CI_RESULT=PASS
 B3_MERGE_DRIFT=SAFE_NON_OVERLAPPING_DOCUMENTATION
-P7_B4=BLOCKED_PENDING_V1_0_8_ACCEPTANCE
-P7_B4_PREREQUISITES=SATISFIED
-P7_B4_IMPLEMENTED=NO
-P7_C_STARTED=NO
+P7_B4=IMPLEMENTED_ACCEPTED
+P7_B4_PR=185
+P7_B4_MERGE_SHA=777762c6aec915d7fc6b3f1f33ce3b7241fd3b82
+P7_B4_POST_MERGE_CI=38051474138
+P7_B4_POST_MERGE_CI_RESULT=PASS
+P7_C_PREREQUISITES=SATISFIED
+P7_C=BLOCKED_PENDING_V1_0_9_ACCEPTANCE
+P7_C_IMPLEMENTED=NO
 ```
 
-Versions 1.0.5 and 1.0.6 are accepted. Version 1.0.6 froze the FocusPolicy typed DesignNode references, their cardinality, the B1 structural model, and B2 deterministic binding identity. The accepted 1.0.7 amendment froze BehaviorContract persistence, canonical serialization, and structural/reference validation. This 1.0.8 amendment freezes B4 review-result authority. Neither amendment changes `docs/09_INTERACTION_MODEL.md`, the BehaviorContract format version, Design IR, or the accepted B2 binding-ID formula. This amendment authorizes no implementation.
+Versions 1.0.5 and 1.0.6 are accepted. Version 1.0.6 froze the FocusPolicy typed DesignNode references, their cardinality, the B1 structural model, and B2 deterministic binding identity. The accepted 1.0.7 amendment froze BehaviorContract persistence, canonical serialization, and structural/reference validation. The accepted 1.0.8 amendment froze B4 review-result authority. This 1.0.9 amendment adds the Milan-driven `selection@1.0.0` semantic definition and minimum P7-C API and validation boundary. It changes no BehaviorContract format version, Design IR, or accepted B2 binding-ID formula. This amendment authorizes no implementation.
 
 The target flow is:
 
@@ -671,6 +675,108 @@ RUNTIME_DB_CALLS=0
 RUNTIME_NETWORK_CALLS=0
 ```
 
+### 2.8 Milan Selection 1.0.0 and P7-C authority
+
+P7-C's first production definition is selected by the exact pair `selection@1.0.0`. This is a tracer-driven addition. It does not define Tabs or Carousel semantics and does not establish durable cross-collection item identity.
+
+```text
+FEATURE_MILAN_TARGET_PRIMITIVE=selection@1.0.0
+FEATURE_MILAN_TABS_MAPPING=REJECTED_FOR_V1
+FEATURE_MILAN_CAROUSEL_MAPPING=REJECTED_FOR_V1
+MILAN_V1_DURABLE_ITEM_IDENTITY=NO
+MILAN_V1_POSITIONAL_SYNCHRONIZATION=YES
+STATE_PRESERVATION_ACROSS_REORDER=NO
+```
+
+The trusted definition owns one state dimension, `selected_position`, whose initial default is zero and whose runtime domain is `0 <= selected_position < rendered_item_count`. The position is not a RuntimeInstance ID, caller item identity, cross-request identity, database identity, or component identity. Milan's occurrence-level `initial_state` is normally `nil`; if present it contains only a non-negative integer `selected_position`. The upper bound is checked after rendered cardinality is available.
+
+Selection 1.0.0 has exactly two target roles. `control_collection` has exactly one controlled target. `presentation_collection` has one or more. Every rendered collection represented by these roles must be non-empty and have equal cardinality. The caller's order is semantic. The runtime never sorts, joins by guessed IDs, searches source IDs, zips, truncates, pads, or guesses correspondence. Empty collections, unequal cardinality, or an out-of-domain selection make the `RuntimeInstance` unavailable without repair. On same-cardinality reorder, keep the numeric selected position; remount starts a new lifecycle at position zero.
+
+The only transitions are `activate(position)` and `timer_advance`. Activation requires an integer position in the rendered range and valid collection cardinalities. It sets the position, synchronizes selected/active/hidden presentation, and applies the TimerPolicy manual-activation effect. Timer advance requires an eligible running timer, positive item count, and valid synchronized cardinalities. It selects `(selected_position + 1) mod item_count` and synchronizes the presentation. There is no skip transition and no Selection semantic terminal state; `RuntimeInstance.destroyed` remains terminal.
+
+Only the semantic triggers `activate` and `timer` are allowed. Milan feature-control click maps to `activate`; interval tick maps to `timer`. Timer has no DesignNode origin. Activate references the exact admitted control target node/template. Source event names and `setInterval` are never target vocabulary.
+
+Selection's only primitive-policy fields and v1 values are:
+
+```text
+alignment: position
+advance_boundary: wrap
+```
+
+No stable key, item key, carousel, or tabs policy is allowed. `timer_policy` is nil or the exact Milan policy below. `focus_policy` and `keyboard_policy` must be nil. `motion_policy` is nil in Milan v1 because reduced-motion timer behavior belongs to TimerPolicy. `responsive_overrides` must be empty. Responsive layout stays in the static lane.
+
+```text
+purpose=advance_selection
+interval_ms=5000
+start=on_initialization
+manual_activation=stop
+restart=never
+reset=none
+reduced_motion=disable_automatic_advance
+```
+
+The timer starts at initialization unless reduced motion suppresses automatic advance. Manual activation changes `running` to `stopped_by_user` permanently for that mounted lifecycle. `updated` and reconciliation do not restart, reset, or resume it. Remount begins a new timer lifecycle. Release the browser-local interval when the runtime becomes unavailable or destroyed. The handle is ephemeral and is never serialized. No server event, GenServer, PubSub, Redis, Postgres, Oban, or polling is required.
+
+Selection semantics do not require tab roles, tablists, tabpanels, `aria-controls`, roving tabindex, Tabs arrow-key behavior, or automatic Tabs activation. Controls remain operable controls; exactly one position is selected; exposed selected state and presentation remain synchronized; inactive hidden content must not remain accidentally interactive or focusable. Exact markup and ARIA belong to the realization/browser accessibility slice.
+
+P7-C exposes only these new public APIs and preserves existing `validate_structure/2` unchanged:
+
+```text
+LiveFrames.Behavior.PrimitiveRegistry.resolve(%PrimitiveRef{})
+  → {:ok, trusted_definition} | :error
+
+LiveFrames.Behavior.Validation.validate_semantics(design_document, behavior_contract)
+  → :ok | {:error, [BehaviorDiagnostic]}
+
+LiveFrames.Behavior.Validation.validate(design_document, behavior_contract)
+  → :ok | {:error, [BehaviorDiagnostic]}
+```
+
+`validate/2` calls `validate_structure/2`, then `validate_semantics/2`. The compile-time trusted registry contains exactly `selection@1.0.0` after this slice. It uses exact-pair lookup only; no kind-only fallback, latest-version fallback, source-defined primitive, or generic registry DSL. P7-C validates each binding's exact primitive reference, initial-state dimensions/value shape, exact primitive-policy keys/values, trigger vocabulary/applicability, target roles/cardinality, TimerPolicy applicability and exact value domains, FocusPolicy/KeyboardPolicy applicability, MotionPolicy applicability, and responsive override applicability.
+
+The first semantic diagnostics are exactly:
+
+```text
+behavior.semantic.primitive_unsupported
+behavior.semantic.initial_state_invalid
+behavior.semantic.primitive_policy_invalid
+behavior.semantic.trigger_invalid
+behavior.semantic.target_invalid
+behavior.semantic.timer_policy_invalid
+behavior.semantic.cross_cutting_policy_invalid
+```
+
+Each has `severity=error` and `category=semantic`. Binding-owned failures carry the exact persisted `binding_id`; `node_id` is used only when one exact controlled/trigger node is the subject. Sort by `(binding_id, code, node_id-or-empty, message)`. Reuse `LiveFrames.Behavior.Diagnostic`.
+
+The Milan-shaped tests in the next implementation slice must cover exact registry resolution and unknown-pair rejection, state default/domain shape, primitive policies, triggers, role/cardinality validation, the exact timer policy and wrong values, nil-only Focus/Keyboard policy, responsive override rejection, deterministic diagnostics, and `validate/2` composition with structural validation. Runtime rendered cardinality remains realization-owned. P7-C does not run JavaScript, inspect selectors, load private source, execute source scripts, run browser behavior, query a database, or modify Design IR, ComponentContract, or ComponentizationPlan.
+
+```text
+KIND_ONLY_FALLBACK=NO
+LATEST_VERSION_FALLBACK=NO
+SOURCE_DEFINED_PRIMITIVES=NO
+P7_C_DATA_LAYER=COLD_COMPILE_REVIEW_TIME
+RUNTIME_SERVER_CALLS_FROM_P7_C=0
+DESIGN_IR_CHANGE=NO
+COMPONENT_CONTRACT_FORMAT_CHANGE=NO
+COMPONENTIZATION_PLAN_FORMAT_CHANGE=NO
+```
+
+Backward path to a working Milan feature:
+
+```text
+M1-A  this authority acceptance
+  → P7-C/Milan  registry, selection@1.0.0, semantic validation, and tests
+  → M1-C  exact Milan BehaviorContract and BehaviorReviewResult
+  → M1-D  P7-D0, existing componentization/review, then P7-D1
+  → M1-E  runtime realization selector
+  → M1-F  scoped colocated hook
+  → browser, accessibility, and cleanup verification
+  → FEATURE_MILAN_INTERACTIVE_TRACER=ACCEPTED
+  → Gallery Bravo
+```
+
+P7-C/Milan does not create the exact Milan BehaviorContract or BehaviorReviewResult and does not approve a component boundary. No runtime code is added before the later realization steps.
+
 ## 3. Design IR boundary and review model
 
 BehaviorContract remains a separate versioned artifact linked to the exact DesignDocumentIdentity. It references normalized `DesignNode.node_id` values and does not mutate the DesignDocument. It may coexist with coarse `LiveFrames.IR.Interaction` evidence without assigning that registry new behavior semantics.
@@ -748,7 +854,7 @@ behavior.review.not_approved
 
 Invalid shape/value and unsupported format use category `structure`; document/digest mismatches use `identity`; missing or ambiguous results use `structure`; a non-approved decision uses `semantic`. B4 adds no diagnostic type or category. If a required failure cannot use this set without misclassification, implementation stops with `STOP=B4_DIAGNOSTIC_AUTHORITY_REQUIRED`.
 
-An `approved` decision means only that the human reviewer approved that exact BehaviorContract artifact. It does not mean P7-C semantic validation passed, that the contract is generation-ready, or that a ComponentContract, componentization, generation, or runtime realization is approved. B4 calls none of `PrimitiveRegistry`, `validate_semantics/2`, or `Behavior.Validation.validate/2`. P7-C remains separately unauthorized.
+An `approved` decision means only that the human reviewer approved that exact BehaviorContract artifact. It does not mean P7-C semantic validation passed, that the contract is generation-ready, or that a ComponentContract, componentization, generation, or runtime realization is approved. B4 calls none of `PrimitiveRegistry`, `validate_semantics/2`, or `Behavior.Validation.validate/2`. P7-C remains blocked pending acceptance of v1.0.9.
 
 ```text
 REVIEW_RESULT_MUTABLE_STATUS=NO
@@ -1080,7 +1186,7 @@ Backend scaling becomes relevant only when a future behavior contract explicitly
 
 ## 10. Test and review strategy
 
-Every implementation issue follows TDD: add a focused failing test, confirm the failure, implement the smallest slice, run focused checks, then run applicable repository gates. This P7-0 planning change adds no tests and runs no broad Mix or browser suite.
+Every implementation issue follows TDD: add a focused failing test, confirm the failure, implement the smallest slice, run focused checks, then run applicable repository gates. This docs-only authority amendment adds no tests and requires only the documented diff and worktree checks.
 
 | Slice | Required focused evidence |
 | --- | --- |
@@ -1090,12 +1196,13 @@ Every implementation issue follows TDD: add a focused failing test, confirm the 
 | P7-B2 | Binding-ID golden vectors prove occurrence-only discriminators; changing `primitive_policy_values` changes the discriminator; different object insertion order with the same values yields the same discriminator; `['a', 'b']` and `['b', 'a']` yield different discriminators; equivalent stable-key objects with different insertion order yield the same discriminator. Also test source traversal noise, duplicate occurrence rejection, stable zero-based ordinals, and that primitive-definition body changes do not affect binding IDs. B2 tests prove structural determinism, not primitive policy validity. Also prove nested policy arrays retain order, reordered unique responsive records yield the same discriminator, duplicate modes reject before identity assignment without P7-C lookup, B2 receives no redundant owner scope, changing semantic `authority_ref` changes the discriminator, and evidence-only provenance/source-trace references do not. |
 | P7-B3 | Golden bytes/digest cover every canonical contract and binding field, diagnostics, provenance, and SourceTrace. Test deterministic diagnostic order and complete-JCS tie-break, provenance ordered arrays, SourceTrace class sorting/duplicate rejection, full PrimitiveRef participation, all binding-owned references and owner-subtree checks, exact DesignDocument identity, and full-set B2 ID/ordinal recomputation. Prove binding-owned diagnostics accept only `binding_id=null`; contract diagnostics accept null or an existing ID and reject unknown IDs. Prove diagnostic nodes inside and outside a binding subtree are valid when present in the exact document, while unknown nodes reject. Reject empty non-null evidence IDs and prove opaque IDs trigger no provenance lookup. `validate_structure/2` is the only validation API; no primitive semantics are included. |
 | P7-B4 | Freeze a literal full-result fixture, canonical JSON bytes, and independently computed `brv_` ID. Prove evidence input-order invariance; ID changes for decision, reviewer, timestamp, evidence set, and null-versus-empty note; duplicate evidence rejects. Reject noncanonical/impossible timestamps. Exact contract, digest, identity, and algorithm matches pass; mismatches reject. Gate tests prove zero/multiple-result rejection, exact singleton approved success, non-approved rejection, and no timestamp selection. Lifecycle tests prove immutable decisions and new results for later decisions. |
-| P7-C | Registry rejects unknown/unimplemented exact `(kind, definition_version)` pairs without fallback; validates occurrence initial-state assignments and `primitive_policy_values` keys, value types/shapes, domains, required/optional status, defaults, and invariants against the exact definition. Evidence proves an array is semantically rejected when that definition requires a stable-key object, while a permitted stable-key object may pass; permitted arrays retain their exact order. P7-C never reinterprets or reorders arrays. `validate/2` calls both `validate_structure/2` and `validate_semantics/2`; semantic diagnostics are deterministic. P7-C owns Timer/Keyboard/Motion/Responsive semantic vocabularies, applicability, domains, defaults, invariants, mode/authority checks, reversibility, and primitive-specific combinations. |
+| P7-C/Milan | `selection@1.0.0` resolves; unknown kind and unknown version each reject without fallback; nil initial state uses default zero; an explicit non-negative `selected_position` is accepted as the initial assignment; unknown dimensions and negative positions reject; `alignment=position` and `advance_boundary=wrap` pass while unknown keys/values reject; activate/timer pass and unknown triggers reject; exactly one control collection and one-or-more presentation collections validate; missing, duplicate, or invalid roles reject; exact 5000 ms TimerPolicy passes; wrong interval type, unknown timer key, and restart other than `never` reject; nonnull Focus/Keyboard policy and Milan responsive overrides reject; `validate/2` fails when either structure or semantics fails; semantic diagnostics are deterministic. This implementation slice tests only the exact Selection definition and its Milan policy values. |
 | P7-D0 | Exact document/contract/review matching; structural validation; candidate boundary and every binding-owned behavior reference checked, including all four FocusPolicy references; contained, irrelevant, split, and unresolved bindings classified deterministically; proposer is not called on rejection and receives unchanged validated semantic input on acceptance. Diagnostic node IDs are excluded from candidate-boundary containment. Unsupported primitive semantics remain blocked at the later full validation gate. Generic policy values add no node-reference channel. |
 | Existing ComponentizationProposer + ComponentReview | Existing proposer still creates only a proposed tuple; its existing ComponentReview and C09D6 gates remain mandatory before the post-review projection. |
 | P7-D1 | Five exact inputs required; review decision/document/contract digest match; golden projection bytes/ID; plan fingerprint equals NativeGenerator's serialized-plan SHA-256; all four FocusPolicy node refs rechecked against approved boundaries; invalid boundaries, stale inputs, ambiguous mappings, and unprojected required bindings reject. Generic policy values add no node-reference channel. |
 | P7-E | Realization selector chooses only supported least-cost strategies; unknown/unsafe strategy rejects; no hook, RuntimeInstance, browser resource manager, or DOM lifecycle code is introduced. |
-| P7-F | Core `closed | open`; native details/summary candidate; ordinary links; accepted native activation/accessibility only; no invented ARIA; no JavaScript and no RuntimeInstance. Browser verification only for this bounded core. |
+| Milan runtime | Empty or unequal rendered collection cardinality makes the RuntimeInstance unavailable, releases its timer, and performs no repair; same-cardinality reorder retains only the numeric selected position. |
+| P7-F | Core Disclosure `closed | open`; native details/summary candidate; ordinary links; accepted native activation/accessibility only; no invented ARIA; no JavaScript and no RuntimeInstance. Browser verification only for this bounded core. |
 | P7-G | Separate focused/selected tab state; activation modes and keyboard policy; accessible relationships; if a managed runtime is required, its patch/reconnect/resource cleanup tests cover Tabs only. |
 | P7-H | `single | multiple` constraints; closure rules; reversible tabs-to-accordion mapping; browser verification for responsive changes. |
 | P7-I | Disclosure navigation and composite Menu remain separate; usable links; accepted keyboard/focus model; unknown source event names reject. |
@@ -1103,11 +1210,11 @@ Every implementation issue follows TDD: add a focused failing test, confirm the 
 | P7-K | Orthogonal slide selection/rotation/focus-hover state; reduced-motion changes; timer eligibility, pause/resume, and owner cleanup. |
 | P7-L | One separately selected source fixture and one approved behavior pattern traverse evidence, contract, review, pre-proposer decision, existing proposer and ComponentReview, projection, generation prerequisites, and realization without source runtime dependencies. |
 
-Every applicable slice also checks that no imported source code executes, no dynamic atom/module conversion occurs, and no Bricks, Frames, WordPress, ACSS, private vendor code, or unapproved runtime dependency enters the reusable library. Pure serializers and validators do not need browser tests. Browser tests are limited to a slice whose accepted behavior requires browser proof.
+After P7-E, the Milan realization selects the scoped colocated hook, then proves browser behavior, accessibility, and cleanup before accepting the tracer and starting Gallery Bravo. This runtime work does not enter P7-C. Every applicable slice also checks that no imported source code executes, no dynamic atom/module conversion occurs, and no Bricks, Frames, WordPress, ACSS, private vendor code, or unapproved runtime dependency enters the reusable library. Pure serializers and validators do not need browser tests. Browser tests are limited to a slice whose accepted behavior requires browser proof.
 
 ## 11. Ordered future issue tree
 
-P7-A1, P7-A2, P7-B1, and P7-B2 are implemented and accepted. P7-B3 is implemented and accepted on PR #179 with valid signature and passing post-merge CI. P7-B4 is blocked until this v1.0.8 amendment is independently accepted and merged with passing post-merge CI. P7-C through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each later issue is independently reviewable and requires explicit owner authorization before work begins.
+P7-A1, P7-A2, P7-B1, and P7-B2 are implemented and accepted. P7-B3 is implemented and accepted on PR #179 with valid signature and passing post-merge CI. P7-B4 is implemented and accepted under PR #185, merge `777762c6aec915d7fc6b3f1f33ce3b7241fd3b82`, with passing post-merge CI `38051474138`. P7-C/Milan is blocked pending v1.0.9 acceptance; P7-D0 through P7-L remain planned and not authorized. No GitHub issues are created by P7-0. Each later issue is independently reviewable and requires explicit owner authorization before work begins.
 
 ```text
 P7_ISSUE_COUNT=17
@@ -1116,10 +1223,14 @@ FUTURE_ISSUES_CREATED=NO
 P7_B1=IMPLEMENTED_ACCEPTED
 P7_B2=IMPLEMENTED_ACCEPTED
 P7_B3=IMPLEMENTED_ACCEPTED
-P7_B4=BLOCKED_PENDING_V1_0_8_ACCEPTANCE
-P7_B4_PREREQUISITES=SATISFIED
-P7_B4_IMPLEMENTED=NO
-P7_C_STARTED=NO
+P7_B4=IMPLEMENTED_ACCEPTED
+P7_B4_PR=185
+P7_B4_MERGE_SHA=777762c6aec915d7fc6b3f1f33ce3b7241fd3b82
+P7_B4_POST_MERGE_CI=38051474138
+P7_B4_POST_MERGE_CI_RESULT=PASS
+P7_C_PREREQUISITES=SATISFIED
+P7_C=BLOCKED_PENDING_V1_0_9_ACCEPTANCE
+P7_C_IMPLEMENTED=NO
 ```
 
 | Order | Issue | Scope and required result | Dependency and hard gate |
@@ -1129,8 +1240,8 @@ P7_C_STARTED=NO
 | 3 | **IMPLEMENTED / ACCEPTED** P7-B1 — BehaviorContract / BehaviorBinding structural model | Define the typed contract/binding model and closed nested shapes for versioned primitive references, triggers, targets, occurrence initial-state assignments, source-neutral `primitive_policy_values` defaulting to `{}`, cross-cutting policies including FocusPolicy, diagnostics, and provenance. | Accepted B1 structural authority. No primitive semantic validation or runtime. |
 | 4 | **IMPLEMENTED / ACCEPTED** P7-B2 — BehaviorBinding deterministic identity | Apply the occurrence-only discriminator, duplicate rule, deterministic ordinal ranking, and `bnd_` ID algorithm to P7-B1's typed model. | Accepted B2 identity authority. The formula uses `primitive_ref.kind`, excludes definition version and primitive-definition bodies, and preserves ordered policy arrays. |
 | 5 | **IMPLEMENTED / ACCEPTED** P7-B3 — BehaviorContract serializer and structural validation | Implemented under PR #179 and accepted on merge `5ea3b0b597eaeebec5524998db93a29e5f7225e8`; post-merge CI `38044213077` passed on that SHA. | Validated with the accepted v1.0.7 authority. No P7-C semantic checks. Merge drift was limited to non-overlapping CTA Tango proposer-run/proposer-output documentation. |
-| 6 | **BLOCKED PENDING V1.0.8 ACCEPTANCE** P7-B4 — BehaviorReviewResult artifact | Implement the exact immutable nine-field review model, canonical JCS serializer, derived `brv_` identity, intrinsic validator, contract matcher, and exact-one approval gate specified in §3. | P7-B3 is accepted and prerequisites are satisfied. This v1.0.8 amendment does not authorize B4; no latest/timestamp selection, storage service, mutable status, or P7-C authority. |
-| 7 | **PLANNED — NOT AUTHORIZED** P7-C — Primitive registry and validation composition | Implement the trusted registry and primitive-definition ownership of StateModels, Transitions, Guards, Effects, cardinality, invariants, and semantic validation. Compose `validate/2 = validate_structure/2 AND validate_semantics/2`. | Depends on P7-B4. Validate state assignments and each exact primitive definition's allowed policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Own FocusPolicy strategy vocabularies, strategy/reference combinations, and primitive-specific focus invariants. Reject mismatching structural shapes, such as an array where the exact definition requires a stable-key object; preserve the exact order of every permitted array. Never reinterpret or reorder arrays. Do not implement every primitive; each tracer adds its own definition. P7-C owns semantic policy values and combinations for Timer/Keyboard/Motion/Responsive. |
+| 6 | **IMPLEMENTED / ACCEPTED** P7-B4 — BehaviorReviewResult artifact | Implemented under PR #185 and accepted at merge `777762c6aec915d7fc6b3f1f33ce3b7241fd3b82`; post-merge CI `38051474138` passed. | No latest/timestamp selection, storage service, mutable status, or database-backed review state. |
+| 7 | **BLOCKED PENDING V1.0.9 ACCEPTANCE** P7-C/Milan — registry, semantic validation, and `selection@1.0.0` | Implement the exact `PrimitiveRegistry.resolve/1`, `validate_semantics/2`, and composed `validate/2` APIs. Register only `selection@1.0.0`. | P7-B4 prerequisites are satisfied. Validate Milan state/policy/trigger/target/timer semantics, deterministic diagnostics, and structure-plus-semantics composition per §2.8. No runtime, source execution, Design IR or component format change, or other production primitive. |
 | 8 | **PLANNED — NOT AUTHORIZED** P7-D0 — BehaviorComponentizationDecision | Validate the exact reviewed behavior against the explicit candidate `ComponentizationSemanticInput`; gate the existing proposer call on whole-binding containment. | Depends on P7-C and P7-B4. Ephemeral result only. Reject split/uncertain boundaries with `STOP=BEHAVIOR_AWARE_BOUNDARY_UNRESOLVED`; do not bypass or change the proposer. |
 | Existing stage | EXISTING — ComponentizationProposer + ComponentReview | Existing authorities create a proposed ComponentContract/Plan and require explicit human ComponentReview plus C09D6 prerequisites. | This is an existing pipeline stage, not a new P7 issue. P7-D1 cannot proceed before its exact approved tuple exists. |
 | 9 | **PLANNED — NOT AUTHORIZED** P7-D1 — BehaviorProjection | Implement the five-input post-review projection, exact review-result validation, deterministic `bpr_` identity, ownership verification, and C09D6 prerequisites. | Depends on P7-D0, existing ComponentizationProposer, and approved ComponentReview. Use a test-only trusted primitive definition; add no production primitive. Formats remain 1.0.0. |
@@ -1143,17 +1254,17 @@ P7_C_STARTED=NO
 | 16 | **PLANNED — NOT AUTHORIZED** P7-K — Carousel | Add Carousel semantics and opt-in timer/control realization. | Depends on P7-J; timer and cleanup remain primitive-scoped. |
 | 17 | **PLANNED — NOT AUTHORIZED** P7-L — One source integration tracer | Integrate one separately selected source fixture and one approved behavior through the complete reviewed pipeline. | Depends on preceding primitive/pipeline gates. Additional sources or behaviors require separate authorization. |
 
-P7-B1, P7-B2, and P7-B3 are implemented and accepted. P7-B3 was accepted on PR #179, merge `5ea3b0b597eaeebec5524998db93a29e5f7225e8`, with valid signature and passing post-merge CI. Its only merge drift from the reviewed base was non-overlapping CTA Tango proposer-run/proposer-output documentation. P7-B4 remains blocked until this v1.0.8 amendment is independently accepted and merged with passing post-merge CI. P7-C through P7-L remain unauthorized and depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
+P7-B1 through P7-B4 are implemented and accepted. P7-B4 was accepted on PR #185, merge `777762c6aec915d7fc6b3f1f33ce3b7241fd3b82`, with post-merge CI `38051474138` passing. P7-C/Milan is blocked pending v1.0.9 acceptance. Later issues depend on their prior artifacts as shown. P7-D0 gates the existing proposer; existing ComponentReview occurs before P7-D1. The pre-proposer decision is ephemeral, while the post-review projection is the persisted identity-bearing sidecar. P7-D1 uses a test-only trusted primitive definition through the P7-C registry API; it adds no production primitive.
 
 P7-0 itself authorized no implementation. P7-A1, P7-A2, P7-B1, and P7-B2 were separately owner-authorized and are implemented/accepted.
 
-This v1.0.8 authority amendment does not itself authorize P7-B4 or any successor.
+This v1.0.9 authority amendment does not itself authorize P7-C implementation or any successor.
 
 Approval of any issue does not authorize its successor.
 
 ## 12. TOON micro-prompts
 
-P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future prompts. P7-B3 is implemented and accepted. P7-B4 is blocked pending v1.0.8 acceptance and merge. P7-C through P7-L remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
+P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future prompts. P7-B3 is implemented and accepted. P7-B4 is implemented and accepted. P7-C/Milan is blocked pending v1.0.9 acceptance; P7-D0 through P7-L remain **PLANNED — NOT AUTHORIZED** until the owner authorizes each issue. The existing ComponentizationProposer and ComponentReview are gates between P7-D0 and P7-D1, not new issues in this decomposition.
 
 ### P7-A1 — DesignDocument identity
 
@@ -1204,7 +1315,7 @@ P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future 
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **BLOCKED PENDING V1.0.8 ACCEPTANCE** Implement only after this exact authority is accepted and merged with passing post-merge CI. |
+| Task      | **IMPLEMENTED / ACCEPTED** Historical slice, implemented under PR #185 after v1.0.8 authority acceptance. |
 | Objective | Represent one immutable human decision about one exact BehaviorContract and let consumers require that explicit result. |
 | Output    | Only `apps/live_frames/lib/live_frames/behavior/review_result.ex` and `apps/live_frames/test/live_frames/behavior/review_result_test.exs`. Production module `LiveFrames.Behavior.ReviewResult`; public API exactly `algorithm/0`, `validate/1`, `encode/1`, `id/1`, `validate_against_contract/2`, `require_approved/2`. |
 | Note      | Exact persisted fields, with no defaults: `review_format_version`, `design_document_identity`, `behavior_contract_digest_algorithm`, `behavior_contract_digest`, `decision`, `reviewer_identity`, `reviewed_at`, `review_note`, `evidence_refs`. Version `1.0.0`. No persisted `review_id`, `id`, `digest`, `status`, `latest`, or `version_counter`; derive `brv_` plus lowercase SHA-256 on demand from `LiveFrames.CanonicalJSON` bytes. Sort evidence refs by ascending Unicode-scalar string order; reject duplicates; input order is not identity-significant. Require UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`, exact lexical validation and valid UTC `DateTime` parsing; no normalization or system clock. Reuse `LiveFrames.IR.Identity` and `LiveFrames.Behavior.Diagnostic`. Match exact document identity, `LiveFrames.Behavior.Serializer.algorithm()`, and recomputed `Serializer.digest/1`; no DesignDocument argument or B3 structural-validation call. `require_approved/2` accepts a proper list, rejects zero and multiple results, validates the singleton against the contract, then returns that exact result only if decision is `approved`; never select by time/order. Use the eight `behavior.review.*` codes and existing categories in §3. No P7-C semantics, database/current-review state, registry lookup, infrastructure, B3 changes, or other changed files. See §3 for golden bytes/ID, field validation, gate, lifecycle, boundary, diagnostics, security, and scaling tests. This amendment does not authorize implementation. |
@@ -1213,10 +1324,10 @@ P7-A1, P7-A2, P7-B1, and P7-B2 below are accepted historical slices, not future 
 
 | Field     | Content |
 |-----------|---------|
-| Task      | **PLANNED — NOT AUTHORIZED** Implement the trusted registry mechanism, common closed vocabularies, and staged semantic validation API. |
+| Task      | **BLOCKED PENDING V1.0.9 ACCEPTANCE** Implement the Milan-driven trusted registry definition and staged semantic validation API only after this exact authority is accepted and merged with passing CI. |
 | Objective | Ensure full Behavior validation cannot pass without both structural/reference checks and primitive semantics. |
-| Output    | `apps/live_frames/lib/live_frames/behavior/primitive_registry.ex` and the composed `validation.ex` API; `validate_semantics/2`; `validate/2 = validate_structure/2 AND validate_semantics/2`; composition and unsupported-definition tests. |
-| Note      | Depends on P7-B4. The trusted registry resolves each exact `(kind, definition_version)` pair and owns that definition's `BehaviorStateModel`; the model owns `Transition` definitions, which own their `TransitionGuard`, `BehaviorEffect`, and associated `AccessibilityEffect` definitions. Validate each binding's primitive reference, occurrence initial-state assignment, `primitive_policy_values`, triggers, targets, and binding policies against the selected definition. Unknown pairs fail closed; kind-only and latest-version fallback are prohibited. The exact definition owns permitted policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Reject a structural value shape, including an array, when that exact policy definition does not permit it; a semantically invalid binding may already have a deterministic structural ID. For an allowed ordered sequence, validate its contents without reinterpreting or reordering it. Where a policy is defined as unordered/set-like, its permitted shape should use a stable-key object. Policy values contain no DesignNode references. Do not implement every primitive definition here. An unimplemented kind/version remains unsupported until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. P7-C owns Timer/Keyboard/Motion/Responsive semantics, modes and authority validity, reversible mapping, and primitive-specific combinations. |
+| Output    | Only `apps/live_frames/lib/live_frames/behavior/primitive_registry.ex`, `apps/live_frames/lib/live_frames/behavior/validation.ex`, and focused tests in `apps/live_frames/test/live_frames/behavior/primitive_registry_test.exs` and `apps/live_frames/test/live_frames/behavior/semantic_validation_test.exs`. Public APIs are `PrimitiveRegistry.resolve/1`, `Validation.validate_semantics/2`, and `Validation.validate/2`; `validate_structure/2` stays unchanged. |
+| Note      | Depends on P7-B4. The trusted compile-time registry contains exactly `selection@1.0.0` after the first implementation slice and resolves only the exact `(kind, definition_version)` pair. Implement only `PrimitiveRegistry.resolve/1`, `Validation.validate_semantics/2`, and `Validation.validate/2`; preserve `validate_structure/2` unchanged, and make `validate/2` run structure before semantics. Validate selection state/default, exact primitive policies, activate/timer triggers, control/presentation target roles and cardinality, the exact Milan TimerPolicy, and cross-cutting policy applicability. Unknown pairs fail closed; kind-only and latest-version fallback are prohibited. No generic registry DSL and no other production primitive. The exact definition owns permitted policy keys, value types/shapes, domains, required/optional status, defaults, and invariants. Reject a structural value shape, including an array, when that exact policy definition does not permit it; a semantically invalid binding may already have a deterministic structural ID. For an allowed ordered sequence, validate its contents without reinterpreting or reordering it. Where a policy is defined as unordered/set-like, its permitted shape should use a stable-key object. Policy values contain no DesignNode references. Do not implement every primitive definition here. An unimplemented kind/version remains unsupported until its tracer supplies the definition. No source-defined vocabulary, adapter, JavaScript, hooks, infrastructure, or polling. P7-C owns Timer/Keyboard/Motion/Responsive semantics, modes and authority validity, reversible mapping, and primitive-specific combinations. Runtime rendered cardinality is realization-owned; P7-C does not inspect selectors, execute source, use a database, or change Design IR or component formats. |
 
 ### P7-D0 — BehaviorComponentizationDecision
 
