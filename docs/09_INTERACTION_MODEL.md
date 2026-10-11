@@ -2,9 +2,9 @@
 
 **Status:** accepted architecture authority for future behavior work. No implementation is authorized.
 
-**Authority revision:** 1.0.1
+**Authority revision:** 1.0.2
 
-**Revision date:** 2026-10-09
+**Revision date:** 2026-10-10
 
 ## 1. Authority, scope, and status
 
@@ -189,7 +189,7 @@ BehaviorBinding identity
   = RuntimeInstance scope
 ```
 
-For repeated collections, one binding may create one runtime instance per rendered item. If state must survive reorder, each item needs a stable caller-provided key. An array index alone is not durable identity for a reorderable collection. If no stable identity exists, state preservation across reorder is unsupported and must be diagnosed.
+For repeated collections, one binding may create one runtime instance per rendered item. If state must survive reorder, each item needs a stable caller-provided key. An array index alone is not durable identity for a reorderable collection. Positional synchronization is valid when the caller supplies the intended order and the contract does not promise state preservation across reorder. If no stable identity exists, state preservation across reorder is unsupported and must be diagnosed.
 
 Targets are typed document-local references, never arbitrary CSS selectors, source IDs, HTML strings, or URL fragments. Runtime-generated DOM IDs must be unique within the document and derived from safe instance scope. A collision prevents mounting the affected binding and is diagnosed.
 
@@ -337,6 +337,84 @@ The underlying media or a normal media link remains available without the lightb
 
 Destruction ends the runtime instance and releases the composed Dialog and collection-navigation resources.
 
+### 9.9 Selection
+
+`Selection` is a source-neutral primitive for selecting one position from synchronized rendered collections. It does not imply Tabs or Carousel semantics.
+
+```text
+PrimitiveRef{
+  kind: "selection",
+  definition_version: "1.0.0"
+}
+```
+
+The state dimension is `selected_position`, with default position zero. Its P7-C static domain is a canonical non-negative safe integer in `[0, 9_007_199_254_740_991]`. P7-C validates the state dimension, integer type, and static range. The realization validates the runtime membership invariant `selected_position < rendered_item_count`; P7-C cannot validate rendered cardinality. Position is semantic state, not durable item identity, a RuntimeInstance ID, caller item identity, cross-request identity, database identity, or component identity. State preservation across reorder is unsupported. On a same-cardinality reorder, retain the same numeric position; do not reset or claim that the new item is the same entity.
+
+Selection uses two controlled target roles:
+
+```text
+control_collection       exactly one controlled target
+presentation_collection  one or more controlled targets
+```
+
+The caller supplies each synchronized collection in its intended presentation order. As a LiveFrames runtime invariant, every rendered collection must be non-empty and have equal cardinality. This fail-closed rule does not claim that source collections have durable identity or proven equal rendered cardinality. A mismatch, empty collection, or runtime position outside the available range makes the RuntimeInstance unavailable and releases its owned timer. The runtime does not sort, join by guessed IDs, search source IDs, truncate, pad, zip, or guess correspondence. No best-effort repair occurs.
+
+The only transitions are:
+
+| Transition | Guard | Effect |
+| --- | --- | --- |
+| `initial` | Valid non-empty synchronized collections and any explicit assignment is valid | Use the explicit `selected_position` assignment when present; otherwise set `selected_position=0`. |
+| `activate(position)` | Position is an integer in `[0, rendered_item_count)` and every synchronized collection is valid | Set `selected_position=position`, synchronize selected/active/hidden presentation, and apply the TimerPolicy manual-activation effect. |
+| `timer_advance` | Timer lifecycle is `running`; item count is positive; synchronized cardinalities are valid | Set `selected_position=(selected_position + 1) mod item_count` and synchronize selected/active/hidden presentation. |
+
+There is no skip transition and no primitive semantic terminal state. `RuntimeInstance.destroyed` remains terminal. Remount starts a new lifecycle at position zero.
+
+Selection v1.0.0 permits only the semantic triggers `activate` and `timer`. An occurrence with `timer_policy=nil` has exactly one `activate` trigger and no `timer` trigger. An occurrence with a TimerPolicy has exactly one of each. Duplicate or unknown semantic triggers reject. The `activate` origin must equal the exact node ID of the single `control_collection` target. The `timer` origin must be nil; a timer trigger without a TimerPolicy and a TimerPolicy without a timer trigger both reject. A source control activation maps to `activate`; an interval tick maps to `timer`. Source event names and `setInterval` are not target vocabulary.
+
+### Selection timer lifecycle
+
+The runtime derives timer lifecycle state from TimerPolicy and does not serialize it in `initial_state` or BehaviorContract:
+
+| Current state | Event and guard | Next state |
+| --- | --- | --- |
+| `not_started` | Mount/initialization; reduced motion does not suppress automatic advance | `running` |
+| `not_started` | Mount/initialization; reduced motion suppresses automatic advance | `suppressed` |
+| `running` | Manual `activate` | `stopped_by_user` |
+| `running`, `stopped_by_user`, or `suppressed` | Runtime becomes unavailable or is destroyed | `released` |
+
+For Selection, `timer_advance` is eligible only while the derived timer lifecycle is `running`. Reduced motion prevents automatic entry into `running`; manual selection remains available. `stopped_by_user` does not return to `running` through activation, updates, or reconciliation. Remount starts a new timer lifecycle. `released` is terminal for the mounted timer resource; `RuntimeInstance` owns destruction.
+
+The Milan source uses an animation-related data attribute as evidence for this normalized lifecycle, but that source attribute is evidence only. It is not runtime authority and is not copied into BehaviorContract, `primitive_policy_values`, TimerPolicy, or target runtime vocabulary. The target eligibility condition is the derived `timer_lifecycle == running` guard.
+
+The only Selection occurrence policy fields are:
+
+```text
+{
+  "alignment": "position",
+  "advance_boundary": "wrap"
+}
+```
+
+The proposed Milan occurrence binds this exact TimerPolicy:
+
+```text
+{
+  "purpose": "advance_selection",
+  "interval_ms": 5000,
+  "start": "on_initialization",
+  "manual_activation": "stop",
+  "restart": "never",
+  "reset": "none",
+  "reduced_motion": "disable_automatic_advance"
+}
+```
+
+The `reduced_motion` value is LiveFrames target accessibility policy, not observed source reduced-motion behavior. When reduced motion is requested, automatic advance does not enter `running`, while manual selection remains available. Manual activation stops the timer for the mounted lifecycle. `updated` and reconciliation do not restart or resume it. Destroying or making the instance unavailable releases the ephemeral browser interval. Reconciliation must not create duplicate intervals.
+
+`initial_state` is normally `nil`, which uses the definition default. An explicit assignment may contain only `selected_position` as a non-negative safe integer in the static domain; P7-C validates that domain, while realization checks membership against `rendered_item_count`. No stable item key or ID is part of the contract.
+
+Selection v1.0.0 permits `timer_policy` to be `nil` or the exact applicable policy; `focus_policy` and `keyboard_policy` must be `nil`; `motion_policy` must be `nil` when reduced-motion behavior is owned by TimerPolicy; and `responsive_overrides` must be empty for Milan v1. The primitive does not authorize tab roles, tablists, tabpanels, `aria-controls`, roving tabindex, Tabs arrow-key behavior, or automatic Tabs activation. Controls remain operable controls. The selected position, exposed selected state, and visible presentation stay synchronized. Inactive hidden presentation must not remain accidentally interactive or focusable. Exact generated markup and ARIA belong to realization and browser/accessibility verification.
+
 ## 10. Accessibility, keyboard, and motion authority
 
 Accessibility state is part of semantic transitions, not a later decoration. When a transition changes visibility, selection, expansion, modality, or active slide, the realization updates the matching native state or ARIA state in the same transition. It must not report a completed transition while DOM visibility, focus, and exposed state disagree.
@@ -356,6 +434,7 @@ Each binding is classified as `CLIENT_LOCAL`, `SERVER_AUTHORITATIVE`, or `HYBRID
 | Disclosure / Toggle | `CLIENT_LOCAL` | Only if activation changes server-owned application data. |
 | Accordion | `CLIENT_LOCAL` | Only if open state itself is domain state or server output depends on it. |
 | Tabs | `CLIENT_LOCAL` | Only if selection loads or mutates server-authoritative content. |
+| Selection | `CLIENT_LOCAL` | Only if selection loads or mutates server-authoritative content. |
 | Disclosure Popup | `CLIENT_LOCAL` | Only if opening triggers a server workflow. |
 | Menu Button / Menu | `CLIENT_LOCAL` | A command may separately invoke a server event; focus/menu state remains local. |
 | Dialog / Modal | `CLIENT_LOCAL` | Form submission or server workflow may be hybrid; open/focus state stays local by default. |
@@ -385,6 +464,7 @@ The server-rendered or no-JS form must retain meaningful content and ordinary li
 | Disclosure | Prefer native `<details>/<summary>` when compatible. Otherwise keep the content reachable. |
 | Accordion | Use native disclosures when their group semantics match; otherwise render reachable sections. |
 | Tabs | Render all panel content reachable; do not leave essential content permanently hidden. |
+| Selection | Automatic rotation is unavailable. Manual JS-dependent selection is unavailable. Keep essential content reachable and do not hide it solely because the behavior runtime is absent. |
 | Disclosure Popup navigation | Keep navigation links usable in normal document flow. |
 | Menu Button / Menu | Do not claim menu roles without its keyboard/focus behavior; render a usable list of actions/links. |
 | Dialog | Essential content/action has a usable inline or non-modal fallback. |
@@ -406,6 +486,7 @@ If source behavior cannot be represented safely, preserve its evidence and emit 
 | Disclosure | None by default | Native state; no cache/Redis/database/PubSub. | No per-client server state is allocated for the interaction. |
 | Accordion | None by default | State only for rendered group; lazy-init only when it preserves initial semantics. | Same local rule; server cost follows rendered page updates, not open-state changes. |
 | Tabs | None by default | Store selected/focused IDs for mounted set; do not eagerly initialize offscreen unrelated widgets. | No polling or server process per tab set. |
+| Selection | None by default | Store one numeric selected position and use at most one browser-local timer per mounted instance. | No polling or per-instance server process. |
 | Disclosure Popup | None by default | Keep listeners scoped to mounted owner; use CSS/native disclosure where sufficient. | No persistent service or storage requirement. |
 | Menu Button / Menu | None for menu/focus; command may be server-owned | Initialize only the rendered menu; keyboard navigation is local. | No per-menu process; server work only for actual commands. |
 | Dialog / Modal | None for open/close | One scoped stack for nested dialogs; share no global state without ownership. | No per-dialog backend process; lock/focus bookkeeping is browser-local. |
@@ -452,7 +533,8 @@ For each example, `SOURCE` is the corresponding folder in the 34-record staging 
 | `BEH-P003` | Slider Basel indicates carousel controls and rotation configuration. | observed | PRIVATE_REFERENCE | staging export `slider-section-basel/`; C-07X Slider Basel record | staging-2026-09 corpus digest above | Carousel | Export/audit records loop, arrows, play/pause, slide source, and responsive layout. It does not establish safe runtime or full accessibility behavior. | Use orthogonal carousel state and APG-informed stop/resume rules; do not depend on Splide. | Carousel normalizer/runtime | New export or browser evidence changes observed controls. |
 | `BEH-P004` | Gallery Bravo indicates gallery/lightbox composition. | observed | PRIVATE_REFERENCE | staging export `gallery-bravo/`; C-07X Gallery Bravo record | staging-2026-09 corpus digest above | Lightbox, collection | Export/audit records gallery collection and lightbox link settings/capture, not complete focus, Escape, or history behavior. | Model as Dialog plus collection navigation; history is opt-in only. | Gallery normalizer, dialog, lightbox | New source evidence proves a different interaction model. |
 | `BEH-P005` | Header Basel indicates nested navigation and dropdown/trigger evidence. | observed | PRIVATE_REFERENCE | staging export `header-basel/`; C-07X Header Basel record | staging-2026-09 corpus digest above | Disclosure Popup, Menu Button | Export/audit records nested navigation, dropdowns, and a trigger widget; it does not prove application-menu semantics. | Default website navigation to disclosure semantics; require evidence for Menu. | Navigation adapter, popup, menu | Verified keyboard/DOM evidence establishes a different primitive. |
-| `BEH-P006` | Feature Milan indicates timed active-item rotation and interaction stopping. | observed | PRIVATE_REFERENCE | staging export `feature-section-milan/`; C-07X Feature Milan record | staging-2026-09 corpus digest above | Tabs, carousel-like rotation, TimerPolicy | Export/audit records tab-like ARIA markup, separate media groups, and interval-based active-item changes; it does not prove proper tab relations or cleanup. | Timed changes require explicit TimerPolicy, pause rules, reduced-motion policy, and diagnostics where relations are incomplete. | Tabs, timer validation, runtime | New admitted source or browser observation changes behavior facts. |
+| `BEH-P006` | Feature Milan indicates timed active-item rotation and interaction stopping. | observed | PRIVATE_REFERENCE | staging export `feature-section-milan/`; C-07X Feature Milan record | staging-2026-09 corpus digest above | Tabs, carousel-like rotation, TimerPolicy | Export/audit records tab-like ARIA markup, separate media groups, and interval-based active-item changes; it does not prove proper tab relations or cleanup. | Superseded for Milan v1 by `BEH-P007`; partial tab-like markup does not establish Tabs or Carousel semantics. | Selection, TimerPolicy | New admitted source or browser observation changes behavior facts. |
+| `BEH-P007` | Feature Milan synchronizes active feature and media by numeric position and uses a 5000 ms timer that stops on manual activation. | observed | PRIVATE_REFERENCE | `private_reference/frames/staging-2026-09/feature-section-milan/bricks-component-ybsqrl-feature-section-milan.json` | SHA-256 `f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132` | Selection, TimerPolicy, synchronized collections | Observation: the first feature is selected; the root custom property `--animation-duration` is `5000ms` and the embedded script reads it for `setInterval`; controls, descriptions, and slides use the same numeric index, with ordered wrap and no skips. Every repeated control starts with its animation data flag true; a feature-control click makes every flag false and clears the interval. The timer callback returns without advancing if any flag is false. No false-to-true or restart path appears in the artifact. Both loops request four posts, but actual rendered cardinality equality, durable identity, browser activation, and lifecycle cleanup are not proven. Decision proposed here: normalize eligibility to `timer_lifecycle == running`, do not serialize the source flag, use Selection positional synchronization without claiming identity, and require equal non-empty collections as a LiveFrames fail-closed runtime invariant. Reduced-motion behavior is target policy, not a source observation. | Propose `selection@1.0.0` and the exact seven-key TimerPolicy; preserve source provenance only; release target timer handles under RuntimeInstance lifecycle. | Selection, TimerPolicy, runtime | New admitted source or browser observation changes behavior facts. |
 
 ### External standards and platform records
 
@@ -483,6 +565,7 @@ LiveFrames.Behavior.Diagnostic
 LiveFrames.Behavior.Primitives.Disclosure
 LiveFrames.Behavior.Primitives.Accordion
 LiveFrames.Behavior.Primitives.Tabs
+LiveFrames.Behavior.Primitives.Selection
 LiveFrames.Behavior.Primitives.Menu
 LiveFrames.Behavior.Primitives.Dialog
 LiveFrames.Behavior.Primitives.Carousel
@@ -512,15 +595,24 @@ safe behavior evidence
 → consumer ejection without Frames
 ```
 
-The first proofs should be:
+The first behavior tracer is Milan. Its path is:
 
-1. **Disclosure / Slide Menu Alpha:** validate native `details`/`summary`, usable links, reduced-motion behavior, and the absence of unnecessary JavaScript.
-2. **Tabs:** prove separate focused/selected state, keyboard policy, client runtime, LiveView patch reconciliation, and destruction cleanup.
-3. **Accordion and responsive tabs/accordion:** prove state mapping is reversible and obeys `single|multiple` and closure policy.
-4. **Disclosure Popup vs Menu:** prove classification follows semantics and keyboard behavior.
-5. **Dialog:** prove modality, focus ownership, nesting, and cleanup.
-6. **Carousel:** prove orthogonal state, autoplay controls, pause/resume, and reduced motion.
-7. **Lightbox:** prove Dialog composition and collection navigation.
+```text
+M1-A authority acceptance
+→ P7-C/Milan registry and semantic validation
+→ exact Milan BehaviorContract and BehaviorReviewResult
+→ P7-D0
+→ existing componentization and ComponentReview
+→ P7-D1
+→ P7-E realization selector
+→ Milan scoped hook and browser/accessibility/cleanup verification
+→ accept Milan tracer
+→ Gallery Bravo
+```
+
+The interactive tracer order after Milan is Gallery Bravo, Slider Basel, Pricing Echo, Slide Menu Alpha, then Header Basel. This source-tracer order is distinct from the historical P7 primitive issue sequence below; the issue labels do not make Slide Menu Alpha the next source tracer.
+
+After those tracers, remaining primitive proofs include Tabs, Accordion and responsive tabs/accordion, Disclosure Popup versus Menu, Dialog, Carousel, and Lightbox. Their P7 issue numbers remain unchanged.
 
 ## 19. Open decisions and stop conditions
 
@@ -544,4 +636,4 @@ No stop condition is active for this documentation slice. Implementation must st
 
 This authority is ready for independent review when it defines the versioned artifact and Design IR relationship; records domain ownership, cardinality, references, invariants, and failure behavior; specifies lifecycle transitions for every required primitive; distinguishes native semantics, ARIA specification, and APG guidance; defines identity, runtime ownership, LiveView reconciliation, no-JS behavior, security, performance, and cleanup; and includes evidence records with invalidation triggers.
 
-This authority changes no Design IR schema, Elixir implementation, JavaScript, CSS, hook, generator, Catalogue runtime, dependency, roadmap, or private source. Its canonical owner is this file: `docs/09_INTERACTION_MODEL.md`.
+This proposed authority amendment adds `selection@1.0.0` based on the owner-reviewed Milan evidence. It changes no Design IR schema, BehaviorContract format, Elixir implementation, JavaScript, CSS, hook, generator, Catalogue runtime, dependency, or private source. Its canonical owner is this file: `docs/09_INTERACTION_MODEL.md`.
