@@ -2,7 +2,7 @@
 
 ## Purpose and decision
 
-This preflight maps the owner-reviewed Feature Milan evidence to the current frontend-data and Behavior authorities. It does not authorize implementation. Unknown source behavior remains unknown. The embedded source script was inspected as text only; it was not executed.
+This preflight maps the owner-reviewed Feature Milan evidence to the current frontend-data and Behavior authorities. The exact BehaviorContract and review are recorded in `feature_milan_behavior_contract_review.md`. This preflight does not authorize componentization or runtime implementation. Unknown source behavior remains unknown. The embedded source script was inspected as text only; it was not executed.
 
 Milan has two admitted frontend collections and three source query owners. Its title and primary media bindings are normalized. The `{post_content:16}` occurrence remains an evidence-insufficient `content.body` binding with an opaque modifier. The owner-supplied Bricks export establishes positional synchronization, the interval occurrence, manual timer stop, and ordered wrap behavior. It does not establish durable cross-collection item identity, actual rendered cardinality equality, complete Tabs semantics, lifecycle timer/listener cleanup, or a Milan-specific responsive breakpoint.
 
@@ -14,7 +14,9 @@ ACCESSIBILITY=PARTIAL
 EXTERNAL_DEPENDENCY=NONE
 OVERALL=NOT_READY
 NATIVE_READY=NO
-IMPLEMENTATION_AUTHORIZED=NO
+COMPONENTIZATION_AUTHORIZED=NO
+M1_C_BEHAVIOR_CONTRACT=APPROVED_PENDING_RECORD_ACCEPTANCE
+RUNTIME_IMPLEMENTATION_AUTHORIZED=NO
 ```
 
 ## Evidence and authority basis
@@ -27,7 +29,7 @@ This mapping relies on the accepted repository authorities below for source evid
 - `docs/09_INTERACTION_MODEL.md` for Tabs, TimerPolicy, focus, keyboard, accessibility, motion, runtime, and security rules.
 - `docs/development/frames_native_conversion_matrix.md`, `docs/development/c07x_unsupported_surface_inventory.md`, `docs/development/c09d6_native_generation_authority.md`, and `docs/04_SOURCE_AND_PROVENANCE.md` for conversion boundaries and provenance.
 
-The current P7 plan is version 1.0.9, a proposed authority amendment. P7-B4 is implemented and accepted under PR #185. P7-C remains blocked pending acceptance of v1.0.9. This preflight records the tracer evidence and target authority; it does not authorize runtime implementation.
+The P7 plan is version 1.0.9. M1-A was accepted under PR #186, and P7-C/Milan was implemented and accepted under PR #187 at `1b7fb11b7d9153ab1731613e1eeb3cbba8742d3c`, with post-merge CI `38165154894` passing. M1-C has an approved BehaviorReviewResult pending acceptance of its evidence record. This preflight records the tracer evidence and target authority; it does not authorize componentization or runtime implementation.
 
 The owner-supplied artifact is `private_reference/frames/staging-2026-09/feature-section-milan/bricks-component-ybsqrl-feature-section-milan.json`, SHA-256 `f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132`. It records dynamic feature data, tab-like ARIA markup, separate desktop/mobile media groups, a 5000 ms interval read from the root custom property `--animation-duration`, first-item selection, collection-order advance with wrap and no skips, and positional media synchronization. Its repeated feature-control template starts with the source animation data flag true. A feature-control click sets every such flag false and clears the interval. The timer callback returns without advancing if any control flag is false; that return does not clear an interval that is still active. The admitted mutation to false occurs on the click path that also clears the interval. The artifact has no false-to-true or restart path. It does not prove durable cross-collection identity, actual rendered cardinality equality, complete Tabs relationships, or lifecycle cleanup.
 
@@ -149,13 +151,21 @@ GENERIC_NATIVE_STYLING_INTEGRATION=PRESENT_ON_MAIN
 FEATURE_MILAN_SPECIFIC_STYLE_MAPPING=PARTIAL
 
 P7_PLAN_VERSION=1.0.9
-P7_1_0_9_STATUS=PROPOSED_AUTHORITY_AMENDMENT
+P7_1_0_9_STATUS=ACCEPTED
 P7_B4=IMPLEMENTED_ACCEPTED
 P7_B4_PR=185
 P7_B4_MERGE_SHA=777762c6aec915d7fc6b3f1f33ce3b7241fd3b82
 P7_B4_POST_MERGE_CI=38051474138
 P7_B4_POST_MERGE_CI_RESULT=PASS
-P7_C=BLOCKED_PENDING_V1_0_9_ACCEPTANCE
+M1_A=IMPLEMENTED_ACCEPTED
+M1_A_PR=186
+P7_C_MILAN=IMPLEMENTED_ACCEPTED
+P7_C_PR=187
+P7_C_MERGE_SHA=1b7fb11b7d9153ab1731613e1eeb3cbba8742d3c
+P7_C_POST_MERGE_CI=38165154894
+P7_C_POST_MERGE_CI_RESULT=PASS
+M1_C_BEHAVIOR_CONTRACT=APPROVED_PENDING_RECORD_ACCEPTANCE
+RUNTIME_IMPLEMENTATION_AUTHORIZED=NO
 
 FEATURE_SELECTION_STATE_LAYER=browser_local
 FEATURE_TIMER_STATE_LAYER=browser_local
@@ -176,7 +186,9 @@ NATIVE_READY=NO
 PRIVATE_SOURCE_INSPECTION_REQUIRED=NO
 PRIVATE_SOURCE_EXECUTION=NO
 PRIVATE_SOURCE_NEW_SEMANTICS=NONE
-IMPLEMENTATION_AUTHORIZED=NO
+COMPONENTIZATION_AUTHORIZED=NO
+M1_C_BEHAVIOR_CONTRACT=APPROVED_PENDING_RECORD_ACCEPTANCE
+RUNTIME_IMPLEMENTATION_AUTHORIZED=NO
 ```
 
 ## Frontend data mapping
@@ -351,14 +363,19 @@ The evidence gaps above do not block positional synchronization. Stop if impleme
 
 ```text
 STOP_CONDITIONS_TRIGGERED=NONE
-M1_A_AUTHORITY=PROPOSED_IN_THIS_SLICE
-P7_C_IMPLEMENTED=NO
+M1_A=IMPLEMENTED_ACCEPTED
+M1_A_PR=186
+P7_C_MILAN=IMPLEMENTED_ACCEPTED
+P7_C_PR=187
+P7_C_IMPLEMENTED=YES
+M1_C_BEHAVIOR_CONTRACT=APPROVED_PENDING_RECORD_ACCEPTANCE
+RUNTIME_IMPLEMENTATION_AUTHORIZED=NO
 ```
 
 
-## Proposed Milan v1 semantic closure
+## Accepted Milan v1 semantic closure
 
-The proposed first Milan Behavior binding uses `PrimitiveRef{kind="selection", definition_version="1.0.0"}`. State is `selected_position`, initially zero, with a P7-C static domain of non-negative safe integers and a realization-owned membership invariant `selected_position < rendered_item_count`. It is positional state only.
+The approved Milan BehaviorContract contains one binding with `PrimitiveRef{kind="selection", definition_version="1.0.0"}`. State is `selected_position`, initially zero, with a P7-C static domain of non-negative safe integers and a realization-owned membership invariant `selected_position < rendered_item_count`. It is positional state only.
 
 ```text
 MILAN_V1_DURABLE_ITEM_IDENTITY=NO
