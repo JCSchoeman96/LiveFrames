@@ -131,7 +131,7 @@ semantics.
 
 The implementation starts by running:
 
-    rg -n 'modifier_status|%ValueBinding\\{' apps/live_frames
+    rg -n 'modifier_status|%ValueBinding\{' apps/live_frames
 
 Classify every match before editing:
 
