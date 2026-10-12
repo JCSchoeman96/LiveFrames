@@ -172,7 +172,14 @@ This authority does not:
 - implement Design IR 4.0.0;
 - change the current docs/03_DESIGN_IR_SPEC.md contract before the IR 4.0.0
   implementation is accepted;
-- change source-specific Bricks normalization rules;
+- change source-specific Bricks normalization rules. The IR 4.0.0
+  implementation may mechanically update existing Bricks adapter constructors
+  from the v3 `:none` and `:opaque` field to the corresponding v4 modifier
+  variants so the current adapter remains compilable. This is representation
+  compatibility only. The adapter MUST keep `{post_content:16}` as opaque with
+  `evidence_insufficient`; it MUST NOT emit resolved `word_limit`, add or
+  generalize numeric-suffix parsing, or re-normalize Feature Milan in that
+  implementation slice;
 - re-normalize Feature Milan or regenerate its identities;
 - create a Milan ComponentizationSemanticInput;
 - execute D0 or call ComponentizationProposer;
