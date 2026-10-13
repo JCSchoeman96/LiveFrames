@@ -2,6 +2,7 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   @moduledoc false
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
+  alias LiveFrames.Adapters.Bricks.CustomCssParser
   alias LiveFrames.Adapters.Bricks.Settings
   alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.Adapters.Bricks.Tree
@@ -204,7 +205,7 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp process_blob(blob, owner_trace, context, acc) when is_binary(blob) do
-    case scan_flat_blocks(blob) do
+    case CustomCssParser.parse_flat_blocks_legacy(blob) do
       {:error, reason, _detail} ->
         framing_fail_closed(acc, blob, reason)
 
@@ -462,7 +463,7 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp parse_rule_blocks(blob) do
-    case scan_flat_blocks(blob) do
+    case CustomCssParser.parse_flat_blocks_legacy(blob) do
       {:ok, frames} ->
         frames_to_rules(frames)
 
@@ -484,158 +485,27 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp frame_to_rule(frame) do
-    case parse_declarations(frame.body) do
+    case CustomCssParser.parse_declarations(frame.body) do
       {:ok, declarations} ->
-        {:ok,
-         %{
-           selector: frame.selector,
-           declarations: declarations,
-           raw: frame.raw
-         }}
+        {:ok, rule_from_frame(frame, declarations)}
 
       {:error, _} ->
-        {:error, :invalid_declarations}
-    end
-  end
-
-  defp scan_flat_blocks(blob) when is_binary(blob) do
-    scan_flat_blocks(blob, 0, [])
-  end
-
-  defp scan_flat_blocks(blob, index, blocks) do
-    case skip_trivia(blob, index) do
-      {:error, _reason, _detail} = error ->
-        error
-
-      {:ok, index} ->
-        cond do
-          index >= byte_size(blob) ->
-            {:ok, Enum.reverse(blocks)}
-
-          :binary.at(blob, index) == ?} ->
-            {:error, :unmatched_closing_brace, index}
-
-          true ->
-            case read_flat_block(blob, index) do
-              {:ok, frame, next_index} ->
-                scan_flat_blocks(blob, next_index, [frame | blocks])
-
-              {:error, _reason, _detail} = error ->
-                error
-            end
+        case parse_legacy_declarations(frame.body) do
+          {:ok, declarations} -> {:ok, rule_from_frame(frame, declarations)}
+          {:error, _} -> {:error, :invalid_declarations}
         end
     end
   end
 
-  defp read_flat_block(blob, index) do
-    selector_start = index
-    {selector_end, index} = read_until(blob, index, ?{)
-
-    if index >= byte_size(blob) do
-      orphan =
-        String.slice(blob, selector_start, byte_size(blob) - selector_start) |> String.trim()
-
-      if orphan == "" do
-        {:error, :missing_closing_brace, selector_start}
-      else
-        {:error, :orphan_text, selector_start}
-      end
-    else
-      selector =
-        String.slice(blob, selector_start, selector_end - selector_start) |> String.trim()
-
-      if selector == "" do
-        {:error, :framing_ambiguous, index}
-      else
-        body_start = index + 1
-        block_start = selector_start
-
-        case read_balanced_body(blob, body_start, 1) do
-          {:ok, body_end, close_index} ->
-            body = String.slice(blob, body_start, body_end - body_start)
-            raw = String.slice(blob, block_start, close_index - block_start + 1)
-
-            frame = %{
-              selector: selector,
-              body: body,
-              raw: raw
-            }
-
-            {:ok, frame, close_index + 1}
-
-          {:error, _reason, _detail} = error ->
-            error
-        end
-      end
-    end
+  defp rule_from_frame(frame, declarations) do
+    %{
+      selector: frame.selector,
+      declarations: declarations,
+      raw: frame.raw
+    }
   end
 
-  defp read_balanced_body(blob, index, depth) do
-    if index >= byte_size(blob) do
-      {:error, :missing_closing_brace, index}
-    else
-      case :binary.at(blob, index) do
-        ?{ ->
-          if depth >= 1 do
-            {:error, :nested_block, index}
-          else
-            read_balanced_body(blob, index + 1, depth + 1)
-          end
-
-        ?} ->
-          next_depth = depth - 1
-
-          if next_depth == 0 do
-            {:ok, index, index}
-          else
-            read_balanced_body(blob, index + 1, next_depth)
-          end
-
-        _ ->
-          read_balanced_body(blob, index + 1, depth)
-      end
-    end
-  end
-
-  defp read_until(blob, index, char) do
-    if index >= byte_size(blob) do
-      {index, index}
-    else
-      case :binary.at(blob, index) do
-        ^char ->
-          {index, index}
-
-        _ ->
-          read_until(blob, index + 1, char)
-      end
-    end
-  end
-
-  defp skip_trivia(blob, index) do
-    cond do
-      index >= byte_size(blob) ->
-        {:ok, index}
-
-      index + 1 < byte_size(blob) and :binary.part(blob, index, 2) == "/*" ->
-        comment_start = index
-        comment_body_start = index + 2
-
-        case :binary.match(blob, "*/", [
-               {:scope, {comment_body_start, byte_size(blob) - comment_body_start}}
-             ]) do
-          {close_start, _close_length} -> skip_trivia(blob, close_start + 2)
-          :nomatch -> {:error, :unterminated_comment, comment_start}
-        end
-
-      :binary.at(blob, index) in [?\s, ?\n, ?\r, ?\t] ->
-        skip_trivia(blob, index + 1)
-
-      true ->
-        {:ok, index}
-    end
-  end
-
-  defp parse_declarations(body) do
+  defp parse_legacy_declarations(body) do
     body
     |> String.split(";", trim: true)
     |> Enum.map(&String.trim/1)
