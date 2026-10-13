@@ -15,7 +15,9 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
 
   @query_count_token ~r/^\{query_results_count:([^{}]+)\}$/
   @query_count_occurrence ~r/\{query_results_count:([^{}]+)\}/
-  @known_text_tokens ["{post_title}", "{post_content}", "{post_content:16}"]
+  @post_content_word_limit_token ~r/^\{post_content:([1-9][0-9]*)\}$/
+  @post_content_word_limit_occurrence ~r/\{post_content:[1-9][0-9]*\}/
+  @known_text_tokens ["{post_title}", "{post_content}"]
 
   @spec normalize(Tree.t(), map(), String.t()) :: map()
   def normalize(%Tree{} = tree, trace_index, adapter_version) when is_map(trace_index) do
@@ -297,29 +299,35 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           :normalized
         )
 
-      "{post_content:16}" = expression ->
-        classify_collection_field(
-          element,
-          collection_id,
-          trace_index,
-          adapter_version,
-          "text",
-          %{"text" => expression},
-          expression,
-          "text.post_content_opaque",
-          "content.body",
-          %LiveFrames.IR.ValueModifier.Opaque{},
-          :evidence_insufficient
-        )
-
       expression when is_binary(expression) ->
-        classify_other_text(
-          element,
-          expression,
-          collection_by_source,
-          trace_index,
-          adapter_version
-        )
+        case Regex.run(@post_content_word_limit_token, expression) do
+          [^expression, count] ->
+            classify_collection_field(
+              element,
+              collection_id,
+              trace_index,
+              adapter_version,
+              "text",
+              %{"text" => expression},
+              expression,
+              "text.post_content_word_limit",
+              "content.body",
+              %LiveFrames.IR.ValueModifier.Resolved{
+                kind: :word_limit,
+                arguments: %{"count" => String.to_integer(count)}
+              },
+              :normalized
+            )
+
+          _not_exact_word_limit ->
+            classify_other_text(
+              element,
+              expression,
+              collection_by_source,
+              trace_index,
+              adapter_version
+            )
+        end
 
       _other ->
         {[], false, []}
@@ -738,7 +746,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
 
   defp known_text_token_occurs?(text) do
     Enum.any?(@known_text_tokens, &String.contains?(text, &1)) or
-      Regex.match?(@query_count_occurrence, text)
+      Regex.match?(@query_count_occurrence, text) or
+      Regex.match?(@post_content_word_limit_occurrence, text)
   end
 
   defp brace_syntax?(text), do: String.contains?(text, ["{", "}"])
