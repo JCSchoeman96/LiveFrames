@@ -20,7 +20,9 @@ implementation slice follows acceptance of this authority.
 AUTHORITY=C09C4
 SOURCE_MAPPING_VERDICT=SUPPORTED
 SOURCE_MAPPING_FORM={post_content:<positive integer>}
-COUNT_DOMAIN=ASCII_DECIMAL_INTEGER_1_OR_GREATER
+COUNT_DOMAIN=ASCII decimal [1-9][0-9]*
+SEMANTIC_MAXIMUM=NONE
+IMPLEMENTATION_MUST_NOT_INVENT_MAXIMUM=YES
 IMPLEMENTATION_AUTHORIZED=NO
 ```
 
@@ -97,9 +99,18 @@ not tokenize, transform, or truncate the value at runtime.
 The source adapter may recognize only the complete text expression matching
 `{post_content:<count>}`, where `<count>` is one or more ASCII decimal digits,
 the first digit is `1` through `9`, and the remaining digits are `0` through
-`9`. This is the positive-integer decimal form. The implementation must parse
-the count as an integer and must reject a value it cannot represent safely.
-This authority sets no maximum count.
+`9`. This is the positive-integer decimal form. The implementation parses the
+admitted decimal form to an Elixir integer. This authority defines no semantic
+maximum, and the implementation must not invent one. If a finite upper bound
+becomes necessary for parser safety, interoperability, serialization, or a
+downstream consumer, STOP and obtain separate authority before imposing that
+bound.
+
+```text
+SEMANTIC_MAXIMUM=NONE
+IMPLEMENTATION_MUST_NOT_INVENT_MAXIMUM=YES
+STOP=COUNT_BOUND_REQUIRED
+```
 
 The resolved ValueBinding uses the already-proven text target, field value
 kind, source-authorized scope, and `content.body` key. The raw expression
