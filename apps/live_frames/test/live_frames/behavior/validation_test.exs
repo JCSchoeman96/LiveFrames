@@ -18,10 +18,33 @@ defmodule LiveFrames.Behavior.ValidationTest do
   test "accepts a contract linked to the exact valid DesignDocument identity" do
     document = document()
     assert {:ok, identity} = Identity.from_document(document)
+    assert identity.ir_version == "4.0.0"
 
     assert :ok =
              Validation.validate_structure(document, %Contract{
                design_document_identity: identity
+             })
+  end
+
+  test "keeps standalone IR3 identity valid but rejects it against the current IR4 document" do
+    document = document()
+    assert {:ok, ir4_identity} = Identity.from_document(document)
+    ir3_identity = %Identity{ir4_identity | ir_version: "3.0.0"}
+
+    assert {:error, [%{code: "behavior.design_document.identity_mismatch", category: "identity"}]} =
+             Validation.validate_structure(document, %Contract{
+               design_document_identity: ir3_identity
+             })
+  end
+
+  test "rejects a different IR4 document identity" do
+    document = document()
+    assert {:ok, identity} = Identity.from_document(document)
+    changed_identity = %Identity{identity | digest: String.duplicate("a", 64)}
+
+    assert {:error, [%{code: "behavior.design_document.identity_mismatch", category: "identity"}]} =
+             Validation.validate_structure(document, %Contract{
+               design_document_identity: changed_identity
              })
   end
 

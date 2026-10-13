@@ -119,7 +119,8 @@ defmodule LiveFrames.ComponentizationProposerTest do
         target_kind: :text,
         value_kind: :field,
         scope: :site,
-        value_key: "field"
+        value_key: "field",
+        modifier: %LiveFrames.IR.ValueModifier.None{}
       },
       overrides
     )

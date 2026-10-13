@@ -54,6 +54,19 @@ defmodule LiveFrames.Behavior.ReviewResultTest do
     assert {:ok, @golden_id} = ReviewResult.id(review)
   end
 
+  test "accepts IR4 identities while keeping Behavior review structure fixed" do
+    ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
+    ir4_review = review(design_document_identity: ir4_identity)
+
+    assert ReviewResult.validate(ir4_review) == :ok
+    assert {:ok, _bytes} = ReviewResult.encode(ir4_review)
+
+    for version <- ["1.0.0", "2.0.0", "5.0.0", "future"] do
+      identity = %Identity{@identity | ir_version: version}
+      assert invalid_code(review(design_document_identity: identity)) == "behavior.review.invalid"
+    end
+  end
+
   test "rejects malformed result values and unsupported review formats" do
     assert invalid_code(nil) == "behavior.review.invalid"
     assert invalid_code(%{}) == "behavior.review.invalid"
@@ -85,7 +98,10 @@ defmodule LiveFrames.Behavior.ReviewResultTest do
     invalid_identities = [
       :not_an_identity,
       Map.put(@identity, :extra_field, true),
+      %Identity{@identity | ir_version: "1.0.0"},
       %Identity{@identity | ir_version: "2.0.0"},
+      %Identity{@identity | ir_version: "5.0.0"},
+      %Identity{@identity | ir_version: "not-a-version"},
       %Identity{@identity | canonicalization_id: "unknown"},
       %Identity{@identity | digest_algorithm: "sha-512"},
       %Identity{@identity | digest: String.duplicate("A", 64)},

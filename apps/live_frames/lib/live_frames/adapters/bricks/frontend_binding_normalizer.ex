@@ -278,7 +278,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           expression,
           "text.post_title",
           "content.title",
-          :none,
+          %LiveFrames.IR.ValueModifier.None{},
           :normalized
         )
 
@@ -293,7 +293,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           expression,
           "text.post_content",
           "content.body",
-          :none,
+          %LiveFrames.IR.ValueModifier.None{},
           :normalized
         )
 
@@ -308,7 +308,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           expression,
           "text.post_content_opaque",
           "content.body",
-          :opaque,
+          %LiveFrames.IR.ValueModifier.Opaque{},
           :evidence_insufficient
         )
 
@@ -353,7 +353,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
                   scope: :collection,
                   value_key: nil,
                   collection_binding_id: collection.collection_binding_id,
-                  modifier_status: :none,
+                  modifier: %LiveFrames.IR.ValueModifier.None{},
                   normalization_status: :normalized
                 },
                 %{
@@ -406,7 +406,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
          expression,
          _discriminator,
          _value_key,
-         _modifier_status,
+         _modifier,
          _normalization_status
        ) do
     diagnostic =
@@ -431,7 +431,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
          expression,
          discriminator,
          value_key,
-         modifier_status,
+         modifier,
          normalization_status
        ) do
     inference = "closed Bricks text form maps to #{value_key}"
@@ -452,7 +452,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           scope: :collection_item,
           value_key: value_key,
           collection_binding_id: collection_id,
-          modifier_status: modifier_status,
+          modifier: modifier,
           normalization_status: normalization_status
         },
         %{}
@@ -505,7 +505,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
                   scope: :collection_item,
                   value_key: "media.primary",
                   collection_binding_id: collection_id,
-                  modifier_status: :none,
+                  modifier: %LiveFrames.IR.ValueModifier.None{},
                   normalization_status: :normalized
                 },
                 %{}
@@ -580,7 +580,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
                 scope: :site,
                 value_key: "site.url",
                 collection_binding_id: nil,
-                modifier_status: :none,
+                modifier: %LiveFrames.IR.ValueModifier.None{},
                 normalization_status: :normalized
               },
               %{}

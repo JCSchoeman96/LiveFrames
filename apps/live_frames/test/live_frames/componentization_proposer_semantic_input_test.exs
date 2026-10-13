@@ -111,7 +111,8 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
         target_kind: :text,
         value_kind: :field,
         scope: :site,
-        value_key: "opaque"
+        value_key: "opaque",
+        modifier: %LiveFrames.IR.ValueModifier.None{}
       },
       overrides
     )

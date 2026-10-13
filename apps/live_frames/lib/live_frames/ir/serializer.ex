@@ -10,6 +10,7 @@ defmodule LiveFrames.IR.Serializer do
   alias LiveFrames.IR.Diagnostic
   alias LiveFrames.IR.Interaction
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR.ValueModifier
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -104,9 +105,20 @@ defmodule LiveFrames.IR.Serializer do
       "scope" => Atom.to_string(binding.scope),
       "value_key" => binding.value_key,
       "collection_binding_id" => binding.collection_binding_id,
-      "modifier_status" => Atom.to_string(binding.modifier_status),
+      "modifier" => value_modifier_to_map(binding.modifier),
       "normalization_status" => Atom.to_string(binding.normalization_status),
       "source_trace" => source_trace_to_map(binding.source_trace)
+    }
+  end
+
+  defp value_modifier_to_map(%ValueModifier.None{}), do: %{"status" => "none"}
+  defp value_modifier_to_map(%ValueModifier.Opaque{}), do: %{"status" => "opaque"}
+
+  defp value_modifier_to_map(%ValueModifier.Resolved{kind: :word_limit, arguments: arguments}) do
+    %{
+      "status" => "resolved",
+      "kind" => "word_limit",
+      "arguments" => %{"count" => arguments["count"]}
     }
   end
 

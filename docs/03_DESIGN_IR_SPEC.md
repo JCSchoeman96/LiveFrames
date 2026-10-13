@@ -13,7 +13,7 @@ source plugin.
 
 ## Version
 
-The current supported contract version is `3.0.0`. `DesignDocument` owns this
+The current supported contract version is `4.0.0`. `DesignDocument` owns this
 authoritative version and exposes it through `current_ir_version/0`; the public
 `LiveFrames.IR.current_ir_version/0` helper delegates to it. Every
 `DesignDocument` carries its `ir_version`, and serialization includes that
@@ -21,9 +21,10 @@ explicit value. A change to required fields, field meaning, validation rules,
 or serialized shape requires a new IR version and an explicit migration
 decision.
 
-Writers emit `3.0.0`. Readers accept `3.0.0` directly, migrate `2.0.0` only
-through `2.0.0` → `3.0.0`, and migrate `1.0.0` only through the chained
-`1.0.0` → `2.0.0` → `3.0.0` route. Any other non-empty `ir_version` is
+Writers emit `4.0.0`. Readers accept `4.0.0` directly, migrate `3.0.0`
+through `3.0.0` → `4.0.0`, migrate `2.0.0` through `2.0.0` → `3.0.0` →
+`4.0.0`, and migrate `1.0.0` through `1.0.0` → `2.0.0` → `3.0.0` →
+`4.0.0`. Any other non-empty `ir_version` is
 rejected as unsupported. Missing, empty, or non-string versions produce
 distinct diagnostics from unsupported versions.
 
@@ -40,7 +41,12 @@ distinct diagnostics from unsupported versions.
   to `3.0.0`, and records structural migration evidence. It does not infer
   semantics from legacy calculation strings. A legacy calculation must remain
   a non-empty string during this transition.
-- `3.0.0` → `3.0.0` is identity.
+- `3.0.0` → `4.0.0` replaces each valid v3 binding's top-level
+  `modifier_status` with the matching nested `modifier` status object. It
+  preserves normalization status, value keys, targets, collection references,
+  source traces, and existing provenance. The migration records structural
+  evidence and does not infer modifier semantics from a source trace.
+- `4.0.0` → `4.0.0` is identity.
 - All other versions fail closed.
 
 Each transition appends evidence under the namespaced provenance key
@@ -48,12 +54,12 @@ Each transition appends evidence under the namespaced provenance key
 
 | Field | Value |
 | --- | --- |
-| `source_version` | Transition source, `1.0.0` or `2.0.0` |
-| `target_version` | Transition target, `2.0.0` or `3.0.0` |
+| `source_version` | Transition source, `1.0.0`, `2.0.0`, or `3.0.0` |
+| `target_version` | Transition target, `2.0.0`, `3.0.0`, or `4.0.0` |
 | `kind` | `structural` |
 | `frontend_semantics_recovered` | `false` |
 
-The 1.0.0 route records 1→2 before 2→3. Existing provenance keys are never
+The 1.0.0 route records 1→2, 2→3, then 3→4. Existing provenance keys are never
 overwritten. Identical migration entries do not duplicate. A non-list
 `liveframes_ir_migrations` value or a conflicting entry for the same transition
 fails closed.
@@ -73,6 +79,12 @@ The exact records for the chained route are:
     "target_version": "3.0.0",
     "kind": "structural",
     "frontend_semantics_recovered": false
+  },
+  {
+    "source_version": "3.0.0",
+    "target_version": "4.0.0",
+    "kind": "structural",
+    "frontend_semantics_recovered": false
   }
 ]
 ```
@@ -85,7 +97,7 @@ with defaults.
 
 ### Generator limitation
 
-The current static Fidelity generator accepts `3.0.0` documents only when both
+The current static Fidelity generator accepts `4.0.0` documents only when both
 `collection_bindings` and `value_bindings` are empty. Non-empty registries fail
 closed with a stable diagnostic until a binding-aware generator ships.
 
@@ -260,7 +272,7 @@ caller-supplied data:
 | `scope` | `collection_item`, `site`, or `collection` | Caller-data scope. |
 | `value_key` | semantic key or `nil` | Required for `field`; absent for `collection_count`. |
 | `collection_binding_id` | collection binding ID or `nil` | Required for `collection_item` and `collection` scopes. |
-| `modifier_status` | `none` or `opaque` | Source modifier presence. |
+| `modifier` | Required closed `ValueModifier` object | Caller-owned value transformation state. |
 | `normalization_status` | `normalized` or `evidence_insufficient` | Compile-time confidence. |
 | `source_trace` | `SourceTrace` or `nil` | Source provenance. |
 
@@ -275,9 +287,27 @@ Valid combinations:
 `collection_item` target must lie within the referenced collection
 `repeat_root_node_id` subtree.
 
-`modifier_status` `opaque` requires `normalization_status`
-`evidence_insufficient`. `normalization_status` `normalized` requires
-`modifier_status` `none`.
+The serialized modifier objects have exactly these forms:
+
+```json
+{"status":"none"}
+{"status":"opaque"}
+{"status":"resolved","kind":"word_limit","arguments":{"count":16}}
+```
+
+`none` and `opaque` contain only `status`. `resolved` contains only `status`,
+`kind`, and `arguments`. The only resolved kind is `word_limit`, with exactly
+one argument, a positive integer `count`. It requires `target_kind` `text`,
+`value_kind` `field`, `scope` `site` or `collection_item`, and
+`normalization_status` `normalized`.
+
+`opaque` requires `normalization_status` `evidence_insufficient`. `none` may
+use either normalization status allowed by the other evidence rules. Design
+IR 3.0.0 used the historical top-level `modifier_status` field. Its explicit
+3.0.0 → 4.0.0 migration maps `none` and `opaque` structurally and never
+resolves source expressions. LiveFrames records modifier meaning; the caller
+applies any resolved transformation before supplying the value. LiveFrames
+does not execute modifiers at runtime.
 
 ## Source trace
 

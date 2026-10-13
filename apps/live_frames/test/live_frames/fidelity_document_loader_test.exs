@@ -52,10 +52,34 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     |> Map.put("ir_version", "1.0.0")
   end
 
-  test "migrates valid v1 maps through 2.0.0 to 3.0.0" do
+  defp minimal_v3_map(overrides \\ %{}) do
+    minimal_v2_map()
+    |> Map.merge(overrides)
+    |> Map.put("ir_version", "3.0.0")
+  end
+
+  defp value_binding_map(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "value_binding_id" => "value_001",
+        "target_node_id" => DesignNode.deterministic_id([1]),
+        "target_kind" => "text",
+        "value_kind" => "field",
+        "scope" => "site",
+        "value_key" => "content.body",
+        "collection_binding_id" => nil,
+        "modifier" => %{"status" => "none"},
+        "normalization_status" => "normalized",
+        "source_trace" => nil
+      },
+      overrides
+    )
+  end
+
+  test "migrates valid v1 maps through 2.0.0, 3.0.0, and 4.0.0" do
     assert {:ok, migrated} = Migration.to_current(minimal_v1_map())
 
-    assert migrated["ir_version"] == "3.0.0"
+    assert migrated["ir_version"] == "4.0.0"
     assert migrated["collection_bindings"] == %{}
     assert migrated["value_bindings"] == %{}
     refute migrated["provenance"] == %{}
@@ -70,6 +94,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              %{
                "source_version" => "2.0.0",
                "target_version" => "3.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "3.0.0",
+               "target_version" => "4.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
              }
@@ -87,24 +117,165 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       |> put_in(["provenance", "existing"], "kept")
 
     assert {:ok, migrated} = Migration.to_current(v2)
-    assert migrated["ir_version"] == "3.0.0"
+    assert migrated["ir_version"] == "4.0.0"
 
     assert get_in(migrated, ["root_nodes", Access.at(0), "styles", "gap", "value"]) ==
              legacy_calculation
 
     assert migrated["provenance"]["existing"] == "kept"
 
-    assert List.last(migrated["provenance"]["liveframes_ir_migrations"]) == %{
-             "source_version" => "2.0.0",
-             "target_version" => "3.0.0",
-             "kind" => "structural",
-             "frontend_semantics_recovered" => false
-           }
+    assert migrated["provenance"]["liveframes_ir_migrations"] == [
+             %{
+               "source_version" => "2.0.0",
+               "target_version" => "3.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "3.0.0",
+               "target_version" => "4.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             }
+           ]
   end
 
-  test "v3 migration is identity" do
-    v3 = minimal_v2_map() |> Map.put("ir_version", "3.0.0")
-    assert Migration.to_current(v3) == {:ok, v3}
+  test "migrates v3 binding modifiers structurally and preserves represented values" do
+    trace = %{"source_settings" => %{"dynamic_data" => "{post_content:16}"}}
+
+    v3 =
+      minimal_v3_map(%{
+        "value_bindings" => %{
+          "none" =>
+            value_binding_map(%{
+              "value_binding_id" => "none",
+              "modifier_status" => "none",
+              "normalization_status" => "evidence_insufficient",
+              "source_trace" => trace
+            })
+            |> Map.delete("modifier"),
+          "opaque" =>
+            value_binding_map(%{
+              "value_binding_id" => "opaque",
+              "modifier_status" => "opaque",
+              "value_key" => "content.body",
+              "normalization_status" => "evidence_insufficient",
+              "source_trace" => trace
+            })
+            |> Map.delete("modifier")
+        }
+      })
+      |> put_in(["provenance", "existing"], "kept")
+
+    assert {:ok, migrated} = Migration.to_current(v3)
+    assert migrated["ir_version"] == "4.0.0"
+    assert migrated["provenance"]["existing"] == "kept"
+
+    assert migrated["provenance"]["liveframes_ir_migrations"] == [
+             %{
+               "source_version" => "3.0.0",
+               "target_version" => "4.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             }
+           ]
+
+    none = migrated["value_bindings"]["none"]
+    assert none["modifier"] == %{"status" => "none"}
+    assert none["normalization_status"] == "evidence_insufficient"
+    assert none["value_key"] == "content.body"
+    assert none["source_trace"] == trace
+    refute Map.has_key?(none, "modifier_status")
+
+    opaque = migrated["value_bindings"]["opaque"]
+    assert opaque["modifier"] == %{"status" => "opaque"}
+    assert opaque["normalization_status"] == "evidence_insufficient"
+    assert opaque["source_trace"] == trace
+    refute Map.has_key?(opaque, "modifier_status")
+    refute Map.has_key?(opaque["modifier"], "kind")
+  end
+
+  test "v4 migration is identity and unknown versions fail closed" do
+    v4 = minimal_v3_map() |> Map.put("ir_version", "4.0.0")
+    assert Migration.to_current(v4) == {:ok, v4}
+    assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "9.0.0"})
+    assert Enum.any?(unsupported, &(&1.code == "ir.document.version_unsupported"))
+  end
+
+  test "rejects malformed v3 binding registries and modifier statuses" do
+    for bindings <- [[], %{"bad" => "record"}, %{"bad" => %{"modifier_status" => "future"}}] do
+      v3 = put_in(minimal_v3_map(), ["value_bindings"], bindings)
+      assert {:error, diagnostics} = Migration.to_current(v3)
+      assert Enum.any?(diagnostics, &String.starts_with?(&1.code, "ir.migration.value_binding"))
+    end
+  end
+
+  test "v4 decoder requires exact modifier shapes and rejects the legacy top-level field" do
+    variants = [
+      {Map.delete(value_binding_map(), "modifier"), "ir.value_binding.modifier_invalid"},
+      {value_binding_map(%{"modifier" => %{"status" => "future"}}),
+       "ir.value_binding.modifier_invalid"},
+      {value_binding_map(%{
+         "modifier" => %{
+           "status" => "resolved",
+           "kind" => "future_modifier",
+           "arguments" => %{"count" => 16}
+         }
+       }), "ir.value_binding.modifier_invalid"},
+      {value_binding_map(%{"modifier" => %{"status" => "none", "extra" => true}}),
+       "ir.value_binding.modifier_invalid"},
+      {value_binding_map(%{
+         "modifier" => %{
+           "status" => "resolved",
+           "kind" => "word_limit",
+           "arguments" => %{"count" => 0}
+         }
+       }), "ir.value_binding.modifier_invalid"},
+      {value_binding_map(%{"modifier_status" => "none"}), "ir.value_binding.modifier_invalid"}
+    ]
+
+    for {binding, code} <- variants do
+      v4 =
+        minimal_v3_map(%{"value_bindings" => %{"value_001" => binding}})
+        |> Map.put("ir_version", "4.0.0")
+
+      assert {:error, diagnostics} = DocumentLoader.from_map(v4)
+      assert Enum.any?(diagnostics, &(&1.code == code))
+    end
+  end
+
+  test "unknown modifier strings do not create atoms" do
+    status = "design_ir_4_unknown_modifier_status_atom"
+    kind = "design_ir_4_unknown_modifier_kind_atom"
+
+    refute existing_atom?(status)
+    refute existing_atom?(kind)
+
+    for modifier <- [
+          %{"status" => status},
+          %{"status" => "resolved", "kind" => kind, "arguments" => %{"count" => 16}}
+        ] do
+      v4 =
+        minimal_v3_map(%{
+          "value_bindings" => %{
+            "value_001" => value_binding_map(%{"modifier" => modifier})
+          }
+        })
+        |> Map.put("ir_version", "4.0.0")
+
+      assert {:error, diagnostics} = DocumentLoader.from_map(v4)
+      assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_invalid"))
+    end
+
+    refute existing_atom?(status)
+    refute existing_atom?(kind)
+  end
+
+  defp existing_atom?(value) do
+    String.to_existing_atom(value)
+    true
+  rescue
+    ArgumentError -> false
   end
 
   test "structured calculation survives serialization and loader round-trip" do
@@ -126,13 +297,13 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
     map =
       put_in(
-        minimal_v2_map() |> Map.put("ir_version", "3.0.0"),
+        minimal_v3_map(),
         ["root_nodes", Access.at(0), "styles"],
         %{"gap" => style}
       )
 
     assert {:ok, document} = DocumentLoader.from_map(map)
-    assert document.ir_version == "3.0.0"
+    assert document.ir_version == "4.0.0"
 
     assert {:ok, round_trip} = document |> IR.to_map() |> DocumentLoader.from_map()
     loaded_style = hd(round_trip.root_nodes).styles["gap"]
@@ -175,7 +346,16 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
     assert {:ok, migrated} = Migration.to_current(with_existing)
     assert migrated["provenance"]["other"]
-    assert migrated["provenance"]["liveframes_ir_migrations"] == [record]
+
+    assert migrated["provenance"]["liveframes_ir_migrations"] == [
+             record,
+             %{
+               "source_version" => "3.0.0",
+               "target_version" => "4.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             }
+           ]
 
     conflict =
       put_in(
@@ -223,7 +403,17 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       )
 
     assert {:ok, migrated} = Migration.to_current(v2)
-    assert migrated["provenance"]["liveframes_ir_migrations"] == history
+
+    assert migrated["provenance"]["liveframes_ir_migrations"] ==
+             history ++
+               [
+                 %{
+                   "source_version" => "3.0.0",
+                   "target_version" => "4.0.0",
+                   "kind" => "structural",
+                   "frontend_semantics_recovered" => false
+                 }
+               ]
   end
 
   test "v1 migration orders existing migration records by transition" do
@@ -240,7 +430,11 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
     assert Enum.map(migrated["provenance"]["liveframes_ir_migrations"], fn entry ->
              {entry["source_version"], entry["target_version"]}
-           end) == [{"1.0.0", "2.0.0"}, {"2.0.0", "3.0.0"}]
+           end) == [
+             {"1.0.0", "2.0.0"},
+             {"2.0.0", "3.0.0"},
+             {"3.0.0", "4.0.0"}
+           ]
   end
 
   test "migration provenance does not overwrite existing provenance keys" do
@@ -296,9 +490,9 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert {:error, invalid} = Migration.to_current(%{"ir_version" => 2})
     assert Enum.any?(invalid, &(&1.code == "ir.document.version_invalid"))
 
-    assert {:ok, v3} = Migration.to_current(minimal_v2_map() |> Map.put("ir_version", "3.0.0"))
-    assert v3["ir_version"] == "3.0.0"
-    assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "4.0.0"})
+    assert {:ok, v4} = Migration.to_current(minimal_v3_map())
+    assert v4["ir_version"] == "4.0.0"
+    assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "9.0.0"})
     assert Enum.any?(unsupported, &(&1.code == "ir.document.version_unsupported"))
   end
 
@@ -319,7 +513,9 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
           {"diagnostics", %{}}
         ] do
       assert {:error, diagnostics} =
-               DocumentLoader.from_map(put_in(minimal_v2_map(), [field], invalid))
+               DocumentLoader.from_map(
+                 put_in(minimal_v3_map() |> Map.put("ir_version", "4.0.0"), [field], invalid)
+               )
 
       assert Enum.any?(diagnostics, &(&1.code == "ir.document.root_shape_invalid"))
     end
@@ -328,28 +524,44 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
   test "loader rejects malformed registry entries without coercing array registries" do
     assert {:error, asset_diagnostics} =
              DocumentLoader.from_map(
-               put_in(minimal_v2_map(), ["assets"], %{"asset_001" => "invalid"})
+               put_in(
+                 minimal_v3_map() |> Map.put("ir_version", "4.0.0"),
+                 ["assets"],
+                 %{"asset_001" => "invalid"}
+               )
              )
 
     assert Enum.any?(asset_diagnostics, &(&1.code == "ir.asset.invalid"))
 
     assert {:error, interaction_diagnostics} =
              DocumentLoader.from_map(
-               put_in(minimal_v2_map(), ["interactions"], %{"interaction_001" => 123})
+               put_in(
+                 minimal_v3_map() |> Map.put("ir_version", "4.0.0"),
+                 ["interactions"],
+                 %{"interaction_001" => 123}
+               )
              )
 
     assert Enum.any?(interaction_diagnostics, &(&1.code == "ir.interaction.invalid"))
 
     assert {:error, collection_diagnostics} =
              DocumentLoader.from_map(
-               put_in(minimal_v2_map(), ["collection_bindings"], %{"collection_001" => []})
+               put_in(
+                 minimal_v3_map() |> Map.put("ir_version", "4.0.0"),
+                 ["collection_bindings"],
+                 %{"collection_001" => []}
+               )
              )
 
     assert Enum.any?(collection_diagnostics, &(&1.code == "ir.collection_binding.invalid"))
 
     assert {:error, value_diagnostics} =
              DocumentLoader.from_map(
-               put_in(minimal_v2_map(), ["value_bindings"], %{"value_001" => "bad"})
+               put_in(
+                 minimal_v3_map() |> Map.put("ir_version", "4.0.0"),
+                 ["value_bindings"],
+                 %{"value_001" => "bad"}
+               )
              )
 
     assert Enum.any?(value_diagnostics, &(&1.code == "ir.value_binding.invalid"))
@@ -437,6 +649,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
           "source_trace" => nil
         }
       })
+      |> Map.put("ir_version", "3.0.0")
       |> put_in(["value_bindings"], %{
         "value_001" => %{
           "value_binding_id" => "value_001",
@@ -463,7 +676,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
   test "unsupported enum strings fail validation cleanly through the loader" do
     map =
-      put_in(minimal_v2_map(), ["value_bindings"], %{
+      put_in(minimal_v3_map(), ["value_bindings"], %{
         "value_001" => %{
           "value_binding_id" => "value_001",
           "target_node_id" => DesignNode.deterministic_id([1]),
@@ -486,7 +699,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     v1 = minimal_v1_map() |> put_in(["provenance", "source_hash"], "fixture")
 
     assert {:ok, document} = DocumentLoader.from_map(v1)
-    assert document.ir_version == "3.0.0"
+    assert document.ir_version == "4.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert document.provenance["source_hash"] == "fixture"
@@ -513,7 +726,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
   test "hero india v1 fixture migrates and fidelity drift inputs stay controlled" do
     assert {:ok, document} = DocumentLoader.from_file(@hero_input)
-    assert document.ir_version == "3.0.0"
+    assert document.ir_version == "4.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert Jason.decode!(File.read!(@hero_input))["ir_version"] == "1.0.0"

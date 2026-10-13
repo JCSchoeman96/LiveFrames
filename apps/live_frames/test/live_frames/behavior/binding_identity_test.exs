@@ -51,6 +51,20 @@ defmodule LiveFrames.Behavior.BindingIdentityTest do
              CanonicalJSON.encode(payload)
   end
 
+  test "assigns a different binding ID for an IR4 DesignDocument identity" do
+    binding = occurrence()
+    ir4_identity = %Identity{@identity | ir_version: "4.0.0", digest: String.duplicate("b", 64)}
+
+    assert {:ok, ir3_contract} = BindingIdentity.assign(contract([binding]))
+    assert {:ok, ir4_contract} = BindingIdentity.assign(contract([binding], ir4_identity))
+
+    ir3_id = hd(ir3_contract.bindings).binding_id
+    ir4_id = hd(ir4_contract.bindings).binding_id
+
+    assert ir3_id == "bnd_a0fbef5fe549adc33e7070a21899cb2d3e83a6df2f1662640e7db8b65df188c4"
+    refute ir4_id == ir3_id
+  end
+
   test "preserves binding list order while IDs follow semantic occurrences" do
     first = occurrence(primitive_policy_values: %{"mode" => "alpha"})
     second = occurrence(primitive_policy_values: %{"mode" => "beta"})

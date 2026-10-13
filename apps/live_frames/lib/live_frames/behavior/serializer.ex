@@ -5,6 +5,7 @@ defmodule LiveFrames.Behavior.Serializer do
 
   alias LiveFrames.Behavior.Contract
   alias LiveFrames.Behavior.Diagnostic
+  alias LiveFrames.Behavior.DesignDocumentIdentity
   alias LiveFrames.Behavior.Binding
   alias LiveFrames.Behavior.Binding.ControlledTarget
   alias LiveFrames.Behavior.Binding.FocusPolicy
@@ -12,12 +13,10 @@ defmodule LiveFrames.Behavior.Serializer do
   alias LiveFrames.Behavior.Binding.ResponsiveBehaviorOverride
   alias LiveFrames.Behavior.Binding.Trigger
   alias LiveFrames.CanonicalJSON
-  alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.Identity
 
   @algorithm "lf-behavior-v1-jcs-sha256"
   @current_format_version "1.0.0"
-  @digest_pattern ~r/\A[0-9a-f]{64}\z/
 
   @spec algorithm() :: String.t()
   def algorithm, do: @algorithm
@@ -73,22 +72,11 @@ defmodule LiveFrames.Behavior.Serializer do
   defp supported_format(_version),
     do: {:error, diagnostic("behavior.contract.format_unsupported", "structure")}
 
-  defp identity_valid(%Identity{} = identity) do
-    expected = [:ir_version, :canonicalization_id, :digest_algorithm, :digest]
-
-    if Enum.sort(Map.keys(identity)) == Enum.sort([:__struct__ | expected]) and
-         identity.ir_version == DesignDocument.current_ir_version() and
-         Identity.supported_canonicalization_id?(identity.canonicalization_id) and
-         Identity.supported_digest_algorithm?(identity.digest_algorithm) and
-         is_binary(identity.digest) and Regex.match?(@digest_pattern, identity.digest) do
-      :ok
-    else
-      {:error, diagnostic("behavior.contract.identity_invalid", "identity")}
-    end
+  defp identity_valid(identity) do
+    if DesignDocumentIdentity.valid?(identity),
+      do: :ok,
+      else: {:error, diagnostic("behavior.contract.identity_invalid", "identity")}
   end
-
-  defp identity_valid(_identity),
-    do: {:error, diagnostic("behavior.contract.identity_invalid", "identity")}
 
   defp valid_contract_fields(%Contract{provenance: provenance})
        when is_map(provenance) and not is_struct(provenance) do

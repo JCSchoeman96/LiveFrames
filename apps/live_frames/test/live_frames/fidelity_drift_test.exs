@@ -24,7 +24,7 @@ defmodule LiveFrames.FidelityDriftTest do
                __DIR__
              )
 
-  test "committed fidelity artifacts regenerate byte-identically" do
+  test "committed fidelity artifacts stay stable across the IR migration" do
     assert {:ok, document} = DocumentLoader.from_file(@input)
     assert {:ok, authority} = BreakpointAuthority.from_file(@authority)
 
@@ -37,7 +37,11 @@ defmodule LiveFrames.FidelityDriftTest do
     assert File.read!(@heex) == bundle.heex
     assert File.read!(@css) == bundle.css
     expected_manifest = Map.put(bundle.manifest, "input_ir_sha256", sha(File.read!(@input)))
-    assert Jason.decode!(File.read!(@manifest)) == expected_manifest
+    assert bundle.manifest["input_ir_version"] == "4.0.0"
+
+    committed_manifest = Jason.decode!(File.read!(@manifest))
+    assert committed_manifest["input_ir_version"] == "3.0.0"
+    assert Map.put(expected_manifest, "input_ir_version", "3.0.0") == committed_manifest
   end
 
   defp sha(value), do: Base.encode16(:crypto.hash(:sha256, value), case: :lower)

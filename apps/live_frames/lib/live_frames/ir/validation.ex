@@ -10,6 +10,7 @@ defmodule LiveFrames.IR.Validation do
   alias LiveFrames.IR.Diagnostic
   alias LiveFrames.IR.Interaction
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR.ValueModifier
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -1162,18 +1163,12 @@ defmodule LiveFrames.IR.Validation do
       "value binding scope is not supported by the IR contract"
     )
     |> require_member(
-      binding.modifier_status,
-      ValueBinding.modifier_statuses(),
-      "ir.value_binding.modifier_status_invalid",
-      "value binding modifier_status is not supported by the IR contract"
-    )
-    |> require_member(
       binding.normalization_status,
       ValueBinding.normalization_statuses(),
       "ir.value_binding.normalization_status_invalid",
       "value binding normalization_status is not supported by the IR contract"
     )
-    |> validate_value_binding_modifier_consistency(binding, trace)
+    |> validate_value_binding_modifier(binding, trace)
     |> validate_source_trace(binding.source_trace)
   end
 
@@ -1187,40 +1182,98 @@ defmodule LiveFrames.IR.Validation do
         nil
       )
 
-  defp validate_value_binding_modifier_consistency(diagnostics, binding, trace) do
-    diagnostics
-    |> validate_opaque_modifier_requires_evidence_insufficient(binding, trace)
-    |> validate_normalized_requires_none_modifier(binding, trace)
-  end
+  defp validate_value_binding_modifier(
+         diagnostics,
+         %ValueBinding{modifier: %ValueModifier.None{}},
+         _trace
+       ),
+       do: diagnostics
 
-  defp validate_opaque_modifier_requires_evidence_insufficient(diagnostics, binding, trace) do
-    if binding.modifier_status == :opaque and
-         binding.normalization_status != :evidence_insufficient do
-      error(
-        diagnostics,
-        "ir.value_binding.modifier_inconsistent",
-        "opaque modifier_status requires evidence_insufficient normalization_status",
-        :schema,
-        trace
-      )
-    else
-      diagnostics
+  defp validate_value_binding_modifier(
+         diagnostics,
+         %ValueBinding{
+           modifier: %ValueModifier.Opaque{},
+           normalization_status: :evidence_insufficient
+         },
+         _trace
+       ),
+       do: diagnostics
+
+  defp validate_value_binding_modifier(
+         diagnostics,
+         %ValueBinding{modifier: %ValueModifier.Opaque{}},
+         trace
+       ),
+       do:
+         modifier_error(
+           diagnostics,
+           "ir.value_binding.modifier_inconsistent",
+           "opaque modifier requires evidence_insufficient normalization_status",
+           trace
+         )
+
+  defp validate_value_binding_modifier(
+         diagnostics,
+         %ValueBinding{modifier: %ValueModifier.Resolved{} = modifier} = binding,
+         trace
+       ) do
+    cond do
+      modifier.kind != :word_limit ->
+        modifier_error(
+          diagnostics,
+          "ir.value_binding.modifier_invalid",
+          "resolved modifier kind is not supported by the IR contract",
+          trace
+        )
+
+      not valid_word_limit_arguments?(modifier.arguments) ->
+        modifier_error(
+          diagnostics,
+          "ir.value_binding.modifier_invalid",
+          "word_limit arguments must contain only a positive integer count",
+          trace
+        )
+
+      binding.normalization_status != :normalized ->
+        modifier_error(
+          diagnostics,
+          "ir.value_binding.modifier_inconsistent",
+          "resolved modifier requires normalized normalization_status",
+          trace
+        )
+
+      binding.target_kind != :text or binding.value_kind != :field or
+          binding.scope not in [:site, :collection_item] ->
+        modifier_error(
+          diagnostics,
+          "ir.value_binding.modifier_inconsistent",
+          "word_limit requires a text field with site or collection_item scope",
+          trace
+        )
+
+      true ->
+        diagnostics
     end
   end
 
-  defp validate_normalized_requires_none_modifier(diagnostics, binding, trace) do
-    if binding.normalization_status == :normalized and binding.modifier_status != :none do
-      error(
+  defp validate_value_binding_modifier(diagnostics, _binding, trace),
+    do:
+      modifier_error(
         diagnostics,
-        "ir.value_binding.modifier_inconsistent",
-        "normalized value bindings require modifier_status none",
-        :schema,
+        "ir.value_binding.modifier_invalid",
+        "value binding modifier must use a supported ValueModifier variant",
         trace
       )
-    else
-      diagnostics
-    end
+
+  defp valid_word_limit_arguments?(arguments) when is_map(arguments) do
+    Map.keys(arguments) == ["count"] and is_integer(arguments["count"]) and
+      arguments["count"] > 0
   end
+
+  defp valid_word_limit_arguments?(_arguments), do: false
+
+  defp modifier_error(diagnostics, code, message, trace),
+    do: error(diagnostics, code, message, :schema, trace)
 
   defp validate_value_binding_semantics(
          bindings,

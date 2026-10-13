@@ -14,7 +14,8 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
     ResponsiveOverride,
     SourceTrace,
     StyleValue,
-    ValueBinding
+    ValueBinding,
+    ValueModifier
   }
 
   @required_current_root_fields ~w(
@@ -396,7 +397,9 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
        ]}
 
   defp decode_value_binding(map) when is_map(map) and not is_struct(map) do
-    with {:ok, source_trace} <- decode_source_trace(Map.get(map, "source_trace")) do
+    with :ok <- reject_legacy_modifier_status(map),
+         {:ok, modifier} <- decode_value_modifier(Map.get(map, "modifier", :__missing__)),
+         {:ok, source_trace} <- decode_source_trace(Map.get(map, "source_trace")) do
       {:ok,
        %ValueBinding{
          value_binding_id: map["value_binding_id"],
@@ -406,7 +409,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
          scope: value_scope(map["scope"]),
          value_key: map["value_key"],
          collection_binding_id: map["collection_binding_id"],
-         modifier_status: value_modifier_status(map["modifier_status"]),
+         modifier: modifier,
          normalization_status: value_normalization_status(map["normalization_status"]),
          source_trace: source_trace
        }}
@@ -420,6 +423,53 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
          loader_error(
            "ir.value_binding.invalid",
            "value binding registry values must be JSON objects"
+         )
+       ]}
+
+  defp reject_legacy_modifier_status(map) do
+    if Map.has_key?(map, "modifier_status") do
+      {:error,
+       [
+         loader_error(
+           "ir.value_binding.modifier_invalid",
+           "current value bindings must use the nested modifier object"
+         )
+       ]}
+    else
+      :ok
+    end
+  end
+
+  defp decode_value_modifier(%{"status" => "none"} = map)
+       when map_size(map) == 1,
+       do: {:ok, %ValueModifier.None{}}
+
+  defp decode_value_modifier(%{"status" => "opaque"} = map)
+       when map_size(map) == 1,
+       do: {:ok, %ValueModifier.Opaque{}}
+
+  defp decode_value_modifier(
+         %{
+           "status" => "resolved",
+           "kind" => "word_limit",
+           "arguments" => %{"count" => count} = arguments
+         } = map
+       )
+       when map_size(map) == 3 and map_size(arguments) == 1 do
+    {:ok,
+     %ValueModifier.Resolved{
+       kind: :word_limit,
+       arguments: %{"count" => count}
+     }}
+  end
+
+  defp decode_value_modifier(_modifier),
+    do:
+      {:error,
+       [
+         loader_error(
+           "ir.value_binding.modifier_invalid",
+           "modifier must match one of the exact supported Design IR 4.0.0 variants"
          )
        ]}
 
@@ -526,10 +576,6 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
   defp value_scope("site"), do: :site
   defp value_scope("collection"), do: :collection
   defp value_scope(_other), do: :__invalid_enum__
-
-  defp value_modifier_status("none"), do: :none
-  defp value_modifier_status("opaque"), do: :opaque
-  defp value_modifier_status(_other), do: :__invalid_enum__
 
   defp value_normalization_status("normalized"), do: :normalized
   defp value_normalization_status("evidence_insufficient"), do: :evidence_insufficient
