@@ -76,6 +76,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     )
   end
 
+  defp migration_pairs(document) do
+    document
+    |> get_in(["provenance", "liveframes_ir_migrations"])
+    |> Enum.map(fn entry -> {entry["source_version"], entry["target_version"]} end)
+  end
+
   test "migrates valid v1 maps through 2.0.0, 3.0.0, and 4.0.0" do
     assert {:ok, migrated} = Migration.to_current(minimal_v1_map())
 
@@ -435,6 +441,133 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              {"2.0.0", "3.0.0"},
              {"3.0.0", "4.0.0"}
            ]
+  end
+
+  test "v2 migration inserts before an existing 3-to-4 record" do
+    v3_to_v4 = %{
+      "source_version" => "3.0.0",
+      "target_version" => "4.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v2 = put_in(minimal_v2_map(), ["provenance", "liveframes_ir_migrations"], [v3_to_v4])
+
+    assert {:ok, migrated} = Migration.to_current(v2)
+
+    assert migration_pairs(migrated) == [{"2.0.0", "3.0.0"}, {"3.0.0", "4.0.0"}]
+  end
+
+  test "v1 migration inserts before an existing 3-to-4 record" do
+    v3_to_v4 = %{
+      "source_version" => "3.0.0",
+      "target_version" => "4.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v1 = put_in(minimal_v1_map(), ["provenance", "liveframes_ir_migrations"], [v3_to_v4])
+
+    assert {:ok, migrated} = Migration.to_current(v1)
+
+    assert migration_pairs(migrated) == [
+             {"1.0.0", "2.0.0"},
+             {"2.0.0", "3.0.0"},
+             {"3.0.0", "4.0.0"}
+           ]
+  end
+
+  test "v1 migration preserves an existing 2-to-3 and 3-to-4 chain" do
+    v2_to_v3 = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v3_to_v4 = %{
+      "source_version" => "3.0.0",
+      "target_version" => "4.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v1 =
+      put_in(
+        minimal_v1_map(),
+        ["provenance", "liveframes_ir_migrations"],
+        [v2_to_v3, v3_to_v4]
+      )
+
+    assert {:ok, migrated} = Migration.to_current(v1)
+
+    assert migration_pairs(migrated) == [
+             {"1.0.0", "2.0.0"},
+             {"2.0.0", "3.0.0"},
+             {"3.0.0", "4.0.0"}
+           ]
+  end
+
+  test "migration inserts known records without reordering unrelated history" do
+    unrelated = %{
+      "source_version" => "8.0.0",
+      "target_version" => "9.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v3_to_v4 = %{
+      "source_version" => "3.0.0",
+      "target_version" => "4.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v2 =
+      put_in(
+        minimal_v2_map(),
+        ["provenance", "liveframes_ir_migrations"],
+        [unrelated, v3_to_v4]
+      )
+
+    assert {:ok, migrated} = Migration.to_current(v2)
+
+    assert migrated["provenance"]["liveframes_ir_migrations"] == [
+             unrelated,
+             %{
+               "source_version" => "2.0.0",
+               "target_version" => "3.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             v3_to_v4
+           ]
+  end
+
+  test "migration rejects known records in impossible transition order" do
+    v2_to_v3 = %{
+      "source_version" => "2.0.0",
+      "target_version" => "3.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v3_to_v4 = %{
+      "source_version" => "3.0.0",
+      "target_version" => "4.0.0",
+      "kind" => "structural",
+      "frontend_semantics_recovered" => false
+    }
+
+    v2 =
+      put_in(
+        minimal_v2_map(),
+        ["provenance", "liveframes_ir_migrations"],
+        [v3_to_v4, v2_to_v3]
+      )
+
+    assert {:error, diagnostics} = Migration.to_current(v2)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.migration.provenance_collision"))
   end
 
   test "migration provenance does not overwrite existing provenance keys" do

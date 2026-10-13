@@ -300,7 +300,8 @@ defmodule LiveFrames.IR.Migration do
 
       {:ok, entries} when is_list(entries) ->
         if Enum.any?(entries, &(not valid_migration_entry?(&1))) or
-             Enum.any?(entries, &conflicting_migration?(&1, migration_entry)) do
+             Enum.any?(entries, &conflicting_migration?(&1, migration_entry)) or
+             not known_migration_order_valid?(entries) do
           {:error,
            [
              error(
@@ -349,18 +350,31 @@ defmodule LiveFrames.IR.Migration do
   defp valid_migration_entry?(_entry), do: false
 
   defp insert_migration_entry(entries, migration_entry) do
+    migration_rank = known_transition_rank(migration_entry)
+
     index =
-      if migration_entry == @v1_to_v2 do
-        Enum.find_index(entries, fn
-          %{"source_version" => @v2, "target_version" => @v3} -> true
-          _entry -> false
-        end) || length(entries)
-      else
-        length(entries)
-      end
+      Enum.find_index(entries, fn entry ->
+        case known_transition_rank(entry) do
+          rank when is_integer(rank) -> rank > migration_rank
+          nil -> false
+        end
+      end) || length(entries)
 
     List.insert_at(entries, index, migration_entry)
   end
+
+  defp known_migration_order_valid?(entries) do
+    entries
+    |> Enum.map(&known_transition_rank/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.all?(fn [previous, current] -> previous <= current end)
+  end
+
+  defp known_transition_rank(%{"source_version" => @v1, "target_version" => @v2}), do: 1
+  defp known_transition_rank(%{"source_version" => @v2, "target_version" => @v3}), do: 2
+  defp known_transition_rank(%{"source_version" => @v3, "target_version" => @v4}), do: 3
+  defp known_transition_rank(_entry), do: nil
 
   defp error(code, message),
     do: Diagnostic.new(code: code, severity: :error, category: :schema, message: message)

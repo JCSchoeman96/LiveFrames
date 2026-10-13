@@ -817,6 +817,45 @@ defmodule LiveFrames.IRTest do
            )
   end
 
+  test "rejects resolved word_limit for collection_count values" do
+    document = binding_document()
+
+    invalid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+              kind: :word_limit,
+              arguments: %{"count" => 16}
+            },
+            value_kind: :collection_count,
+            scope: :collection
+        }
+      end)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
+  test "rejects resolved word_limit for collection scope" do
+    document = binding_document()
+
+    invalid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+              kind: :word_limit,
+              arguments: %{"count" => 16}
+            },
+            scope: :collection
+        }
+      end)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
   test "collection parent graph reports missing parent without crashing cycle analysis" do
     document =
       collection_only_document(
