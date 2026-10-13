@@ -55,7 +55,7 @@ The audited code has these properties on the accepted base:
 | --- | --- |
 | `LiveFrames.IR.StyleValue` | Includes `:complex_css`; `complex_css/2` accepts a map value. |
 | `LiveFrames.IR.Validation` | Requires `complex_css` values to be JSON objects. It does not validate a closed state-rule subtype. |
-| Bricks `DesignIRNormalizer` | Retains custom CSS under the `custom-css` style key as a `complex_css` object with source trace. |
+| Bricks `DesignIRNormalizer` | Retains custom CSS under the `custom-css` style key as a `complex_css` object with source trace. Safe normalized declarations and residual custom CSS currently have no generic mixed representation. |
 | `BoundedCustomCssNormalizer` | Parses a bounded declaration/block subset, checks collisions and frozen rule matches, retains residual CSS, and records diagnostics. Its owner/child IDs, class, and selector table are frozen to CTA Tango. |
 | `NativeGenerator.StyleValueCSS` | Serializes safe literals, keywords, token references resolved through TokenBridge, and the accepted structured multiply calculation. It rejects `:complex_css`. |
 | `NativeGenerator.StylesheetRenderer` | Emits ordinary node rules, resolved max-width responsive rules, and same-node `:hover` / `:focus-visible` rules. It does not emit min-width rules. |
@@ -135,41 +135,172 @@ to verify the final touch layout in the later component acceptance gate.
 
 ## 6. Generic stateful style representation
 
-Romeo needs generic stateful CSS support. It does not need source selectors or
-source event-class mutation. The later implementation plan must use this
-source-neutral path:
+Romeo needs generic conditionless custom-CSS normalization and browser-state
+CSS support. It does not need source selectors or source event-class mutation.
+The later implementation plan must use this source-neutral partition:
 
 ```text
-bounded source parsing
-    → resolve source selector meaning to DesignNode relationships
-    → normalize closed state-style rules and retain separate provenance
-    → Design IR StyleValue.complex_css
-    → componentization consumes normalized nodes and rules only
+source custom CSS rule
+    ├─ no browser state, no viewport
+    │      → safe declarations on target DesignNode.styles
+    ├─ no browser state, resolved viewport
+    │      → safe declarations in target DesignNode.responsive
+    │        as an existing ResponsiveOverride
+    ├─ closed browser state condition
+    │      → complex_css type="state_rules" on the state-owning DesignNode
+    └─ unsafe, unresolved, ambiguous, or unsupported rule
+           → inert residual evidence; never generatable
+
+componentization consumes normalized nodes and rules only
     → NodeStyleIdentity supplies private owner/target classes
     → StylesheetRenderer emits closed selector forms and safe declarations
 ```
 
-The semantic specialization is stored in the existing node style map under
-the existing `custom-css` key as a `StyleValue` of kind `complex_css`. Its
-value uses a closed subtype such as `type = "state_rules"` and a `rules` list.
-The subtype name and its fields are semantic data, not CSS syntax. A rule
-contains:
+### Conditionless custom-CSS normalization
+
+Conditionless source rules are not browser states. Never add a `default`
+condition. Resolve every conditionless rule's selector meaning upstream to a
+deterministic, non-empty set of DesignNodes. Normalize each complete rule's
+declarations with the existing safe property and StyleValue/TokenBridge
+semantics. Replicate the normalized declaration set to each resolved target.
+Empty, ambiguous, or unresolved target sets remain residual.
+
+With no media condition, place declarations in each target's `styles` map.
+With a resolved media condition, place declarations in the target's existing
+`responsive` map using `ResponsiveOverride.min_width` and
+`ResponsiveOverride.max_width`. Preserve the exact inclusive thresholds and
+both bounds when present. Do not infer a breakpoint from a name or replace a
+min-width rule with a nearby max-width value. Derive each responsive key from
+the normalized bound tuple using canonical finite decimal text and the bound
+kind (`min`, `max`, or `range`). The distinct min and max queries at 767px
+therefore remain distinct entries. If a derived key already exists, fail
+closed; do not merge records based on source names or map order.
+
+Never overwrite an existing target property. If a conditionless declaration
+collides with a property already owned by base styles or the same responsive
+condition, retain its complete source rule as residual and emit a diagnostic.
+Do not invent precedence. A source rule is an atomic normalization unit: if
+any selector target, declaration, value, or required viewport in that rule is
+unsafe, unsupported, unresolved, ambiguous, or conflicting, move the whole
+source rule to residual instead of partially applying its declarations.
+
+Romeo's collapsed/default heading, lede, and inner-content declarations under
+`@media (min-width: 767px)` use this conditionless responsive path. Its
+unconditional card, overlay, and vertical-heading defaults use node-local base
+styles. Its mobile overlay and vertical-heading hiding declarations under
+`@media (max-width: 767px)` use the conditionless responsive path. The source's
+two inclusive queries remain separate, including at exactly 767px.
+
+For responsive keys created by this path, use
+`custom_<bound-kind>_<canonical-dimension>` for one-sided bounds and
+`custom_range_<canonical-min>_<canonical-max>` for two-sided bounds. Canonical
+dimensions use finite decimal notation, omit a trailing `.0`, and replace the
+decimal point with `p`. For example, the 767px rules use distinct keys
+`custom_min_767` and `custom_max_767`. Any collision with an existing key fails
+closed.
+
+### Stateful rule ownership and topology
+
+Store the one `complex_css` state-rule value on the DesignNode whose browser
+condition owns the state:
+
+```text
+STATE_RULE_STORAGE_OWNER=STATE_OWNING_DESIGN_NODE
+STATE_RULE_COMPLEX_CSS_TYPE="state_rules"
+STATE_RULE_TARGET_RELATION=SELF_OR_DESCENDANT
+```
+
+Because the containing DesignNode is the owner, rule entries do not repeat an
+`owner_node_id`. Each `target_node_id` must resolve to a DesignNode that is
+inside the component boundary and either equals the containing owner or is a
+descendant of it. Sibling, ancestor, escaped-boundary, missing, ambiguous, or
+otherwise unsupported targets fail closed. This exactly supports the closed
+native forms `.<owner>:hover`, `.<owner>:hover .<target>`,
+`.<owner>:focus-within`, and `.<owner>:focus-within .<target>`.
+No sibling, ancestor, or general selector combinator is authorized.
+
+### Exact state-rule wire contract
+
+The value remains JSON data under the existing node style map key
+`custom-css`; nested Elixir structs are not permitted. The top-level value has
+exactly these keys:
+
+```json
+{
+  "type": "state_rules",
+  "rules": [
+    {
+      "condition": "hover",
+      "target_node_id": "node_000001_000001",
+      "declarations": {"opacity": {"kind": "literal", "value": 1}},
+      "viewport": null,
+      "order": 0
+    }
+  ],
+  "residual": []
+}
+```
+
+Both lists are required. `rules` must be non-empty for this subtype to be
+created. `residual` may be empty. No additional top-level keys are allowed.
+Each rule has exactly these keys:
 
 | Field | Required meaning |
 | --- | --- |
-| `owner_node_id` | Existing normalized DesignNode whose browser condition owns the state. |
-| `condition` | Closed enum `hover` or `focus_within`. `focus_visible` remains an existing accessibility mechanism and is not part of this first state-rule enum. |
-| `target_node_id` | Existing normalized DesignNode receiving the declarations. It may equal the owner or identify a descendant. |
-| `declarations` | Non-empty CSS-property map to existing tagged StyleValue meanings. No raw CSS string value escape hatch. |
-| `viewport` | Optional resolved condition with `min_width`, `max_width`, or both as finite non-negative numbers. Omit unbounded sides. CSS min/max inclusivity is preserved. |
-| `order` | Non-negative integer assigned deterministically after semantic normalization. It resolves intentional cascade order; it is not copied from source selector text. |
+| `condition` | String enum `hover` or `focus_within`. `focus_visible` remains separate. |
+| `target_node_id` | Resolved self-or-descendant DesignNode ID. |
+| `declarations` | Non-empty map from safe CSS property strings to the closed JSON declaration values below. |
+| `viewport` | `null` or an object with exactly `min_width` and `max_width`; each bound is a finite non-negative number or `null`, and at least one bound is numeric. `null` means no media condition. |
+| `order` | Unique non-negative integer assigned deterministically after semantic normalization. It is not copied from source selector order. |
 
-`rules` are ordered by the validated `order` value. Duplicate or conflicting
-order values fail closed unless a future authority defines a stable tie rule.
-Source trace and source expressions remain provenance fields on the
-`StyleValue`; they do not enter selectors, ordering, or declaration meaning.
+`rules` serialize in ascending `order`. Assign unique zero-based order values
+after expansion by original stylesheet rule order, then condition order
+(`hover` before `focus_within`), then canonical numeric DesignNode traversal
+path. This preserves stylesheet cascade order without retaining selector
+strings. Duplicate order values fail closed. Source trace and source
+expressions remain provenance fields on the outer `StyleValue`; they do not
+enter selectors, ordering, or declaration meaning.
 Repeated pointer/focus conditions that produce the same target presentation
 remain separate closed conditions and emit deterministic equivalent rules.
+
+Each declaration value is a JSON object with exactly `kind` and `value`.
+Allowed wire forms are:
+
+```json
+{"kind":"literal","value":"2px"}
+{"kind":"literal","value":0.5}
+{"kind":"keyword","value":"flex"}
+{"kind":"token_ref","value":"color.brand.primary"}
+{"kind":"calculation","value":{"operation":"multiply","operands":[{"kind":"token_ref","path":"spacing.grid_gap"},{"kind":"literal","value":2}]}}
+```
+
+`literal` accepts only a string or finite JSON number. `keyword` and
+`token_ref` accept non-empty strings and retain their existing validation and
+TokenBridge rules. `calculation` accepts only the existing structured
+multiply contract from `docs/03_DESIGN_IR_SPEC.md`; legacy calculation
+strings are not generatable. Nested `complex_css`, `responsive`, and
+`unresolved` values are forbidden. Additional keys at the declaration or
+tagged-value level are forbidden. The generation boundary validates these
+JSON maps, then uses the existing StyleValueCSS value serializer, CSS safe
+property boundary, and TokenBridge. It does not add another CSS value
+serializer.
+
+The `residual` list preserves source rules not normalized by the bounded
+conversion. Each entry has exactly these JSON keys:
+
+```json
+{"reason":"unsupported_selector","source_text":"inert original rule text"}
+```
+
+`reason` is one of `ambiguous_selector`, `malformed_block`,
+`responsive_collision`, `style_collision`, `unresolved_target`,
+`unresolved_value`, `unsupported_declaration`, `unsupported_selector`, or
+`unsafe_declaration`. `source_text` is inert evidence only. A source rule with
+any unsupported declaration is kept whole in this list. The generator reads
+only validated `rules`, ignores `residual` entirely, never parses its text,
+and never uses it as selector or declaration authority. A non-empty residual
+list remains visible through diagnostics and blocks Romeo acceptance until
+any visually required residual meaning has separate authority and support.
 
 The renderer may emit only selectors built from generated private classes:
 
@@ -181,20 +312,56 @@ The renderer may emit only selectors built from generated private classes:
 ```
 
 Same-node rules omit the descendant suffix. Rules with a viewport are wrapped
-in their resolved media condition. No source selector string reaches native
-generation. No Romeo-specific branch belongs in `NativeGenerator`.
+in the exact inclusive min/max media condition. No source selector string
+reaches native generation. No Romeo-specific branch belongs in
+`NativeGenerator`.
 
-## 7. Design IR version gate
+## 7. Residual coexistence model
+
+Romeo's effective CSS contains normalized conditionless declarations and
+browser-state rules, plus source material outside this first closed target
+grammar, including pseudo-element rules. Atomic conversion of the complete
+effective owner value would leave the required state styles non-generatable.
+Use a composite representation with per-source-rule atomic normalization:
+
+```text
+CUSTOM_CSS_NORMALIZATION_SCOPE=COMPOSITE_PER_EFFECTIVE_OWNER_VALUE
+RESIDUAL_COEXISTENCE_MODEL=SINGLE_STATE_RULES_VALUE_WITH_RESIDUAL_LIST
+```
+
+Conditionless rules that pass the full normalization boundary move to
+`DesignNode.styles` or `DesignNode.responsive`. State rules that pass it go in
+the owner's `state_rules.rules` list. Unsupported, unresolved, ambiguous,
+unsafe, or colliding source rules go whole into the single `residual` list.
+When at least one state rule is generatable, the owner has exactly one
+`styles["custom-css"]` value of type `state_rules`, containing both `rules`
+and `residual`. If no state rule is generatable but residual text remains,
+preserve it using the current `type = "custom_css"` value shape: exactly one
+object with `type`, `property`, `source_key`, and `rules` fields, where
+`property` is `custom-css`, `source_key` records the source setting name, and
+`rules` contains the full residual source values. The native generator rejects
+this subtype. If framing fails, preserve the entire effective owner value as
+one residual entry. Never store both subtypes under the same style key, and
+never emit a partially normalized source rule.
+
+```text
+RAW_RESIDUAL_EXECUTION=FORBIDDEN
+UNKNOWN_COMPLEX_CSS_SUBTYPE=NOT_GENERATABLE
+SOURCE_SELECTOR_EXECUTION=FORBIDDEN
+```
+
+## 8. Design IR version gate
 
 Design IR 4.0.0 already defines `complex_css` as structured selector/rule data
 that needs a CSS renderer. Current validation accepts its value as a JSON
 object, and the current generator's refusal to serialize it is a capability
 gap, not a different IR meaning. The closed `state_rules` subtype specializes
 that existing object value. It adds no DesignDocument root field, required
-DesignNode field, serialized root shape, or migration behavior. Existing
-validation compatibility remains unchanged; future subtype validation may
-reject that subtype for generation without rejecting existing preserved
-objects during general IR validation.
+DesignNode field, serialized root shape, or migration behavior. The serialized
+outer StyleValue shape also remains unchanged. General IR validation continues
+to preserve every currently valid `complex_css` object. Strict `state_rules`
+shape and value checks occur only at normalization and generation capability
+boundaries; they do not make other `complex_css` values invalid IR.
 
 The future implementation must recognize only the closed subtype for
 generation and leave unknown `complex_css` objects preserved but
@@ -208,7 +375,7 @@ CAN_STATE_RULES_USE_EXISTING_COMPLEX_CSS_MEANING=YES
 DESIGN_IR_VERSION_BUMP_REQUIRED=NO
 ```
 
-## 8. Existing bounded custom-CSS pattern
+## 9. Existing bounded custom-CSS pattern
 
 CTA Tango proves a reusable normalization pattern, not a reusable rule table.
 The future generic implementation may reuse:
@@ -231,7 +398,7 @@ closed conditions, validated viewport values, declarations, deterministic
 order, and trace metadata. Unhandled source CSS remains residual and is never
 executed.
 
-## 9. Capability matrix
+## 10. Capability matrix
 
 `CURRENTLY_SUPPORTED` describes the current implementation in its existing
 scope. `REQUIRES_GENERIC_EXTENSION` means the capability is absent or only
@@ -240,11 +407,17 @@ available in a special path and needs the generic state-style extension.
 
 | Capability | Status | Required for Romeo | Current evidence / boundary |
 | --- | --- | --- | --- |
+| Conditionless custom selector to node-local base style | `REQUIRES_GENERIC_EXTENSION` | Yes | Current Bricks normalization retains custom CSS; generic selector-to-node relocation is absent. |
+| Conditionless custom selector to min-width responsive style | `REQUIRES_GENERIC_EXTENSION` | Yes | `ResponsiveOverride.min_width` exists; native CSS emission currently rejects min-width. |
+| Conditionless custom selector to max-width responsive style | `REQUIRES_GENERIC_EXTENSION` | Yes | Existing max-width emission handles normalized overrides, not generic custom-CSS target resolution. |
 | Same-node base declarations | `CURRENTLY_SUPPORTED` | Yes | Safe ordinary node rules are emitted. |
 | Same-node `:hover` | `REQUIRES_GENERIC_EXTENSION` | Yes | Only the primary-action pseudo path is current; generic owner-state rules are absent. |
 | Same-node `:focus-visible` | `CURRENTLY_SUPPORTED` | Yes, for visible focus on the focusable link/control | Existing primary-action accessibility path; preserve visible focus in target output. |
 | Parent `:hover` to descendant styles | `REQUIRES_GENERIC_EXTENSION` | Yes | No state-owner-to-descendant selector generation exists. |
 | Parent `:focus-within` to descendant styles | `REQUIRES_GENERIC_EXTENSION` | Yes | No generic `:focus-within` emission exists. |
+| State owner to self | `REQUIRES_GENERIC_EXTENSION` | Yes | Containing DesignNode ownership is frozen; generic state rule emission is absent. |
+| State owner to descendant | `REQUIRES_GENERIC_EXTENSION` | Yes | Descendant targeting is closed and typed but not implemented. |
+| Unsupported owner/target relationship | `FORBIDDEN` | No | Sibling, ancestor, escaped, missing, or ambiguous targets fail closed. |
 | Multiple conditions producing identical target presentation | `REQUIRES_GENERIC_EXTENSION` | Yes | Normalize as distinct closed conditions and order deterministically. |
 | `min-width` media condition | `REQUIRES_GENERIC_EXTENSION` | Yes | Current renderer supports only resolved `max-width` responsive rules. |
 | `max-width` media condition | `CURRENTLY_SUPPORTED` | Yes | Existing resolved max-width node overrides; state-scoped max-width rules still need the generic extension. |
@@ -255,12 +428,14 @@ available in a special path and needs the generic state-style extension.
 | `token_ref` values | `CURRENTLY_SUPPORTED` | Yes, when mapped by TokenBridge | Existing native serialization resolves approved package mappings. |
 | Literal values | `CURRENTLY_SUPPORTED` | Yes, when safe | Existing native CSS value checks apply. |
 | Structured calculations | `CURRENTLY_SUPPORTED` | Optional | Only the existing validated token-reference multiply contract serializes. |
+| Mixed normalized and residual custom CSS | `REQUIRES_GENERIC_EXTENSION` | Yes | One `state_rules` object owns both normalized rules and inert residual entries. |
+| Closed state-rule declaration wire values | `REQUIRES_GENERIC_EXTENSION` | Yes | JSON tagged values are frozen; generation must validate before existing StyleValueCSS serialization. |
 | Raw custom CSS | `FORBIDDEN` | No | Residual or raw `complex_css` is not generatable. |
 | Arbitrary selector strings | `FORBIDDEN` | No | Semantic input uses a closed enum and DesignNode references. |
 | Source class selectors | `FORBIDDEN` | No | Source classes never become native selector authority. |
 | Source event-class mutation | `FORBIDDEN` | No | Browser `:hover` owns pointer state; no event class is a public/runtime contract. |
 
-## 10. Security, scope, and failure rules
+## 11. Security, scope, and failure rules
 
 The generic implementation must fail closed:
 
@@ -277,6 +452,7 @@ CSS_PROPERTIES=MUST_PASS_EXISTING_SAFE_PROPERTY_BOUNDARY
 CSS_VALUES=MUST_PASS_EXISTING_STYLEVALUE/TOKENBRIDGE SAFETY
 UNKNOWN_COMPLEX_CSS_SUBTYPE=NOT_GENERATABLE
 RAW/RESIDUAL_COMPLEX_CSS=NOT_GENERATABLE
+RESIDUAL_TEXT_SELECTOR_AUTHORITY=FORBIDDEN
 ```
 
 Only literal string keys may select the closed subtype and condition clauses.
@@ -287,7 +463,7 @@ ambiguous, or unsupported references block generation with diagnostics. A
 componentization step must not need source classes or selector text to recover
 the rule meaning.
 
-## 11. Performance and runtime ownership
+## 12. Performance and runtime ownership
 
 The conditions are local browser presentation. No server-side state or service
 is needed:
@@ -307,7 +483,7 @@ SERVER_POLLING=N/A
 CLIENT_COMPLEXITY=O(cards + emitted state rules)
 ```
 
-## 12. Verdict and next gate
+## 13. Verdict and next gate
 
 CSS is semantically sufficient for the accepted Romeo behavior. Generic stateful
 style emission is not currently implemented, so CSS sufficiency does not mean
@@ -337,6 +513,16 @@ VISIBLE_FOCUS_ACCEPTANCE_REQUIRED=YES
 GENERIC_STATEFUL_STYLE_EXTENSION_REQUIRED=YES
 CAN_STATE_RULES_USE_EXISTING_COMPLEX_CSS_MEANING=YES
 DESIGN_IR_VERSION_BUMP_REQUIRED=NO
+
+CONDITIONLESS_CUSTOM_CSS_NORMALIZATION=NODE_STYLES_OR_RESPONSIVE_OVERRIDE
+STATE_RULE_STORAGE_OWNER=STATE_OWNING_DESIGN_NODE
+STATE_RULE_TARGET_RELATION=SELF_OR_DESCENDANT
+CUSTOM_CSS_NORMALIZATION_SCOPE=COMPOSITE_PER_EFFECTIVE_OWNER_VALUE
+RESIDUAL_COEXISTENCE_MODEL=SINGLE_STATE_RULES_VALUE_WITH_RESIDUAL_LIST
+STATE_RULE_COMPLEX_CSS_TYPE="state_rules"
+STATE_RULE_DECLARATION_REPRESENTATION=JSON_TAGGED_VALUE_MAPS
+NESTED_COMPLEX_CSS_ALLOWED=NO
+NESTED_UNRESOLVED_ALLOWED=NO
 
 ROMEO_COMPONENTIZATION_AUTHORIZED=NO
 ROMEO_IMPLEMENTATION_AUTHORIZED=NO
