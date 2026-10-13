@@ -829,7 +829,7 @@ defmodule LiveFrames.IRTest do
               arguments: %{"count" => 16}
             },
             value_kind: :collection_count,
-            scope: :collection
+            scope: :site
         }
       end)
 
