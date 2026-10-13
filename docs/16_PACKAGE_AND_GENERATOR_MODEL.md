@@ -9,8 +9,9 @@ otherwise.
 Cross-cutting CSS strategy: **`docs/11_CSS_AND_TAILWIND_STRATEGY.md`**. P6.4
 architecture history: **`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`**.
 
-Generator/ejection is described here as a **future relationship** only; there is
-no generator implementation in the current package.
+`LiveFrames.NativeGenerator` is implemented in the library. It generates
+in-memory native component artifacts from approved inputs. P10
+consumer-project ejection is a separate capability and remains unimplemented.
 
 ## Catalogue and package boundaries
 
@@ -26,9 +27,10 @@ These manifests are inspectable package source. The public Catalogue API's
 visibility rules do not make them confidential. See the #51 build and CI
 contract in [docs/23](23_CATALOGUE_ARCHITECTURE.md).
 
-Library, generator, and ejection are independent capabilities. Catalogue
-release does not require generator or ejection support. Generator and ejection
-remain unsupported and not authorized. See
+Library, native generation, and ejection are independent capabilities.
+Catalogue release does not require generator or ejection support. Native
+generation is implemented; P10 ejection is not. Production Catalogue content
+is absent. See
 [docs/23_CATALOGUE_ARCHITECTURE.md](23_CATALOGUE_ARCHITECTURE.md) and
 [docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md).
 
@@ -37,12 +39,14 @@ remain unsupported and not authorized. See
 | Path | Role |
 | --- | --- |
 | `lib/live_frames/components/sections/hero.ex` | Native Hero function component |
+| `lib/live_frames/components/sections/media_call_to_action.ex` | Native CTA function component |
 | `assets/css/live_frames.css` | Optional Tailwind v4 **source** entry |
 | `assets/css/theme/lf_theme.css` | Generated public `--lf-*` theme (read-only) |
 | `assets/css/components/sections/hero.css` | Hero semantic presentation CSS |
+| `assets/css/components/sections/media_call_to_action.css` | CTA package-owned presentation CSS, imported by the source CSS entry |
 | `priv/static/live_frames/css/live_frames.css` | **Precompiled** CSS (primary runtime path) |
 | `priv/token_maps/` | Token bridge inputs (build/generation; not a runtime API) |
-| `priv/catalogue/` | Canonical Catalogue JSON; source authority and Registry build/compile-time input, not a runtime API. Files may be inspectable in the source package. |
+| `priv/catalogue/` | Reserved for canonical Catalogue JSON and Registry build input. The production directory is currently absent. |
 
 The separately authorized #51 implementation must include `priv/catalogue` in
 `apps/live_frames/mix.exs` `package/0 :files`, alongside `lib`, `assets/css`,
@@ -53,6 +57,40 @@ discovery state and does not imply Hex publication, redistribution clearance,
 generator support, or ejection support.
 
 ## 2. Component import and use
+
+The native CTA API is:
+
+```text
+LiveFrames.Components.Sections.MediaCallToAction
+media_call_to_action/1
+```
+
+It requires `heading`, three image source/alt pairs, and one
+`primary_action` slot entry. `heading_level` defaults to `2` and accepts `1..6`;
+`eyebrow`, `class`, `rest`, and one `body` slot entry are optional. The module
+rejects missing or empty image alt text and invalid slot cardinality.
+
+```elixir
+import LiveFrames.Components.Sections.MediaCallToAction
+
+~H"""
+<.media_call_to_action
+  heading="A place to begin"
+  image_1_src="/images/first.svg"
+  image_1_alt="First image"
+  image_2_src="/images/second.svg"
+  image_2_alt="Second image"
+  image_3_src="/images/third.svg"
+  image_3_alt="Third image"
+>
+  <:primary_action><a href="/details">See the details</a></:primary_action>
+</.media_call_to_action>
+"""
+```
+
+The API above follows the implementation and component tests. The preview has a
+Storybook story and route test. These repository checks do not prove clean
+external CTA consumer compatibility; C09D7-C owns that proof.
 
 Module and function:
 
@@ -219,8 +257,8 @@ are relative to the importing stylesheet.
 Do **not** use Tailwind v3 `content` configuration as the v4 integration model.
 Do **not** treat JavaScript `tailwind.config` as the primary v4 path.
 
-Importing source CSS pulls theme + Hero components but **not** Preflight; the
-host base styles remain the host’s responsibility.
+Importing source CSS pulls the theme, Hero CSS, and CTA CSS but **not**
+Preflight; the host base styles remain the host's responsibility.
 
 ## 8. Theme overrides (public `--lf-*`)
 
@@ -272,9 +310,12 @@ Internal behavior (implementation, not inputs):
 
 ## 10. CSS requirement
 
-Hero presentation requires LiveFrames CSS (precompiled or source-built). Without
-it, semantic structure renders but verified styling, contrast, focus, and layout
-do not apply.
+Hero and CTA presentation require LiveFrames CSS (precompiled or source-built).
+The CTA stylesheet is part of the source CSS import graph and the committed
+precompiled `priv/static/live_frames/css/live_frames.css` artifact. Repository
+tests and the preview Storybook test verify CTA rendering and styling presence.
+They do not prove compatibility in a clean external consumer project; C09D7-C
+has not yet established that boundary.
 
 ## 11. Source-asset and fidelity truth
 
@@ -287,11 +328,25 @@ full visual fidelity = not claimed
 
 Do not depend on preview demo SVG/media as source fidelity.
 
-## 12. Generator and ejection (relationship only)
+## 12. Native generation and P10 ejection
 
-Future generator/ejection may copy or adapt `hero/1` and CSS paths documented
-here. Current releases expose the library module and static CSS only; no ejection
-tooling ships in this phase.
+`LiveFrames.NativeGenerator` accepts an approved `ComponentContract`, matching
+`ComponentizationPlan`, and exact `DesignDocument`. It returns an in-memory
+artifact bundle containing generated native component source and package CSS.
+It does not write into a consumer project or perform Catalogue admission.
+
+P10 consumer-project ejection is separate:
+
+```text
+NativeGenerator
+!=
+P10 consumer-project ejection
+```
+
+P10 would copy or adapt a selected Catalogue item into a consumer project. It is
+not implemented. CTA external consumer proof remains unproven until the
+dedicated C09D7-C preflight establishes it. This guide does not claim clean
+external consumer compatibility, Hex publication, or public release readiness.
 
 ## 13. Performance model
 
