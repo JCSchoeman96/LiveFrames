@@ -242,19 +242,90 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     assert binding.value_key == "content.body"
     assert binding.scope == :collection_item
     assert binding.normalization_status == :normalized
+    assert %LiveFrames.IR.ValueModifier.None{} = binding.modifier
     assert node_by_source_id(document, "body").content == nil
   end
 
-  test "opaque post content modifier keeps a diagnostic binding and clears content" do
+  test "post content word limit 16 resolves with exact source trace" do
     assert {:ok, document} =
              to_ir(loop_with_target("body", "text-basic", %{"text" => "{post_content:16}"}))
 
     assert %ValueBinding{} = binding = binding_for(document, "body")
     assert binding.value_key == "content.body"
-    assert %LiveFrames.IR.ValueModifier.Opaque{} = binding.modifier
-    assert binding.normalization_status == :evidence_insufficient
+    assert binding.target_kind == :text
+    assert binding.value_kind == :field
+    assert binding.scope == :collection_item
+    assert binding.collection_binding_id == "cb_node_000001"
+
+    assert %LiveFrames.IR.ValueModifier.Resolved{
+             kind: :word_limit,
+             arguments: %{"count" => 16}
+           } = binding.modifier
+
+    assert binding.normalization_status == :normalized
     assert node_by_source_id(document, "body").content == nil
-    assert "bricks.binding.evidence_insufficient" in diagnostic_codes(document)
+    assert binding.source_trace.metadata["raw_expression"] == "{post_content:16}"
+    assert binding.source_trace.source_path =~ ".settings.text"
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "body"
+           end)
+  end
+
+  test "post content word limit accepts fixture count 60" do
+    assert {:ok, document} =
+             to_ir(loop_with_target("body", "text-basic", %{"text" => "{post_content:60}"}))
+
+    assert %ValueBinding{} = binding = binding_for(document, "body")
+    assert binding.value_key == "content.body"
+    assert binding.scope == :collection_item
+
+    assert %LiveFrames.IR.ValueModifier.Resolved{
+             kind: :word_limit,
+             arguments: %{"count" => 60}
+           } = binding.modifier
+
+    assert binding.normalization_status == :normalized
+  end
+
+  test "post content word limit accepts positive integers above unsigned 64-bit range" do
+    count = 18_446_744_073_709_551_616
+    expression = "{post_content:18446744073709551616}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("body", "text-basic", %{"text" => expression}))
+
+    assert %ValueBinding{} = binding = binding_for(document, "body")
+
+    assert %LiveFrames.IR.ValueModifier.Resolved{
+             kind: :word_limit,
+             arguments: %{"count" => ^count}
+           } = binding.modifier
+
+    assert binding.normalization_status == :normalized
+  end
+
+  test "invalid post content word limit forms fail closed" do
+    for expression <- [
+          "{post_content:0}",
+          "{post_content:01}",
+          "{post_content:-1}",
+          "{post_content:+1}",
+          "{post_content:1.5}",
+          "{post_content: 16}",
+          "{post_content:16 }",
+          "{post_content:16:foo}",
+          "{post_content:foo}"
+        ] do
+      assert {:ok, document} =
+               to_ir(loop_with_target("body", "text-basic", %{"text" => expression}))
+
+      assert binding_for(document, "body") == nil
+      assert document.value_bindings == %{}
+      assert node_by_source_id(document, "body").content == nil
+      assert "bricks.binding.expression_unsupported" in diagnostic_codes(document)
+    end
   end
 
   test "known collection item text without collection context has no binding" do
@@ -268,7 +339,7 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   test "post content without collection context has no binding and clears content" do
     assert {:ok, document} =
-             to_ir([source_element("body", "text-basic", 0, %{"text" => "{post_content}"})])
+             to_ir([source_element("body", "text-basic", 0, %{"text" => "{post_content:16}"})])
 
     assert document.value_bindings == %{}
     assert node_by_source_id(document, "body").content == nil
@@ -577,7 +648,12 @@ defmodule LiveFrames.BricksFrontendBindingTest do
   end
 
   test "wrapped known text and query count are cleared as unsupported interpolation" do
-    for expression <- ["<p>wrapped {post_content}</p>", "wrapped {query_results_count:owner}"] do
+    for expression <- [
+          "<p>wrapped {post_content}</p>",
+          "Before {post_content:16}",
+          "{post_content:16} suffix",
+          "wrapped {query_results_count:owner}"
+        ] do
       assert {:ok, document} =
                to_ir([
                  source_element("root", "block", 0, %{}, ["owner", "text"]),
