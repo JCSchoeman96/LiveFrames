@@ -190,3 +190,31 @@ RUNTIME_DB_CALLS=0
 RUNTIME_EXTERNAL_SERVICE_REQUIREMENTS=0
 RUNTIME_POLLING=0
 ```
+
+## Independent review
+
+The C1 evidence at the following immutable revision received independent review:
+
+```text
+REVIEWED_EVIDENCE_HEAD=889337466f676fbbde7926ab26aec6d44c3303d8
+REVIEWED_EVIDENCE_TREE=d4de3950dad2b800e3c998949f062827565da90f
+
+PUSH_CI=38441035563
+PUSH_CI_RESULT=PASS
+PR_CI=38441097647
+PR_CI_RESULT=PASS
+
+C1_PASS_CHECKLIST=SATISFIED
+C1_TECHNICAL_EVIDENCE=ACCEPTED
+SUBSTANTIVE_REVIEW_FINDINGS=0
+REVIEWER_DECISION=C1_EVIDENCE_ACCEPTED
+```
+
+The review accepted the external-consumer evidence only. It does not authorize Catalogue admission, Catalogue release, Hex publication, package-boundary claims, distribution capability claims, Catalogue reflection compatibility, or P10.
+
+Accordingly, the accepted proof lifecycle result is:
+
+```text
+C1_OUTCOME=PASS
+C1_STATE=PASSED
+```
