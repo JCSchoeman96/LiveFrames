@@ -35,6 +35,7 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
     assert decoded == admitted
     assert {:ok, encoded} = CanonicalJSON.encode(manifest_map(admitted))
     assert bytes == encoded
+    assert catalogue_files(root) == ["sections/synthetic_empty.json"]
     assert {:ok, [%Manifest{id: "live_frames.section.synthetic_empty"}]} = Builder.build(root)
   end
 
@@ -82,8 +83,17 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
 
   test "only one concurrent admission can reserve a previously unused path" do
     root = new_catalogue_root()
-    candidate = candidate("live_frames.section.synthetic_concurrent")
+
+    candidate =
+      candidate("live_frames.section.synthetic_concurrent")
+      |> Map.put("display_name", String.duplicate("x", 8_000_000))
+
     parent = self()
+
+    observer =
+      Task.async(fn ->
+        observe_builder_errors(root, [])
+      end)
 
     tasks =
       for _ <- 1..2 do
@@ -95,15 +105,63 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
 
     pids = for _ <- 1..2, do: receive(do: ({:ready, pid} -> pid))
     Enum.each(pids, &send(&1, :admit))
-    results = Enum.map(tasks, &Task.await(&1, 5_000))
+    results = Enum.map(tasks, &Task.await(&1, 30_000))
     successes = Enum.count(results, &match?({:ok, %Manifest{}, _}, &1))
     failures = Enum.count(results, &match?({:error, [_ | _]}, &1))
 
     assert successes == 1
     assert failures == 1
 
+    failure = Enum.find(results, &match?({:error, [_ | _]}, &1))
+    assert {:error, diagnostics} = failure
+
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code in [
+               "catalogue.admission.path_reserved",
+               "catalogue.identity.id_duplicate",
+               "catalogue.identity.path_duplicate"
+             ]
+           end)
+
+    refute Enum.any?(diagnostics, &(&1.code == "catalogue.manifest.invalid_json"))
+
+    send(observer.pid, :stop_observing)
+    observer_errors = Task.await(observer, 5_000)
+    refute Enum.any?(observer_errors, &(&1.code == "catalogue.manifest.invalid_json"))
+
     assert {:ok, [%Manifest{id: "live_frames.section.synthetic_concurrent"}]} =
              Builder.build(root)
+  end
+
+  test "concurrent admissions of different IDs both publish complete manifests" do
+    root = new_catalogue_root()
+    parent = self()
+
+    candidates = [
+      candidate("live_frames.section.synthetic_concurrent_first"),
+      candidate("live_frames.section.synthetic_concurrent_second")
+    ]
+
+    tasks =
+      Enum.map(candidates, fn candidate ->
+        Task.async(fn ->
+          send(parent, {:ready, self()})
+          receive do: (:admit -> Admission.admit(root, candidate, @guard_result))
+        end)
+      end)
+
+    pids = for _ <- 1..2, do: receive(do: ({:ready, pid} -> pid))
+    Enum.each(pids, &send(&1, :admit))
+    results = Enum.map(tasks, &Task.await(&1, 5_000))
+
+    assert Enum.count(results, &match?({:ok, %Manifest{}, _}, &1)) == 2
+
+    assert {:ok, manifests} = Builder.build(root)
+
+    assert Enum.sort(Enum.map(manifests, & &1.id)) == [
+             "live_frames.section.synthetic_concurrent_first",
+             "live_frames.section.synthetic_concurrent_second"
+           ]
   end
 
   test "preserves a rejected guard result and writes no manifest" do
@@ -198,6 +256,35 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
     File.mkdir_p!(base)
     on_exit(fn -> File.rm_rf!(base) end)
     root
+  end
+
+  defp catalogue_files(root) do
+    root
+    |> Path.join("**/*")
+    |> Path.wildcard(match: :all)
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.map(&Path.relative_to(&1, root))
+    |> Enum.sort()
+  end
+
+  defp observe_builder_errors(root, errors) do
+    errors =
+      if File.exists?(root) do
+        case Builder.build(root) do
+          {:ok, _manifests} -> errors
+          {:error, diagnostics} -> Enum.reverse(diagnostics, errors)
+        end
+      else
+        errors
+      end
+
+    receive do
+      :stop_observing -> Enum.reverse(errors)
+    after
+      0 ->
+        Process.sleep(0)
+        observe_builder_errors(root, errors)
+    end
   end
 
   defp physical_path(root, logical_path) do

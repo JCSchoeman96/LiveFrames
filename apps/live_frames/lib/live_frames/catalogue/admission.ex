@@ -2,7 +2,7 @@ defmodule LiveFrames.Catalogue.Admission do
   @moduledoc """
   Admits a fresh DRAFT manifest into a repository Catalogue.
 
-  The canonical manifest file is created exclusively and reserves its identity.
+  A complete staged manifest is linked into place atomically to reserve its identity.
   """
 
   alias LiveFrames.Catalogue.CanonicalJSON
@@ -55,11 +55,11 @@ defmodule LiveFrames.Catalogue.Admission do
   defp reserve_manifest(catalogue_root, logical_path, bytes) do
     relative_path = String.replace_prefix(logical_path, @logical_root <> "/", "")
     physical_path = Path.join(catalogue_root, relative_path)
+    staging_path = staging_path(catalogue_root)
 
     with :ok <- ensure_directory(Path.dirname(physical_path)),
-         {:ok, file} <- exclusive_open(physical_path),
-         :ok <- write_and_close(file, physical_path, bytes) do
-      :ok
+         :ok <- write_staging_file(staging_path, bytes) do
+      publish_staging_file(staging_path, physical_path)
     end
   end
 
@@ -70,10 +70,15 @@ defmodule LiveFrames.Catalogue.Admission do
     end
   end
 
-  defp exclusive_open(path) do
+  defp staging_path(catalogue_root) do
+    parent = Path.dirname(Path.expand(catalogue_root))
+    unique = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+    Path.join(parent, ".catalogue-admission-#{unique}.tmp")
+  end
+
+  defp write_staging_file(path, bytes) do
     case File.open(path, [:write, :binary, :exclusive]) do
-      {:ok, file} -> {:ok, file}
-      {:error, :eexist} -> already_reserved()
+      {:ok, file} -> write_and_close(file, path, bytes)
       {:error, _reason} -> write_failed()
     end
   end
@@ -87,8 +92,35 @@ defmodule LiveFrames.Catalogue.Admission do
         :ok
 
       _ ->
-        File.rm(path)
-        write_failed()
+        fail_after_cleanup(path, write_failed())
+    end
+  end
+
+  defp publish_staging_file(staging_path, physical_path) do
+    case File.ln(staging_path, physical_path) do
+      :ok ->
+        cleanup_staging_file(staging_path)
+
+      {:error, :eexist} ->
+        fail_after_cleanup(staging_path, already_reserved())
+
+      {:error, _reason} ->
+        fail_after_cleanup(staging_path, write_failed())
+    end
+  end
+
+  defp fail_after_cleanup(path, {:error, diagnostics}) do
+    case cleanup_staging_file(path) do
+      :ok -> {:error, diagnostics}
+      {:error, cleanup_diagnostics} -> {:error, diagnostics ++ cleanup_diagnostics}
+    end
+  end
+
+  defp cleanup_staging_file(path) do
+    case File.rm(path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, _reason} -> staging_cleanup_failed()
     end
   end
 
@@ -117,6 +149,17 @@ defmodule LiveFrames.Catalogue.Admission do
          code: "catalogue.admission.write_failed",
          path: "path",
          message: "Canonical Catalogue manifest could not be created."
+       }
+     ]}
+  end
+
+  defp staging_cleanup_failed do
+    {:error,
+     [
+       %{
+         code: "catalogue.admission.staging_cleanup_failed",
+         path: "staging",
+         message: "Temporary Catalogue manifest could not be removed."
        }
      ]}
   end
