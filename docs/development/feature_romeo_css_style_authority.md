@@ -199,6 +199,43 @@ decimal point with `p`. For example, the 767px rules use distinct keys
 `custom_min_767` and `custom_max_767`. Any collision with an existing key fails
 closed.
 
+Before committing conditionless responsive candidates, compare them by target
+DesignNode and CSS property. Each candidate records its inclusive viewport
+interval, normalized value, and originating complete atomic source rule. A
+missing `min_width` is unbounded below; a missing `max_width` is unbounded
+above; `min_width=N` means width `>= N`; and `max_width=N` means width `<= N`.
+For candidates on the same target and property, intersecting intervals with
+different normalized values are a conflict. In particular, the inclusive
+`min-width: 767px` and `max-width: 767px` intervals overlap at 767px.
+
+```text
+CONDITIONLESS_RESPONSIVE_OVERLAP_CONFLICT=FAIL_CLOSED
+```
+
+On conflict, do not select map order, source order, min-width precedence, or
+max-width precedence. Retain every involved complete atomic source rule as
+inert residual evidence, remove all candidates contributed by those rules,
+and emit the stable diagnostic
+`style.conditionless_responsive_overlap_conflict`. This prevents a partial
+responsive cascade from being emitted. Candidates with the same target,
+property, exact interval, and normalized value may be deduplicated
+deterministically; candidates with different intervals remain separate and
+are never widened. Non-overlapping intervals remain valid.
+If an existing responsive declaration on the same target and property
+overlaps a candidate with a different value, the candidate source rule also
+fails closed; an unresolved existing interval is treated as ambiguous and
+fails closed. This rule adds no ordering field to `ResponsiveOverride` and
+does not define general CSS cascade behavior.
+
+The accepted Romeo conditionless rules were audited by resolved target,
+property, inclusive viewport interval, and normalized value. No differing-value
+same-target/same-property overlap was observed among them. This records no
+net presentation at 767px; both source media conditions still match there.
+
+```text
+ROMEO_CONDITIONLESS_RESPONSIVE_OVERLAP_CONFLICT=NONE_OBSERVED
+```
+
 ### Stateful rule ownership and topology
 
 Store the one `complex_css` state-rule value on the DesignNode whose browser
@@ -293,11 +330,12 @@ conversion. Each entry has exactly these JSON keys:
 ```
 
 `reason` is one of `ambiguous_selector`, `malformed_block`,
-`responsive_collision`, `style_collision`, `unresolved_target`,
-`unresolved_value`, `unsupported_declaration`, `unsupported_selector`, or
-`unsafe_declaration`. `source_text` is inert evidence only. A source rule with
-any unsupported declaration is kept whole in this list. The generator reads
-only validated `rules`, ignores `residual` entirely, never parses its text,
+`responsive_collision`, `responsive_overlap_conflict`, `style_collision`,
+`unresolved_target`, `unresolved_value`, `unsupported_declaration`,
+`unsupported_selector`, or `unsafe_declaration`. `source_text` is inert
+evidence only. A source rule with any unsupported declaration is kept whole in
+this list. The generator reads only validated `rules`, ignores `residual`
+entirely, never parses its text,
 and never uses it as selector or declaration authority. A non-empty residual
 list remains visible through diagnostics and blocks Romeo acceptance until
 any visually required residual meaning has separate authority and support.
@@ -410,6 +448,7 @@ available in a special path and needs the generic state-style extension.
 | Conditionless custom selector to node-local base style | `REQUIRES_GENERIC_EXTENSION` | Yes | Current Bricks normalization retains custom CSS; generic selector-to-node relocation is absent. |
 | Conditionless custom selector to min-width responsive style | `REQUIRES_GENERIC_EXTENSION` | Yes | `ResponsiveOverride.min_width` exists; native CSS emission currently rejects min-width. |
 | Conditionless custom selector to max-width responsive style | `REQUIRES_GENERIC_EXTENSION` | Yes | Existing max-width emission handles normalized overrides, not generic custom-CSS target resolution. |
+| Conditionless responsive overlapping-property conflict | `FORBIDDEN` / fail closed | Yes | Different normalized values for the same target/property over overlapping inclusive intervals retain all involved source rules as inert residual and emit a stable diagnostic; no ordering is inferred. |
 | Same-node base declarations | `CURRENTLY_SUPPORTED` | Yes | Safe ordinary node rules are emitted. |
 | Same-node `:hover` | `REQUIRES_GENERIC_EXTENSION` | Yes | Only the primary-action pseudo path is current; generic owner-state rules are absent. |
 | Same-node `:focus-visible` | `CURRENTLY_SUPPORTED` | Yes, for visible focus on the focusable link/control | Existing primary-action accessibility path; preserve visible focus in target output. |
@@ -515,6 +554,8 @@ CAN_STATE_RULES_USE_EXISTING_COMPLEX_CSS_MEANING=YES
 DESIGN_IR_VERSION_BUMP_REQUIRED=NO
 
 CONDITIONLESS_CUSTOM_CSS_NORMALIZATION=NODE_STYLES_OR_RESPONSIVE_OVERRIDE
+CONDITIONLESS_RESPONSIVE_OVERLAP_CONFLICT=FAIL_CLOSED
+ROMEO_CONDITIONLESS_RESPONSIVE_OVERLAP_CONFLICT=NONE_OBSERVED
 STATE_RULE_STORAGE_OWNER=STATE_OWNING_DESIGN_NODE
 STATE_RULE_TARGET_RELATION=SELF_OR_DESCENDANT
 CUSTOM_CSS_NORMALIZATION_SCOPE=COMPOSITE_PER_EFFECTIVE_OWNER_VALUE
