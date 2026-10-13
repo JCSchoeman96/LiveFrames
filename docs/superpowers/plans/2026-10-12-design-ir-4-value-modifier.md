@@ -6,6 +6,8 @@
 
 **Spec:** [C-09B2 Design IR 4.0.0 value modifier authority](../../development/c09b2_design_ir_4_value_modifier_authority.md). It controls the serialized variants, validation invariants, caller ownership, and migration limits in every task below.
 
+**Behavior identity compatibility:** [C-09B2A Behavior identity version compatibility authority](../../development/c09b2a_behavior_identity_version_compatibility_authority.md) controls which Design IR identity versions BehaviorContract 1.0.0 and BehaviorReviewResult 1.0.0 accept. Read and apply it before implementation. IR4 promotion is gated on the compatibility validation and exact-document tests in that authority.
+
 **Architecture:** Keep the v3 contract historical and add the v4 model to the existing IR reader, serializer, validator, and migration chain. Serialize one required nested modifier object per ValueBinding; use closed variant structs internally and exact-shape maps at the JSON boundary. The caller owns applying resolved transformations before supplying bound values.
 
 **Tech Stack:** Elixir umbrella app, Jason JSON serialization, Mix ExUnit tests, Markdown authority documents.
@@ -25,10 +27,14 @@ Feature Milan. Do not regenerate Milan behavior identities, create
 SemanticInput, run D0, call the proposer, or start P7-D1/runtime work. Those
 activities require later source-mapping and exact-document approval gates.
 
-Use the accepted base
-4b335ac496a0c8536923101dac6770f94d4b994e and its tree
-56dfeebca4d0f9f254ab1d19e3e49e4d43800296. Stop if origin/main moves before
-implementation begins.
+The original IR4 plan was authored at base
+`4b335ac496a0c8536923101dac6770f94d4b994e`, tree
+`56dfeebca4d0f9f254ab1d19e3e49e4d43800296`. That implementation base is
+superseded. Begin or resume implementation only from the exact accepted main
+SHA and tree supplied by the review gate after C-09B2A is merged and its exact
+post-merge CI passes. The review gate supplies that implementation base; do
+not guess a future merge SHA. Stop if `origin/main` differs from the supplied
+implementation base.
 
 The serialized v4 variants are exactly:
 
@@ -56,6 +62,12 @@ semantics.
   add a Bricks or WordPress runtime dependency.
 - Do not regenerate Milan source documents, identities, BehaviorContracts, or
   BehaviorReviewResults in this implementation slice.
+- Keep BehaviorContract and BehaviorReviewResult at format version 1.0.0,
+  with their exact serialized fields and canonicalization unchanged. Preserve
+  frozen IR3 Behavior bytes, digests, and review IDs. Implement only the
+  C-09B2A compatibility validation: Behavior artifacts support the closed IR
+  identity set 3.0.0 and 4.0.0, while exact DesignDocument identity matching
+  remains mandatory. Do not rewrite or reissue historical artifacts.
 - Never convert serialized modifier strings or argument keys into atoms.
 - Keep migration deterministic, side-effect-free, and O(document size).
 
@@ -123,6 +135,22 @@ semantics.
   and apps/live_frames/lib/live_frames/native_generator/renderer.ex: inspect
   struct patterns and consumers; change only actual old-field reads required
   by the new type.
+- apps/live_frames/lib/live_frames/behavior/design_document_identity.ex:
+  create the shared Behavior-owned policy for exact Identity shape and the
+  closed supported Design IR versions, canonicalization ID, digest algorithm,
+  and lowercase digest syntax. Do not move this Behavior-specific version
+  policy into `LiveFrames.IR.Identity`.
+- apps/live_frames/lib/live_frames/behavior/serializer.ex and
+  apps/live_frames/lib/live_frames/behavior/review_result.ex: delegate
+  standalone DesignDocumentIdentity compatibility validation to the shared
+  policy. Change no serialized fields, canonical bytes, digest or review-ID
+  algorithms, or exact identity comparisons.
+- apps/live_frames/test/live_frames/behavior/serializer_test.exs,
+  apps/live_frames/test/live_frames/behavior/review_result_test.exs, and
+  apps/live_frames/test/live_frames/behavior/validation_test.exs, and
+  apps/live_frames/test/live_frames/behavior/binding_identity_test.exs: prove
+  the C-09B2A compatibility and exact-document requirements and retain the
+  frozen IR3 binding-ID proof.
 - apps/live_frames/test/live_frames/fidelity_document_loader_test.exs: retain
   raw legacy maps with `modifier_status` as migration inputs; update current
   v4 loaded-shape assertions only.
@@ -144,6 +172,11 @@ Classify every match before editing:
 | Consumers and struct patterns, not old-field constructors | `componentization_proposer/construction.ex`, `component_contract/reference_validation.ex`, `componentization_plan/reference_validation.ex`, `native_generator/renderer.ex` | Inspect for actual old-field reads. No change is expected for patterns that use other fields only. |
 | Historical contracts and migration fixtures | C-09B and versioned documentation/fixtures outside current constructors | Keep historical spelling and meaning. Do not bulk-rewrite matches outside the current v4 representation. |
 
+The inventory includes the remaining current `%ValueBinding{}` constructor in
+`apps/live_frames/test/live_frames/componentization_plan_test.exs`; update it
+mechanically with the other current test constructors. Do not rewrite raw v3
+serialized fixtures or versioned historical documents.
+
 If the inventory finds another serialized contract that depends on
 `modifier_status`, stop and report it before implementation.
 
@@ -154,8 +187,9 @@ If the inventory finds another serialized contract that depends on
 | 1. Contract tests | C-09B2 and current IR helpers | Failing tests for exact v4 modifier and migration behavior |
 | 2. Internal model | Task 1 cases and C-09B2 | Closed `ValueModifier` variants and `ValueBinding.modifier` type |
 | 3. Serialization, loading, validation | Task 2 model | Deterministic v4 round trip and exact-shape validation |
+| 3A. Behavior identity compatibility | C-09B2A plus current Behavior serializer/review/validation | Shared Behavior-side policy and proofs preserving historical artifacts and exact-document binding |
 | 4. Migration and version dispatch | Task 3 reader, writer, and validator | Explicit v1→2→3→4, v2→3→4, and v3→4 routes with provenance |
-| 5. Canonical spec and identity proof | Task 4 current-version path | Canonical v4 spec and corrected identity tests |
+| 5. Canonical spec and identity proof | Tasks 3A and 4 current-version path | Canonical v4 spec and corrected identity tests |
 | 6. Integrated verification | Tasks 1–5 and constructor inventory | One green, reviewable IR 4 core transition |
 
 ## Atomic integration boundary
@@ -166,8 +200,56 @@ repository has a mixed v3/v4 in-memory contract. Keep intermediate work in the
 same uncommitted implementation change. The production transition is coherent
 only when `ValueModifier`, `ValueBinding`, serializer, loader, validator,
 migration, all current constructor compatibility updates, and
-`docs/03_DESIGN_IR_SPEC.md` form one compilable v4 contract. Include that full
-transition and its focused tests in one implementation commit.
+`docs/03_DESIGN_IR_SPEC.md` form one compilable v4 contract. The Behavior
+identity compatibility policy and its exact-document tests must also be
+complete before promoting `current_ir_version` to `4.0.0`. Include the full
+IR transition and compatibility changes in one implementation commit.
+
+### Behavior identity compatibility boundary (C-09B2A)
+
+Before promoting the current IR version, implement only the compatibility
+validation authorized by C-09B2A. BehaviorContract 1.0.0 and
+BehaviorReviewResult 1.0.0 accept exactly Design IR identity versions 3.0.0
+and 4.0.0. Versions 1.0.0, 2.0.0, malformed versions, and unknown future
+versions fail closed. Do not compare an artifact identity to
+`DesignDocument.current_ir_version/0`, and do not accept arbitrary
+non-empty versions.
+
+Prefer the shared `LiveFrames.Behavior.DesignDocumentIdentity` policy module
+in `apps/live_frames/lib/live_frames/behavior/design_document_identity.ex`.
+It centralizes exact Identity struct shape, supported IR versions,
+canonicalization ID, digest algorithm, and lowercase 64-hex digest syntax.
+`Behavior.Serializer` and `Behavior.ReviewResult` delegate standalone
+identity validation to it. Keep the version policy in the Behavior domain;
+`LiveFrames.IR.Identity` remains the generic DesignDocument identity
+mechanism.
+
+The authorized compatibility-only files are:
+
+- `apps/live_frames/lib/live_frames/behavior/design_document_identity.ex`
+- `apps/live_frames/lib/live_frames/behavior/serializer.ex`
+- `apps/live_frames/lib/live_frames/behavior/review_result.ex`
+- `apps/live_frames/test/live_frames/behavior/serializer_test.exs`
+- `apps/live_frames/test/live_frames/behavior/review_result_test.exs`
+- `apps/live_frames/test/live_frames/behavior/validation_test.exs`
+
+Tests retain exact frozen IR3 serializer bytes/digest and review bytes/ID;
+accept valid IR4 identities; reject IR1, IR2, unknown future versions,
+malformed canonicalization, and malformed digests; and preserve exact
+identity, contract digest, and algorithm matching. After the IR4 migration,
+structural validation computes the supplied current IR4 DesignDocument's
+exact identity and compares the full tuple. Prove that exact IR4 pair passes
+and cross-document or cross-version attachment fails. Standalone historical
+IR3 Behavior artifacts remain structurally valid, but revalidation of a raw
+IR3 DesignDocument through the current in-memory API is not supported. Keep
+frozen IR3 binding-ID proofs; an IR4 identity changes the B2 payload and
+therefore receives a different binding ID.
+
+This work changes neither Behavior format, serialized field set, serializer
+or review-ID algorithm, nor historical fixture. Do not reissue Milan
+Behavior artifacts, re-normalize Milan, start P7-D1, or begin runtime work.
+The compatibility path is compile/review-time only and adds no database,
+cache, process, PubSub, job, or network infrastructure.
 
 ## Task 1: Add failing tests for the v4 modifier union
 
@@ -288,6 +370,77 @@ Expected: direct serialization, modifier-object decoder tests, and the
 coherent v4 contract pass once Tasks 4 and 5 complete. Do not make a partial
 version promotion to obtain an intermediate green run.
 
+## Task 3A: Decouple Behavior artifact identity compatibility from the current IR writer
+
+**Interface:** C-09B2A defines the closed Behavior compatibility set and
+historical-artifact boundary. This task removes the standalone Behavior
+identity checks' dependency on `DesignDocument.current_ir_version/0` without
+changing either Behavior artifact format or the generic IR identity API.
+
+Use TDD. Add the compatibility and identity-binding tests first and confirm
+the standalone IR4 identity cases fail under the current-version check.
+Preserve the frozen IR3 golden fixtures exactly. The current-IR4 document
+pair assertion must remain in the focused test set and pass at the coherent
+Task 4 version-promotion boundary. Do not commit an intermediate mixed IR3/
+IR4 production state.
+
+**Files:**
+
+- Create: `apps/live_frames/lib/live_frames/behavior/design_document_identity.ex`
+- Modify: `apps/live_frames/lib/live_frames/behavior/serializer.ex`
+- Modify: `apps/live_frames/lib/live_frames/behavior/review_result.ex`
+- Modify: `apps/live_frames/test/live_frames/behavior/serializer_test.exs`
+- Modify: `apps/live_frames/test/live_frames/behavior/review_result_test.exs`
+- Modify: `apps/live_frames/test/live_frames/behavior/validation_test.exs`
+- Modify: `apps/live_frames/test/live_frames/behavior/binding_identity_test.exs`
+
+**Red tests first:**
+
+- Keep the frozen IR3 BehaviorContract canonical bytes and digest exact.
+- Keep the frozen IR3 BehaviorReviewResult canonical bytes and review ID
+  exact.
+- Accept a structurally valid standalone IR4 DesignDocumentIdentity.
+- Reject IR1, IR2, unknown future versions, malformed identity fields,
+  unsupported canonicalization IDs, unsupported digest algorithms, and
+  malformed digest syntax.
+- Prove an exact current IR4 DesignDocument and BehaviorContract pair passes
+  `Behavior.Validation.validate_structure/2` after Task 4 promotes the
+  current IR contract. Prove cross-document and IR3-to-IR4 attachment rejects.
+- Retain the frozen IR3 B2 binding-ID proof unchanged. Prove a binding ID
+  changes when its exact DesignDocumentIdentity changes to IR4; do not reuse
+  the IR3 ID.
+
+**Implementation:**
+
+- Add one Behavior-owned identity policy that checks the exact `Identity`
+  struct field set and supports only IR versions `3.0.0` and `4.0.0`, the
+  existing canonicalization ID, the existing digest algorithm, and lowercase
+  64-hex digest syntax.
+- Make `Behavior.Serializer` and `Behavior.ReviewResult` delegate standalone
+  identity validation to that policy while retaining their existing
+  diagnostics.
+- Keep the Behavior-specific version policy out of
+  `LiveFrames.IR.Identity`. Do not add historical raw-IR3 DesignDocument
+  validation, a legacy serializer, or a second identity path.
+- Change no serialized fields, sorting, canonicalization, Behavior digest
+  algorithm, review-ID algorithm, or frozen fixture bytes.
+
+Run after the Task 4 current-IR4 boundary is assembled, before committing the
+coherent production change:
+
+```bash
+mix test \
+  apps/live_frames/test/live_frames/behavior/serializer_test.exs \
+  apps/live_frames/test/live_frames/behavior/review_result_test.exs \
+  apps/live_frames/test/live_frames/behavior/validation_test.exs \
+  apps/live_frames/test/live_frames/behavior/binding_identity_test.exs
+```
+
+Expected: all Behavior compatibility and exact-document tests pass while the
+historical IR3 canonical bytes, digests, review ID, and binding-ID proof stay
+exact. Standalone IR3 artifacts remain structurally valid; the current
+in-memory IR4 document API does not revalidate raw historical IR3 documents.
+
 ## Task 4: Add the named 3.0.0 to 4.0.0 structural migration
 
 **Interface:** Task 3's v4 reader, writer, and validator are inputs. The task
@@ -310,7 +463,11 @@ to document and test.
 - [ ] Route v1 documents through v2, v3, then v4; route v2 through v3 then
   v4; route v3 through v4; accept v4 unchanged; reject unknown versions.
 - [ ] Promote DesignDocument.current_ir_version/0 to "4.0.0" only after the
-  v4 serializer, loader, validator, and migration route are present.
+  v4 serializer, loader, validator, and migration route are present and the
+  Task 3A identity policy plus standalone Behavior compatibility tests pass.
+  Make the promotion in the same uncommitted transition that makes the exact
+  current-IR4 Behavior/document test pass, then run Task 3A's full focused
+  command before the coherent production commit.
 - [ ] Add migration tests for both modifier statuses, both valid none
   normalization states, opaque evidence status, provenance order, malformed
   records, and old opaque {post_content:16} remaining opaque.
