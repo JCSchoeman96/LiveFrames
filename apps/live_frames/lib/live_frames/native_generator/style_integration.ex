@@ -13,6 +13,14 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
   @locus_gap_code "native_generator.styling.style_locus_authority_gap"
   @primary_variant_gap_code "native_generator.styling.primary_action_variant_authority_gap"
   @primary_precedence_gap_code "native_generator.styling.primary_action_style_precedence_gap"
+  @primary_slot_gap_code "native_generator.styling.primary_action_subtree_slot_authority_gap"
+  @figure_image_radius_properties [
+    "border-radius",
+    "border-top-left-radius",
+    "border-top-right-radius",
+    "border-bottom-right-radius",
+    "border-bottom-left-radius"
+  ]
 
   @primary_base_tokens %{
     "background-color" => "button.primary.background",
@@ -40,13 +48,14 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
     with {:ok, identity} <- identity_index(doc, package_class),
          {:ok, boundary_node} <- boundary_node(plan.boundary_node_id, identity.nodes_by_id),
-         {:ok, styles, classes} <-
+         {:ok, style_result, classes} <-
            collect_styles(boundary_node, plan, identity.private_class_by_id),
-         {:ok, css} <- render_styles(styles),
+         {:ok, css} <- render_styles(style_result.entries),
          {:ok, stylesheet_path} <- stylesheet_path(contract) do
       {:ok,
        %{
          private_class_by_id: classes,
+         primary_action_slot_targets: style_result.primary_action_slot_targets,
          nodes_by_id: identity.nodes_by_id,
          stylesheet_content: css,
          stylesheet_path: stylesheet_path
@@ -76,30 +85,45 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     slot_targets =
       plan.render_projections
       |> Enum.filter(&(&1.render_role == :subtree_slot))
-      |> MapSet.new(& &1.target_node_id)
+      |> Map.new(&{&1.target_node_id, &1.public_slot_name})
 
-    case collect_node_styles(boundary_node, plan, slot_targets, private_class_by_id, {[], %{}}) do
-      {:ok, {rendered, classes}} -> {:ok, Enum.reverse(rendered), classes}
-      {:error, diagnostic} -> {:error, diagnostic}
+    case collect_node_styles(
+           boundary_node,
+           plan,
+           slot_targets,
+           private_class_by_id,
+           {[], %{}, MapSet.new()}
+         ) do
+      {:ok, {rendered, classes, primary_action_slot_targets}} ->
+        {:ok,
+         %{
+           entries: Enum.reverse(rendered),
+           primary_action_slot_targets: primary_action_slot_targets
+         }, classes}
+
+      {:error, diagnostic} ->
+        {:error, diagnostic}
     end
   end
 
   defp collect_node_styles(node, plan, slot_targets, private_class_by_id, acc) do
-    if MapSet.member?(slot_targets, node.node_id) do
-      {:ok, acc}
-    else
-      with {:ok, next_acc} <-
-             collect_node_style(node, plan.boundary_node_id, private_class_by_id, acc),
-           {:ok, descendant_acc} <-
-             collect_child_styles(
-               node.children,
-               plan,
-               slot_targets,
-               private_class_by_id,
-               next_acc
-             ) do
-        {:ok, descendant_acc}
-      end
+    case Map.fetch(slot_targets, node.node_id) do
+      {:ok, public_slot_name} ->
+        collect_subtree_slot_style(node, public_slot_name, private_class_by_id, acc)
+
+      :error ->
+        with {:ok, next_acc} <-
+               collect_node_style(node, plan.boundary_node_id, private_class_by_id, acc),
+             {:ok, descendant_acc} <-
+               collect_child_styles(
+                 node.children,
+                 plan,
+                 slot_targets,
+                 private_class_by_id,
+                 next_acc
+               ) do
+          {:ok, descendant_acc}
+        end
     end
   end
 
@@ -112,29 +136,42 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end)
   end
 
-  defp collect_node_style(node, boundary_id, private_class_by_id, {rendered, classes}) do
+  defp collect_node_style(
+         node,
+         boundary_id,
+         private_class_by_id,
+         {rendered, classes, slot_targets}
+       ) do
     case node_style(node) do
       {:ok, base_styles, pseudo_styles} ->
         responsive = responsive_overrides(node.responsive)
-        styled? = node.styles != %{} or responsive != [] or pseudo_styles != %{}
+        styled? = base_styles != %{} or responsive != [] or pseudo_styles != %{}
         root? = node.node_id == boundary_id
+        class = Map.fetch!(private_class_by_id, node.node_id)
 
         cond do
-          figure_image?(node) and styled? ->
-            {:error, style_locus_gap(node.node_id)}
+          figure_image?(node) ->
+            collect_figure_image_style(
+              node,
+              class,
+              base_styles,
+              responsive,
+              pseudo_styles,
+              styled?,
+              root?,
+              {rendered, classes, slot_targets}
+            )
 
           true ->
-            class = Map.fetch!(private_class_by_id, node.node_id)
-
             classes =
               if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
 
             rendered =
               if styled?,
-                do: [{class, base_styles, responsive, pseudo_styles} | rendered],
+                do: [{:single, class, base_styles, responsive, pseudo_styles} | rendered],
                 else: rendered
 
-            {:ok, {rendered, classes}}
+            {:ok, {rendered, classes, slot_targets}}
         end
 
       {:error, diagnostic} ->
@@ -142,12 +179,141 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
+  defp collect_subtree_slot_style(
+         %DesignNode{semantic_type: "button", attributes: %{"style" => "primary"}} = node,
+         "primary_action",
+         private_class_by_id,
+         {rendered, classes, slot_targets} = acc
+       ) do
+    responsive = responsive_overrides(node.responsive)
+
+    cond do
+      Map.get(node.attributes, "outline") in [true, "true"] ->
+        case primary_action_styles(node) do
+          {:error, diagnostic} -> {:error, diagnostic}
+          {:ok, _, _} -> {:ok, acc}
+        end
+
+      node.styles != %{} or responsive != [] ->
+        {:error,
+         diagnostic(
+           @primary_slot_gap_code,
+           "Styled primary action subtree slot target has no proven presentation partition",
+           %{node_id: node.node_id}
+         )}
+
+      true ->
+        with {:ok, base_styles, pseudo_styles} <- node_style(node) do
+          class = Map.fetch!(private_class_by_id, node.node_id)
+
+          {:ok,
+           {[{:primary_action_slot, class, base_styles, pseudo_styles} | rendered],
+            Map.put(classes, node.node_id, class), MapSet.put(slot_targets, node.node_id)}}
+        end
+    end
+  end
+
+  defp collect_subtree_slot_style(_node, _public_slot_name, _private_class_by_id, acc),
+    do: {:ok, acc}
+
+  defp collect_figure_image_style(
+         node,
+         class,
+         base_styles,
+         responsive,
+         pseudo_styles,
+         styled?,
+         root?,
+         {rendered, classes, slot_targets}
+       ) do
+    cond do
+      responsive != [] or pseudo_styles != %{} ->
+        {:error, style_locus_gap(node.node_id)}
+
+      true ->
+        with {:ok, {figure_styles, image_styles}} <-
+               partition_figure_image_styles(node.node_id, base_styles) do
+          image_styles =
+            if Enum.any?(@figure_image_radius_properties, &Map.has_key?(figure_styles, &1)) do
+              Map.put(image_styles, "border-radius", StyleValue.keyword("inherit"))
+            else
+              image_styles
+            end
+
+          classes =
+            if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
+
+          rendered =
+            if styled?,
+              do: [{:figure_image, class, figure_styles, image_styles} | rendered],
+              else: rendered
+
+          {:ok, {rendered, classes, slot_targets}}
+        end
+    end
+  end
+
+  defp partition_figure_image_styles(node_id, styles) do
+    Enum.reduce_while(styles, {:ok, {%{}, %{}}}, fn {property, value}, {:ok, {figure, image}} ->
+      case property do
+        "border-radius" ->
+          {:cont, {:ok, {Map.put(figure, property, value), image}}}
+
+        "border-top-left-radius" ->
+          {:cont, {:ok, {Map.put(figure, property, value), image}}}
+
+        "border-top-right-radius" ->
+          {:cont, {:ok, {Map.put(figure, property, value), image}}}
+
+        "border-bottom-right-radius" ->
+          {:cont, {:ok, {Map.put(figure, property, value), image}}}
+
+        "border-bottom-left-radius" ->
+          {:cont, {:ok, {Map.put(figure, property, value), image}}}
+
+        "aspect-ratio" ->
+          {:cont, {:ok, {figure, Map.put(image, property, value)}}}
+
+        "object-fit" ->
+          {:cont, {:ok, {figure, Map.put(image, property, value)}}}
+
+        "width" ->
+          {:cont, {:ok, {Map.put(figure, property, value), Map.put(image, property, value)}}}
+
+        "height" ->
+          {:cont, {:ok, {Map.put(figure, property, value), Map.put(image, property, value)}}}
+
+        _unsupported ->
+          {:halt, {:error, style_locus_gap(node_id)}}
+      end
+    end)
+  end
+
   defp node_style(%DesignNode{} = node) do
     with {:ok, action_styles, pseudo_styles} <- primary_action_styles(node),
          :ok <- no_base_collisions(node.styles, action_styles) do
-      {:ok, Map.merge(node.styles, action_styles), pseudo_styles}
+      base_styles =
+        node
+        |> semantic_base_styles()
+        |> Map.merge(node.styles)
+        |> Map.merge(action_styles)
+
+      {:ok, base_styles, pseudo_styles}
     end
   end
+
+  defp semantic_base_styles(%DesignNode{
+         semantic_type: "heading",
+         attributes: %{"tag" => "h2"}
+       }) do
+    %{
+      "font-size" => StyleValue.token_ref("typography.heading.scale.h2"),
+      "font-weight" => StyleValue.token_ref("typography.heading.font_weight"),
+      "line-height" => StyleValue.token_ref("typography.heading.line_height")
+    }
+  end
+
+  defp semantic_base_styles(_node), do: %{}
 
   defp primary_action_styles(%DesignNode{semantic_type: "button", attributes: attrs}) do
     if Map.get(attrs, "style") == "primary" do
@@ -205,9 +371,8 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
   defp responsive_overrides(_), do: [:invalid_responsive_authority]
 
   defp render_styles(styles) do
-    Enum.reduce_while(styles, {:ok, []}, fn {class, base, responsive, pseudos}, {:ok, acc} ->
-      with {:ok, css} <- StylesheetRenderer.render(class, base, responsive),
-           {:ok, pseudo_css} <- render_pseudos(class, pseudos) do
+    Enum.reduce_while(styles, {:ok, []}, fn style_entry, {:ok, acc} ->
+      with {:ok, css, pseudo_css} <- render_style_entry(style_entry) do
         content =
           [css, pseudo_css]
           |> Enum.reject(&(&1 == ""))
@@ -231,6 +396,26 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
       {:error, diagnostic} ->
         {:error, diagnostic}
+    end
+  end
+
+  defp render_style_entry({:single, class, base, responsive, pseudos}) do
+    with {:ok, css} <- StylesheetRenderer.render(class, base, responsive),
+         {:ok, pseudo_css} <- render_pseudos(class, pseudos) do
+      {:ok, css, pseudo_css}
+    end
+  end
+
+  defp render_style_entry({:figure_image, class, figure_styles, image_styles}) do
+    with {:ok, css} <- StylesheetRenderer.render_figure_image(class, figure_styles, image_styles) do
+      {:ok, css, ""}
+    end
+  end
+
+  defp render_style_entry({:primary_action_slot, class, base_styles, pseudo_styles}) do
+    case StylesheetRenderer.render_primary_action_slot(class, base_styles, pseudo_styles) do
+      {:ok, css} -> {:ok, css, ""}
+      {:error, diagnostic} -> {:error, diagnostic}
     end
   end
 

@@ -3,6 +3,7 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
 
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.IR.ResponsiveOverride
+  alias LiveFrames.IR.StyleValue
   alias LiveFrames.NativeGenerator.Diagnostic
   alias LiveFrames.NativeGenerator.StyleValueCSS
 
@@ -29,6 +30,85 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
     else
       {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
       {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
+  @spec render_figure_image(String.t(), map(), map()) ::
+          {:ok, String.t()} | {:error, Diagnostic.t()}
+  def render_figure_image(private_class, figure_styles, image_styles) do
+    with :ok <- validate_private_class(private_class),
+         {:ok, figure_declarations} <- serialize_styles(figure_styles),
+         {:ok, image_declarations} <- serialize_styles(image_styles) do
+      css =
+        [
+          render_block("." <> private_class, figure_declarations, 2),
+          render_block("." <> private_class <> " > img", image_declarations, 2)
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+
+      if css == "", do: {:ok, ""}, else: {:ok, css <> "\n"}
+    else
+      {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
+      {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
+  @spec render_primary_action_slot(String.t(), map(), map()) ::
+          {:ok, String.t()} | {:error, Diagnostic.t()}
+  def render_primary_action_slot(private_class, base_styles, pseudo_styles) do
+    selector = "." <> private_class <> " > :where(a, button)"
+
+    structure = %{
+      "align-items" => StyleValue.keyword("center"),
+      "box-sizing" => StyleValue.keyword("border-box"),
+      "display" => StyleValue.keyword("inline-flex"),
+      "font-family" => StyleValue.keyword("inherit"),
+      "justify-content" => StyleValue.keyword("center"),
+      "text-decoration" => StyleValue.keyword("none")
+    }
+
+    with :ok <- validate_private_class(private_class),
+         {:ok, action_declarations} <- serialize_styles(Map.merge(structure, base_styles)),
+         {:ok, pseudo_css} <- render_primary_action_pseudos(selector, pseudo_styles) do
+      css =
+        [
+          render_block("." <> private_class, [{"display", "contents"}], 2),
+          render_block(selector, action_declarations, 2),
+          pseudo_css
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join("\n\n")
+
+      {:ok, css <> "\n"}
+    else
+      {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
+      {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
+  defp render_primary_action_pseudos(selector, pseudos) do
+    Enum.reduce_while([:hover, :focus_visible], {:ok, []}, fn pseudo, {:ok, acc} ->
+      case Map.fetch(pseudos, pseudo) do
+        {:ok, styles} ->
+          with {:ok, declarations} <- serialize_styles(styles) do
+            suffix = if pseudo == :hover, do: ":hover", else: ":focus-visible"
+            {:cont, {:ok, [render_block(selector <> suffix, declarations, 2) | acc]}}
+          else
+            {:error, reason} -> {:halt, {:error, style_diagnostic(reason)}}
+          end
+
+        :error ->
+          {:cont, {:ok, acc}}
+      end
+    end)
+    |> case do
+      {:ok, blocks} ->
+        css = blocks |> Enum.reverse() |> Enum.reject(&is_nil/1) |> Enum.join("\n\n")
+        {:ok, css}
+
+      {:error, _} = error ->
+        error
     end
   end
 

@@ -8,7 +8,9 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
 
   @fixture Path.expand("../../../../../fixtures/automatic_css/acss_settings.json", __DIR__)
   @mapping Path.expand("../../../priv/token_maps/native_hero_v1.json", __DIR__)
-  @shared_mapping Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
+  @shared_mapping Path.expand("../../../priv/token_maps/native_shared_v3.json", __DIR__)
+  @previous_shared_mapping Path.expand("../../../priv/token_maps/native_shared_v2.json", __DIR__)
+  @legacy_shared_mapping Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
   @committed_theme Path.expand("../../../assets/css/theme/lf_theme.css", __DIR__)
 
   defp hero_token_set do
@@ -340,6 +342,64 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
 
     assert {:ok, "--lf-radius-base"} = TokenBridge.package_css_variable("radius.base")
     assert {:ok, "--lf-space-grid-gap"} = TokenBridge.package_css_variable("spacing.grid_gap")
+    assert {:ok, "--lf-space-scale-xs"} = TokenBridge.package_css_variable("spacing.scale.xs")
+
+    assert {:ok, "--lf-typography-heading-size-h2"} =
+             TokenBridge.package_css_variable("typography.heading.scale.h2")
+  end
+
+  test "native_shared_v2 extends immutable v1 with only the xs scale mapping" do
+    v1 = TokenBridge.load_mapping!(@legacy_shared_mapping)
+    v2 = TokenBridge.load_mapping!(@previous_shared_mapping)
+
+    assert v2["mapping_version"] == "native_shared_v2"
+    assert Enum.all?(v1["entries"], &(&1 in v2["entries"]))
+
+    assert v2["entries"] -- v1["entries"] == [
+             %{
+               "token_set_path" => "spacing.scale.xs",
+               "css_variable" => "--lf-space-scale-xs"
+             }
+           ]
+
+    assert {:ok, v1_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v1])
+
+    assert {:error, {:unknown_token_path, "spacing.scale.xs"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+               v1_index,
+               "spacing.scale.xs"
+             )
+
+    assert {:ok, _v2_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v2])
+  end
+
+  test "native_shared_v3 extends immutable v2 with only the h2 heading scale mapping" do
+    v2 = TokenBridge.load_mapping!(@previous_shared_mapping)
+    v3 = TokenBridge.load_mapping!(@shared_mapping)
+
+    assert v3["mapping_version"] == "native_shared_v3"
+    assert Enum.all?(v2["entries"], &(&1 in v3["entries"]))
+
+    assert v3["entries"] -- v2["entries"] == [
+             %{
+               "token_set_path" => "typography.heading.scale.h2",
+               "css_variable" => "--lf-typography-heading-size-h2"
+             }
+           ]
+
+    assert {:ok, v2_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v2])
+
+    assert {:error, {:unknown_token_path, "typography.heading.scale.h2"}} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.lookup(
+               v2_index,
+               "typography.heading.scale.h2"
+             )
+
+    assert {:ok, _v3_index} =
+             LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v3])
   end
 
   test "looks up primary action CSS variables from package metadata" do

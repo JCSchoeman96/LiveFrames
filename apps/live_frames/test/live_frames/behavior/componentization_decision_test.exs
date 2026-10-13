@@ -18,7 +18,8 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
   alias LiveFrames.ComponentizationProposer.SemanticInput.BoundaryDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.ClassificationDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.ContractIdentityDecision
-  alias LiveFrames.IR.{DesignDocument, DesignNode, Identity}
+  alias LiveFrames.IR.{DesignDocument, DesignNode, Identity, ResponsiveOverride, StyleValue}
+  alias LiveFrames.Responsive.{BreakpointAuthority, DesignDocumentResolver}
 
   test "contained binding admits and passes the validated canonical input to the proposer" do
     document = document()
@@ -44,6 +45,77 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
            ]
 
     assert gated_result == direct_result
+  end
+
+  test "authority-less behavior proposal rejects responsive input before identity is accepted" do
+    unresolved_document = responsive_document()
+    contract = reviewed_contract(unresolved_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(unresolved_document, contract)
+
+    assert {:error, {:prerequisite, :breakpoint_authority, [diagnostic]}} =
+             ComponentizationDecision.propose(
+               unresolved_document,
+               contract,
+               review,
+               semantic_input(ids().candidate)
+             )
+
+    assert diagnostic.code == "componentization_proposer.breakpoint_authority_required"
+  end
+
+  test "authority-aware behavior proposal carries the resolved document through identity and plan" do
+    unresolved_document = responsive_document()
+    authority = breakpoint_authority()
+
+    assert {:ok, resolved_document} =
+             DesignDocumentResolver.resolve(unresolved_document, authority)
+
+    contract = reviewed_contract(resolved_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(resolved_document, contract)
+
+    assert {:ok, decision, proposal} =
+             ComponentizationDecision.propose(
+               unresolved_document,
+               contract,
+               review,
+               semantic_input(ids().candidate),
+               authority
+             )
+
+    assert decision.design_document_identity == elem(Identity.from_document(resolved_document), 1)
+    assert Map.fetch!(proposal, :design_document) == resolved_document
+
+    assert {:ok, proposal_document_identity} =
+             Identity.from_document(proposal.design_document)
+
+    assert proposal_document_identity == decision.design_document_identity
+
+    assert proposal.plan.design_document_sha256 ==
+             elem(LiveFrames.ComponentizationPlan.design_document_sha256(resolved_document), 1)
+  end
+
+  test "authority-aware behavior rejection returns no proposal result" do
+    unresolved_document = responsive_document()
+    authority = breakpoint_authority()
+
+    assert {:ok, resolved_document} =
+             DesignDocumentResolver.resolve(unresolved_document, authority)
+
+    values = ids()
+    contract = reviewed_contract(resolved_document, [behavior_binding(owner: values.outside)])
+    review = approved_review(resolved_document, contract)
+
+    assert {:error, decision} =
+             ComponentizationDecision.propose(
+               unresolved_document,
+               contract,
+               review,
+               semantic_input(values.candidate),
+               authority
+             )
+
+    assert decision.outcome == :rejected
+    assert hd(decision.binding_dispositions).disposition == :split
   end
 
   test "a binding wholly outside the candidate is irrelevant and remains admissible" do
@@ -580,5 +652,48 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
       },
       boundary: %BoundaryDecision{boundary_node_id: boundary_node_id}
     }
+  end
+
+  defp responsive_document do
+    original = document()
+    [root | rest] = original.root_nodes
+
+    override = %ResponsiveOverride{
+      breakpoint_id: "tablet_portrait",
+      source_name: "tablet_portrait",
+      resolution_status: :unresolved,
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    %{original | root_nodes: [%{root | responsive: %{"tablet_portrait" => override}} | rest]}
+  end
+
+  defp breakpoint_authority do
+    {:ok, authority} =
+      BreakpointAuthority.from_map(%{
+        "schema_version" => "1.0.0",
+        "authority_status" => "accepted",
+        "authority_level" => 3,
+        "authority_type" => "version_matched_default_confirmed_by_source_environment",
+        "breakpoints" => %{
+          "tablet_portrait" => %{
+            "source_name" => "tablet_portrait",
+            "source_width" => 991,
+            "min_width" => nil,
+            "max_width" => 991,
+            "unit" => "px",
+            "query_semantics" => "max-width",
+            "media_condition" => "@media (max-width: 991px)",
+            "enabled" => true,
+            "cascade_order" => 1,
+            "authority_level" => 3,
+            "authority_type" => "version_matched_default_confirmed_by_source_environment",
+            "status" => "accepted"
+          }
+        },
+        "cascade" => %{"ordering" => "descending_width"}
+      })
+
+    authority
   end
 end

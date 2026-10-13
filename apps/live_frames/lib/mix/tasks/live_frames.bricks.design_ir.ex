@@ -2,6 +2,7 @@ defmodule Mix.Tasks.LiveFrames.Bricks.DesignIr do
   @shortdoc "Generate the deterministic Bricks Design IR document"
 
   use Mix.Task
+  @requirements ["app.config"]
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks

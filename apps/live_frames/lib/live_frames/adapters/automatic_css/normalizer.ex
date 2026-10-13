@@ -51,7 +51,8 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     "spacing.section" => {"--section-space-m", "section-spacing"},
     "typography.body.scale.medium" => {"--text-m", "text"},
     "typography.body.scale.small" => {"--text-s", "text"},
-    "typography.heading.scale.h1" => {"--h1", "headings"}
+    "typography.heading.scale.h1" => {"--h1", "headings"},
+    "typography.heading.scale.h2" => {"--h2", "headings"}
   }
 
   @spec mapping(map()) :: [map()]
@@ -318,6 +319,22 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
         ["typography.heading.base_size", "layout.viewport.min", "layout.viewport.max"],
         "headings"
       ),
+      derived(
+        "typography.heading.scale.h2",
+        :typography,
+        "h2",
+        [
+          {"mobile_base", "base-heading-mob"},
+          {"desktop_base", "base-heading-desk"},
+          {"mobile_scale", "mob-heading-scale"},
+          {"desktop_scale", "heading-scale"},
+          {"viewport_min", "vp-min"},
+          {"viewport_max", "vp-max"}
+        ],
+        ["typography.heading.base_size", "layout.viewport.min", "layout.viewport.max"],
+        "headings",
+        unsupported_inputs: ["h2-min", "h2-max"]
+      ),
       direct("typography.heading.line_height", :typography, "base-heading-lh", :css),
       literal_default(
         "typography.heading.font_weight",
@@ -461,7 +478,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       |> Map.get(:optional_inputs, [])
       |> Enum.map(&elem(&1, 1))
 
-    entry.source_keys ++ optional_keys
+    entry.source_keys ++ optional_keys ++ Map.get(entry, :unsupported_inputs, [])
   end
 
   @spec normalize(map(), map(), keyword()) :: {map(), [Diagnostic.t()]}
@@ -701,6 +718,32 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     do: Resolver.responsive(settings, source_keys, unit)
 
   defp resolve_entry(
+         %{strategy: :derived, unsupported_inputs: unsupported_inputs} = entry,
+         settings
+       ) do
+    active_inputs =
+      Enum.filter(unsupported_inputs, &present_source_value?(Map.get(settings, &1)))
+
+    case active_inputs do
+      [] ->
+        resolve_entry(Map.delete(entry, :unsupported_inputs), settings)
+
+      [source_key | _] ->
+        raw_value = Map.new(active_inputs, &{&1, Map.get(settings, &1)})
+
+        result =
+          Resolver.unresolved(raw_value, source_key, "h2 endpoint overrides are unsupported")
+
+        metadata =
+          result.metadata
+          |> Map.put("source_keys", active_inputs)
+          |> Map.put("effective_raw_value", raw_value)
+
+        %{result | metadata: metadata}
+    end
+  end
+
+  defp resolve_entry(
          %{strategy: :derived, source_keys: source_keys, inputs: inputs} = entry,
          settings
        ) do
@@ -795,21 +838,20 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
     end)
   end
 
-  defp consume_entry_source_keys(
-         %{source_keys: source_keys, optional_inputs: optional_inputs},
-         settings,
-         consumed
-       )
-       when is_list(optional_inputs) and optional_inputs != [] do
+  defp consume_entry_source_keys(%{source_keys: source_keys} = entry, settings, consumed) do
     consumed = Enum.reduce(source_keys, consumed, &MapSet.put(&2, &1))
 
-    Enum.reduce(optional_inputs, consumed, fn {_name, source_key}, acc ->
+    optional_keys = entry |> Map.get(:optional_inputs, []) |> Enum.map(&elem(&1, 1))
+    guarded_keys = Map.get(entry, :unsupported_inputs, [])
+
+    consumed =
+      Enum.reduce(optional_keys, consumed, fn source_key, acc ->
+        if Map.has_key?(settings, source_key), do: MapSet.put(acc, source_key), else: acc
+      end)
+
+    Enum.reduce(guarded_keys, consumed, fn source_key, acc ->
       if Map.has_key?(settings, source_key), do: MapSet.put(acc, source_key), else: acc
     end)
-  end
-
-  defp consume_entry_source_keys(entry, _settings, consumed) do
-    Enum.reduce(entry.source_keys, consumed, &MapSet.put(&2, &1))
   end
 
   defp build_token(entry, result, raw_value, source_metadata) do
@@ -1037,8 +1079,11 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
           category: :value,
           message: reason,
           path: entry.path,
-          source_key: List.first(entry.source_keys),
-          metadata: %{"source_keys" => entry.source_keys}
+          source_key: get_in(result, [:metadata, "source_key"]) || List.first(entry.source_keys),
+          metadata: %{
+            "source_keys" =>
+              Enum.uniq(entry.source_keys ++ Map.get(entry, :unsupported_inputs, []))
+          }
         )
       ]
     else
@@ -1269,6 +1314,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
 
   defp derived(path, category, variable, inputs, references, calculation_group, opts \\ []) do
     optional_inputs = Keyword.get(opts, :optional_inputs, [])
+    unsupported_inputs = Keyword.get(opts, :unsupported_inputs, [])
     constants = Keyword.get(opts, :constants, %{})
 
     %{
@@ -1277,6 +1323,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Normalizer do
       strategy: :derived,
       source_keys: Enum.map(inputs, &elem(&1, 1)),
       optional_inputs: optional_inputs,
+      unsupported_inputs: unsupported_inputs,
       constants: constants,
       inputs: inputs,
       references: references,

@@ -419,6 +419,29 @@ generated file. The drift test regenerates into a temporary directory and
 compares bytes with the committed artifact. It never writes the tracked output
 during normal tests.
 
+The work artifact at `sources/work/hero_india/design_ir/design_document.json`
+is current generated evidence. Regenerate it only with
+`mix live_frames.bricks.design_ir`; it reflects the accepted normalizers and
+TokenSet, and current drift tests compare fresh output with this file. Do not
+hand-edit it.
+
+The original IR 1.0.0 bytes are preserved separately at
+`apps/live_frames/test/fixtures/ir/historical/hero_india_design_document_v1.json`.
+That immutable fixture is used only by migration and backward-compatibility
+tests. Do not regenerate it from current normalizers.
+
+## Bricks 2.3.1 intrinsic layout defaults
+
+Design IR normalization includes the existing Bricks `container` intrinsic
+rules and the Bricks 2.3.1 `block` defaults `align-items: flex-start`,
+`display: flex`, and `flex-direction: column`. The block values carry
+`bricks_intrinsic` provenance for `.brxe-block`, and authored values take
+precedence.
+
+The source element name `block` is the evidence boundary for these defaults.
+The normalized semantic type `generic` alone does not imply flex layout. Other
+Bricks element names, including `div`, do not receive the block defaults.
+
 This is static compiler work. It uses no database, queue, cache, process
 registry, pub/sub, or network call. Source maps are treated as data. The
 normalizer never evaluates source code or CSS, creates atoms from source

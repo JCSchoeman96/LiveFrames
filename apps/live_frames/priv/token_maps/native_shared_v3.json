@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "mapping_version": "native_shared_v3",
+  "entries": [
+    {
+      "token_set_path": "typography.body.scale.small",
+      "css_variable": "--lf-typography-body-size-small"
+    },
+    {
+      "token_set_path": "radius.base",
+      "css_variable": "--lf-radius-base"
+    },
+    {
+      "token_set_path": "spacing.grid_gap",
+      "css_variable": "--lf-space-grid-gap"
+    },
+    {
+      "token_set_path": "spacing.scale.xs",
+      "css_variable": "--lf-space-scale-xs"
+    },
+    {
+      "token_set_path": "typography.heading.scale.h2",
+      "css_variable": "--lf-typography-heading-size-h2"
+    }
+  ]
+}

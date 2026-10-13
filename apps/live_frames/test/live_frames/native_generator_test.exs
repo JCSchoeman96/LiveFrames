@@ -184,6 +184,13 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert artifact.content =~ "values: 1..6"
   end
 
+  test "generated Elixir module artifact ends with a newline" do
+    bundle = generate!(contract(), plan(contract(), document()), document())
+    artifact = elixir_artifact(bundle)
+
+    assert String.ends_with?(artifact.content, "\n")
+  end
+
   for {category, prefix, path_segment, class_prefix} <- [
         {:component, "LiveFrames.Components.Demo", "lib/live_frames/components/demo.ex",
          "lf-component-demo"},
@@ -258,7 +265,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     refute stylesheet.content =~ "000001-000002"
   end
 
-  test "styled figure image blocks when the emitted style element cannot be proven" do
+  test "figure image styles use the proven outer and inner native elements" do
     document = document()
     [boundary] = document.root_nodes
     image_id = DesignNode.deterministic_id([1, 3])
@@ -275,7 +282,75 @@ defmodule LiveFrames.NativeGeneratorTest do
                       node_id: image_id,
                       semantic_type: "image",
                       attributes: %{"tag" => "figure"},
-                      styles: %{"object-fit" => StyleValue.keyword("cover")}
+                      styles: %{
+                        "width" => StyleValue.literal("100%"),
+                        "height" => StyleValue.literal("100%"),
+                        "aspect-ratio" => StyleValue.literal("16/9"),
+                        "object-fit" => StyleValue.keyword("cover"),
+                        "border-top-left-radius" => StyleValue.literal("1rem"),
+                        "border-top-right-radius" => StyleValue.literal("1rem"),
+                        "border-bottom-right-radius" => StyleValue.literal("1rem"),
+                        "border-bottom-left-radius" => StyleValue.literal("1rem")
+                      }
+                    }
+                  ]
+          }
+        ]
+    }
+
+    c =
+      contract(
+        public_attrs: [
+          attr("src", :string,
+            required: true,
+            accessibility: %{"image_alt_policy" => "decorative"}
+          )
+        ]
+      )
+
+    p = plan(c, document, render_projections: [render_attr("src", :asset_src, image_id)])
+
+    bundle = generate!(c, p, document)
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    source = elixir_artifact(bundle).content
+    private_class = "lf-section-marketing-block__n-000001-000003"
+
+    assert stylesheet =~ ".#{private_class} {"
+    assert stylesheet =~ "border-bottom-left-radius: 1rem;"
+    assert stylesheet =~ "border-bottom-right-radius: 1rem;"
+    assert stylesheet =~ "border-top-left-radius: 1rem;"
+    assert stylesheet =~ "border-top-right-radius: 1rem;"
+    assert stylesheet =~ "height: 100%;"
+    assert stylesheet =~ "width: 100%;"
+
+    assert stylesheet =~ ".#{private_class} > img {"
+    assert stylesheet =~ "aspect-ratio: 16/9;"
+    assert stylesheet =~ "border-radius: inherit;"
+    assert stylesheet =~ "object-fit: cover;"
+
+    assert source =~ ~s(<figure class={"#{private_class}"}>)
+    assert source =~ ~s(<img src={@src} alt="" />)
+    refute source =~ ~s(<img class={"#{private_class}"})
+  end
+
+  test "unlisted figure image styles remain blocked" do
+    document = document()
+    [boundary] = document.root_nodes
+    image_id = DesignNode.deterministic_id([1, 3])
+
+    document = %{
+      document
+      | root_nodes: [
+          %{
+            boundary
+            | children:
+                boundary.children ++
+                  [
+                    %DesignNode{
+                      node_id: image_id,
+                      semantic_type: "image",
+                      attributes: %{"tag" => "figure"},
+                      styles: %{"max-width" => StyleValue.literal("80rem")}
                     }
                   ]
           }
@@ -933,11 +1008,243 @@ defmodule LiveFrames.NativeGeneratorTest do
     stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
 
     assert source =~ "render_slot(@body)"
+    refute source =~ "<span class={"
     refute source =~ "LF_RICH_TEXT_SOURCE_SENTINEL"
     refute source =~ "<p>LF_RICH_TEXT_SOURCE_SENTINEL</p>"
     refute source =~ "Phoenix.HTML.raw"
     refute source =~ "raw("
     refute stylesheet =~ "lf-section-marketing-block__n-000001-000005"
+  end
+
+  test "primary action subtree slot gets a package boundary and direct-root presentation" do
+    target_id = DesignNode.deterministic_id([1, 3])
+
+    button = %DesignNode{
+      node_id: target_id,
+      semantic_type: "button",
+      attributes: %{"tag" => "button", "style" => "primary"},
+      content: "Source label must not render"
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    document = %{document() | root_nodes: [%{boundary | children: boundary.children ++ [button]}]}
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "primary_action",
+            semantic_purpose: "action",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "primary_action",
+            target_node_id: target_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    bundle = generate!(c, p, document)
+    source = elixir_artifact(bundle).content
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    private_class = "lf-section-marketing-block__n-000001-000003"
+
+    assert source =~ "<span class={\"#{private_class}\"}>"
+    assert source =~ "render_slot(@primary_action)"
+    assert source =~ "</span>"
+    refute source =~ "Source label must not render"
+    refute source =~ "<button"
+    assert length(:binary.matches(source, private_class)) == 1
+
+    assert stylesheet =~ ".#{private_class} {\n  display: contents;\n}"
+    assert stylesheet =~ ".#{private_class} > :where(a, button) {"
+    assert stylesheet =~ "align-items: center;"
+    assert stylesheet =~ "box-sizing: border-box;"
+    assert stylesheet =~ "display: inline-flex;"
+    assert stylesheet =~ "font-family: inherit;"
+    assert stylesheet =~ "justify-content: center;"
+    assert stylesheet =~ "text-decoration: none;"
+    assert stylesheet =~ "background-color: var(--lf-action-primary-background);"
+    assert stylesheet =~ "padding-inline: var(--lf-action-primary-padding-inline);"
+    assert stylesheet =~ ".#{private_class} > :where(a, button):hover {"
+    assert stylesheet =~ ".#{private_class} > :where(a, button):focus-visible {"
+    refute stylesheet =~ ".#{private_class} :where(a, button)"
+  end
+
+  test "primary-styled button in non-primary subtree slot stays ordinary" do
+    target_id = DesignNode.deterministic_id([1, 3])
+
+    button = %DesignNode{
+      node_id: target_id,
+      semantic_type: "button",
+      attributes: %{"tag" => "button", "style" => "primary"}
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    document = %{document() | root_nodes: [%{boundary | children: boundary.children ++ [button]}]}
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "secondary_action",
+            semantic_purpose: "action",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "secondary_action",
+            target_node_id: target_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    bundle = generate!(c, p, document)
+    source = elixir_artifact(bundle).content
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert source =~ "render_slot(@secondary_action)"
+    refute source =~ "<span class={"
+    refute stylesheet =~ "display: contents"
+    refute stylesheet =~ ":where(a, button)"
+  end
+
+  test "styled primary subtree slot target remains blocked" do
+    target_id = DesignNode.deterministic_id([1, 3])
+
+    button = %DesignNode{
+      node_id: target_id,
+      semantic_type: "button",
+      attributes: %{"tag" => "button", "style" => "primary"},
+      styles: %{"max-width" => StyleValue.literal("20rem")}
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    document = %{document() | root_nodes: [%{boundary | children: boundary.children ++ [button]}]}
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "primary_action",
+            semantic_purpose: "action",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "primary_action",
+            target_node_id: target_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert {:error, :generation_blocked, [diagnostic]} = NativeGenerator.generate(c, p, document)
+    assert diagnostic.code == "native_generator.styling.primary_action_subtree_slot_authority_gap"
+  end
+
+  test "responsive primary subtree slot target remains blocked" do
+    target_id = DesignNode.deterministic_id([1, 3])
+
+    button = %DesignNode{
+      node_id: target_id,
+      semantic_type: "button",
+      attributes: %{"tag" => "button", "style" => "primary"},
+      responsive: %{
+        "tablet_portrait" => %LiveFrames.IR.ResponsiveOverride{
+          breakpoint_id: "tablet_portrait",
+          source_name: "tablet_portrait",
+          max_width: 991,
+          resolution_status: :resolved
+        }
+      }
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    document = %{document() | root_nodes: [%{boundary | children: boundary.children ++ [button]}]}
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "primary_action",
+            semantic_purpose: "action",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "primary_action",
+            target_node_id: target_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert {:error, :generation_blocked, [diagnostic]} = NativeGenerator.generate(c, p, document)
+
+    assert diagnostic.code ==
+             "native_generator.styling.primary_action_subtree_slot_authority_gap"
+  end
+
+  test "outline primary subtree slot remains blocked by variant authority" do
+    target_id = DesignNode.deterministic_id([1, 3])
+
+    button = %DesignNode{
+      node_id: target_id,
+      semantic_type: "button",
+      attributes: %{"tag" => "button", "style" => "primary", "outline" => true}
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    document = %{document() | root_nodes: [%{boundary | children: boundary.children ++ [button]}]}
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "primary_action",
+            semantic_purpose: "action",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "primary_action",
+            target_node_id: target_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert {:error, :generation_blocked, [diagnostic]} = NativeGenerator.generate(c, p, document)
+    assert diagnostic.code == "native_generator.styling.primary_action_variant_authority_gap"
   end
 
   test "non-slotted rich_text without a normalized tag remains generation_blocked" do

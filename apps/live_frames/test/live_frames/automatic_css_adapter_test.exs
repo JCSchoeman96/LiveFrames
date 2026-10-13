@@ -433,7 +433,8 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       {"spacing.section", "--section-space-m", nil},
       {"typography.body.scale.medium", "--text-m", nil},
       {"typography.body.scale.small", "--text-s", nil},
-      {"typography.heading.scale.h1", "--h1", nil}
+      {"typography.heading.scale.h1", "--h1", nil},
+      {"typography.heading.scale.h2", "--h2", nil}
     ]
 
     for {path, variable, source_key} <- cases do
@@ -478,7 +479,8 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                {"spacing.section", "--section-space-m", nil},
                {"typography.body.scale.medium", "--text-m", nil},
                {"typography.body.scale.small", "--text-s", nil},
-               {"typography.heading.scale.h1", "--h1", nil}
+               {"typography.heading.scale.h1", "--h1", nil},
+               {"typography.heading.scale.h2", "--h2", nil}
              ])
 
     calculated_ids = [
@@ -491,7 +493,8 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       {"spacing.section", "--section-space-m", "section-spacing"},
       {"typography.body.scale.medium", "--text-m", "text"},
       {"typography.body.scale.small", "--text-s", "text"},
-      {"typography.heading.scale.h1", "--h1", "headings"}
+      {"typography.heading.scale.h1", "--h1", "headings"},
+      {"typography.heading.scale.h2", "--h2", "headings"}
     ]
 
     for {path, variable, group} <- calculated_ids do
@@ -943,7 +946,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              )
 
     assert map_size(token_set.tokens) == length(Normalizer.mapping(fixture_settings()))
-    assert map_size(token_set.tokens) == 101
+    assert map_size(token_set.tokens) == 102
 
     assert Enum.frequencies_by(token_set.tokens, fn {_path, token} -> token.category end) == %{
              button: 21,
@@ -952,7 +955,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              layout: 3,
              radius: 1,
              spacing: 15,
-             typography: 10
+             typography: 11
            }
 
     required_paths = AutomaticCSS.required_paths(:hero_foundation)
@@ -965,6 +968,113 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert Enum.all?(Map.keys(token_set.tokens), &String.contains?(&1, "."))
     refute Map.has_key?(token_set.tokens, "color-primary")
     assert diagnostics == token_set.diagnostics
+  end
+
+  test "normalizes the accepted h2 heading scale through the existing clamp authority" do
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.from_file(fixture_path(),
+               strict: true,
+               profile: :hero_foundation,
+               source_version: "4.0.1",
+               source_version_status: "fixture_reference"
+             )
+
+    token = token_set.tokens["typography.heading.scale.h2"]
+    assert is_map(token), "missing canonical h2 heading scale token"
+    assert token.category == :typography
+    assert token.resolution_status == :resolved
+    assert token.value["type"] == "derived"
+    assert token.value["recipe"] == "acss.clamp"
+    assert token.value["variable"] == "h2"
+
+    assert token.value["inputs"] == %{
+             "calculation_group" => "headings",
+             "desktop_base" => 20,
+             "desktop_scale" => 1.333,
+             "mobile_base" => 18,
+             "mobile_scale" => 1.2,
+             "viewport_max" => 1366,
+             "viewport_min" => 360
+           }
+
+    assert FluidClamp.css_expression(token.value) ==
+             "clamp(1.62rem, calc(0.9560417495vw + 1.4048906064rem), 2.22111125rem)"
+
+    assert token.metadata["css_expression"] == FluidClamp.css_expression(token.value)
+    assert token.metadata["variable"] == "h2"
+
+    assert authority(token, "--h2", "source_output_alias")["authority_id"] ==
+             "automatic-css-4.0.1:calculated-variable-group:headings:h2"
+  end
+
+  test "blank h2 endpoint overrides keep the accepted default clamp resolved" do
+    settings =
+      fixture_settings()
+      |> Map.put("h2-min", "")
+      |> Map.put("h2-max", "")
+
+    absent_settings = Map.drop(settings, ["h2-min", "h2-max"])
+
+    assert {:ok, absent_token_set, absent_diagnostics} = AutomaticCSS.normalize(absent_settings)
+    absent_token = absent_token_set.tokens["typography.heading.scale.h2"]
+
+    assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(settings)
+    token = token_set.tokens["typography.heading.scale.h2"]
+
+    assert absent_token.resolution_status == :resolved
+    assert token.resolution_status == :resolved
+
+    assert FluidClamp.css_expression(absent_token.value) ==
+             "clamp(1.62rem, calc(0.9560417495vw + 1.4048906064rem), 2.22111125rem)"
+
+    assert FluidClamp.css_expression(token.value) ==
+             "clamp(1.62rem, calc(0.9560417495vw + 1.4048906064rem), 2.22111125rem)"
+
+    unknown_count = fn diagnostics ->
+      case Enum.find(diagnostics, &(&1.code == "acss.setting.unknown")) do
+        nil -> 0
+        diagnostic -> diagnostic.metadata["count"]
+      end
+    end
+
+    assert unknown_count.(diagnostics) == unknown_count.(absent_diagnostics)
+
+    unknown_sample =
+      diagnostics
+      |> Enum.find(&(&1.code == "acss.setting.unknown"))
+      |> then(&(&1 && &1.metadata["sample_keys"]))
+
+    refute "h2-min" in (unknown_sample || [])
+    refute "h2-max" in (unknown_sample || [])
+    refute Enum.any?(diagnostics, &(&1.path == "typography.heading.scale.h2"))
+  end
+
+  test "active h2 endpoint overrides fail closed without unknown-setting diagnostics" do
+    recognized_settings = Map.take(fixture_settings(), Normalizer.source_keys())
+
+    for overrides <- [
+          %{"h2-min" => 26},
+          %{"h2-max" => 36},
+          %{"h2-min" => 26, "h2-max" => 36}
+        ] do
+      settings = Map.merge(recognized_settings, overrides)
+
+      assert {:ok, token_set, diagnostics} = AutomaticCSS.normalize(settings)
+      token = token_set.tokens["typography.heading.scale.h2"]
+      active_keys = Map.keys(overrides) |> Enum.sort()
+
+      assert token.resolution_status == :unresolved
+      assert is_nil(token.resolved_value)
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.path == "typography.heading.scale.h2" and
+                 diagnostic.code == "acss.value.unresolved" and
+                 diagnostic.source_key in active_keys and
+                 diagnostic.message == "h2 endpoint overrides are unsupported"
+             end)
+
+      refute Enum.any?(diagnostics, &(&1.code == "acss.setting.unknown"))
+    end
   end
 
   test "retains fixture source-version evidence and resolves the BW foundation" do
@@ -995,13 +1105,15 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     unknown = Enum.find(diagnostics, &(&1.code == "acss.setting.unknown"))
     assert unknown.metadata["count"] > 0
 
+    fixture_settings = fixture_settings()
+
     recognized_keys =
       Normalizer.source_keys()
       |> Kernel.++(["option-icons"] ++ IconTokens.omitted_source_keys())
       |> MapSet.new()
 
     expected_unknown_count =
-      fixture_settings()
+      fixture_settings
       |> Map.keys()
       |> Enum.reject(&MapSet.member?(recognized_keys, &1))
       |> length()

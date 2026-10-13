@@ -30,6 +30,7 @@
   --lf-space-content-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   --lf-space-grid-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   --lf-space-gutter: clamp(1rem, calc(6.3618290258vw + -0.4314115308rem), 5rem);
+  --lf-space-scale-xs: clamp(0.8333333333rem, calc(-0.0172384889vw + 0.8480506933rem), 0.8441720333rem);
   --lf-space-section-padding-block: clamp(3rem, calc(4.1749502982vw + 2.0606361829rem), 5.625rem);
   --lf-typography-body-line-height: calc(6px + 2ex);
   --lf-typography-body-size: clamp(1rem, calc(0.1988071571vw + 0.9552683897rem), 1.125rem);
@@ -37,4 +38,5 @@
   --lf-typography-display-line-height: calc(4px + 2ex);
   --lf-typography-display-size: clamp(1.944rem, calc(1.6170835726vw + 1.5801561962rem), 2.9607412962rem);
   --lf-typography-display-weight: 700;
+  --lf-typography-heading-size-h2: clamp(1.62rem, calc(0.9560417495vw + 1.4048906064rem), 2.22111125rem);
 }

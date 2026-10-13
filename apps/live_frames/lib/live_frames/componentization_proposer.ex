@@ -10,6 +10,7 @@ defmodule LiveFrames.ComponentizationProposer do
   alias LiveFrames.ComponentizationProposer.Diagnostic
   alias LiveFrames.ComponentizationProposer.Result
   alias LiveFrames.ComponentizationProposer.SemanticInput
+  alias LiveFrames.Responsive.DesignDocumentResolver
 
   @evidence_plan_code "componentization_plan.binding.evidence_insufficient"
   @evidence_contract_code "component_contract.binding_evidence_insufficient"
@@ -17,28 +18,61 @@ defmodule LiveFrames.ComponentizationProposer do
 
   @spec propose(LiveFrames.IR.DesignDocument.t(), SemanticInput.t()) :: Result.t()
   def propose(design_document, semantic_input) do
+    if DesignDocumentResolver.has_responsive_overrides?(design_document) do
+      Result.invalid_input([authority_required_diagnostic()])
+    else
+      propose_document(design_document, semantic_input)
+    end
+  end
+
+  @spec propose(
+          LiveFrames.IR.DesignDocument.t(),
+          SemanticInput.t(),
+          LiveFrames.Responsive.BreakpointAuthority.t() | map()
+        ) :: Result.t()
+  def propose(design_document, semantic_input, breakpoint_authority) do
+    case DesignDocumentResolver.resolve(design_document, breakpoint_authority) do
+      {:ok, resolved_document} ->
+        propose_document(resolved_document, semantic_input)
+
+      {:error, diagnostic} ->
+        Result.invalid_input([resolver_diagnostic(diagnostic)])
+    end
+  end
+
+  defp propose_document(design_document, semantic_input) do
     case SemanticInput.validate(semantic_input, design_document) do
       {:error, diagnostics} ->
-        Result.invalid_input(diagnostics)
+        Result.invalid_input(diagnostics, design_document)
 
       {:ok, canonical_input} ->
-        propose_canonical(design_document, canonical_input)
+        propose_from_preflighted_document_internal(design_document, canonical_input)
     end
+  end
+
+  @doc false
+  @spec propose_from_preflighted_document_internal(
+          LiveFrames.IR.DesignDocument.t(),
+          SemanticInput.t()
+        ) :: Result.t()
+  def propose_from_preflighted_document_internal(design_document, canonical_input) do
+    propose_canonical(design_document, canonical_input)
   end
 
   defp propose_canonical(design_document, canonical_input) do
     case Construction.build(design_document, canonical_input) do
       {:error, diagnostics} ->
-        Result.construction_failed(diagnostics)
+        Result.construction_failed(diagnostics, design_document)
 
       {:ok, contract, plan} ->
         validate_references(contract, plan, design_document)
     end
   rescue
     error ->
-      Result.construction_failed([
-        construction_diagnostic("construction", Exception.message(error))
-      ])
+      Result.construction_failed(
+        [construction_diagnostic("construction", Exception.message(error))],
+        design_document
+      )
   end
 
   defp validate_references(contract, plan, design_document) do
@@ -67,23 +101,42 @@ defmodule LiveFrames.ComponentizationProposer do
 
     plan = %{plan | diagnostics: canonicalize_diagnostics(candidate_plan_diagnostics)}
 
-    finalize(contract, plan, outcome)
+    finalize(contract, plan, outcome, design_document)
   end
 
-  defp finalize(contract, plan, outcome) do
+  defp finalize(contract, plan, outcome, design_document) do
     case ComponentContract.validate(contract) do
       :ok ->
         case ComponentizationPlan.validate(plan) do
           :ok ->
-            Result.successful(contract, plan, outcome)
+            Result.successful(contract, plan, outcome, design_document)
 
           {:error, diagnostics} ->
-            Result.construction_failed(construction_diagnostics(diagnostics))
+            Result.construction_failed(construction_diagnostics(diagnostics), design_document)
         end
 
       {:error, diagnostics} ->
-        Result.construction_failed(construction_diagnostics(diagnostics))
+        Result.construction_failed(construction_diagnostics(diagnostics), design_document)
     end
+  end
+
+  defp authority_required_diagnostic do
+    %Diagnostic{
+      code: "componentization_proposer.breakpoint_authority_required",
+      severity: :error,
+      path: "breakpoint_authority",
+      message: "responsive overrides require accepted breakpoint authority"
+    }
+  end
+
+  defp resolver_diagnostic(diagnostic) do
+    %Diagnostic{
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      message: diagnostic.message,
+      path: "breakpoint_authority",
+      metadata: diagnostic.metadata
+    }
   end
 
   defp classify(contract, contract_diagnostics, plan_diagnostics) do
