@@ -3,7 +3,6 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
-  alias LiveFrames.Fidelity.DocumentLoader
   alias LiveFrames.IR
 
   @fixture_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
@@ -20,7 +19,7 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                    __DIR__
                  )
 
-  test "regeneration matches the committed v1 artifact after structural migration" do
+  test "current regeneration matches the committed current artifact byte-for-byte" do
     token_set = token_set()
 
     assert {:ok, document} =
@@ -33,21 +32,22 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
     assert document.ir_version == "4.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
+    assert Map.has_key?(document.token_set["tokens"], "typography.heading.scale.h2")
 
-    assert {:ok, migrated_fixture} = DocumentLoader.from_file(@artifact_path)
-    assert Jason.decode!(File.read!(@artifact_path))["ir_version"] == "1.0.0"
+    current_bytes = IR.encode!(document) <> "\n"
+    artifact_bytes = File.read!(@artifact_path)
+    assert Jason.decode!(artifact_bytes)["ir_version"] == "4.0.0"
 
-    assert scrub_migration_provenance(IR.to_map(document)) ==
-             scrub_migration_provenance(IR.to_map(migrated_fixture))
+    unless current_bytes == artifact_bytes do
+      flunk(
+        "current Bricks Design IR bytes differ: generated=#{sha256(current_bytes)} artifact=#{sha256(artifact_bytes)}"
+      )
+    end
+
+    assert Jason.decode!(artifact_bytes)["ir_version"] == "4.0.0"
   end
 
-  defp scrub_migration_provenance(map) do
-    Map.update!(map, "provenance", fn provenance ->
-      Map.delete(provenance, "liveframes_ir_migrations")
-      |> Map.update!("normalization_lifecycle", &List.delete(&1, "frontend_bindings_normalized"))
-      |> Map.update!("source_pipeline", &List.delete(&1, "frontend_binding_normalizer"))
-    end)
-  end
+  defp sha256(value), do: Base.encode16(:crypto.hash(:sha256, value), case: :lower)
 
   defp token_set do
     {:ok, token_set, _diagnostics} =

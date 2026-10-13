@@ -32,6 +32,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               boundary_node: nil,
               slot_targets: MapSet.new(),
               subtree_slot_by_target: %{},
+              primary_action_slot_targets: MapSet.new(),
               render_by_node: %{},
               render_roles_by_node: %{},
               collection_by_repeat_root: %{},
@@ -55,7 +56,14 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
   @spec build_indexes(ComponentContract.t(), ComponentizationPlan.t(), map(), map()) ::
           {:ok, Indexes.t()} | {:error, Diagnostic.t()}
-  def build_indexes(contract, plan, nodes_by_id, value_bindings, private_class_by_id \\ %{}) do
+  def build_indexes(
+        contract,
+        plan,
+        nodes_by_id,
+        value_bindings,
+        private_class_by_id \\ %{},
+        primary_action_slot_targets \\ MapSet.new()
+      ) do
     boundary_node = Map.get(nodes_by_id, plan.boundary_node_id)
 
     if boundary_node == nil do
@@ -121,6 +129,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          boundary_node: boundary_node,
          slot_targets: slot_targets,
          subtree_slot_by_target: subtree_slot_by_target,
+         primary_action_slot_targets: primary_action_slot_targets,
          render_by_node: render_by_node,
          render_roles_by_node: render_roles_by_node,
          collection_by_repeat_root: collection_by_repeat_root,
@@ -575,7 +584,13 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp render_node(indexes, node_id, collection_stack, is_root?) do
     if Map.has_key?(indexes.subtree_slot_by_target, node_id) do
       slot_name = Map.fetch!(indexes.subtree_slot_by_target, node_id)
-      {:ok, "<%= render_slot(@#{slot_name}) %>"}
+
+      if MapSet.member?(indexes.primary_action_slot_targets, node_id) do
+        private_class = Map.fetch!(indexes.private_class_by_id, node_id)
+        {:ok, "<span class={\"#{private_class}\"}><%= render_slot(@#{slot_name}) %></span>"}
+      else
+        {:ok, "<%= render_slot(@#{slot_name}) %>"}
+      end
     else
       case Map.get(indexes.collection_by_repeat_root, node_id) do
         nil ->
@@ -1291,7 +1306,9 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
   defp format_source(source) do
     try do
-      {:ok, IO.iodata_to_binary(Code.format_string!(source))}
+      formatted = IO.iodata_to_binary(Code.format_string!(source))
+      formatted = if String.ends_with?(formatted, "\n"), do: formatted, else: formatted <> "\n"
+      {:ok, formatted}
     rescue
       _error ->
         {:error,

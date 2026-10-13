@@ -8,7 +8,7 @@ defmodule Mix.Tasks.LiveFrames.Styling.Theme.Build do
   @app_root Path.expand("../../..", __DIR__)
 
   @default_fixture Path.expand("../../fixtures/automatic_css/acss_settings.json", @app_root)
-  @default_shared_mapping Path.join(@app_root, "priv/token_maps/native_shared_v1.json")
+  @default_shared_mapping Path.join(@app_root, "priv/token_maps/native_shared_v3.json")
   @default_mapping Path.join(@app_root, "priv/token_maps/native_hero_v1.json")
   @default_output Path.join(@app_root, "assets/css/theme/lf_theme.css")
 

@@ -859,6 +859,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     |> put_intrinsic_style(trace, "container", "margin-right", "auto", blocked)
   end
 
+  defp merge_intrinsic_styles(styles, %Element{name: "block"}, trace, _context, blocked) do
+    styles
+    |> put_intrinsic_style(trace, "block", "align-items", "flex-start", blocked)
+    |> put_intrinsic_style(trace, "block", "display", "flex", blocked)
+    |> put_intrinsic_style(trace, "block", "flex-direction", "column", blocked)
+  end
+
   defp merge_intrinsic_styles(styles, %Element{name: "section"}, trace, _context, blocked) do
     put_intrinsic_style(styles, trace, "section", "align-items", "center", blocked)
   end

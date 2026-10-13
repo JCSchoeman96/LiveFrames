@@ -382,6 +382,67 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
     assert root(document).styles["margin-right"].value == "auto"
   end
 
+  test "Bricks block receives its intrinsic flex column and cross-axis defaults" do
+    document = document([], [], %{}, element_name: "block")
+    block = root(document)
+
+    assert block.semantic_type == "generic"
+
+    for {property, value} <- [
+          {"display", "flex"},
+          {"flex-direction", "column"},
+          {"align-items", "flex-start"}
+        ] do
+      assert %StyleValue{kind: :keyword, value: ^value} = style = block.styles[property]
+      assert style.source_trace.source_type == "bricks_intrinsic"
+      assert style.source_trace.source_name == "brxe-block.#{property}"
+      assert style.metadata["authority"] == "bricks_intrinsic_element_default"
+      assert style.metadata["selector"] == ".brxe-block"
+    end
+  end
+
+  test "authored block align-items overrides the intrinsic cross-axis default" do
+    document = document([], [], %{"_alignItems" => "center"}, element_name: "block")
+
+    assert %StyleValue{kind: :keyword, value: "center"} = root(document).styles["align-items"]
+
+    refute root(document).styles["align-items"].metadata["authority"] ==
+             "bricks_intrinsic_element_default"
+  end
+
+  test "authored block display overrides the intrinsic flex display" do
+    document =
+      document(
+        ["class-a"],
+        [class("class-a", %{"_display" => "grid"})],
+        %{},
+        element_name: "block"
+      )
+
+    assert %StyleValue{kind: :keyword, value: "grid"} = root(document).styles["display"]
+
+    refute root(document).styles["display"].metadata["authority"] ==
+             "bricks_intrinsic_element_default"
+  end
+
+  test "authored block direction overrides the intrinsic column direction" do
+    document = document([], [], %{"_direction" => "row"}, element_name: "block")
+
+    assert %StyleValue{kind: :keyword, value: "row"} =
+             root(document).styles["flex-direction"]
+
+    refute root(document).styles["flex-direction"].metadata["authority"] ==
+             "bricks_intrinsic_element_default"
+  end
+
+  test "generic div does not receive Bricks block intrinsic layout" do
+    document = document([], [], %{}, element_name: "div")
+
+    refute Map.has_key?(root(document).styles, "display")
+    refute Map.has_key?(root(document).styles, "flex-direction")
+    refute Map.has_key?(root(document).styles, "align-items")
+  end
+
   test "container max-width and margin conflicts suppress only matching intrinsics" do
     document =
       document(

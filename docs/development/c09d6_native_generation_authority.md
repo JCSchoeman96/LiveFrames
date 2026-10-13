@@ -1338,21 +1338,48 @@ both its existing public package root class and its private node class. Nested
 artifact-visible nodes receive their private class.
 
 Do not generate styling selectors for nodes that C09D6-C replaces completely
-with a `subtree_slot`. A collection repeat reuses the same node class for every
-emitted instance. Optional emission may leave a deterministic selector in CSS
-even when a runtime assign omits the element. Dynamic tag alternatives for one
-heading node share that node's class.
+with a `subtree_slot`, except for the narrowly authorized primary-action
+presentation boundary in §21.7.1. A collection repeat reuses the same node
+class for every emitted instance. Optional emission may leave a deterministic
+selector in CSS even when a runtime assign omits the element. Dynamic tag
+alternatives for one heading node share that node's class.
 
 ### 21.3 Native style-locus rule
 
-Attach a node's private class to the native element that owns that node's
-normalized styles. Do not put it on a wrapper just because the renderer emits
-multiple elements. The first wave requires one mechanically proven native
-style locus per DesignNode. If compound markup leaves the style owner
-unprovable, stop with `STYLE_LOCUS_AUTHORITY_GAP`; do not guess or move styles
-to a wrapper. In particular, image `object-fit`, dimensions, radius, and other
-normalized image styles must not silently move to a `<figure>`. CTA Tango D1
-may proceed only for CTA nodes whose style loci are mechanically unambiguous.
+Attach a node's private class to its native root. Ordinary artifact-visible
+DesignNodes retain one mechanically proven style locus. Do not put the class
+on a wrapper just because the renderer emits multiple elements. A compound
+native emission may use multiple per-property loci only when this authority
+explicitly proves and allowlists the mapping. Unproven mappings stop with
+`STYLE_LOCUS_AUTHORITY_GAP`.
+
+#### 21.3.1 Proven `figure > img` image styles
+
+The exact Bricks 2.3.1 source establishes this source-neutral mapping for a
+normalized `image` node with `attributes["tag"] == "figure"`:
+
+| Native target | Allowed base style properties |
+| --- | --- |
+| Outer `<figure>` | `border-radius`, `border-top-left-radius`, `border-top-right-radius`, `border-bottom-right-radius`, `border-bottom-left-radius` |
+| Inner `<img>` | `aspect-ratio`, `object-fit` |
+| Both elements | `width`, `height` |
+
+When any allowed radius property appears on the figure, emit
+`border-radius: inherit` on the direct child image. Use the existing node
+private class on the figure and the closed selector `.<private-class> > img`;
+do not add another class or use source IDs/classes. Emit no `overflow` rule.
+Keep responsive figure-image styles and every unlisted property blocked with
+`STYLE_LOCUS_AUTHORITY_GAP`. Do not add Bricks, Frames, or ACSS runtime
+dependencies. Existing subtree-slot style pruning is unchanged.
+
+#### 21.3.2 Bricks `block` intrinsic layout
+
+For DesignNodes normalized from the Bricks source element name `block`, the
+accepted Bricks 2.3.1 frontend default contributes `align-items: flex-start`,
+`display: flex`, and `flex-direction: column`. The adapter records these as
+`bricks_intrinsic` values with `.brxe-block` provenance; authored effective
+styles take precedence. The semantic type `generic` alone does not trigger
+these defaults, and other source element names such as `div` remain unchanged.
 
 ### 21.4 Mechanical StyleValue-to-CSS emission
 
@@ -1395,9 +1422,14 @@ mapping authority through `LiveFrames.Styling.TokenBridge` or a narrowly added
 TokenBridge-owned validated lookup/index API. Existing accepted mapping layers,
 including shared and action-token authority, remain in force.
 
-D must not add a token map, infer CSS variable names from paths, change the
-generator tuple, or take a fourth mapping/semantic input. Missing, duplicate,
-ambiguous, or unsupported mapping for a required token blocks generation.
+NativeGenerator must not add a token map, infer CSS variable names from paths,
+change the generator tuple, or take a fourth mapping/semantic input. Missing,
+duplicate, ambiguous, or unsupported mapping for a required token blocks
+generation. Generator-visible `token_ref` values require an approved package
+TokenBridge mapping; resolved TokenSet values are not inlined to bypass a
+missing mapping. The tracer-discovered shared mapping is
+`spacing.scale.xs` → `--lf-space-scale-xs` in `native_shared_v2`; the immutable
+`native_shared_v1` mapping is unchanged.
 
 ### 21.6 Responsive CSS ordering
 
@@ -1406,6 +1438,12 @@ IR. It must not parse Bricks breakpoint names or infer thresholds from source
 names. A responsive declaration requires `resolution_status == :resolved` and
 proven numeric width authority. Emit base declarations before responsive ones.
 Never use map enumeration order.
+
+Bind accepted breakpoint authority before componentization identity is frozen.
+Resolving an unresolved DesignDocument creates a new DesignDocument identity,
+so Contract and Plan review must bind to that resolved document before
+`NativeGenerator.generate/3`. NativeGenerator does not resolve source breakpoint
+names.
 
 For the CTA first-wave max-width cascade, emit broader max-width overrides
 before narrower ones, so a narrower matching rule wins. For example, emit the
@@ -1418,10 +1456,48 @@ determine a required overlapping-rule order without adding semantics, stop with
 Primary action presentation comes from normalized IR/native semantics, such as
 approved button `style = primary` evidence, and existing package
 `--lf-action-primary-*` tokens. Emit it against the generated private node
-selector. Hover and focus-visible are ordinary package CSS pseudo states on
-that selector. Do not use `btn--primary`, source classes in `source_trace`,
+selector for an artifact-visible button; subtree-slot handling is governed by
+§21.7.1. Hover and focus-visible are ordinary package CSS pseudo states on
+the authorized action-root selector. Do not use `btn--primary`, source classes in `source_trace`,
 `LiveFrames.Adapters.AutomaticCSS.FidelityResolver`, or
 `.lf-hero__action--primary` as generator inputs or selector reuse.
+
+#### 21.7.1 `PRIMARY_ACTION_SUBTREE_SLOT_PRESENTATION_RULE`
+
+Ordinary `subtree_slot` projections still replace the target DesignNode and
+descendants with consumer-owned markup and prune their styles. The first-wave
+exception applies only when the projection is `subtree_slot`, the target is a
+`button` with `attributes["style"] == "primary"`, outline is not `true` or
+`"true"`, base styles are empty, and responsive overrides are absent. Outline
+targets retain the existing variant-authority block; styled or responsive
+targets block with a primary-action subtree-slot authority gap.
+
+For that exact shape, the original button is not emitted. Emit a package-owned,
+non-semantic, non-focusable `<span>` around `render_slot/1` with
+`display: contents`; it creates no layout box and is not a focus target. Reuse
+the target's deterministic private path class only as this
+presentation-boundary identity; add no source identity, slot-derived class,
+ARIA attribute, or interaction behavior. The consumer owns the action element,
+label, destination, navigation, and events. The package owns presentation.
+
+Apply only these structural declarations to the direct action root selector
+`.<private-class> > :where(a, button)`: `align-items: center`,
+`box-sizing: border-box`, `display: inline-flex`, `font-family: inherit`,
+`justify-content: center`, and `text-decoration: none`. Preserve the existing
+package mappings: background/color/border color/border width/border style/
+border radius/padding inline/padding block/min width/font size/font weight/
+line height map respectively to `button.primary.background`,
+`button.primary.text`, `button.primary.border`,
+`button.primary.border_width`, `button.primary.border_style`,
+`button.primary.radius`, `button.primary.padding_inline`,
+`button.primary.padding_block`, `button.primary.min_width`,
+`button.primary.font_size`, `button.primary.font_weight`, and
+`button.primary.line_height`. Preserve the existing hover background token and
+focus-visible outline token/style/width/offset.
+
+Never use a descendant selector, style the body slot, or add width, responsive
+action width, height, margin, position, or cursor rules. All other subtree
+slots, including `body`, remain unchanged.
 
 Before materializing CSS, D must revalidate every property/value pair. A
 low-level declaration validator may be reused only when its input semantics

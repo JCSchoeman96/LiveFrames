@@ -31,7 +31,8 @@ defmodule LiveFrames.NativeGenerator do
              plan,
              styling.nodes_by_id,
              normalize_registry(design_document.value_bindings),
-             styling.private_class_by_id
+             styling.private_class_by_id,
+             styling.primary_action_slot_targets
            ),
          {:ok, source} <- Renderer.render_module(indexes),
          {:ok, bundle} <- build_bundle(contract, plan, design_document, indexes, source, styling) do

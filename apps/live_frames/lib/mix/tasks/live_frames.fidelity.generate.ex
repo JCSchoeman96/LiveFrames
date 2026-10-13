@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.LiveFrames.Fidelity.Generate do
   @shortdoc "Generate deterministic Design IR fidelity artifacts"
   use Mix.Task
+  @requirements ["app.config"]
 
   alias LiveFrames.Fidelity
   alias LiveFrames.Fidelity.DocumentLoader

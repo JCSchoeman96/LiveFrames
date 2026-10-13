@@ -255,8 +255,8 @@ defmodule LiveFrames.AutomaticCSSIconTokensTest do
   end
 
   test "mapping size includes icon entries only for enabled settings" do
-    assert length(Normalizer.mapping(%{})) == 77
-    assert length(Normalizer.mapping(fixture_settings())) == 101
+    assert length(Normalizer.mapping(%{})) == 78
+    assert length(Normalizer.mapping(fixture_settings())) == 102
   end
 
   test "gated icon settings are consumed when icons are enabled" do

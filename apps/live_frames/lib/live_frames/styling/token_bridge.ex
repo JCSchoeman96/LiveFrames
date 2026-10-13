@@ -167,7 +167,7 @@ defmodule LiveFrames.Styling.TokenBridge do
   @unsafe_value ~r/[{};\\]/
   @unsafe_external_url ~r/url\s*\(\s*(?:["']\s*|\/\*.*?\*\/\s*)*(?:https?:|\/\/|javascript:)/is
 
-  @shared_mapping_path Path.expand("../../../priv/token_maps/native_shared_v1.json", __DIR__)
+  @shared_mapping_path Path.expand("../../../priv/token_maps/native_shared_v3.json", __DIR__)
   @hero_mapping_path Path.expand("../../../priv/token_maps/native_hero_v1.json", __DIR__)
   @external_resource @shared_mapping_path
   @external_resource @hero_mapping_path

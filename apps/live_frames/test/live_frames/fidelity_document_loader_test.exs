@@ -7,10 +7,10 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Migration
 
-  @hero_input Path.expand(
-                "../../../../sources/work/hero_india/design_ir/design_document.json",
-                __DIR__
-              )
+  @hero_v1_input Path.expand(
+                   "../fixtures/ir/historical/hero_india_design_document_v1.json",
+                   __DIR__
+                 )
 
   defp minimal_v2_map(overrides \\ %{}) do
     Map.merge(
@@ -858,10 +858,11 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
   end
 
   test "hero india v1 fixture migrates and fidelity drift inputs stay controlled" do
-    assert {:ok, document} = DocumentLoader.from_file(@hero_input)
+    assert {:ok, document} = DocumentLoader.from_file(@hero_v1_input)
     assert document.ir_version == "4.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
-    assert Jason.decode!(File.read!(@hero_input))["ir_version"] == "1.0.0"
+    refute Map.has_key?(document.token_set["tokens"], "typography.heading.scale.h2")
+    assert Jason.decode!(File.read!(@hero_v1_input))["ir_version"] == "1.0.0"
   end
 end

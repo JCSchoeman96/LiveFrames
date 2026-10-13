@@ -206,8 +206,9 @@ therefore does not create a transparency token for it, include it in
 
 ## Canonical token coverage
 
-The mapping emits 76 tokens. It is one explicit mapping table; raw
-Automatic.css setting names are not the canonical API.
+The canonical mapping emits 78 tokens. The approved fixture enables 24
+additional icon tokens, for 102 normalized tokens in total. It is one explicit
+mapping table; raw Automatic.css setting names are not the canonical API.
 
 ### Colors (27)
 
@@ -300,7 +301,7 @@ output alias. The alias authority IDs follow
 variables. Contextual gaps retain semantic references to the scale tokens.
 The spacing and section values preserve their respective ACSS clamp inputs.
 
-### Typography (10)
+### Typography (11)
 
 ~~~text
 typography.body.base_size
@@ -311,6 +312,7 @@ typography.body.line_height
 typography.heading.base_size
 typography.heading.scale
 typography.heading.scale.h1
+typography.heading.scale.h2
 typography.heading.line_height
 typography.heading.font_weight
 ~~~
@@ -324,6 +326,11 @@ remains **1.0.0**; `--text-s` is a calculated output alias only. Line-height
 expressions remain source CSS expressions. Heading font weight uses the
 exported `heading-weight` setting when present, otherwise the Automatic.css
 SCSS default `700`.
+
+`typography.heading.scale.h2` uses the shared heading base, scale, and viewport
+inputs with the accepted `FluidClamp` h2 scale power of `2`. Its calculated
+source output alias is `--h2`. The accepted fixture has empty `h2-min` and
+`h2-max` settings, so this token uses the default h2 scale relationship.
 
 ### Primary button (21)
 

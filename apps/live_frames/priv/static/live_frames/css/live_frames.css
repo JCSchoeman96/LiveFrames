@@ -31,6 +31,7 @@
   --lf-space-content-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   --lf-space-grid-gap: clamp(1.5rem, calc(0.5964214712vw + 1.365805169rem), 1.875rem);
   --lf-space-gutter: clamp(1rem, calc(6.3618290258vw + -0.4314115308rem), 5rem);
+  --lf-space-scale-xs: clamp(0.8333333333rem, calc(-0.0172384889vw + 0.8480506933rem), 0.8441720333rem);
   --lf-space-section-padding-block: clamp(3rem, calc(4.1749502982vw + 2.0606361829rem), 5.625rem);
   --lf-typography-body-line-height: calc(6px + 2ex);
   --lf-typography-body-size: clamp(1rem, calc(0.1988071571vw + 0.9552683897rem), 1.125rem);
@@ -38,6 +39,7 @@
   --lf-typography-display-line-height: calc(4px + 2ex);
   --lf-typography-display-size: clamp(1.944rem, calc(1.6170835726vw + 1.5801561962rem), 2.9607412962rem);
   --lf-typography-display-weight: 700;
+  --lf-typography-heading-size-h2: clamp(1.62rem, calc(0.9560417495vw + 1.4048906064rem), 2.22111125rem);
 }
 @layer components {
   .lf-hero {
@@ -198,4 +200,158 @@
       object-position: 70% 50%;
     }
   }
+}
+.lf-section-media-call-to-action__n-000001 {
+  align-items: center;
+}
+.lf-section-media-call-to-action__n-000001-000001 {
+  display: grid;
+  flex-direction: column;
+  gap: calc(var(--lf-space-grid-gap) * 2.0);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+  width: 1100px;
+}
+@media (max-width: 991px) {
+  .lf-section-media-call-to-action__n-000001-000001 {
+    gap: var(--lf-space-content-gap);
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+.lf-section-media-call-to-action__n-000001-000001-000001 {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001 {
+  display: grid;
+  flex-wrap: nowrap;
+  gap: var(--lf-space-content-gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(1, minmax(0, 1fr));
+  justify-items: flex-end;
+  min-height: 675px;
+}
+@media (max-width: 991px) {
+  .lf-section-media-call-to-action__n-000001-000001-000001-000001 {
+    justify-items: flex-start;
+    width: 100%;
+  }
+}
+@media (max-width: 767px) {
+  .lf-section-media-call-to-action__n-000001-000001-000001-000001 {
+    gap: var(--lf-space-scale-xs);
+  }
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000001 {
+  grid-column: 1 / -1;
+  width: 90%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000001-000001 {
+  border-bottom-left-radius: var(--lf-radius-base);
+  border-bottom-right-radius: var(--lf-radius-base);
+  border-top-left-radius: var(--lf-radius-base);
+  border-top-right-radius: var(--lf-radius-base);
+  height: 100%;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000001-000001 > img {
+  aspect-ratio: 16/9;
+  border-radius: inherit;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000002 {
+  aspect-ratio: 16/9;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000002-000001 {
+  border-bottom-left-radius: var(--lf-radius-base);
+  border-bottom-right-radius: var(--lf-radius-base);
+  border-top-left-radius: var(--lf-radius-base);
+  border-top-right-radius: var(--lf-radius-base);
+  height: 100%;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000002-000001 > img {
+  aspect-ratio: 16/9;
+  border-radius: inherit;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000003 {
+  aspect-ratio: 5/3.5;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000003-000001 {
+  border-bottom-left-radius: var(--lf-radius-base);
+  border-bottom-right-radius: var(--lf-radius-base);
+  border-top-left-radius: var(--lf-radius-base);
+  border-top-right-radius: var(--lf-radius-base);
+  height: 100%;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000001-000001-000003-000001 > img {
+  aspect-ratio: 16/9;
+  border-radius: inherit;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.lf-section-media-call-to-action__n-000001-000001-000002 {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  row-gap: var(--lf-space-content-gap);
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000001 {
+  font-size: var(--lf-typography-heading-size-h2);
+  font-weight: var(--lf-typography-display-weight);
+  line-height: var(--lf-typography-display-line-height);
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000002 {
+  font-size: var(--lf-typography-body-size-small);
+  font-weight: 400;
+  letter-spacing: .095em;
+  line-height: 1.1;
+  margin-bottom: 0;
+  order: -1;
+  text-transform: uppercase;
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000004 {
+  display: contents;
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000004 > :where(a, button) {
+  align-items: center;
+  background-color: var(--lf-action-primary-background);
+  border-color: var(--lf-action-primary-border);
+  border-radius: var(--lf-action-primary-radius);
+  border-style: var(--lf-action-primary-border-style);
+  border-width: var(--lf-action-primary-border-width);
+  box-sizing: border-box;
+  color: var(--lf-action-primary-text);
+  display: inline-flex;
+  font-family: inherit;
+  font-size: var(--lf-action-primary-font-size);
+  font-weight: var(--lf-action-primary-font-weight);
+  justify-content: center;
+  line-height: var(--lf-action-primary-line-height);
+  min-width: var(--lf-action-primary-min-width);
+  padding-block: var(--lf-action-primary-padding-block);
+  padding-inline: var(--lf-action-primary-padding-inline);
+  text-decoration: none;
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000004 > :where(a, button):hover {
+  background-color: var(--lf-action-primary-background-hover);
+}
+.lf-section-media-call-to-action__n-000001-000001-000002-000004 > :where(a, button):focus-visible {
+  outline-color: var(--lf-action-primary-focus);
+  outline-offset: 2px;
+  outline-style: solid;
+  outline-width: 2px;
 }

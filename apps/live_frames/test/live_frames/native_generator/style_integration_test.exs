@@ -316,11 +316,81 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     assert module.content =~ "<img class={\"lf-section-style-fixture__n-000001-000001\"}"
   end
 
+  test "each figure radius property stays on the figure and is inherited by img" do
+    private_class = "lf-section-style-fixture__n-000001-000001"
+
+    for property <- [
+          "border-radius",
+          "border-top-left-radius",
+          "border-top-right-radius",
+          "border-bottom-right-radius",
+          "border-bottom-left-radius"
+        ] do
+      image = %DesignNode{
+        node_id: DesignNode.deterministic_id([1, 1]),
+        semantic_type: "image",
+        attributes: %{"tag" => "figure"},
+        styles: %{property => StyleValue.literal("1rem")}
+      }
+
+      root = boundary([image])
+      c = contract()
+
+      {:ok, result} =
+        StyleIntegration.build(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+
+      stylesheet = result.stylesheet_content
+
+      assert [figure_rule, image_rule] =
+               String.split(stylesheet, "\n\n.#{private_class} > img {")
+
+      assert figure_rule =~ ".#{private_class} {"
+      assert figure_rule =~ "#{property}: 1rem;"
+      refute figure_rule =~ "overflow: hidden;"
+      assert String.trim(image_rule) == "border-radius: inherit;\n}"
+    end
+  end
+
+  test "figure image dimensions and image-only properties keep their authorized loci" do
+    image = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "image",
+      attributes: %{"tag" => "figure"},
+      styles: %{
+        "aspect-ratio" => StyleValue.literal("16/9"),
+        "object-fit" => StyleValue.keyword("cover"),
+        "width" => StyleValue.literal("100%"),
+        "height" => StyleValue.literal("100%")
+      }
+    }
+
+    root = boundary([image])
+    c = contract()
+
+    {:ok, result} =
+      StyleIntegration.build(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+
+    stylesheet = result.stylesheet_content
+    private_class = "lf-section-style-fixture__n-000001-000001"
+    [figure_rule, image_rule] = String.split(stylesheet, "\n\n.#{private_class} > img {")
+
+    assert figure_rule =~ "width: 100%;"
+    assert figure_rule =~ "height: 100%;"
+    refute figure_rule =~ "aspect-ratio:"
+    refute figure_rule =~ "object-fit:"
+
+    assert image_rule =~ "aspect-ratio: 16/9;"
+    assert image_rule =~ "object-fit: cover;"
+    assert image_rule =~ "width: 100%;"
+    assert image_rule =~ "height: 100%;"
+    refute image_rule =~ "border-radius: inherit;"
+  end
+
   test "all dynamic heading alternatives reuse the node's private class" do
     heading = %DesignNode{
       node_id: DesignNode.deterministic_id([1, 1]),
       semantic_type: "heading",
-      styles: %{"color" => StyleValue.keyword("navy")}
+      attributes: %{"tag" => "h2"}
     }
 
     document = %DesignDocument{root_nodes: [boundary([heading])]}
@@ -351,8 +421,126 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
 
     bundle = bundle!(generate(document, contract(:section, attrs), projections))
     module = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet))
     class = "lf-section-style-fixture__n-000001-000001"
 
     assert length(String.split(module.content, class)) == 7
+    assert stylesheet.content =~ "font-size: var(--lf-typography-heading-size-h2);"
+    assert stylesheet.content =~ "font-weight: var(--lf-typography-display-weight);"
+    assert stylesheet.content =~ "line-height: var(--lf-typography-display-line-height);"
+    assert module.content =~ "class={\"#{class}\"}"
+  end
+
+  test "explicit heading typography wins property by property over H2 defaults" do
+    node_id = DesignNode.deterministic_id([1, 1])
+
+    for {property, value} <- [
+          {"font-size", StyleValue.literal("30px")},
+          {"font-weight", StyleValue.literal(700)},
+          {"line-height", StyleValue.literal("1.4")}
+        ] do
+      heading = %DesignNode{
+        node_id: node_id,
+        semantic_type: "heading",
+        attributes: %{"tag" => "h2"},
+        styles: %{property => value}
+      }
+
+      bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([heading])]}, contract()))
+      stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+      assert stylesheet =~ "#{property}: #{value.value};"
+
+      for {fallback_property, fallback_value} <- [
+            {"font-size", "var(--lf-typography-heading-size-h2)"},
+            {"font-weight", "var(--lf-typography-display-weight)"},
+            {"line-height", "var(--lf-typography-display-line-height)"}
+          ],
+          fallback_property != property do
+        assert stylesheet =~ "#{fallback_property}: #{fallback_value};"
+      end
+
+      refute stylesheet =~ "#{property}: #{fallback_value_for(property)};"
+    end
+  end
+
+  test "responsive heading typography remains separate from semantic base defaults" do
+    heading = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "heading",
+      attributes: %{"tag" => "h2"},
+      responsive: %{
+        "mobile" => %ResponsiveOverride{
+          breakpoint_id: "mobile",
+          source_name: "mobile",
+          resolution_status: :resolved,
+          max_width: 767,
+          styles: %{"font-size" => StyleValue.literal("24px")}
+        }
+      }
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([heading])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    [base_rule, responsive_rule] = String.split(stylesheet, "@media")
+
+    assert base_rule =~ "font-size: var(--lf-typography-heading-size-h2);"
+    assert responsive_rule =~ "font-size: 24px;"
+    refute responsive_rule =~ "font-weight"
+    refute responsive_rule =~ "line-height"
+  end
+
+  test "semantic H2 fallback is closed to every other heading tag" do
+    headings =
+      for {tag, index} <- Enum.with_index(["h1", "h3", "h4", "h5", "h6"], 1) do
+        %DesignNode{
+          node_id: DesignNode.deterministic_id([1, index]),
+          semantic_type: "heading",
+          attributes: %{"tag" => tag}
+        }
+      end
+
+    {:ok, result} =
+      StyleIntegration.build(
+        contract(),
+        plan_for(boundary(headings), contract()),
+        %DesignDocument{root_nodes: [boundary(headings)]}
+      )
+
+    assert result.stylesheet_content == ""
+    Enum.each(headings, &refute(Map.has_key?(result.private_class_by_id, &1.node_id)))
+  end
+
+  test "unmapped token styling on an H2 node blocks stylesheet generation" do
+    heading = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "heading",
+      attributes: %{"tag" => "h2"},
+      styles: %{"font-size" => StyleValue.token_ref("unknown.h2.path")}
+    }
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             generate(%DesignDocument{root_nodes: [boundary([heading])]}, contract())
+
+    assert diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    assert diagnostic.metadata.reason ==
+             {:invalid_declaration, "font-size",
+              {:token_mapping_blocked, {:unknown_token_path, "unknown.h2.path"}}}
+  end
+
+  defp fallback_value_for("font-size"), do: "var(--lf-typography-heading-size-h2)"
+  defp fallback_value_for("font-weight"), do: "var(--lf-typography-display-weight)"
+  defp fallback_value_for("line-height"), do: "var(--lf-typography-display-line-height)"
+
+  defp plan_for(root, c) do
+    {:ok, fingerprint} =
+      ComponentizationPlan.design_document_sha256(%DesignDocument{root_nodes: [root]})
+
+    %ComponentizationPlan{
+      contract_id: c.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: root.node_id
+    }
   end
 end
