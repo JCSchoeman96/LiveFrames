@@ -35,8 +35,8 @@ BLOCKED, FAILED, and PASSED are terminal states. A proof in a terminal state can
 | Transition | Guard | Effect | Required observable evidence |
 | --- | --- | --- | --- |
 | Start at DEFINED | This authority has passed independent review. A separate explicit owner authorization starts C1. | Open a new proof run. Do not alter LiveFrames or Catalogue state. | Record the authority revision, C1 authorization, and the accepted LiveFrames commit and tree selected for this run. |
-| DEFINED to ENVIRONMENT_CREATED | Create a new Phoenix application from the Phoenix generator. Its resolved root must be outside the LiveFrames repository, every LiveFrames worktree, apps/live_frames_preview, fixtures, acss, and private_reference. Do not symlink or copy the preview application. | Create the external host skeleton and test-owned placeholder content. | Record the canonical app root, Phoenix generator result, and exact Elixir, OTP, Mix, Phoenix, and Phoenix LiveView versions used. Record the LiveFrames checkout path, commit, tree, and clean status. |
-| ENVIRONMENT_CREATED to DEPENDENCY_RESOLVED | Set the host dependency to the local path at the exact accepted checkout's apps/live_frames directory. Confirm the path resolves to that checkout and commit. Run mix deps.get successfully. | Resolve dependencies in the external host. Do not write into the LiveFrames checkout. | Record the path dependency declaration, resolved LiveFrames path and source commit, mix deps.get result, and dependency tree. Record that the host dependency tree contains neither live_frames_preview nor phoenix_storybook. |
+| DEFINED to ENVIRONMENT_CREATED | Create a new Phoenix application with the exact generator command in section 3. The root must be outside the LiveFrames repository, every LiveFrames worktree, apps/live_frames_preview, fixtures, acss, and private_reference. Do not symlink or copy the preview application. Inspect the generated host to verify that Ecto, Tailwind, and dependency installation are absent. | Create only the external host skeleton and test-owned placeholder content. Do not install or resolve dependencies. | Record `PHX_NEW_VERSION=`, `PHX_NEW_COMMAND=`, `HOST_ROOT=`, `ECTO_PRESENT=NO`, `TAILWIND_PRESENT=NO`, and `GENERATOR_DEP_INSTALL=NO`. Also record `PHX_NEW_PROFILE_MATCH=YES`, `ECTO_GENERATED=NO`, `TAILWIND_GENERATED=NO`, and `DEPENDENCIES_INSTALLED_DURING_GENERATION=NO`. Record the canonical host root, exact Elixir, OTP, Mix, Phoenix, and Phoenix LiveView versions, and the LiveFrames checkout path, commit, tree, and clean status. |
+| ENVIRONMENT_CREATED to DEPENDENCY_RESOLVED | Only after ENVIRONMENT_CREATED, add the local path dependency to the exact accepted checkout's apps/live_frames directory. Confirm the path resolves to that checkout and commit. Run mix deps.get successfully. | Resolve dependencies in the external host. Do not write into the LiveFrames checkout. | Record the path dependency declaration, resolved LiveFrames path and source commit, mix deps.get result, and dependency tree. This is the first transition where dependency installation or resolution is allowed. Record that the host dependency tree contains neither live_frames_preview nor phoenix_storybook. |
 | DEPENDENCY_RESOLVED to COMPILED | Run mix compile --warnings-as-errors successfully in the external host. | Compile the external host and its dependencies. This does not establish runtime behavior. | Retain the command and exit result. Record resolved dependency versions. Do not infer a supported version range from this run. |
 | COMPILED to RUNTIME_VERIFIED | Start the host and successfully boot its test endpoint. Verify the rendered component and the static CSS response against the C1 checklist in section 5. | Run the host endpoint and request the host-owned static CSS URL. | Retain the endpoint boot result, rendered markup assertions, HTTP status and response evidence for the CSS, and host dependency/runtime observations. |
 | RUNTIME_VERIFIED to PASSED | A reviewer checks every required C1 item, exact version record, dependency isolation, private-reference exclusion, and before/after repository status. No requirement may be waived or inferred from another test suite. | Accept the evidence record and mark this proof run PASSED. Do not modify Catalogue state. | Publish a C1 evidence record containing the commands, results, exact versions, source identity, required assertions, and reviewer decision. Record outcome PASS and state PASSED. |
@@ -54,6 +54,40 @@ C1 must create a new Phoenix application whose canonical root is outside all of 
 - private_reference.
 
 A temporary root under /tmp is suitable. Do not commit the proof application to LiveFrames. Do not symlink, copy, or adapt apps/live_frames_preview as the host. Generate a clean host application and use test-owned text and placeholder image paths.
+
+### C1 Phoenix generator profile
+
+Create the host with this exact profile. C1 may choose the application directory and name, but it must use these flags:
+
+```bash
+mix phx.new "$HOST_ROOT" \
+  --no-install \
+  --no-ecto \
+  --no-mailer \
+  --no-dashboard \
+  --no-gettext \
+  --no-tailwind \
+  --no-version-check
+```
+
+- `--no-install` keeps dependency fetching and resolution in the ENVIRONMENT_CREATED to DEPENDENCY_RESOLVED transition.
+- `--no-ecto` makes the absence of persistence explicit. `POSTGRES=N/A` must hold by construction, not only because the proof made no database query.
+- `--no-tailwind` keeps the host on the documented precompiled LiveFrames CSS path without a Tailwind build dependency.
+- `--no-mailer`, `--no-dashboard`, and `--no-gettext` remove generated subsystems that C1 does not use.
+- `--no-version-check` keeps Phoenix's remote latest-version check outside the proof. Record the installed generator version instead.
+
+Do not use `--no-html` or `--no-live`; the host needs an ordinary Phoenix HTML and LiveView-capable environment. Do not use `--no-assets`; C1 excludes Tailwind without changing other asset assumptions.
+
+The generator command alone is not evidence that the generated host matches the profile. Inspect the generated files and dependency declarations. Record `PHX_NEW_PROFILE_MATCH=YES`, `ECTO_GENERATED=NO`, `TAILWIND_GENERATED=NO`, and `DEPENDENCIES_INSTALLED_DURING_GENERATION=NO` only after confirming the host has no Ecto setup, no Tailwind setup, and no dependencies installed during generation. Record these values:
+
+```text
+PHX_NEW_VERSION=
+PHX_NEW_COMMAND=
+HOST_ROOT=
+ECTO_PRESENT=NO
+TAILWIND_PRESENT=NO
+GENERATOR_DEP_INSTALL=NO
+```
 
 The host application is external to LiveFrames. Its dependency source is the exact accepted LiveFrames checkout selected for C1. The dependency source is not a copy of the app and does not make the consumer application part of the LiveFrames repository.
 
@@ -88,22 +122,23 @@ The external host does not need Tailwind. C1 must not add a Tailwind runtime or 
 Every item below is required for PASS:
 
 1. The canonical external application root is outside the locations listed in section 3. Record its real path.
-2. The exact LiveFrames dependency identity is recorded as required in section 4, and the dependency resolves from the selected accepted commit.
-3. mix deps.get passes in the host.
-4. mix compile --warnings-as-errors passes in the host.
-5. The host starts and its test endpoint boots successfully.
-6. The host imports or invokes LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1.
-7. The rendered CTA contains the test-owned required heading.
-8. The rendered CTA contains all three test-owned image src and alt pairs.
-9. Caller-owned primary_action markup renders.
-10. The fixed CTA root class and a caller-supplied additive root class are present.
-11. The host serves priv/static/live_frames/css/live_frames.css through its own Plug.Static and the URL returns HTTP 200.
-12. The served stylesheet contains the CTA selector family present in the committed precompiled artifact.
-13. The host has no Tailwind runtime or Tailwind build requirement for the proof.
-14. The host dependency tree contains no live_frames_preview or phoenix_storybook dependency. The LiveFrames app itself depends on neither.
-15. The proof leaves the exact accepted LiveFrames checkout unchanged. Record its status before and after the run.
-16. The consumer contains no copied private_reference, fixture, or ACSS data. It uses only the public CTA API and test-owned placeholder content and assets.
-17. The proof record contains the exact Elixir, OTP, Mix, Phoenix, and Phoenix LiveView versions used.
+2. The Phoenix generator profile and generated-host inspections required in section 3 pass. `POSTGRES=N/A` and `TAILWIND_HOST_BUILD_REQUIREMENT=NO` hold by construction.
+3. The exact LiveFrames dependency identity is recorded as required in section 4, and the dependency resolves from the selected accepted commit.
+4. mix deps.get passes in the host.
+5. mix compile --warnings-as-errors passes in the host.
+6. The host starts and its test endpoint boots successfully.
+7. The host imports or invokes LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1.
+8. The rendered CTA contains the test-owned required heading.
+9. The rendered CTA contains all three test-owned image src and alt pairs.
+10. Caller-owned primary_action markup renders.
+11. The fixed CTA root class and a caller-supplied additive root class are present.
+12. The host serves priv/static/live_frames/css/live_frames.css through its own Plug.Static and the URL returns HTTP 200.
+13. The served stylesheet contains the CTA selector family present in the committed precompiled artifact.
+14. The host has no Tailwind runtime or Tailwind build requirement for the proof.
+15. The host dependency tree contains no live_frames_preview or phoenix_storybook dependency. The LiveFrames app itself depends on neither.
+16. The proof leaves the exact accepted LiveFrames checkout unchanged. Record its status before and after the run.
+17. The consumer contains no copied private_reference, fixture, or ACSS data. It uses only the public CTA API and test-owned placeholder content and assets.
+18. The proof record contains the exact Elixir, OTP, Mix, Phoenix, and Phoenix LiveView versions used.
 
 Record the versions from the actual proof run. One run does not establish an additional compatible version or version range. Keep the command output and assertion results in the C1 evidence record. No C1 result may be inferred from repository ExUnit, preview, or Storybook success.
 
