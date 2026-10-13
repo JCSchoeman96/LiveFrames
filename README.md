@@ -2,8 +2,8 @@
 
 LiveFrames is a Phoenix/LiveView design compiler and reusable UI-component
 platform. It adapts design sources into source-independent compiler contracts,
-preserves provenance, and produces deterministic fidelity output before later
-native componentization.
+preserves provenance, produces deterministic fidelity output, and supports
+reviewed native component generation.
 
 ## Current status
 
@@ -22,7 +22,7 @@ Completed foundations include:
 
 - Phoenix umbrella/library foundation, preview application, and Storybook
   foundation.
-- Design IR `1.0.0` and TokenSet `1.0.0`.
+- Design IR `4.0.0` and TokenSet `1.0.0`.
 - Automatic.css settings adapter for the current required TokenSet semantics.
 - Bricks structured adapter and Bricks → Design IR conversion.
 - Deterministic artifacts and drift verification.
@@ -31,6 +31,10 @@ Completed foundations include:
 - P5-H1 Fidelity CSS serialization safety.
 - Phase 5B authority-bound responsive generation and browser verification.
 - Source-independent Fidelity with a caller-injected source fidelity resolver.
+- `LiveFrames.NativeGenerator` on `main`, which generates in-memory native
+  component artifacts from approved component inputs.
+- BehaviorContract core types, validation, identity, serialization, and
+  review-result types. This does not establish an interactive browser runtime.
 - Accepted Level 3 Bricks breakpoint authority: `mobile_portrait` at
   `max-width: 478px` and `tablet_portrait` at `max-width: 991px`; tablet
   remains active at mobile widths.
@@ -46,27 +50,28 @@ source
       → ComponentizationProposer
       → proposed/needs_review ComponentContract + ComponentizationPlan
       → reviewer approval (C09D6-B / ComponentReview on main)
-      → native generator (C09D6-C; not on main — PR #135 on hold pending C09D6-C0)
+      → LiveFrames.NativeGenerator (implemented on main)
 ```
 
 Master Phase 5 is closed. P5-H2 Bricks Result lifecycle hardening is complete.
 Hero India is accepted with the authorized unavailable-image limitation.
-Phase 6 is authorized. The P6.1 native Hero API is approved. The P6.2 native
-Hero implementation is present. P6.3 semantic verification is complete. P6.4A
-styling-bridge architecture is approved in
-`docs/20_P6_4A_NATIVE_STYLING_BRIDGE_ARCHITECTURE.md`. P6.4B1 native Hero styling
-bridge is **merged** (PR #31). P6.4B2 browser verification is **verified**
-(`docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md`). P6.4 workstream =
-**verified**. P6.5 = **documented / owner accepted**; P6.6 =
-**storybook_verified / owner accepted** (`docs/22`). **Hero lifecycle =
-accepted**. **Phase 6 = CLOSED / accepted** (`docs/19` §31). **C09D5**
-componentization proposer = **complete**. Catalogue **library infrastructure**
-(schema, Registry, lifecycle, discovery) = **implemented**; production
-`priv/catalogue/` tree = **absent**; Registry membership = **empty**. **Native
-component generator** and **P10 ejection** = **not implemented** (see
-[`docs/development/c09d6_native_generation_authority.md`](docs/development/c09d6_native_generation_authority.md)).
-Catalogue admission and generator/ejection **production** capabilities remain
-**not authorized** until later reviewed slices.
+Phase 6 and the native Hero lifecycle are accepted. C09D5 componentization
+proposer, C09D6 review and native generator, and C09D6 native styling are
+implemented on `main`.
+
+CTA Tango native delivery is implemented on `main` as
+`LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1`.
+Its component tests, preview Storybook story and Storybook test exist. CTA CSS
+is included in both the source CSS graph and precompiled package CSS. A clean
+external CTA consumer has not yet been proven; see
+[`docs/17_ROADMAP.md`](docs/17_ROADMAP.md) for the current checkpoint.
+
+Catalogue library infrastructure exists, but production Catalogue content is
+absent. No production Catalogue membership is claimed. C09D7-C consumer proof /
+Catalogue handoff has not yet been proven. P10 consumer-project ejection remains
+unimplemented. `LiveFrames.NativeGenerator` and P10 ejection are separate
+capabilities. These status statements do not claim Hex or public release
+readiness.
 
 ## Consumer quick start (native Hero)
 
@@ -79,6 +84,7 @@ owns action behavior and public `--lf-*` theme overrides.
 - [Phase 6 lifecycle authority](docs/19_PHASE_6_NATIVE_COMPONENTIZATION.md)
 - [P6.4B2 browser verification](docs/21_P6_4B2_NATIVE_HERO_BROWSER_VERIFICATION.md)
 - [P6.6 Storybook verification (verified evidence)](docs/22_P6_6_NATIVE_HERO_STORYBOOK_VERIFICATION.md)
+- [Roadmap and current repository checkpoint](docs/17_ROADMAP.md)
 
 ## Authority and navigation
 
