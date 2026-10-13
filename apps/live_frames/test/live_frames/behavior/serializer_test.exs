@@ -30,6 +30,20 @@ defmodule LiveFrames.Behavior.SerializerTest do
              Serializer.encode(%Contract{design_document_identity: @identity})
   end
 
+  test "accepts the closed IR3 and IR4 identity set" do
+    ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
+
+    assert {:ok, _bytes} =
+             Serializer.encode(%Contract{design_document_identity: ir4_identity})
+
+    for version <- ["1.0.0", "2.0.0", "5.0.0", "future"] do
+      identity = %Identity{@identity | ir_version: version}
+
+      assert {:error, [%{code: "behavior.contract.identity_invalid", category: "identity"}]} =
+               Serializer.encode(%Contract{design_document_identity: identity})
+    end
+  end
+
   test "serializes a persisted binding with the complete PrimitiveRef and explicit nulls" do
     binding = %Binding{
       binding_id: "bnd_" <> String.duplicate("a", 64),
@@ -82,9 +96,11 @@ defmodule LiveFrames.Behavior.SerializerTest do
 
     invalid_identities = [
       nil,
+      Map.put(@identity, :unexpected, true),
       %Identity{@identity | canonicalization_id: "unknown"},
       %Identity{@identity | digest_algorithm: "sha-512"},
-      %Identity{@identity | digest: String.duplicate("A", 64)}
+      %Identity{@identity | digest: String.duplicate("A", 64)},
+      %Identity{@identity | digest: String.duplicate("a", 63)}
     ]
 
     for identity <- invalid_identities do

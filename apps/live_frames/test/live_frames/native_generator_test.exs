@@ -454,7 +454,7 @@ defmodule LiveFrames.NativeGeneratorTest do
         collection_binding_id: "cb_members",
         value_key: "photo",
         normalization_status: :normalized,
-        modifier_status: :none
+        modifier: %LiveFrames.IR.ValueModifier.None{}
       }
 
     alt_binding =
@@ -467,7 +467,7 @@ defmodule LiveFrames.NativeGeneratorTest do
         collection_binding_id: "cb_members",
         value_key: "alt",
         normalization_status: :normalized,
-        modifier_status: :none
+        modifier: %LiveFrames.IR.ValueModifier.None{}
       }
 
     document = %{
@@ -735,7 +735,7 @@ defmodule LiveFrames.NativeGeneratorTest do
             scope: :site,
             value_key: "url",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -803,7 +803,7 @@ defmodule LiveFrames.NativeGeneratorTest do
             scope: :collection,
             collection_binding_id: "cb_x",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }

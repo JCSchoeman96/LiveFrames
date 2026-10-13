@@ -4,9 +4,9 @@ defmodule LiveFrames.Behavior.ReviewResult do
   """
 
   alias LiveFrames.Behavior.Diagnostic
+  alias LiveFrames.Behavior.DesignDocumentIdentity
   alias LiveFrames.Behavior.Serializer
   alias LiveFrames.CanonicalJSON
-  alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.Identity
 
   @review_format_version "1.0.0"
@@ -172,11 +172,7 @@ defmodule LiveFrames.Behavior.ReviewResult do
   end
 
   defp identity_valid?(%Identity{} = identity) do
-    exact_fields?(identity, [:ir_version, :canonicalization_id, :digest_algorithm, :digest]) and
-      identity.ir_version == DesignDocument.current_ir_version() and
-      Identity.supported_canonicalization_id?(identity.canonicalization_id) and
-      Identity.supported_digest_algorithm?(identity.digest_algorithm) and
-      digest?(identity.digest)
+    DesignDocumentIdentity.valid?(identity)
   end
 
   defp identity_valid?(_identity), do: false

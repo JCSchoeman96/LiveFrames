@@ -7,8 +7,9 @@ defmodule LiveFrames.IR.IdentityTest do
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Identity
+  alias LiveFrames.Fidelity.DocumentLoader
 
-  @baseline_golden_digest "f0cc7b053b89b1522b3f336a53c31c461f645fa30077aeefa611bfb95de123e3"
+  @baseline_golden_digest "db122326699eef1df1da1b6f967f201d5372c3ab7e3efda3b649a36aed710cf2"
 
   defp valid_document do
     %DesignDocument{root_nodes: [DesignNode.new([1], semantic_type: "section")]}
@@ -20,7 +21,7 @@ defmodule LiveFrames.IR.IdentityTest do
     assert Identity.canonicalization_id() == "lf-ir-serializer-v1"
     assert Identity.digest_algorithm() == "sha-256"
     assert {:ok, identity} = Identity.from_document(document)
-    assert identity.ir_version == "3.0.0"
+    assert identity.ir_version == "4.0.0"
     assert identity.canonicalization_id == "lf-ir-serializer-v1"
     assert identity.digest_algorithm == "sha-256"
     assert identity.digest == @baseline_golden_digest
@@ -46,6 +47,71 @@ defmodule LiveFrames.IR.IdentityTest do
     assert {:ok, original_identity} = Identity.from_document(document)
     assert {:ok, changed_identity} = Identity.from_document(changed)
     assert original_identity.digest != changed_identity.digest
+  end
+
+  test "includes the v4 modifier in the canonical document identity" do
+    node_id = DesignNode.deterministic_id([1])
+
+    document_with_modifier = fn modifier ->
+      map = %{
+        "ir_version" => "4.0.0",
+        "source_metadata" => %{},
+        "token_set" => %{},
+        "root_nodes" => [
+          %{
+            "node_id" => node_id,
+            "semantic_type" => "paragraph",
+            "semantic_role" => nil,
+            "label" => nil,
+            "content" => "Body",
+            "attributes" => %{},
+            "styles" => %{},
+            "responsive" => %{},
+            "interaction_refs" => [],
+            "asset_refs" => [],
+            "children" => [],
+            "source_trace" => nil
+          }
+        ],
+        "assets" => %{},
+        "interactions" => %{},
+        "collection_bindings" => %{},
+        "value_bindings" => %{
+          "value_001" => %{
+            "value_binding_id" => "value_001",
+            "target_node_id" => node_id,
+            "target_kind" => "text",
+            "value_kind" => "field",
+            "scope" => "site",
+            "value_key" => "content.body",
+            "collection_binding_id" => nil,
+            "modifier" => modifier,
+            "normalization_status" => "normalized",
+            "source_trace" => nil
+          }
+        },
+        "diagnostics" => [],
+        "provenance" => %{}
+      }
+
+      assert {:ok, document} = DocumentLoader.from_map(map)
+      document
+    end
+
+    none = document_with_modifier.(%{"status" => "none"})
+
+    resolved =
+      document_with_modifier.(%{
+        "status" => "resolved",
+        "kind" => "word_limit",
+        "arguments" => %{"count" => 16}
+      })
+
+    assert {:ok, none_identity} = Identity.from_document(none)
+    assert {:ok, resolved_identity} = Identity.from_document(resolved)
+    assert none_identity.ir_version == "4.0.0"
+    assert resolved_identity.ir_version == "4.0.0"
+    assert none_identity.digest != resolved_identity.digest
   end
 
   test "returns existing IR diagnostics for invalid documents before hashing" do

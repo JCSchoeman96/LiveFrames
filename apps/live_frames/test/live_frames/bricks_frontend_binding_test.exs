@@ -223,7 +223,7 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     assert binding.scope == :collection_item
     assert binding.value_key == "content.title"
     assert binding.collection_binding_id == "cb_#{DesignNode.deterministic_id([1])}"
-    assert binding.modifier_status == :none
+    assert %LiveFrames.IR.ValueModifier.None{} = binding.modifier
     assert binding.normalization_status == :normalized
     assert node_by_source_id(document, "title").content == nil
     assert binding.source_trace.source_path =~ ".settings.text"
@@ -251,7 +251,7 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
     assert %ValueBinding{} = binding = binding_for(document, "body")
     assert binding.value_key == "content.body"
-    assert binding.modifier_status == :opaque
+    assert %LiveFrames.IR.ValueModifier.Opaque{} = binding.modifier
     assert binding.normalization_status == :evidence_insufficient
     assert node_by_source_id(document, "body").content == nil
     assert "bricks.binding.evidence_insufficient" in diagnostic_codes(document)

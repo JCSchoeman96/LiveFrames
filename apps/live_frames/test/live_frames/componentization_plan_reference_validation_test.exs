@@ -138,7 +138,7 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
       value_key: Keyword.get(options, :value_key, "field"),
       collection_binding_id: Keyword.get(options, :collection_binding_id),
       normalization_status: Keyword.get(options, :normalization_status, :normalized),
-      modifier_status: Keyword.get(options, :modifier_status, :none)
+      modifier: Keyword.get(options, :modifier, %LiveFrames.IR.ValueModifier.None{})
     }
   end
 
@@ -1635,7 +1635,7 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
           "vb_title" =>
             value_binding("vb_title", @heading_id,
               normalization_status: :evidence_insufficient,
-              modifier_status: :opaque
+              modifier: %LiveFrames.IR.ValueModifier.Opaque{}
             )
         }
     }

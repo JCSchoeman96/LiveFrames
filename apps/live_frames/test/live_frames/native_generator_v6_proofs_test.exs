@@ -98,7 +98,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             scope: :site,
             value_key: "title",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -145,7 +145,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             scope: :site,
             value_key: "photo",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -226,7 +226,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             scope: :collection,
             collection_binding_id: "cb_x",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -360,7 +360,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             scope: :site,
             value_key: "body",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -491,7 +491,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             scope: :collection,
             collection_binding_id: "cb_child",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }
@@ -838,7 +838,7 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
             collection_binding_id: "cb",
             value_key: "photo",
             normalization_status: :normalized,
-            modifier_status: :none
+            modifier: %LiveFrames.IR.ValueModifier.None{}
           }
         }
     }

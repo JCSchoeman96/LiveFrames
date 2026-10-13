@@ -237,7 +237,7 @@ defmodule LiveFrames.ComponentReviewTest do
             scope: :site,
             value_key: "title",
             normalization_status: :evidence_insufficient,
-            modifier_status: :opaque
+            modifier: %LiveFrames.IR.ValueModifier.Opaque{}
           }
         }
     }

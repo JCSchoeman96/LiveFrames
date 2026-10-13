@@ -207,7 +207,7 @@ defmodule LiveFrames.ComponentizationPlanTest do
           collection_binding_id: "cb_items",
           value_key: "photo",
           normalization_status: :normalized,
-          modifier_status: :none
+          modifier: %LiveFrames.IR.ValueModifier.None{}
         }
       }
     }
@@ -402,7 +402,8 @@ defmodule LiveFrames.ComponentizationPlanTest do
       target_kind: :text,
       value_kind: :field,
       scope: :site,
-      value_key: "text"
+      value_key: "text",
+      modifier: %LiveFrames.IR.ValueModifier.None{}
     }
 
     document = %{document | value_bindings: %{"value" => binding}}

@@ -41,7 +41,7 @@ defmodule LiveFrames.ComponentContractReferenceValidationTest do
       value_key: value_key_for(value_kind, opts),
       collection_binding_id: Keyword.get(opts, :collection_binding_id),
       normalization_status: Keyword.get(opts, :normalization_status, :normalized),
-      modifier_status: Keyword.get(opts, :modifier_status, :none)
+      modifier: Keyword.get(opts, :modifier, %LiveFrames.IR.ValueModifier.None{})
     }
   end
 
@@ -251,7 +251,7 @@ defmodule LiveFrames.ComponentContractReferenceValidationTest do
                 target_node_id: @site_id,
                 value_kind: :field,
                 scope: :site,
-                modifier_status: :opaque,
+                modifier: %LiveFrames.IR.ValueModifier.Opaque{},
                 normalization_status: :evidence_insufficient
               )
           }

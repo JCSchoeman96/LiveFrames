@@ -7,6 +7,7 @@ defmodule LiveFrames.IR.Migration do
   @v1 "1.0.0"
   @v2 "2.0.0"
   @v3 "3.0.0"
+  @v4 "4.0.0"
 
   @v1_to_v2 %{
     "source_version" => @v1,
@@ -17,6 +18,12 @@ defmodule LiveFrames.IR.Migration do
   @v2_to_v3 %{
     "source_version" => @v2,
     "target_version" => @v3,
+    "kind" => "structural",
+    "frontend_semantics_recovered" => false
+  }
+  @v3_to_v4 %{
+    "source_version" => @v3,
+    "target_version" => @v4,
     "kind" => "structural",
     "frontend_semantics_recovered" => false
   }
@@ -35,13 +42,20 @@ defmodule LiveFrames.IR.Migration do
 
       {:ok, @v1} ->
         with {:ok, v2} <- migrate_v1_to_v2(map) do
-          migrate_v2_to_v3(v2, :legacy_values_checked)
+          with {:ok, v3} <- migrate_v2_to_v3(v2, :legacy_values_checked) do
+            migrate_v3_to_v4(v3)
+          end
         end
 
       {:ok, @v2} ->
-        migrate_v2_to_v3(map, :check_legacy_values)
+        with {:ok, v3} <- migrate_v2_to_v3(map, :check_legacy_values) do
+          migrate_v3_to_v4(v3)
+        end
 
       {:ok, @v3} ->
+        migrate_v3_to_v4(map)
+
+      {:ok, @v4} ->
         {:ok, map}
 
       {:ok, _unsupported} ->
@@ -81,6 +95,75 @@ defmodule LiveFrames.IR.Migration do
       {:ok, map |> Map.put("ir_version", @v3) |> Map.put("provenance", provenance)}
     end
   end
+
+  defp migrate_v3_to_v4(map) do
+    with {:ok, value_bindings} <- migrate_v3_value_bindings(Map.get(map, "value_bindings")),
+         :ok <- require_provenance_object(map),
+         provenance = Map.fetch!(map, "provenance"),
+         {:ok, provenance} <- merge_migration_provenance(provenance, @v3_to_v4) do
+      {:ok,
+       map
+       |> Map.put("ir_version", @v4)
+       |> Map.put("value_bindings", value_bindings)
+       |> Map.put("provenance", provenance)}
+    end
+  end
+
+  defp migrate_v3_value_bindings(bindings) when is_map(bindings) and not is_struct(bindings) do
+    Enum.reduce_while(bindings, {:ok, %{}}, fn
+      {id, binding}, {:ok, acc}
+      when is_binary(id) and is_map(binding) and not is_struct(binding) ->
+        case Map.fetch(binding, "modifier_status") do
+          {:ok, "none"} ->
+            if Map.has_key?(binding, "modifier") do
+              {:halt,
+               {:error,
+                [value_binding_migration_error("v3 binding already has a modifier field")]}}
+            else
+              migrated =
+                binding
+                |> Map.delete("modifier_status")
+                |> Map.put("modifier", %{"status" => "none"})
+
+              {:cont, {:ok, Map.put(acc, id, migrated)}}
+            end
+
+          {:ok, "opaque"} ->
+            if Map.has_key?(binding, "modifier") do
+              {:halt,
+               {:error,
+                [value_binding_migration_error("v3 binding already has a modifier field")]}}
+            else
+              migrated =
+                binding
+                |> Map.delete("modifier_status")
+                |> Map.put("modifier", %{"status" => "opaque"})
+
+              {:cont, {:ok, Map.put(acc, id, migrated)}}
+            end
+
+          _other ->
+            {:halt,
+             {:error,
+              [value_binding_migration_error("v3 binding modifier_status must be none or opaque")]}}
+        end
+
+      _malformed, _acc ->
+        {:halt,
+         {:error,
+          [
+            value_binding_migration_error(
+              "v3 value_bindings must contain JSON object records keyed by strings"
+            )
+          ]}}
+    end)
+  end
+
+  defp migrate_v3_value_bindings(_bindings),
+    do: {:error, [value_binding_migration_error("v3 value_bindings must be a JSON object")]}
+
+  defp value_binding_migration_error(message),
+    do: error("ir.migration.value_binding_invalid", message)
 
   defp ensure_legacy_calculations_valid(_map, :legacy_values_checked), do: :ok
 
@@ -217,7 +300,8 @@ defmodule LiveFrames.IR.Migration do
 
       {:ok, entries} when is_list(entries) ->
         if Enum.any?(entries, &(not valid_migration_entry?(&1))) or
-             Enum.any?(entries, &conflicting_migration?(&1, migration_entry)) do
+             Enum.any?(entries, &conflicting_migration?(&1, migration_entry)) or
+             not known_migration_order_valid?(entries) do
           {:error,
            [
              error(
@@ -266,18 +350,31 @@ defmodule LiveFrames.IR.Migration do
   defp valid_migration_entry?(_entry), do: false
 
   defp insert_migration_entry(entries, migration_entry) do
+    migration_rank = known_transition_rank(migration_entry)
+
     index =
-      if migration_entry == @v1_to_v2 do
-        Enum.find_index(entries, fn
-          %{"source_version" => @v2, "target_version" => @v3} -> true
-          _entry -> false
-        end) || length(entries)
-      else
-        length(entries)
-      end
+      Enum.find_index(entries, fn entry ->
+        case known_transition_rank(entry) do
+          rank when is_integer(rank) -> rank > migration_rank
+          nil -> false
+        end
+      end) || length(entries)
 
     List.insert_at(entries, index, migration_entry)
   end
+
+  defp known_migration_order_valid?(entries) do
+    entries
+    |> Enum.map(&known_transition_rank/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.all?(fn [previous, current] -> previous <= current end)
+  end
+
+  defp known_transition_rank(%{"source_version" => @v1, "target_version" => @v2}), do: 1
+  defp known_transition_rank(%{"source_version" => @v2, "target_version" => @v3}), do: 2
+  defp known_transition_rank(%{"source_version" => @v3, "target_version" => @v4}), do: 3
+  defp known_transition_rank(_entry), do: nil
 
   defp error(code, message),
     do: Diagnostic.new(code: code, severity: :error, category: :schema, message: message)

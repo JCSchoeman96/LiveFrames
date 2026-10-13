@@ -95,7 +95,7 @@ defmodule LiveFrames.IRTest do
   end
 
   test "exposes the current supported IR version and uses it by default" do
-    assert DesignDocument.current_ir_version() == "3.0.0"
+    assert DesignDocument.current_ir_version() == "4.0.0"
     assert IR.current_ir_version() == DesignDocument.current_ir_version()
     assert DesignDocument.new().ir_version == IR.current_ir_version()
     assert DesignDocument.new().collection_bindings == %{}
@@ -104,7 +104,7 @@ defmodule LiveFrames.IRTest do
 
   test "validation rejects non-empty unsupported IR versions" do
     assert {:error, diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "4.0.0"})
+             IR.validate(%{valid_document() | ir_version: "3.0.0"})
 
     assert Enum.any?(diagnostics, &(&1.code == "ir.document.version_unsupported"))
     refute Enum.any?(diagnostics, &(&1.code == "ir.document.version_missing"))
@@ -120,7 +120,7 @@ defmodule LiveFrames.IRTest do
     assert Enum.any?(malformed_diagnostics, &(&1.code == "ir.document.version_invalid"))
 
     assert {:error, unsupported_diagnostics} =
-             IR.validate(%{valid_document() | ir_version: "4.0.0"})
+             IR.validate(%{valid_document() | ir_version: "3.0.0"})
 
     assert Enum.any?(unsupported_diagnostics, &(&1.code == "ir.document.version_unsupported"))
   end
@@ -344,7 +344,7 @@ defmodule LiveFrames.IRTest do
     assert first == second
 
     decoded = Jason.decode!(first)
-    assert decoded["ir_version"] == "3.0.0"
+    assert decoded["ir_version"] == "4.0.0"
     assert decoded["collection_bindings"] == %{}
     assert decoded["value_bindings"] == %{}
 
@@ -525,7 +525,7 @@ defmodule LiveFrames.IRTest do
       scope: :collection_item,
       value_key: "content.title",
       collection_binding_id: "collection_001",
-      modifier_status: :none,
+      modifier: %LiveFrames.IR.ValueModifier.None{},
       normalization_status: :normalized
     }
 
@@ -542,6 +542,14 @@ defmodule LiveFrames.IRTest do
 
   test "accepts valid collection and value bindings" do
     assert IR.validate(binding_document()) == :ok
+  end
+
+  test "serializes ValueBinding modifiers as a required nested v4 object" do
+    serialized = IR.to_map(binding_document())
+    value = serialized["value_bindings"]["value_001"]
+
+    assert value["modifier"] == %{"status" => "none"}
+    refute Map.has_key?(value, "modifier_status")
   end
 
   test "rejects collection binding registry key mismatch" do
@@ -644,7 +652,7 @@ defmodule LiveFrames.IRTest do
           value_kind: :field,
           scope: :site,
           value_key: "content.title",
-          modifier_status: :none,
+          modifier: %LiveFrames.IR.ValueModifier.None{},
           normalization_status: :normalized
         },
         "value_count" => %ValueBinding{
@@ -654,7 +662,7 @@ defmodule LiveFrames.IRTest do
           value_kind: :collection_count,
           scope: :collection,
           collection_binding_id: "collection_001",
-          modifier_status: :none,
+          modifier: %LiveFrames.IR.ValueModifier.None{},
           normalization_status: :normalized
         }
       }
@@ -688,38 +696,163 @@ defmodule LiveFrames.IRTest do
 
     opaque_invalid =
       update_in(document.value_bindings["value_001"], fn binding ->
-        %{binding | modifier_status: :opaque, normalization_status: :normalized}
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Opaque{},
+            normalization_status: :normalized
+        }
       end)
 
     assert {:error, modifier_diagnostics} = IR.validate(opaque_invalid)
     assert Enum.any?(modifier_diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
   end
 
-  test "ValueBinding modifier and normalization status matrix matches C09B authority" do
+  test "ValueBinding modifier and normalization status matrix matches C09B2 authority" do
     document = binding_document()
 
     assert IR.validate(document) == :ok
 
     evidence_without_modifier =
       update_in(document.value_bindings["value_001"], fn binding ->
-        %{binding | modifier_status: :none, normalization_status: :evidence_insufficient}
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.None{},
+            normalization_status: :evidence_insufficient
+        }
       end)
 
     assert IR.validate(evidence_without_modifier) == :ok
 
     opaque_evidence =
       update_in(document.value_bindings["value_001"], fn binding ->
-        %{binding | modifier_status: :opaque, normalization_status: :evidence_insufficient}
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Opaque{},
+            normalization_status: :evidence_insufficient
+        }
       end)
 
     assert IR.validate(opaque_evidence) == :ok
 
     opaque_normalized =
       update_in(document.value_bindings["value_001"], fn binding ->
-        %{binding | modifier_status: :opaque, normalization_status: :normalized}
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Opaque{},
+            normalization_status: :normalized
+        }
       end)
 
     assert {:error, diagnostics} = IR.validate(opaque_normalized)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+
+    resolved_modifier = %LiveFrames.IR.ValueModifier.Resolved{
+      kind: :word_limit,
+      arguments: %{"count" => 16}
+    }
+
+    resolved =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{binding | modifier: resolved_modifier}
+      end)
+
+    assert IR.validate(resolved) == :ok
+
+    resolved_without_evidence =
+      update_in(resolved.value_bindings["value_001"], fn binding ->
+        %{binding | normalization_status: :evidence_insufficient}
+      end)
+
+    assert {:error, resolved_diagnostics} = IR.validate(resolved_without_evidence)
+
+    assert Enum.any?(
+             resolved_diagnostics,
+             &(&1.code == "ir.value_binding.modifier_inconsistent")
+           )
+  end
+
+  test "rejects invalid resolved word_limit arguments and binding contexts" do
+    document = binding_document()
+
+    for arguments <- [
+          %{},
+          %{"count" => 0},
+          %{"count" => -1},
+          %{"count" => 1.5},
+          %{"count" => "16"},
+          %{"count" => 16, "unit" => "words"}
+        ] do
+      invalid =
+        update_in(document.value_bindings["value_001"], fn binding ->
+          %{
+            binding
+            | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+                kind: :word_limit,
+                arguments: arguments
+              }
+          }
+        end)
+
+      assert {:error, diagnostics} = IR.validate(invalid)
+      assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_invalid"))
+    end
+
+    invalid_context =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+              kind: :word_limit,
+              arguments: %{"count" => 16}
+            },
+            target_kind: :asset
+        }
+      end)
+
+    assert {:error, context_diagnostics} = IR.validate(invalid_context)
+
+    assert Enum.any?(
+             context_diagnostics,
+             &(&1.code == "ir.value_binding.modifier_inconsistent")
+           )
+  end
+
+  test "rejects resolved word_limit for collection_count values" do
+    document = binding_document()
+
+    invalid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+              kind: :word_limit,
+              arguments: %{"count" => 16}
+            },
+            value_kind: :collection_count,
+            scope: :site
+        }
+      end)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
+  end
+
+  test "rejects resolved word_limit for collection scope" do
+    document = binding_document()
+
+    invalid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | modifier: %LiveFrames.IR.ValueModifier.Resolved{
+              kind: :word_limit,
+              arguments: %{"count" => 16}
+            },
+            scope: :collection
+        }
+      end)
+
+    assert {:error, diagnostics} = IR.validate(invalid)
     assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.modifier_inconsistent"))
   end
 
