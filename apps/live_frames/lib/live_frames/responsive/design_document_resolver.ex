@@ -25,6 +25,12 @@ defmodule LiveFrames.Responsive.DesignDocumentResolver do
       {:error,
        diagnostic("design_document_resolver.input_invalid", "expected a DesignDocument", %{})}
 
+  @spec has_responsive_overrides?(term()) :: boolean()
+  def has_responsive_overrides?(%DesignDocument{root_nodes: root_nodes}) when is_list(root_nodes),
+    do: Enum.any?(root_nodes, &node_has_responsive_overrides?/1)
+
+  def has_responsive_overrides?(_document), do: false
+
   defp validate_document(document) do
     case IR.validate(document) do
       :ok ->
@@ -82,6 +88,13 @@ defmodule LiveFrames.Responsive.DesignDocumentResolver do
       {:ok, %{node | responsive: responsive, children: children}}
     end
   end
+
+  defp node_has_responsive_overrides?(%DesignNode{responsive: responsive, children: children}) do
+    (is_map(responsive) and map_size(responsive) > 0) or
+      (is_list(children) and Enum.any?(children, &node_has_responsive_overrides?/1))
+  end
+
+  defp node_has_responsive_overrides?(_node), do: false
 
   defp resolve_overrides(%DesignNode{} = node, authority) do
     Enum.reduce_while(node.responsive, {:ok, %{}}, fn {key, override}, {:ok, acc} ->
@@ -163,7 +176,12 @@ defmodule LiveFrames.Responsive.DesignDocumentResolver do
          )}
 
       {:error, :authority_missing} ->
-        {:ok, override}
+        {:error,
+         diagnostic(
+           "design_document_resolver.authority_missing",
+           "no accepted breakpoint authority matches the resolved override",
+           override_metadata(node_id, override)
+         )}
     end
   end
 

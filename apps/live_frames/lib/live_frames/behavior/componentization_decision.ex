@@ -12,9 +12,11 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
   alias LiveFrames.Behavior.Serializer
   alias LiveFrames.Behavior.Validation
   alias LiveFrames.ComponentizationProposer
+  alias LiveFrames.ComponentizationProposer.Diagnostic, as: ProposerDiagnostic
   alias LiveFrames.ComponentizationProposer.SemanticInput
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Identity
+  alias LiveFrames.Responsive.DesignDocumentResolver
 
   @type disposition :: :contained | :outside_candidate | :split | :unresolved
 
@@ -43,6 +45,51 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
   @spec propose(term(), term(), term(), term()) ::
           {:ok, t(), term()} | {:error, t()} | {:error, {:prerequisite, atom(), list()}}
   def propose(design_document, behavior_contract, behavior_review_result, semantic_input) do
+    if DesignDocumentResolver.has_responsive_overrides?(design_document) do
+      result = ComponentizationProposer.propose(design_document, semantic_input)
+      {:error, {:prerequisite, :breakpoint_authority, result.input_diagnostics}}
+    else
+      propose_after_preflight(
+        design_document,
+        behavior_contract,
+        behavior_review_result,
+        semantic_input,
+        &ComponentizationProposer.propose_from_preflighted_document_internal/2
+      )
+    end
+  end
+
+  @spec propose(term(), term(), term(), term(), term()) ::
+          {:ok, t(), term()} | {:error, t()} | {:error, {:prerequisite, atom(), list()}}
+  def propose(
+        design_document,
+        behavior_contract,
+        behavior_review_result,
+        semantic_input,
+        breakpoint_authority
+      ) do
+    case DesignDocumentResolver.resolve(design_document, breakpoint_authority) do
+      {:error, diagnostic} ->
+        {:error, {:prerequisite, :breakpoint_authority, [proposal_diagnostic(diagnostic)]}}
+
+      {:ok, resolved_document} ->
+        propose_after_preflight(
+          resolved_document,
+          behavior_contract,
+          behavior_review_result,
+          semantic_input,
+          &ComponentizationProposer.propose_from_preflighted_document_internal/2
+        )
+    end
+  end
+
+  defp propose_after_preflight(
+         design_document,
+         behavior_contract,
+         behavior_review_result,
+         semantic_input,
+         proposal_builder
+       ) do
     with {:ok, document_identity} <-
            prerequisite(:design_document, Identity.from_document(design_document)),
          {:ok, contract_digest} <-
@@ -100,15 +147,22 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
 
       case decision.outcome do
         :admissible ->
-          proposer_result =
-            ComponentizationProposer.propose(design_document, decision.semantic_input)
-
-          {:ok, decision, proposer_result}
+          {:ok, decision, proposal_builder.(design_document, decision.semantic_input)}
 
         :rejected ->
           {:error, decision}
       end
     end
+  end
+
+  defp proposal_diagnostic(diagnostic) do
+    %ProposerDiagnostic{
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      message: diagnostic.message,
+      path: "breakpoint_authority",
+      metadata: diagnostic.metadata
+    }
   end
 
   defp prerequisite(_stage, {:ok, value}), do: {:ok, value}

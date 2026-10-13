@@ -54,6 +54,16 @@ defmodule LiveFrames.Responsive.DesignDocumentResolverTest do
            }
   end
 
+  test "fails closed when breakpoint authority is invalid" do
+    override = unresolved("tablet_portrait", %{"display" => StyleValue.keyword("grid")})
+
+    assert {:error, diagnostic} =
+             document(override)
+             |> DesignDocumentResolver.resolve(%{})
+
+    assert diagnostic.code == "design_document_resolver.authority_invalid"
+  end
+
   test "fails closed when the source name differs from accepted authority" do
     override = %{
       unresolved("tablet_portrait", %{"display" => StyleValue.keyword("grid")})
@@ -83,7 +93,7 @@ defmodule LiveFrames.Responsive.DesignDocumentResolverTest do
     assert diagnostic.code == "design_document_resolver.resolved_authority_conflict"
   end
 
-  test "preserves a valid resolved override with no matching authority entry" do
+  test "rejects a resolved override with no matching authority entry" do
     override = %ResponsiveOverride{
       breakpoint_id: "legacy_tablet",
       source_name: "legacy_tablet",
@@ -92,12 +102,17 @@ defmodule LiveFrames.Responsive.DesignDocumentResolverTest do
       styles: %{"display" => StyleValue.keyword("grid")}
     }
 
-    assert {:ok, resolved} =
+    assert {:error, diagnostic} =
              document(override)
              |> DesignDocumentResolver.resolve(authority())
 
-    [node] = resolved.root_nodes
-    assert node.responsive["legacy_tablet"] == override
+    assert diagnostic.code == "design_document_resolver.authority_missing"
+
+    assert diagnostic.metadata == %{
+             "breakpoint_id" => "legacy_tablet",
+             "node_id" => "node_000001",
+             "source_name" => "legacy_tablet"
+           }
   end
 
   test "preserves an already-resolved range that matches accepted authority" do

@@ -21,7 +21,16 @@ defmodule LiveFrames.ComponentizationProposerTest do
     RenderPlacementDecision
   }
 
-  alias LiveFrames.IR.{CollectionBinding, DesignDocument, DesignNode, ValueBinding}
+  alias LiveFrames.IR.{
+    CollectionBinding,
+    DesignDocument,
+    DesignNode,
+    ResponsiveOverride,
+    StyleValue,
+    ValueBinding
+  }
+
+  alias LiveFrames.Responsive.BreakpointAuthority
 
   @boundary_id "node_000001"
   @heading_id "node_000001_000001"
@@ -190,7 +199,8 @@ defmodule LiveFrames.ComponentizationProposerTest do
 
   test "constructs a proposed pair for explicit unbound placement" do
     semantic_input = input(public_attrs: [attr("title")], render_placements: [render("title")])
-    result = ComponentizationProposer.propose(document(), semantic_input)
+    design_document = document()
+    result = ComponentizationProposer.propose(design_document, semantic_input)
 
     assert result.outcome == :proposed
     assert result.contract.approval_status == :proposed
@@ -200,12 +210,142 @@ defmodule LiveFrames.ComponentizationProposerTest do
     assert result.contract.function_intent == "card"
     assert result.plan.contract_id == "card_contract"
     assert result.plan.boundary_node_id == @boundary_id
+    assert result.design_document == design_document
     assert_pair_valid(result)
 
     assert ComponentContract.validate_ir_references(result.contract, document()) == :ok
 
     assert ComponentizationPlan.validate_references(result.plan, result.contract, document()) ==
              :ok
+  end
+
+  test "authority-less proposal rejects a responsive document" do
+    result = ComponentizationProposer.propose(responsive_document(), input())
+
+    assert result.outcome == :invalid_input
+    assert result.contract == nil
+    assert result.plan == nil
+
+    assert Enum.any?(result.input_diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_proposer.breakpoint_authority_required"
+           end)
+  end
+
+  test "authority-less proposal rejects responsive state nested on a child" do
+    original = document()
+    [root] = original.root_nodes
+    [child | rest] = root.children
+
+    override = %ResponsiveOverride{
+      breakpoint_id: "tablet_portrait",
+      source_name: "tablet_portrait",
+      resolution_status: :unresolved,
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    nested_document = %{
+      original
+      | root_nodes: [
+          %{
+            root
+            | children: [%{child | responsive: %{"tablet_portrait" => override}} | rest]
+          }
+        ]
+    }
+
+    [nested_root] = nested_document.root_nodes
+    [nested_child | _] = nested_root.children
+    assert nested_root.responsive == %{}
+    assert nested_child.responsive != %{}
+
+    result = ComponentizationProposer.propose(nested_document, input())
+
+    assert result.outcome == :invalid_input
+
+    assert Enum.any?(result.input_diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_proposer.breakpoint_authority_required"
+           end)
+  end
+
+  test "authority-aware proposal preserves missing-breakpoint metadata" do
+    original = document()
+    [root] = original.root_nodes
+
+    override = %ResponsiveOverride{
+      breakpoint_id: "legacy_tablet",
+      source_name: "legacy_tablet",
+      resolution_status: :unresolved,
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    responsive = %{original | root_nodes: [%{root | responsive: %{"legacy_tablet" => override}}]}
+    result = ComponentizationProposer.propose(responsive, input(), breakpoint_authority())
+
+    assert result.outcome == :invalid_input
+    [diagnostic] = result.input_diagnostics
+    assert diagnostic.code == "design_document_resolver.authority_missing"
+
+    assert Map.get(diagnostic, :metadata) == %{
+             "breakpoint_id" => "legacy_tablet",
+             "node_id" => @boundary_id,
+             "source_name" => "legacy_tablet"
+           }
+  end
+
+  test "authority-aware proposal preserves source-name mismatch metadata" do
+    original = responsive_document()
+    [root] = original.root_nodes
+    override = root.responsive["tablet_portrait"]
+    mismatched = %{override | source_name: "tablet"}
+
+    responsive = %{
+      original
+      | root_nodes: [%{root | responsive: %{"tablet_portrait" => mismatched}}]
+    }
+
+    result = ComponentizationProposer.propose(responsive, input(), breakpoint_authority())
+
+    assert result.outcome == :invalid_input
+    [diagnostic] = result.input_diagnostics
+    assert diagnostic.code == "design_document_resolver.source_breakpoint_mismatch"
+
+    assert Map.get(diagnostic, :metadata) == %{
+             "breakpoint_id" => "tablet_portrait",
+             "node_id" => @boundary_id,
+             "source_name" => "tablet"
+           }
+  end
+
+  test "authority-aware proposal resolves before fingerprinting and returns that document" do
+    original_document = responsive_document()
+    result = ComponentizationProposer.propose(original_document, input(), breakpoint_authority())
+
+    assert result.outcome == :proposed
+    assert %DesignDocument{} = result.design_document
+    [resolved_boundary] = result.design_document.root_nodes
+    resolved_override = resolved_boundary.responsive["tablet_portrait"]
+
+    assert resolved_override.max_width == 991
+    assert resolved_override.resolution_status == :resolved
+
+    assert {:ok, resolved_identity} =
+             ComponentizationPlan.design_document_sha256(result.design_document)
+
+    assert result.plan.design_document_sha256 == resolved_identity
+
+    assert {:ok, original_identity} =
+             ComponentizationPlan.design_document_sha256(original_document)
+
+    refute result.plan.design_document_sha256 == original_identity
+
+    assert ComponentContract.validate_ir_references(result.contract, result.design_document) ==
+             :ok
+
+    assert ComponentizationPlan.validate_references(
+             result.plan,
+             result.contract,
+             result.design_document
+           ) == :ok
   end
 
   test "canonical caller order produces identical structs and encodings" do
@@ -864,6 +1004,49 @@ defmodule LiveFrames.ComponentizationProposerTest do
       )
 
     {design_document, semantic_input}
+  end
+
+  defp responsive_document do
+    original = document()
+    [boundary | rest] = original.root_nodes
+
+    override = %ResponsiveOverride{
+      breakpoint_id: "tablet_portrait",
+      source_name: "tablet_portrait",
+      resolution_status: :unresolved,
+      styles: %{"display" => StyleValue.keyword("grid")}
+    }
+
+    %{original | root_nodes: [%{boundary | responsive: %{"tablet_portrait" => override}} | rest]}
+  end
+
+  defp breakpoint_authority do
+    {:ok, authority} =
+      BreakpointAuthority.from_map(%{
+        "schema_version" => "1.0.0",
+        "authority_status" => "accepted",
+        "authority_level" => 3,
+        "authority_type" => "version_matched_default_confirmed_by_source_environment",
+        "breakpoints" => %{
+          "tablet_portrait" => %{
+            "source_name" => "tablet_portrait",
+            "source_width" => 991,
+            "min_width" => nil,
+            "max_width" => 991,
+            "unit" => "px",
+            "query_semantics" => "max-width",
+            "media_condition" => "@media (max-width: 991px)",
+            "enabled" => true,
+            "cascade_order" => 1,
+            "authority_level" => 3,
+            "authority_type" => "version_matched_default_confirmed_by_source_environment",
+            "status" => "accepted"
+          }
+        },
+        "cascade" => %{"ordering" => "descending_width"}
+      })
+
+    authority
   end
 
   defp diagnostic_sort_key(diagnostic) do
