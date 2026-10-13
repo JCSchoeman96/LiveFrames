@@ -120,28 +120,33 @@ is recorded. The export does not specify guards or an invalid-target fallback.
 ## 8. Observed presentation/style evidence
 
 The owning class's custom CSS contains both the pointer-state selectors and
-`:focus-within` selectors. The CSS groups pointer and focus conditions for the
-same expanded presentation effects:
+`:focus-within` selectors. Within the `min-width: 767px` collapsed-state
+presentation, the CSS groups pointer and focus conditions for the same
+expanded presentation effects:
 
 - The normal heading and lede change from zero opacity to visible opacity.
 - The vertical heading changes from visible opacity to zero opacity.
 - The overlay changes to zero opacity.
 - The inner content's expanded-state opacity is nonzero.
 - The lede has a translated expanded presentation.
-- The currently focused descendant receives a separate outline rule under
-  `:focus-within :focus`.
+- Under `:focus-within :focus`, the currently focused descendant has
+  `outline: 0` and `box-shadow: none`.
 
 CSS transition declarations are present. These declarations describe visual
 transitions; the export contains no timer action for them. The state selectors
 are source CSS evidence only. The source class and `is-hover` value are not
 LiveFrames public contracts or approved target selectors.
 
-Pointer-active and focus-within presentation overlap: the grouped rules give
-them the same expanded content treatment. Focus-within also supplies a focus
-outline. They are not identical in every visual detail. No source rule defines
-precedence when pointer and focus conditions are both true. Each condition
-continues to apply according to its own browser state; the export records no
-application-managed precedence rule.
+Pointer-active and focus-within presentation share the expanded card/content
+treatment. The focused-descendant rule explicitly suppresses outline and
+box-shadow; no separate visible source focus ring is evidenced. No source rule
+defines precedence when pointer and focus conditions are both true. Each
+condition continues to apply according to its own browser state; the export
+records no application-managed precedence rule.
+
+```text
+POINTER_FOCUS_OVERLAP=Shared expanded presentation; focused descendant source rule suppresses outline and box-shadow; no precedence rule
+```
 
 ## 9. Explicit lifecycle/state machine
 
@@ -150,10 +155,10 @@ browser selector condition, not an application-managed state record.
 
 | State | Entry and exit | Guard | Side effect and presentation | Cross-card effect | Cleanup, persistence, invalid/no-op, terminal |
 | --- | --- | --- | --- | --- | --- |
-| `DEFAULT(i)` | Initial card condition when its pointer class is absent and no descendant is focused. | No guard is encoded. | Default CSS presentation. | None recorded. | No terminal state. Missing-target behavior is unspecified. No persistence is recorded. |
-| `POINTER_ACTIVE(i)` | `DEFAULT(i) -- mouseenter --> POINTER_ACTIVE(i)`; `POINTER_ACTIVE(i) -- mouseleave --> DEFAULT(i)`. | Trigger is attached to the shared owner class; no further guard is encoded. | Set/remove the `is-hover` class value. CSS presents the expanded state. | No action references another card. | The leave action removes the class value. No other cleanup or persistence action is encoded. No terminal state. |
-| `FOCUS_ACTIVE(i)` | Enters while browser focus is within a descendant of card `i`; exits when focus leaves the card. | Native `:focus-within` selector condition. | No event action is recorded. CSS presents the expanded state and focus outline. | No action references another card. | Browser selector condition ends with focus leaving. No persistence or application cleanup is encoded. No terminal state. |
-| `POINTER_AND_FOCUS_ACTIVE(i)` | Both preceding conditions hold for the same card. | No precedence guard is encoded. | Grouped expanded rules overlap; the focus outline also applies. | No cross-card coordination is recorded. | Pointer class removal does not remove the independent focus selector condition. No terminal state. |
+| `DEFAULT(i)` | Initial card condition when its pointer class is absent and no descendant is focused. | No guard is encoded. | Default CSS presentation; the responsive default differs by viewport as described in section 10. | None recorded. | No terminal state. Missing-target behavior is unspecified. No persistence is recorded. |
+| `POINTER_ACTIVE(i)` | `DEFAULT(i) -- mouseenter --> POINTER_ACTIVE(i)`; `POINTER_ACTIVE(i) -- mouseleave --> DEFAULT(i)`. | Trigger is attached to the shared owner class; no further guard is encoded. | Set/remove the `is-hover` class value. At widths covered by `min-width: 767px`, CSS presents the expanded state; below 767px the normal heading and lede are already visible by default. | No action references another card. | The leave action removes the class value. No other cleanup or persistence action is encoded. No terminal state. |
+| `FOCUS_ACTIVE(i)` | Enters while browser focus is within a descendant of card `i`; exits when focus leaves the card. | Native `:focus-within` selector condition. | No event action is recorded. At widths covered by `min-width: 767px`, CSS presents the expanded card/content state; below 767px the normal heading and lede are already visible by default. The focused descendant receives `outline: 0` and `box-shadow: none`; no visible source focus ring is evidenced. | No action references another card. | Browser selector condition ends with focus leaving. No persistence or application cleanup is encoded. No terminal state. |
+| `POINTER_AND_FOCUS_ACTIVE(i)` | Both preceding conditions hold for the same card. | No precedence guard is encoded. | Shared expanded presentation applies at the desktop collapsed-state breakpoint; below 767px the normal heading and lede are already visible by default. The focused-descendant rule sets `outline: 0` and `box-shadow: none`. No precedence is specified. | No cross-card coordination is recorded. | Pointer class removal does not remove the independent focus selector condition. No terminal state. |
 
 These states describe observed class and selector conditions. They do not
 claim that the target requires an application state machine. The export does
@@ -164,32 +169,34 @@ not specify behavior for invalid targets or a missing event owner.
 Responsive data records a `tablet_portrait` grid override that selects
 `var(--grid-1)`; this document does not resolve that token's value. At
 `mobile_landscape`, the containing layout direction is `column` and its row
-gap uses the source grid-gap variable. The custom CSS also contains
-`min-width: 767px` rules for the collapsed heading/inner opacity and
-`max-width: 767px` rules that hide the overlay and vertical heading. At
-widths below 767px, the desktop collapsed-opacity rules do not apply. The
-mobile rules hide the overlay and vertical heading. The normal heading is not
-hidden by the desktop rule, but the base lede opacity remains zero until a
-pointer or focus state applies. At exactly 767px, both inclusive CSS media
-conditions match; that source boundary overlap is recorded here, without
-assigning precedence.
+gap uses the source grid-gap variable. The custom CSS places the collapsed
+normal-heading and lede opacity/translation rules, and the inner-content
+collapsed opacity rule, inside `@media (min-width: 767px)`. Pointer-active or
+`:focus-within` presentation exposes the expanded content at that breakpoint.
+The `@media (max-width: 767px)` rule hides the overlay and vertical heading;
+it does not hide the normal heading or lede. Below 767px, the desktop
+collapsed heading/lede/inner opacity rules do not apply, so the normal heading
+and lede are visible by default. At exactly 767px, both inclusive CSS media
+conditions match; this source boundary overlap is recorded without inferring a
+net presentation from that overlap.
 
 The interaction records use mouse entry and leave. No touch-specific action or
-separate touch-active state is encoded. Below 767px the normal heading is
-visible by default, while the lede remains at zero opacity until pointer or
-focus presentation activates. The four heading link settings remain present.
-The source does not label content as essential or specify how touch focus and
-link activation interact, so this document records visibility rather than
-making an accessibility or content-importance judgment.
+separate touch-active state is encoded. The bounded source shows the mobile
+heading and lede presented by default rather than gated by the desktop
+collapsed state. The four heading link settings remain present. Touch event
+ordering and navigation activation semantics are not specified by the export;
+this does not change the observed default mobile content visibility.
 
 ## 11. Accessibility-relevant source facts
 
 Each card root is a list item and has a heading descendant with a link setting.
-The focus-within CSS applies the expanded presentation and a separate outline
-to the focused descendant. No interaction record changes ARIA attributes or
-moves focus. The artifact contains no `aria-*` source setting in the inspected
-component records. These facts do not establish an accessibility acceptance
-result.
+At the desktop collapsed-state breakpoint, `:focus-within` applies the
+expanded presentation. Below 767px the normal heading and lede are already
+visible by default. The focused descendant rule sets `outline: 0` and
+`box-shadow: none`; no separate visible source focus ring is evidenced. No
+interaction record changes ARIA attributes or moves focus. The artifact
+contains no `aria-*` source setting in the inspected component records. These
+are source facts and do not establish an accessibility acceptance result.
 
 ## 12. Negative-effects audit
 
@@ -226,12 +233,15 @@ prove behavior outside the bounded Romeo component export. No browser behavior
 or accessibility conformance was tested. Supplied screenshots were not
 needed to resolve these source questions.
 
-The source does not mark which text is essential. At desktop collapsed widths,
-the normal heading, inner content, and lede are visually hidden until pointer
-or focus presentation activates. Below 767px, the normal heading is visible by
-default, while the lede remains visually hidden until pointer or focus
-presentation activates. The source alone does not classify these visibility
-facts as an information-access failure or establish touch-focus behavior.
+The source does not mark which text is essential. At widths covered by the
+`min-width: 767px` collapsed rules, the normal heading, inner content, and lede
+are visually hidden until pointer or focus presentation activates. Below
+767px, the desktop collapsed opacity/translation rules do not apply; the
+normal heading and lede are visible by default, while the overlay and vertical
+heading are hidden. The bounded source therefore does not show mobile content
+being gated on hover or focus. Touch event ordering and navigation activation
+remain unspecified, but the export's default mobile content visibility is
+observed.
 
 ## 14. Performance/runtime classification
 
