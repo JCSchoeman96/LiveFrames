@@ -7,6 +7,12 @@
 | Gate | Result |
 | --- | --- |
 | A0 review ready | yes |
+| Breakpoint authority accepted | no |
+| Resolved DesignDocument created | no |
+| Resolved DesignDocument identity frozen | no |
+| Post-resolution BehaviorBinding reissued | no |
+| Post-resolution BehaviorContract reissued | no |
+| Post-resolution BehaviorReviewResult issued | no |
 | A1 SemanticInput frozen or created | no |
 | Real Milan D0 executed | no |
 | Behavior componentization decision proposed | no |
@@ -36,6 +42,16 @@ This record completes the A0 mechanical and authority preflight. Candidate seman
 | REVIEW_APPROVED_GATE | PASS |
 
 origin/main matched the accepted SHA and tree before analysis. The private Milan artifact SHA-256 is f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132. ACSS_FIXTURE_PATH=fixtures/automatic_css/acss_settings.json. Its SHA-256 is 19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05.
+
+This tuple is the accepted immutable **pre-resolution tuple**. Its DesignDocument contains three unresolved responsive overrides. The accepted binding ID, BehaviorContract digest, and BehaviorReviewResult ID all bind to that exact unresolved DesignDocument. They remain valid evidence for the pre-resolution document; they cannot authorize real responsive D0 after breakpoint resolution changes the document identity.
+
+```text
+PRE_RESOLUTION_IR_VERSION=4.0.0
+PRE_RESOLUTION_DESIGN_DOCUMENT_DIGEST=52544dcc0d279d91d3d56d054c9785b18f96e77a5520b782726b678c404db864
+PRE_RESOLUTION_BINDING_ID=bnd_caf04646aa92bbf2026ec3a2a1298a448ab03c624d27519c0740f874e64d22a7
+PRE_RESOLUTION_BEHAVIOR_CONTRACT_DIGEST=303273984f180ea671ba968c841672603f0a0604368385b8f295e1cfcc64f826
+PRE_RESOLUTION_BEHAVIOR_REVIEW_ID=brv_5159f503fec2bb56c416642e6ea2151c402a2d9a70670d50b9fe153d5dd62e1d
+```
 
 The accepted invocation uses SOURCE_ARGUMENT_FORM=file_path and loads the ACSS file with source_version 4.0.1, source_version_status fixture_reference, strict true, and profile hero_foundation. It passes the Milan file path, component_id ybsqrl, and resulting token set to Bricks.to_ir/2, with no other Bricks options. STRUCTURAL_VARIABLE_AUTHORITY_OPTION=omitted; THEME_STYLES_OPTION=omitted; EXTERNAL_CLASS_AUTHORITIES_OPTION=omitted; CONTAINER_WIDTH_OPTION=omitted. No other Bricks options are supplied. The effective structural-variable authority is the empty default struct. The document passes IR.validate/1; IR.encode!/1 produces 387432 bytes; IR.Identity.from_document/1 matches the exact accepted identity above. No alternate normalization options were tried.
 
@@ -203,7 +219,43 @@ The root also contains node_000001_000002, normalized as unsupported. C09D3 says
 | EXACT_MILAN_BREAKPOINT_AUTHORITY_PRESENT | NO |
 | D0_BLOCKED_BREAKPOINT_AUTHORITY | YES |
 
-Behavior.ComponentizationDecision.propose/4 checks for DesignDocument responsive overrides and requires the breakpoint-authority prerequisite when any are present. This preflight did not call that function or the proposer. The exact three current overrides are unresolved, and the shared accepted 767px entry is supported by evidence for a different source environment. Milan-specific evidence still records its breakpoint as not established. A Milan-scoped accepted authority must resolve the exact source name, width/query semantics, and applicable cascade before A1 freeze or D0.
+Behavior.ComponentizationDecision.propose/5 accepts the DesignDocument, BehaviorContract, BehaviorReviewResult, SemanticInput, and breakpoint authority. It calls DesignDocumentResolver.resolve/2 before running the remaining preflight. On success, it follows this sequence:
+
+```text
+DesignDocumentResolver.resolve/2
+→ Identity.from_document(resolved_document)
+→ Serializer.digest(behavior_contract)
+→ ReviewResult.require_approved([behavior_review_result], behavior_contract)
+→ ReviewResult.id(review_result)
+→ SemanticInput.validate(semantic_input, resolved_document)
+→ Behavior.Validation.validate_structure(resolved_document, behavior_contract)
+→ whole-binding containment classification
+→ proposer(resolved_document, canonical_input)
+```
+
+Real responsive D0 therefore operates on the resolved DesignDocument, not on the unresolved document identified by 52544dcc… . This preflight did not call propose/5 or the proposer.
+
+The exact three current overrides are unresolved, and the shared accepted 767px entry is supported by evidence for a different source environment. Milan-specific evidence still records its breakpoint as not established. A Milan-scoped accepted authority must resolve the exact source name, width/query semantics, and applicable cascade before the document can be resolved.
+
+### Responsive identity transition
+
+| Field | Result |
+| --- | --- |
+| RESPONSIVE_OVERRIDE_COUNT | 3 |
+| BREAKPOINT_RESOLUTION_MUTATES_DESIGN_DOCUMENT | YES |
+| MUTATED_CANONICAL_FIELDS_INCLUDE | responsive[].min_width; responsive[].max_width; responsive[].resolution_status |
+| POST_RESOLUTION_DOCUMENT_IDENTITY_CHANGES | YES |
+| POST_RESOLUTION_DESIGN_DOCUMENT_DIGEST | UNRESOLVED_PENDING_MILAN_BREAKPOINT_AUTHORITY |
+| PRE_RESOLUTION_DESIGN_DOCUMENT_DIGEST_REUSABLE_FOR_REAL_D0 | NO |
+| POST_RESOLUTION_BINDING_ID_REISSUE_REQUIRED | YES |
+| POST_RESOLUTION_BEHAVIOR_CONTRACT_REISSUE_REQUIRED | YES |
+| POST_RESOLUTION_BEHAVIOR_REVIEW_RESULT_REISSUE_REQUIRED | YES |
+| SELECTION_PRIMITIVE_CHANGE | NO |
+| POSITIONAL_ALIGNMENT_CHANGE | NO |
+| TIMER_SEMANTICS_CHANGE | NO |
+| CONTROLLED_TARGET_SEMANTICS_CHANGE | NO |
+
+Resolving the overrides writes their accepted min/max widths and resolution status into the ResponsiveOverride records. Those fields participate in canonical Design IR serialization, so the resolved DesignDocument has a different exact identity. BehaviorBinding identity includes the exact DesignDocument identity, so the binding ID, BehaviorContract, and immutable BehaviorReviewResult must be reissued against the resolved DesignDocument. The future digest and derived Behavior identities remain unset in this A0 record. That work changes the identity chain only; it does not authorize a change to the accepted selection semantics or controlled targets.
 
 ## ComponentizationSemanticInput decision-family matrix
 
@@ -260,7 +312,7 @@ Each entry is unresolved. The recommended direction is advisory and must not be 
 | A1-Q09 | Render placements | No unbound value; placements arise only if an unbound public member is selected. | Keep placements empty unless static content or an unbound member is promoted. | Choose a supported existing placement for each promoted member. | Wrong node/role or placement conflict. | A1 freeze if applicable. |
 | A1-Q10 | Image accessibility | Two dynamic image sources, no alt authority. | Decide whether each gets a consumer-supplied sibling alt field, required with the source. | Explicitly mark an image decorative when owner evidence supports it. | Accessibility gap or inaccurate alternative text. | A1 input validation. |
 | A1-Q11 | Static content | One static heading and one static rich-text node; literals withheld. | Keep both internal unless customization has product value. | Promote either through explicit attr/slot decision and placement. | Accidental private-copy exposure or unnecessary API. | A1 freeze for any public promotion. |
-| A1-Q12 | Breakpoint authority prerequisite | Three unresolved overrides name mobile_landscape; shared 767px evidence is scoped to another source environment. | Accept Milan-scoped numeric/query/cascade authority before proceeding. | Supply different verified Milan source-environment evidence; do not reuse unrelated scope by name alone. | Incorrect responsive output and ungrounded D0 resolution. | A1 freeze and real P7-D0. |
+| A1-Q12 | Breakpoint authority prerequisite | Three unresolved overrides name mobile_landscape; shared 767px evidence is scoped to another source environment. Resolution mutates canonical responsive fields and changes the DesignDocument identity. | Accept Milan-scoped numeric/query/cascade authority. Then resolve the DesignDocument, freeze its exact new identity, reissue the BehaviorBinding and BehaviorContract, and issue a new immutable BehaviorReviewResult before A1 or D0. This identity work is mechanical and does not add a component API decision. | Supply different verified Milan source-environment evidence; do not reuse unrelated scope by name alone. | Incorrect responsive output or a mismatch between the resolved DesignDocument and the pre-resolution Behavior/review tuple. | Resolved identity freeze and Behavior reissue must precede A1 SemanticInput freeze and real P7-D0. |
 | A1-Q13 | Unsupported-node consequence | Root includes one normalized unsupported node; C09D3 blocks Plan 1.0.0 validation/generation eligibility for it. | Decide whether to freeze root knowing the downstream blocker, or defer for structured-exclusion authority. | Defer componentization until authority changes. | A1 may produce a candidate that cannot become generation-eligible. | Owner review before A1; generation remains blocked under current authority. |
 
 The accepted positional-alignment contract is an invariant, not an A1 option. A1 must not replace it with durable IDs, a merged list, inferred equal cardinality, or new selection targets. Collection-count links and evidence handling remain empty because their required IR evidence is absent.
@@ -283,7 +335,40 @@ The accepted positional-alignment contract is an invariant, not an A1 option. A1
 
 **accepted_tuple_verified → exact_normalization_replayed → componentization_surface_inventoried → behavior_references_inventoried → candidate_boundaries_classified → breakpoint_prerequisite_classified → semantic_decision_matrix_completed → owner_questions_recorded → A0_REVIEW_READY**
 
-The accepted tuple, evidence hashes, exact replay, Behavior references, and A0 inventory all match. Owner decisions and Milan breakpoint authority remain open by design and are recorded above. The source-neutral product role can be described without choosing a final public identifier or schema; therefore A0 is review-ready. The unsupported node and breakpoint authority remain explicit downstream blockers.
+The accepted pre-resolution tuple, evidence hashes, exact replay, Behavior references, and A0 inventory all match. Owner decisions and Milan breakpoint authority remain open by design and are recorded above. The source-neutral product role can be described without choosing a final public identifier or schema; therefore A0 is review-ready. The unsupported node and breakpoint authority remain explicit downstream blockers.
+
+The required post-A0 lifecycle is:
+
+```text
+A0_REVIEW_READY
+→ A0_ACCEPTED
+→ MILAN_BREAKPOINT_AUTHORITY_ACCEPTED
+→ MILAN_DESIGN_DOCUMENT_RESOLVED
+→ RESOLVED_DESIGN_DOCUMENT_IDENTITY_FROZEN
+→ BEHAVIOR_BINDING_REISSUED_FOR_RESOLVED_IDENTITY
+→ BEHAVIOR_CONTRACT_REISSUED_FOR_RESOLVED_IDENTITY
+→ NEW_BEHAVIOR_REVIEW_RESULT_ISSUED
+→ A1_OWNER_DECISIONS_ACCEPTED
+→ A1_SEMANTIC_INPUT_FROZEN_AGAINST_RESOLVED_DOCUMENT
+→ REAL_MILAN_D0_PROPOSE_5
+→ COMPONENTIZATION_PROPOSER
+```
+
+None of these post-A0 states has occurred. Current state:
+
+```text
+BREAKPOINT_AUTHORITY_ACCEPTED=NO
+RESOLVED_DESIGN_DOCUMENT_CREATED=NO
+RESOLVED_DESIGN_DOCUMENT_IDENTITY_FROZEN=NO
+POST_RESOLUTION_BEHAVIOR_BINDING_REISSUED=NO
+POST_RESOLUTION_BEHAVIOR_CONTRACT_REISSUED=NO
+POST_RESOLUTION_BEHAVIOR_REVIEW_ISSUED=NO
+A1_SEMANTIC_INPUT_FROZEN=NO
+REAL_MILAN_D0_EXECUTED=NO
+COMPONENT_PROPOSER_EXECUTED=NO
+```
+
+The unsupported node `node_000001_000002` remains a separate plan/generation blocker. Breakpoint resolution and its identity transition do not resolve or change that finding.
 
 ## Performance and scaling
 
@@ -302,6 +387,13 @@ No runtime infrastructure is introduced.
 
 ## Next gate
 
-NEXT_REQUIRED_GATE=Review and accept the A0 owner-decision register, then resolve the exact Milan breakpoint authority before A1 SemanticInput freeze or real P7-D0. Separately decide whether to carry the known unsupported-node blocker into downstream review or defer for structured-exclusion authority.
+NEXT_REQUIRED_GATE=
+Review and accept A0, then establish Milan-scoped breakpoint authority. After
+that authority is accepted, resolve the exact Milan DesignDocument and freeze
+its new identity; reissue the BehaviorBinding and BehaviorContract against
+that resolved identity and issue a new immutable BehaviorReviewResult. Only
+after that exact resolved Behavior tuple exists may A1 SemanticInput be frozen
+against the resolved document and real P7-D0 propose/5 execute. The unsupported
+node generation blocker remains separately unresolved.
 
 UNRESOLVED_AUTHORITY_GAPS=Milan-scoped mobile_landscape breakpoint semantics; owner semantic choices A1-Q01 through A1-Q13; structured exclusion for the unsupported node if generation eligibility is required.
