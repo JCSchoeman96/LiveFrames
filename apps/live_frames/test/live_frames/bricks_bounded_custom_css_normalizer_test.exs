@@ -734,6 +734,77 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
     assert rejects == []
   end
 
+  test "parse_parts preserves ordered Tango rule and rejection shapes" do
+    css =
+      ".image-group-tango { min-height: 675px; }\n" <>
+        ".image-group-tango > *:first-child { grid-column: 1/-1; width: 90%; }\n" <>
+        ".future-rule { broken declaration }"
+
+    assert {[
+              %{
+                selector: ".image-group-tango",
+                declarations: %{"min-height" => "675px"},
+                raw: ".image-group-tango { min-height: 675px; }"
+              },
+              %{
+                selector: ".image-group-tango > *:first-child",
+                declarations: %{"grid-column" => "1/-1", "width" => "90%"},
+                raw: ".image-group-tango > *:first-child { grid-column: 1/-1; width: 90%; }"
+              }
+            ], [%{selector: ".future-rule", raw: ".future-rule { broken declaration }"}]} =
+             BoundedCustomCssNormalizer.parse_parts(css)
+  end
+
+  test "parse_blocks returns the legacy rule map shape" do
+    css = ".image-group-tango { min-height: 675px; }"
+
+    assert [
+             %{
+               selector: ".image-group-tango",
+               declarations: %{"min-height" => "675px"},
+               raw: ^css
+             }
+           ] = BoundedCustomCssNormalizer.parse_blocks(css)
+  end
+
+  test "parse_parts preserves historical duplicate declaration parsing" do
+    css = ".legacy { color: red; color: blue; display: block; }"
+
+    assert {[
+              %{
+                selector: ".legacy",
+                declarations: %{"color" => "red", "display" => "block"},
+                raw: ^css
+              }
+            ], []} = BoundedCustomCssNormalizer.parse_parts(css)
+  end
+
+  test "parse_parts preserves historical quoted-semicolon declaration splitting" do
+    css = ".legacy { font-family: \"A;color:red\"; }"
+
+    assert {[
+              %{
+                selector: ".legacy",
+                declarations: %{"font-family" => "\"A", "color" => "red\""},
+                raw: ^css
+              }
+            ], []} = BoundedCustomCssNormalizer.parse_parts(css)
+  end
+
+  test "parse_parts rejects malformed framing as the complete source blob" do
+    css = ".image-group-tango { min-height: 675px; }\n.future-rule { width: 90%;"
+
+    assert {[], [%{selector: nil, raw: ^css}]} = BoundedCustomCssNormalizer.parse_parts(css)
+    assert [] = BoundedCustomCssNormalizer.parse_blocks(css)
+  end
+
+  test "parse_parts preserves legacy framing for braces inside quoted selectors" do
+    css = ~s([data-x="{"] { color: red; })
+
+    assert {[], [%{selector: nil, raw: ^css}]} = BoundedCustomCssNormalizer.parse_parts(css)
+    assert [] = BoundedCustomCssNormalizer.parse_blocks(css)
+  end
+
   test "parse_blocks handles a single owner rule" do
     assert [_rule] =
              BoundedCustomCssNormalizer.parse_blocks(".image-group-tango { min-height: 675px; }")
