@@ -94,6 +94,15 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     )
   end
 
+  defp normalize_tree(css, nodes, children_by_source_id) do
+    CustomCssNormalizer.normalize(
+      [owner(css)],
+      nodes,
+      children_by_source_id,
+      MapSet.new()
+    )
+  end
+
   test "relocates a safe conditionless rule to its target node" do
     result = run(".owner { color: red; }")
 
@@ -111,6 +120,29 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
              result.styles_by_source_id[@child]["color"]
 
     refute Map.has_key?(result.styles_by_source_id, @owner)
+  end
+
+  test "applies a conditionless descendant selector to every matching node in scope" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "late-item" => node("late-item", ["item"], [1, 10], parent_id: @owner),
+      "early-item" => node("early-item", ["item"], [1, 2], parent_id: @owner),
+      "outside-item" => node("outside-item", ["item"], [2])
+    }
+
+    result =
+      normalize_tree(
+        ".owner .item { color: red; }",
+        nodes,
+        %{@owner => ["late-item", "early-item"]}
+      )
+
+    for source_id <- ["early-item", "late-item"] do
+      assert %StyleValue{kind: :literal, value: "red"} =
+               result.styles_by_source_id[source_id]["color"]
+    end
+
+    refute Map.has_key?(result.styles_by_source_id, "outside-item")
   end
 
   test "relocates min-only responsive rules with an inclusive resolved override" do
@@ -137,6 +169,37 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
              result.responsive_by_source_id[@owner]["custom_range_767p5_991"]
   end
 
+  test "canonicalizes integer-like responsive dimensions without dropping integer zeros" do
+    for {dimension, key} <- [{"767.0", "custom_min_767"}, {"1000.0", "custom_min_1000"}] do
+      result = run("@media (min-width: #{dimension}px) { .owner { color: red; } }")
+
+      assert Map.has_key?(result.responsive_by_source_id[@owner], key)
+    end
+  end
+
+  test "canonicalizes fractional responsive dimensions" do
+    result = run("@media (min-width: 767.5px) { .owner { color: red; } }")
+
+    assert Map.has_key?(result.responsive_by_source_id[@owner], "custom_min_767p5")
+  end
+
+  test "expands large finite responsive dimensions without colliding with one pixel" do
+    result =
+      run(
+        "@media (min-width: 1px) { .owner { color: red; } }\n" <>
+          "@media (min-width: 100000000000000000000px) { .owner { color: red; } }"
+      )
+
+    assert Map.keys(result.responsive_by_source_id[@owner]) |> MapSet.new() ==
+             MapSet.new(["custom_min_1", "custom_min_100000000000000000000"])
+  end
+
+  test "expands very small finite responsive dimensions from exponent notation" do
+    result = run("@media (min-width: 0.0000001px) { .owner { color: red; } }")
+
+    assert Map.has_key?(result.responsive_by_source_id[@owner], "custom_min_0p0000001")
+  end
+
   test "maps a proven same-layer transient alias to hover and removes its source token" do
     result =
       run(".owner.#{@token} { opacity: 1; }", settings: %{"_interactions" => interaction_pair()})
@@ -152,6 +215,52 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
 
     assert [%{"condition" => "focus_within", "target_node_id" => "node_1_1"}] =
              result.custom_css_by_source_id[@owner].value["rules"]
+  end
+
+  test "expands hover descendant selectors to every matching node in numeric path order" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "late-item" => node("late-item", ["item"], [1, 10], parent_id: @owner),
+      "early-item" => node("early-item", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner:hover .item { opacity: 1; }",
+        nodes,
+        %{@owner => ["late-item", "early-item"]}
+      )
+
+    assert %StyleValue{value: %{"type" => "state_rules", "rules" => rules}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert Enum.map(rules, &{&1["condition"], &1["target_node_id"]}) == [
+             {"hover", "node_1_2"},
+             {"hover", "node_1_10"}
+           ]
+  end
+
+  test "expands focus-within descendant selectors to every matching node" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "item-a" => node("item-a", ["item"], [1, 1], parent_id: @owner),
+      "item-b" => node("item-b", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner:focus-within .item { opacity: 1; }",
+        nodes,
+        %{@owner => ["item-a", "item-b"]}
+      )
+
+    assert %StyleValue{value: %{"type" => "state_rules", "rules" => rules}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert Enum.map(rules, &{&1["condition"], &1["target_node_id"]}) == [
+             {"focus_within", "node_1_1"},
+             {"focus_within", "node_1_2"}
+           ]
   end
 
   test "expands comma groups and orders hover before focus-within" do
@@ -419,6 +528,26 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
       CustomCssNormalizer.normalize([source_owner], nodes, %{@owner => [@child]}, MapSet.new())
 
     assert hd(result.residuals_by_source_id[@owner])["reason"] == "unresolved_target"
+  end
+
+  test "keeps a state selector ambiguous when its owner compound matches multiple nodes" do
+    css = ".owner:hover .item { opacity: 1; }"
+
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "nested-owner" => node("nested-owner", ["owner"], [1, 1], parent_id: @owner),
+      "item" => node("item", ["item"], [1, 1, 1], parent_id: "nested-owner")
+    }
+
+    result =
+      normalize_tree(
+        css,
+        nodes,
+        %{@owner => ["nested-owner"], "nested-owner" => ["item"]}
+      )
+
+    assert [%{"reason" => "ambiguous_selector"}] = result.residuals_by_source_id[@owner]
+    assert result.custom_css_by_source_id[@owner].value["type"] == "custom_css"
   end
 
   test "claimed Tango owners are excluded from generic normalization" do

@@ -515,9 +515,6 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       targets == [] ->
         {:error, "unresolved_target"}
 
-      length(targets) > 1 ->
-        {:error, "ambiguous_selector"}
-
       condition && hd(targets).source_id != owner_node.source_id &&
           not descendant_or_self?(owner_node.source_id, hd(targets).source_id, scope_ids) ->
         {:error, "unresolved_target"}
@@ -1059,12 +1056,13 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
             binary_part(digits, decimal_index, byte_size(digits) - decimal_index)
       end
 
-    expanded
-    |> String.trim_trailing("0")
-    |> String.trim_trailing(".")
-    |> case do
-      "" -> "0"
-      value -> value
+    case String.split(expanded, ".", parts: 2) do
+      [whole, fraction] ->
+        fraction = String.trim_trailing(fraction, "0")
+        if fraction == "", do: whole, else: whole <> "." <> fraction
+
+      [whole] ->
+        whole
     end
   end
 
