@@ -1,6 +1,48 @@
 defmodule LiveFrames.Components.Sections.MediaCallToAction do
   use Phoenix.Component
 
+  Module.register_attribute(__MODULE__, :liveframes_public_contract_metadata, persist: true)
+
+  @liveframes_public_contract_metadata %{
+    media_call_to_action: %{
+      slot_cardinality: %{
+        "body" => {0, 1},
+        "primary_action" => {1, 1}
+      },
+      capabilities: [
+        "liveframes.consumer.owns_action_navigation_and_events",
+        "liveframes.consumer.owns_global_root_attributes",
+        "liveframes.integration.requires_liveframes_css",
+        "liveframes.validation.argument_error_on_contract_violation"
+      ],
+      css_theme_contract: [
+        "--lf-action-primary-background",
+        "--lf-action-primary-background-hover",
+        "--lf-action-primary-border",
+        "--lf-action-primary-border-style",
+        "--lf-action-primary-border-width",
+        "--lf-action-primary-focus",
+        "--lf-action-primary-font-size",
+        "--lf-action-primary-font-weight",
+        "--lf-action-primary-line-height",
+        "--lf-action-primary-min-width",
+        "--lf-action-primary-padding-block",
+        "--lf-action-primary-padding-inline",
+        "--lf-action-primary-radius",
+        "--lf-action-primary-text",
+        "--lf-radius-base",
+        "--lf-space-content-gap",
+        "--lf-space-grid-gap",
+        "--lf-space-scale-xs",
+        "--lf-typography-body-size-small",
+        "--lf-typography-display-line-height",
+        "--lf-typography-display-weight",
+        "--lf-typography-heading-size-h2"
+      ],
+      global_prefixes: []
+    }
+  }
+
   attr(:class, :string)
   attr(:eyebrow, :string)
   attr(:heading, :string, required: true)
