@@ -3,8 +3,6 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.CustomCssParser
-  alias LiveFrames.Adapters.Bricks.Settings
-  alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.Adapters.Bricks.Tree
   alias LiveFrames.IR.StyleValue
 
@@ -42,6 +40,7 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
           styles_by_source_id: %{optional(String.t()) => map()},
           residual_custom_css_by_source_id: %{optional(String.t()) => String.t() | nil},
           custom_css_mode_by_source_id: %{optional(String.t()) => :legacy | :consumed | :residual},
+          claimed_source_ids: MapSet.t(String.t()),
           diagnostics: [Diagnostic.t()]
         }
 
@@ -62,19 +61,25 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
       styles_by_source_id: %{},
       residual_custom_css_by_source_id: %{},
       custom_css_mode_by_source_id: %{},
+      claimed_source_ids: MapSet.new(),
       diagnostics: []
     }
   end
 
   @spec normalize(map()) :: result()
   def normalize(context) do
+    result =
+      if exact_frozen_owner?(context),
+        do: %{empty_result() | claimed_source_ids: MapSet.new([@owner_id])},
+        else: empty_result()
+
     cond do
       not Map.has_key?(context.tree.elements, @owner_id) ->
-        empty_result()
+        result
 
       verify_topology(context.tree) == {:error, :topology_mismatch} ->
         %{
-          empty_result()
+          result
           | diagnostics: [
               diagnostic(
                 "bricks.bounded_custom_css.topology_mismatch",
@@ -85,27 +90,26 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
             ]
         }
 
-      verify_owner_class(context) != :ok ->
-        empty_result()
+      not MapSet.member?(result.claimed_source_ids, @owner_id) ->
+        result
 
       true ->
         case authorized_effective_custom_css(context) do
           {:ok, blob, owner_trace} ->
-            process_blob(blob, owner_trace, context, empty_result())
+            process_blob(blob, owner_trace, context, result)
 
           {:error, _} ->
-            empty_result()
+            result
         end
     end
   end
 
-  defp verify_owner_class(context) do
-    resolved = Map.fetch!(context.resolved.elements, @owner_id)
-
-    if frozen_class_ref?(resolved) do
-      :ok
+  defp exact_frozen_owner?(context) do
+    with true <- Map.has_key?(context.tree.elements, @owner_id),
+         {:ok, resolved} <- Map.fetch(context.resolved.elements, @owner_id) do
+      frozen_class_ref?(resolved)
     else
-      {:error, :owner_class_mismatch}
+      _ -> false
     end
   end
 
@@ -130,24 +134,14 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     resolved = Map.fetch!(context.resolved.elements, @owner_id)
     style_result = Map.fetch!(context.dependencies.style_results, @owner_id)
 
-    layers =
-      StylePrecedence.layers(resolved.class_refs, resolved.source_settings, @owner_id)
+    provenance =
+      context.dependencies
+      |> Map.get(:custom_css_provenance, %{})
+      |> Map.get(@owner_id, %{})
+      |> Map.get(:base)
 
-    extraction_opts = [semantic_settings: [], rejected_semantic_settings: []]
-
-    contributions =
-      layers
-      |> Enum.flat_map(fn layer ->
-        extraction = Settings.extract(layer.settings, extraction_opts)
-
-        Enum.map(extraction.custom_css.base, fn value -> {layer, value} end)
-      end)
-
-    with [_ | _] = contributions,
-         {effective_layer, effective_blob} <- List.last(contributions),
-         true <- effective_layer.origin == :global_class,
-         true <- effective_layer.class_id == @class_id,
-         true <- frozen_layer_class_ref?(resolved, effective_layer),
+    with %{value: effective_blob, provenance: effective_layer} <- provenance,
+         true <- frozen_layer_provenance?(resolved, effective_layer),
          true <- effective_blob_effective?(style_result, effective_blob),
          {:ok, owner_trace} <- owner_css_custom_trace(context, effective_layer) do
       {:ok, effective_blob, owner_trace}
@@ -165,15 +159,33 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
     end
   end
 
-  defp frozen_layer_class_ref?(resolved, layer) do
-    case Enum.at(resolved.class_refs, layer.class_reference_index) do
-      %{id: id, name: name} when id == @class_id and name == @class_name ->
-        true
-
-      _ ->
-        false
+  defp frozen_layer_provenance?(resolved, provenance) when is_map(provenance) do
+    with :global_class <- Map.get(provenance, :origin),
+         @class_id <- Map.get(provenance, :class_id),
+         resolution_source when resolution_source in [:local, :external] <-
+           Map.get(provenance, :resolution_source),
+         authority_ids when is_list(authority_ids) <- Map.get(provenance, :authority_ids),
+         index when is_integer(index) and index >= 0 <-
+           Map.get(provenance, :class_reference_index),
+         @owner_id <- Map.get(provenance, :source_id),
+         layer_settings when is_map(layer_settings) <- Map.get(provenance, :layer_settings),
+         %{id: @class_id, name: @class_name, settings: ^layer_settings} <-
+           Enum.at(resolved.class_refs, index),
+         ref when ref.resolution_status in [:local_resolved, :external_resolved] <-
+           Enum.at(resolved.class_refs, index),
+         true <- resolution_source == ref.resolution_source,
+         true <- authority_ids == ref.authority_ids,
+         true <-
+           (resolution_source == :external and ref.resolution_status == :external_resolved) or
+             (resolution_source == :local and ref.resolution_status == :local_resolved),
+         true <- resolution_source != :external or authority_ids != [] do
+      true
+    else
+      _ -> false
     end
   end
+
+  defp frozen_layer_provenance?(_resolved, _provenance), do: false
 
   defp owner_css_custom_trace(context, effective_layer) do
     case Map.fetch(context.trace_index, @owner_id) do

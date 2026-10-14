@@ -4,6 +4,9 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer
+  alias LiveFrames.Adapters.Bricks.ClassResolver
+  alias LiveFrames.Adapters.Bricks.DependencyExtractor
+  alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
 
   @token_fixture_path Path.expand(
@@ -19,6 +22,7 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
   @image_2 "b3b3c9"
   @image_3 "b266bb"
   @image_group_class_id "cIqHGvqlwpj"
+  @class_name "image-group-tango"
   @wrapper_class_id "cIqHG0n8mdk"
   @image_class_id "cIqHG26nn4v"
 
@@ -175,6 +179,32 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
     document
   end
 
+  defp bounded_context(opts \\ []) do
+    source = cta_fragment_source(opts)
+    assert {:ok, source_document, _diagnostics} = Bricks.recognize(source)
+
+    assert {:ok, _proxy, component, _diagnostics} =
+             Bricks.resolve(source_document, component_id: "hxambs")
+
+    assert {:ok, tree, _diagnostics} = Bricks.build_tree(component)
+    assert {:ok, resolved, _diagnostics} = ClassResolver.resolve(tree, source_document)
+
+    dependencies = DependencyExtractor.extract(resolved, source_document, semantic_settings: [])
+
+    trace = %SourceTrace{
+      source_type: "bricks_element",
+      source_id: @owner_id,
+      source_path: "components[0].elements[0]"
+    }
+
+    %{
+      tree: tree,
+      resolved: resolved,
+      dependencies: dependencies,
+      trace_index: %{@owner_id => %{trace: trace}}
+    }
+  end
+
   defp node_by_source_id(document, source_id) do
     find_node(document.root_nodes, source_id)
   end
@@ -193,6 +223,90 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
   end
 
   describe "R4 bounded CTA image-group custom CSS" do
+    test "an exact frozen class identity is claimed" do
+      result = BoundedCustomCssNormalizer.normalize(bounded_context())
+
+      assert MapSet.member?(result.claimed_source_ids, @owner_id)
+    end
+
+    test "an exact frozen class identity remains claimed when topology mismatches" do
+      result =
+        BoundedCustomCssNormalizer.normalize(
+          bounded_context(owner_children: [@child_2, @child_1, @child_3])
+        )
+
+      assert MapSet.member?(result.claimed_source_ids, @owner_id)
+
+      assert Enum.any?(
+               result.diagnostics,
+               &(&1.code == "bricks.bounded_custom_css.topology_mismatch")
+             )
+    end
+
+    test "an exact frozen class identity remains claimed when CSS is residual" do
+      result =
+        BoundedCustomCssNormalizer.normalize(
+          bounded_context(css_custom: ".image-group-tango { color: red; }")
+        )
+
+      assert MapSet.member?(result.claimed_source_ids, @owner_id)
+      assert is_binary(result.residual_custom_css_by_source_id[@owner_id])
+    end
+
+    test "an exact frozen class identity remains claimed when CSS is consumed" do
+      result = BoundedCustomCssNormalizer.normalize(bounded_context())
+
+      assert result.custom_css_mode_by_source_id[@owner_id] == :consumed
+      assert MapSet.member?(result.claimed_source_ids, @owner_id)
+    end
+
+    test "a historical owner ID with a different class identity is not claimed" do
+      wrong_class = %{
+        "id" => "different-class-id",
+        "name" => "different-class-name",
+        "settings" => %{"_cssCustom" => @canonical_css}
+      }
+
+      settings = %{"_cssGlobalClasses" => ["different-class-id"]}
+
+      result =
+        BoundedCustomCssNormalizer.normalize(
+          bounded_context(owner_settings: settings, global_classes: [wrong_class])
+        )
+
+      refute MapSet.member?(result.claimed_source_ids, @owner_id)
+    end
+
+    test "the frozen class name without its exact class ID is not claimed" do
+      wrong_id_class = %{
+        "id" => "different-class-id",
+        "name" => @class_name,
+        "settings" => %{"_cssCustom" => @canonical_css}
+      }
+
+      settings = %{"_cssGlobalClasses" => ["different-class-id"]}
+
+      result =
+        BoundedCustomCssNormalizer.normalize(
+          bounded_context(owner_settings: settings, global_classes: [wrong_id_class])
+        )
+
+      refute MapSet.member?(result.claimed_source_ids, @owner_id)
+    end
+
+    test "the frozen class ID with a different class name is not claimed" do
+      wrong_name_class = %{
+        "id" => @image_group_class_id,
+        "name" => "different-class-name",
+        "settings" => %{"_cssCustom" => @canonical_css}
+      }
+
+      result =
+        BoundedCustomCssNormalizer.normalize(bounded_context(global_classes: [wrong_name_class]))
+
+      refute MapSet.member?(result.claimed_source_ids, @owner_id)
+    end
+
     test "R4_CCS_01_OWNER=PASS owner receives min-height 675px" do
       document = normalize_cta_document()
       owner = node_by_source_id(document, @owner_id)

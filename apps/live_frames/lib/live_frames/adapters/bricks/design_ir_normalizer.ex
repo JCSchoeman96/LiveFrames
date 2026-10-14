@@ -8,6 +8,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   """
 
   alias LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer
+  alias LiveFrames.Adapters.Bricks.CustomCssNormalizer
   alias LiveFrames.Adapters.Bricks.ClassResolver
   alias LiveFrames.Adapters.Bricks.DependencyExtractor
   alias LiveFrames.Adapters.Bricks.Diagnostic, as: BricksDiagnostic
@@ -333,6 +334,20 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       |> Enum.with_index(1)
       |> Enum.map(fn {source_id, index} -> build_node(source_id, [index], context) end)
 
+    generic_custom_css =
+      CustomCssNormalizer.normalize(
+        generic_custom_css_owners(context),
+        generic_custom_css_node_index(root_nodes),
+        context.tree.children_by_id,
+        bounded_custom_css.claimed_source_ids,
+        authority_index: context.authority_index
+      )
+
+    root_nodes = apply_generic_custom_css(root_nodes, generic_custom_css)
+
+    context =
+      Map.update!(context, :source_diagnostics, &(&1 ++ generic_custom_css.diagnostics))
+
     document = %DesignDocument{
       ir_version: DesignDocument.current_ir_version(),
       source_metadata: source_metadata(context),
@@ -347,6 +362,75 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
 
     validate_and_serialize(document)
+  end
+
+  defp generic_custom_css_owners(context) do
+    Enum.flat_map(context.tree.ordered_elements, fn element ->
+      case get_in(context.dependencies.custom_css_provenance, [element.id, :base]) do
+        %{value: value, provenance: provenance} when is_binary(value) ->
+          [
+            %{
+              source_id: element.id,
+              value: value,
+              provenance: provenance,
+              source_key: "_cssCustom"
+            }
+          ]
+
+        _ ->
+          []
+      end
+    end)
+  end
+
+  defp generic_custom_css_node_index(root_nodes) do
+    Enum.reduce(root_nodes, %{}, &collect_generic_custom_css_nodes(&1, nil, &2))
+  end
+
+  defp collect_generic_custom_css_nodes(node, parent_source_id, index) do
+    source_id = node.source_trace.source_id
+    path = Map.get(node.source_trace.metadata, "ir_path", [])
+
+    node_context = %{
+      node_id: node.node_id,
+      source_id: source_id,
+      parent_id: parent_source_id,
+      classes: node.source_trace.source_classes,
+      path: path,
+      styles: node.styles,
+      responsive: node.responsive,
+      source_trace: node.source_trace
+    }
+
+    index = Map.put(index, source_id, node_context)
+    Enum.reduce(node.children, index, &collect_generic_custom_css_nodes(&1, source_id, &2))
+  end
+
+  defp apply_generic_custom_css(root_nodes, result),
+    do: Enum.map(root_nodes, &apply_generic_custom_css_node(&1, result))
+
+  defp apply_generic_custom_css_node(node, result) do
+    source_id = node.source_trace.source_id
+
+    styles =
+      Map.merge(node.styles, Map.get(result.styles_by_source_id, source_id, %{}))
+
+    styles =
+      case Map.fetch(result.custom_css_by_source_id, source_id) do
+        {:ok, nil} -> Map.delete(styles, "custom-css")
+        {:ok, value} -> Map.put(styles, "custom-css", value)
+        :error -> styles
+      end
+
+    responsive =
+      Map.merge(node.responsive, Map.get(result.responsive_by_source_id, source_id, %{}))
+
+    %{
+      node
+      | styles: styles,
+        responsive: responsive,
+        children: Enum.map(node.children, &apply_generic_custom_css_node(&1, result))
+    }
   end
 
   defp validate_and_serialize(document) do
@@ -2029,6 +2113,12 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     do: generic_diagnostic_trace(diagnostic)
 
   defp diagnostic_source_path(trace, nil), do: trace.source_path
+
+  defp diagnostic_source_path(trace, source_path) when is_binary(source_path) do
+    if String.starts_with?(source_path, "#{trace.source_path}."),
+      do: source_path,
+      else: "#{trace.source_path}.settings.#{source_path}"
+  end
 
   defp diagnostic_source_path(trace, source_path),
     do: "#{trace.source_path}.settings.#{source_path}"

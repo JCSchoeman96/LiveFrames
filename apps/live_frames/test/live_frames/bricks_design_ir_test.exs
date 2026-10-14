@@ -3,6 +3,8 @@ defmodule LiveFrames.BricksDesignIRTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
+  alias LiveFrames.Adapters.Bricks.ClassResolver
+  alias LiveFrames.Adapters.Bricks.DependencyExtractor
   alias LiveFrames.Fidelity
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignNode
@@ -89,6 +91,47 @@ defmodule LiveFrames.BricksDesignIRTest do
       "children" => children,
       "settings" => settings
     }
+  end
+
+  defp transient_pair(token \\ "pointer-active") do
+    [
+      %{
+        "action" => "setAttribute",
+        "actionAttributeKey" => "class",
+        "actionAttributeValue" => token,
+        "id" => "enter",
+        "trigger" => "mouseenter"
+      },
+      %{
+        "action" => "removeAttribute",
+        "actionAttributeKey" => "class",
+        "actionAttributeValue" => token,
+        "id" => "leave",
+        "trigger" => "mouseleave"
+      }
+    ]
+  end
+
+  defp generic_custom_css_document(opts) do
+    owner_id = Keyword.get(opts, :owner_id, "root")
+    owner_settings = Keyword.get(opts, :owner_settings, %{"_cssGlobalClasses" => ["class-a"]})
+    child_settings = Keyword.get(opts, :child_settings, %{"_cssGlobalClasses" => ["class-child"]})
+    child_id = Keyword.get(opts, :child_id, "child")
+
+    source =
+      synthetic_source([
+        source_element(owner_id, "div", 0, owner_settings, [child_id]),
+        source_element(child_id, "div", owner_id, child_settings)
+      ])
+      |> Map.put("globalClasses", Keyword.get(opts, :global_classes, []))
+
+    assert {:ok, document} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set()
+             )
+
+    document
   end
 
   defp authority_token_set(path, variable, status) do
@@ -248,6 +291,232 @@ defmodule LiveFrames.BricksDesignIRTest do
              )
 
     assert diagnostic.code == "bricks.ir.token_set_missing"
+  end
+
+  test "dependency extraction carries custom CSS provenance from its precedence selection" do
+    class_a_settings = %{
+      "_cssCustom" => ".owner { color: red; }",
+      "_cssCustom:mobile_portrait" => ".owner { color: teal; }",
+      "_cssCustom:mobile_landscape" => ".owner { color: blue; }"
+    }
+
+    class_b_settings = %{
+      "_cssCustom" => ".owner { color: green; }",
+      "_cssCustom:mobile_landscape" => ".owner { color: orange; }"
+    }
+
+    source =
+      synthetic_source([
+        source_element("root", "div", 0, %{"_cssGlobalClasses" => ["class-a", "class-b"]})
+      ])
+      |> Map.put("globalClasses", [
+        %{"id" => "class-a", "name" => "class-a", "settings" => class_a_settings},
+        %{"id" => "class-b", "name" => "class-b", "settings" => class_b_settings}
+      ])
+
+    assert {:ok, source_document, _diagnostics} = Bricks.recognize(source)
+
+    assert {:ok, _proxy, component, _diagnostics} =
+             Bricks.resolve(source_document, component_id: "component-a")
+
+    assert {:ok, tree, _diagnostics} = Bricks.build_tree(component)
+    assert {:ok, resolved, _diagnostics} = ClassResolver.resolve(tree, source_document)
+
+    dependencies = DependencyExtractor.extract(resolved, source_document, semantic_settings: [])
+    style_result = dependencies.style_results["root"]
+    provenance = dependencies.custom_css_provenance["root"]
+
+    assert hd(style_result.custom_css.base) == ".owner { color: green; }"
+    assert provenance.base.value == hd(style_result.custom_css.base)
+    assert provenance.base.provenance.class_id == "class-b"
+    assert provenance.base.provenance.layer_settings === class_b_settings
+
+    assert provenance.responsive["_cssCustom:mobile_portrait"].value ==
+             ".owner { color: teal; }"
+
+    assert provenance.responsive["_cssCustom:mobile_portrait"].provenance.class_id ==
+             "class-a"
+
+    assert provenance.responsive["_cssCustom:mobile_landscape"].value ==
+             ".owner { color: orange; }"
+
+    assert provenance.responsive["_cssCustom:mobile_landscape"].provenance.class_id ==
+             "class-b"
+  end
+
+  test "normalizes hover only when the winning global class owns the interaction pair" do
+    css = ".owner.pointer-active { opacity: 1; }"
+    pair = transient_pair()
+
+    document =
+      generic_custom_css_document(
+        global_classes: [
+          %{
+            "id" => "class-a",
+            "name" => "owner",
+            "settings" => %{"_cssCustom" => css, "_interactions" => pair}
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+
+    assert %StyleValue{kind: :complex_css, value: %{"type" => "state_rules", "rules" => [rule]}} =
+             owner.styles["custom-css"]
+
+    assert rule["condition"] == "hover"
+
+    assert MapSet.new(Map.keys(owner.styles["custom-css"].value)) ==
+             MapSet.new(["type", "rules", "residual"])
+
+    assert MapSet.new(Map.keys(rule)) ==
+             MapSet.new(["condition", "target_node_id", "declarations", "viewport", "order"])
+
+    refute String.contains?(inspect(owner.styles["custom-css"].value), "pointer-active")
+  end
+
+  test "generic media rules add resolved ResponsiveOverride data without changing IR version" do
+    document =
+      generic_custom_css_document(
+        global_classes: [
+          %{
+            "id" => "class-a",
+            "name" => "owner",
+            "settings" => %{
+              "_cssCustom" => "@media (min-width: 767px) { .owner { color: red; } }"
+            }
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    assert document.ir_version == "4.0.0"
+
+    assert %LiveFrames.IR.ResponsiveOverride{min_width: 767.0, max_width: nil} =
+             owner.responsive["custom_min_767"]
+
+    assert owner.responsive["custom_min_767"].styles["color"].value == "red"
+    refute Map.has_key?(owner.styles, "custom-css")
+  end
+
+  test "does not borrow a hover pair from a nonwinning global class" do
+    css = ".owner.pointer-active { opacity: 1; }"
+    pair = transient_pair()
+
+    document =
+      generic_custom_css_document(
+        owner_settings: %{"_cssGlobalClasses" => ["class-a", "class-b"]},
+        global_classes: [
+          %{"id" => "class-a", "name" => "owner", "settings" => %{"_cssCustom" => css}},
+          %{"id" => "class-b", "name" => "other", "settings" => %{"_interactions" => pair}},
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    assert get_in(owner.source_trace.metadata, ["effective_settings", "_interactions"]) == pair
+    refute owner.styles["custom-css"].value["type"] == "state_rules"
+    assert owner.styles["custom-css"].value["type"] == "custom_css"
+  end
+
+  test "does not borrow a class hover pair for an element-local CSS override" do
+    css = ".owner.pointer-active { opacity: 1; }"
+    pair = transient_pair()
+
+    document =
+      generic_custom_css_document(
+        owner_settings: %{"_cssGlobalClasses" => ["class-a"], "_cssCustom" => css},
+        global_classes: [
+          %{"id" => "class-a", "name" => "owner", "settings" => %{"_interactions" => pair}},
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    assert owner.styles["custom-css"].value["type"] == "custom_css"
+  end
+
+  test "allows an element-local CSS override to use its own interaction pair" do
+    css = ".owner.pointer-active { opacity: 1; }"
+
+    document =
+      generic_custom_css_document(
+        owner_settings: %{
+          "_cssGlobalClasses" => ["class-a"],
+          "_cssCustom" => css,
+          "_interactions" => transient_pair()
+        },
+        global_classes: [
+          %{"id" => "class-a", "name" => "owner", "settings" => %{}},
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    assert owner.styles["custom-css"].value["type"] == "state_rules"
+  end
+
+  test "unresolved class authority cannot authorize a transient alias" do
+    css = ".owner.pointer-active { opacity: 1; }"
+
+    document =
+      generic_custom_css_document(
+        owner_settings: %{"_cssGlobalClasses" => ["class-a", "missing-class"]},
+        global_classes: [
+          %{"id" => "class-a", "name" => "owner", "settings" => %{"_cssCustom" => css}},
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    refute owner.styles["custom-css"].value["type"] == "state_rules"
+  end
+
+  test "an exact Tango owner remains claimed after topology mismatch" do
+    owner_id = "0531fc"
+
+    document =
+      generic_custom_css_document(
+        owner_id: owner_id,
+        owner_settings: %{"_cssGlobalClasses" => ["cIqHGvqlwpj"]},
+        child_id: "other-child",
+        global_classes: [
+          %{
+            "id" => "cIqHGvqlwpj",
+            "name" => "image-group-tango",
+            "settings" => %{"_cssCustom" => ".image-group-tango { color: red; }"}
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    refute Map.has_key?(owner.styles, "color")
+    assert owner.styles["custom-css"].value["type"] == "custom_css"
+  end
+
+  test "a historical Tango source ID with a different class remains generic-eligible" do
+    owner_id = "0531fc"
+
+    document =
+      generic_custom_css_document(
+        owner_id: owner_id,
+        owner_settings: %{"_cssGlobalClasses" => ["generic-class"]},
+        child_id: "other-child",
+        global_classes: [
+          %{
+            "id" => "generic-class",
+            "name" => "generic-owner",
+            "settings" => %{"_cssCustom" => ".generic-owner { color: red; }"}
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    assert %StyleValue{kind: :literal, value: "red"} = owner.styles["color"]
   end
 
   test "normalizes a valid DesignDocument with the complete ordered Hero tree" do
@@ -1402,11 +1671,21 @@ defmodule LiveFrames.BricksDesignIRTest do
     document = document()
     codes = Enum.map(document.diagnostics, & &1.code)
 
-    assert length(document.diagnostics) == 7
+    assert length(document.diagnostics) == 8
     assert Enum.count(codes, &(&1 == "bricks.breakpoint.unresolved")) == 4
     assert Enum.count(codes, &(&1 == "bricks.variable.unresolved")) == 2
+    assert Enum.count(codes, &(&1 == "bricks.custom_css.unsupported_selector")) == 1
     refute "bricks.setting.value_unresolved" in codes
     assert "bricks.asset.unresolved" in codes
+
+    custom_css_diagnostic =
+      Enum.find(document.diagnostics, &(&1.code == "bricks.custom_css.unsupported_selector"))
+
+    assert custom_css_diagnostic.metadata["source_path"] ==
+             "components[0].elements[8].class_refs[0].settings._cssCustom"
+
+    assert custom_css_diagnostic.source_trace.source_path ==
+             "components[0].elements[8].class_refs[0].settings._cssCustom"
 
     assert Enum.any?(document.diagnostics, fn diagnostic ->
              diagnostic.code == "bricks.variable.unresolved" and

@@ -53,6 +53,33 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
         {layer, Settings.extract(layer.settings, opts)}
       end)
 
+    {resolved, _custom_css_provenance} = resolve_extractions(extractions)
+    resolved
+  end
+
+  @spec resolve_with_custom_css_provenance(map(), keyword()) :: map()
+  def resolve_with_custom_css_provenance(resolved_element, opts \\ [])
+      when is_map(resolved_element) and is_list(opts) do
+    element = Map.get(resolved_element, :element, %{})
+    source_id = Map.get(element, :id)
+
+    layers =
+      layers(
+        Map.get(resolved_element, :class_refs, []),
+        Map.get(resolved_element, :source_settings, %{}),
+        source_id
+      )
+
+    extractions =
+      Enum.map(layers, fn layer ->
+        {layer, Settings.extract(layer.settings, opts)}
+      end)
+
+    {resolved, custom_css_provenance} = resolve_extractions(extractions)
+    %{resolved: resolved, custom_css_provenance: custom_css_provenance}
+  end
+
+  defp resolve_extractions(extractions) do
     declarations =
       Enum.flat_map(extractions, fn {layer, extraction} ->
         Enum.map(extraction.declarations, &add_layer_provenance(&1, layer))
@@ -73,24 +100,24 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
         resolve_group(property, breakpoint, order_contributors(grouped))
       end)
 
-    custom_css = resolved_custom_css(extractions)
+    {custom_css, custom_css_provenance} = resolved_custom_css_with_provenance(extractions)
     custom_css_responsive = resolved_custom_css_responsive(extractions)
 
-    %{
-      base_styles: emitted_styles(resolutions, nil),
-      responsive:
-        (emitted_responsive(resolutions) ++ custom_css_responsive)
-        |> Enum.sort_by(&{&1.breakpoint || "", &1.property || "", &1.source_key}),
-      custom_css: custom_css,
-      responsive_evidence: extraction_records(extractions, :responsive),
-      unresolved_styles: unresolved_styles(resolutions),
-      resolutions: resolutions,
-      consumed: extraction_records(extractions, :consumed),
-      unsupported: extraction_records(extractions, :unsupported),
-      diagnostics:
-        extraction_diagnostics(extractions) ++
-          Enum.flat_map(resolutions, &precedence_diagnostic/1)
-    }
+    {%{
+       base_styles: emitted_styles(resolutions, nil),
+       responsive:
+         (emitted_responsive(resolutions) ++ custom_css_responsive)
+         |> Enum.sort_by(&{&1.breakpoint || "", &1.property || "", &1.source_key}),
+       custom_css: custom_css,
+       responsive_evidence: extraction_records(extractions, :responsive),
+       unresolved_styles: unresolved_styles(resolutions),
+       resolutions: resolutions,
+       consumed: extraction_records(extractions, :consumed),
+       unsupported: extraction_records(extractions, :unsupported),
+       diagnostics:
+         extraction_diagnostics(extractions) ++
+           Enum.flat_map(resolutions, &precedence_diagnostic/1)
+     }, custom_css_provenance}
   end
 
   defp resolve_group(property, breakpoint, declarations) do
@@ -306,20 +333,54 @@ defmodule LiveFrames.Adapters.Bricks.StylePrecedence do
     end)
   end
 
-  defp resolved_custom_css(extractions) do
-    base_values =
-      Enum.flat_map(extractions, fn {_layer, extraction} -> extraction.custom_css.base end)
+  defp resolved_custom_css_with_provenance(extractions) do
+    base_candidates =
+      Enum.flat_map(extractions, fn {layer, extraction} ->
+        Enum.map(extraction.custom_css.base, &{layer, &1})
+      end)
 
-    responsive_values =
-      extractions
-      |> Enum.flat_map(fn {_layer, extraction} -> extraction.custom_css.responsive end)
-      |> Enum.reduce(%{}, fn record, values -> Map.put(values, record.source_key, record) end)
+    responsive_candidates =
+      Enum.flat_map(extractions, fn {layer, extraction} ->
+        Enum.map(extraction.custom_css.responsive, &{layer, &1})
+      end)
+
+    selected_base = List.last(base_candidates)
+
+    selected_responsive =
+      Enum.reduce(responsive_candidates, %{}, fn {layer, record}, values ->
+        Map.put(values, record.source_key, {layer, record})
+      end)
       |> Enum.sort_by(&elem(&1, 0))
-      |> Enum.map(&elem(&1, 1))
 
+    custom_css = %{
+      base: if(selected_base == nil, do: [], else: [elem(selected_base, 1)]),
+      responsive: Enum.map(selected_responsive, fn {_source_key, {_layer, record}} -> record end)
+    }
+
+    provenance = %{
+      base:
+        case selected_base do
+          {layer, value} -> %{value: value, provenance: provenance_record(layer)}
+          nil -> nil
+        end,
+      responsive:
+        Map.new(selected_responsive, fn {source_key, {layer, record}} ->
+          {source_key, %{value: record.value, provenance: provenance_record(layer)}}
+        end)
+    }
+
+    {custom_css, provenance}
+  end
+
+  defp provenance_record(layer) do
     %{
-      base: if(base_values == [], do: [], else: [List.last(base_values)]),
-      responsive: responsive_values
+      origin: layer.origin,
+      class_id: layer.class_id,
+      resolution_source: layer.resolution_source,
+      authority_ids: layer.authority_ids,
+      class_reference_index: layer.class_reference_index,
+      source_id: layer.source_id,
+      layer_settings: layer.settings
     }
   end
 
