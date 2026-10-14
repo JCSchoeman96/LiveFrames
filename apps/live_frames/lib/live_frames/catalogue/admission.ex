@@ -99,7 +99,9 @@ defmodule LiveFrames.Catalogue.Admission do
   defp publish_staging_file(staging_path, physical_path) do
     case File.ln(staging_path, physical_path) do
       :ok ->
-        cleanup_staging_file(staging_path)
+        # Publishing the hard link commits admission. Cleanup cannot undo that commit.
+        _ = cleanup_staging_file(staging_path)
+        :ok
 
       {:error, :eexist} ->
         fail_after_cleanup(staging_path, already_reserved())

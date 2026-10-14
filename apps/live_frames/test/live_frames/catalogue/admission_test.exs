@@ -36,6 +36,7 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
     assert {:ok, encoded} = CanonicalJSON.encode(manifest_map(admitted))
     assert bytes == encoded
     assert catalogue_files(root) == ["sections/synthetic_empty.json"]
+    assert staging_files(root) == []
     assert {:ok, [%Manifest{id: "live_frames.section.synthetic_empty"}]} = Builder.build(root)
   end
 
@@ -265,6 +266,13 @@ defmodule LiveFrames.Catalogue.AdmissionTest do
     |> Enum.filter(&File.regular?/1)
     |> Enum.map(&Path.relative_to(&1, root))
     |> Enum.sort()
+  end
+
+  defp staging_files(root) do
+    root
+    |> Path.dirname()
+    |> Path.join(".catalogue-admission-*.tmp")
+    |> Path.wildcard()
   end
 
   defp observe_builder_errors(root, errors) do
