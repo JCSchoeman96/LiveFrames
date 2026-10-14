@@ -117,6 +117,56 @@ enter/leave pair is transient in the exported record: pointer entry sets the
 class value, and pointer exit removes it. No toggle or persistent state action
 is recorded. The export does not specify guards or an invalid-target fallback.
 
+### Imported `_interactions` representation
+
+The canonical Romeo export was inspected as inert JSON after verifying its
+SHA-256 (`0cf29929a25bc2485ece90375d8c0f90fa1710eac0439bc5decc13af11f03f63`)
+and byte count (`24944`). Its sole `_interactions` occurrence is the array at
+`globalClasses[9].settings._interactions`. The array contains two objects. Each
+object has exactly the flat string keys `action`, `actionAttributeKey`,
+`actionAttributeValue`, `id`, and `trigger`; all five values in both records
+are strings.
+
+| Array item | `id` | `trigger` | `action` | `actionAttributeKey` | `actionAttributeValue` |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `hnhofk` | `mouseenter` | `setAttribute` | `class` | `is-hover` |
+| 2 | `nafkin` | `mouseleave` | `removeAttribute` | `class` | `is-hover` |
+
+This records only the observed Romeo shape. It does not define a universal
+Bricks `_interactions` schema. A generic implementation may support this
+bounded shape. Unknown collection types, non-object members, missing fields,
+wrong field types, additional fields, or nested record structure must fail
+closed.
+
+The observed array lists the enter record first, but array position is not
+semantic authority. A consumer must prove the pair from its field values,
+regardless of order. Exact duplicate records may be deduplicated. Multiple
+complete candidate pairs with different tokens are ambiguous and must fail
+closed, as specified by the accepted Generic Stateful Style implementation
+plan.
+
+`Bricks.Loader.settings_value/2` returns a map-valued imported `settings`
+object as that map. It does not decode `_interactions` into executable or
+runtime structures. The array therefore remains inert nested data reachable
+through the owning layer's settings map. This statement is limited to the
+loader behavior implemented in `apps/live_frames/lib/live_frames/adapters/bricks/loader.ex`.
+
+The records authorize no source action execution or source class mutation in
+LiveFrames. They are evidence for a browser-owned hover condition only when
+the exact reversible enter/set and leave/remove pair uses the same class
+token on the same proven effective layer.
+
+```text
+ROMEO_OBSERVED_INTERACTIONS_COLLECTION=array
+ROMEO_OBSERVED_INTERACTION_RECORD=flat_string_keyed_object
+INTERACTION_RECORD_ORDER_IS_SEMANTIC_AUTHORITY=NO
+SOURCE_ACTIONS_ARE_INERT_EVIDENCE=YES
+SOURCE_ACTION_EXECUTION_AUTHORIZED=NO
+SOURCE_CLASS_MUTATION_REPRODUCED=NO
+TRANSIENT_CLASS_TO_HOVER_REQUIRES_EXACT_PAIR=YES
+UNIVERSAL_BRICKS_INTERACTIONS_SCHEMA_CLAIMED=NO
+```
+
 ## 8. Observed presentation/style evidence
 
 The owning class's custom CSS contains both the pointer-state selectors and
