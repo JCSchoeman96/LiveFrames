@@ -91,14 +91,15 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
     {class_dependencies, source_classes, acss_classes, settings_consumed, unsupported_settings,
      responsive, custom_css, variable_values, variable_occurrences, assets, runtime, diagnostics,
-     style_results} =
+     style_results, custom_css_provenance} =
       Enum.reduce(
         tree.ordered_elements,
-        {[], [], [], [], [], [], %{base: [], responsive: []}, [], [], [], [], [], %{}},
+        {[], [], [], [], [], [], %{base: [], responsive: []}, [], [], [], [], [], %{}, %{}},
         fn element,
            {class_dependencies_acc, source_classes_acc, acss_classes_acc, settings_consumed_acc,
             unsupported_settings_acc, responsive_acc, custom_css_acc, variable_values_acc,
-            variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc, style_results_acc} ->
+            variable_occurrences_acc, assets_acc, runtime_acc, diagnostics_acc, style_results_acc,
+            custom_css_provenance_acc} ->
           resolved = Map.fetch!(elements, element.id)
 
           layers =
@@ -121,7 +122,10 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
               rejected_semantic_settings: class_semantic_settings
             ]
 
-          style_result = StylePrecedence.resolve(layers, extraction_opts)
+          style_resolution =
+            StylePrecedence.resolve_with_custom_css_provenance(resolved, extraction_opts)
+
+          style_result = style_resolution.resolved
 
           class_records = class_records(resolved, element.id)
           class_names = resolved.class_names
@@ -184,6 +188,9 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
           style_results_acc = Map.put(style_results_acc, element.id, style_result)
 
+          custom_css_provenance_acc =
+            Map.put(custom_css_provenance_acc, element.id, style_resolution.custom_css_provenance)
+
           diagnostics =
             report_style_diagnostics(style_result)
 
@@ -200,7 +207,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
             assets_acc ++ add_source(element_assets, element.id),
             runtime_acc ++ runtime_records,
             diagnostics_acc ++ diagnostics ++ runtime_diagnostics ++ icon_diagnostics,
-            style_results_acc
+            style_results_acc,
+            custom_css_provenance_acc
           }
         end
       )
@@ -242,6 +250,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       runtime_dependencies: runtime,
       diagnostics: diagnostics ++ variable_diagnostics ++ asset_diagnostics,
       style_results: style_results,
+      custom_css_provenance: custom_css_provenance,
       document: document
     }
   end
@@ -259,7 +268,8 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
       assets: [],
       runtime_dependencies: [],
       diagnostics: [],
-      style_results: %{}
+      style_results: %{},
+      custom_css_provenance: %{}
     }
 
   defp layer_variable_occurrences(layers, source_id) do

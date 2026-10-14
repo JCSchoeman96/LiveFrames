@@ -3,6 +3,7 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
 
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Adapters.Bricks.StageA
+  alias LiveFrames.Adapters.Bricks.StylePrecedence
   alias LiveFrames.Fidelity
   alias LiveFrames.IR
   alias LiveFrames.IR.StyleValue
@@ -53,6 +54,154 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
 
   defp precedence_diagnostics(document) do
     Enum.filter(document.diagnostics, &(&1.code == "bricks.style.precedence_conflict"))
+  end
+
+  defp resolved_style_element(class_refs, source_settings \\ %{}) do
+    %{class_refs: class_refs, source_settings: source_settings, element: %{id: "element-1"}}
+  end
+
+  test "custom CSS provenance follows the existing base and responsive winners" do
+    class_refs = [
+      %{
+        id: "class-a",
+        resolution_status: :local_resolved,
+        resolution_source: :local,
+        authority_ids: [],
+        settings: %{
+          "_cssCustom" => ".a { color: red; }",
+          "_cssCustom:mobile_portrait" => ".a { color: teal; }",
+          "_cssCustom:mobile_landscape" => ".a { color: blue; }"
+        }
+      },
+      %{
+        id: "class-b",
+        resolution_status: :external_resolved,
+        resolution_source: :external,
+        authority_ids: ["authority-1"],
+        settings: %{
+          "_cssCustom" => ".b { color: red; }",
+          "_cssCustom:mobile_landscape" => ".b { color: blue; }",
+          "_cssCustom:tablet_portrait" => ".b { color: green; }"
+        }
+      }
+    ]
+
+    resolved_element = resolved_style_element(class_refs)
+    layers = StylePrecedence.layers(class_refs, %{}, "element-1")
+    expected = StylePrecedence.resolve(layers)
+    result = StylePrecedence.resolve_with_custom_css_provenance(resolved_element)
+
+    assert result.resolved === expected
+    assert result.resolved === StylePrecedence.resolve(layers)
+    assert result.custom_css_provenance.base.value == ".b { color: red; }"
+
+    assert result.custom_css_provenance.base.provenance == %{
+             origin: :global_class,
+             class_id: "class-b",
+             resolution_source: :external,
+             authority_ids: ["authority-1"],
+             class_reference_index: 1,
+             source_id: "element-1",
+             layer_settings: class_refs |> Enum.at(1) |> Map.fetch!(:settings)
+           }
+
+    assert Map.keys(result.custom_css_provenance.responsive) |> Enum.sort() == [
+             "_cssCustom:mobile_landscape",
+             "_cssCustom:mobile_portrait",
+             "_cssCustom:tablet_portrait"
+           ]
+
+    assert result.custom_css_provenance.responsive["_cssCustom:mobile_landscape"].value ==
+             ".b { color: blue; }"
+
+    assert result.custom_css_provenance.responsive["_cssCustom:mobile_landscape"].provenance.class_id ==
+             "class-b"
+
+    assert result.custom_css_provenance.responsive["_cssCustom:mobile_portrait"].value ==
+             ".a { color: teal; }"
+
+    assert result.custom_css_provenance.responsive["_cssCustom:mobile_portrait"].provenance.class_id ==
+             "class-a"
+
+    assert result.custom_css_provenance.responsive["_cssCustom:tablet_portrait"].provenance.class_id ==
+             "class-b"
+  end
+
+  test "identical custom CSS bytes retain the selected class layer identity" do
+    class_refs =
+      Enum.map(["class-a", "class-b"], fn id ->
+        %{
+          id: id,
+          resolution_status: :local_resolved,
+          resolution_source: :local,
+          authority_ids: [],
+          settings: %{"_cssCustom" => ".same { color: red; }"}
+        }
+      end)
+
+    result =
+      class_refs
+      |> resolved_style_element()
+      |> StylePrecedence.resolve_with_custom_css_provenance()
+
+    assert result.custom_css_provenance.base.value == ".same { color: red; }"
+    assert result.custom_css_provenance.base.provenance.class_id == "class-b"
+    assert result.custom_css_provenance.base.provenance.class_reference_index == 1
+  end
+
+  test "local global class provenance records the exact selected settings" do
+    settings = %{"_cssCustom" => ".local-class { color: orange; }"}
+
+    result =
+      [
+        %{
+          id: "class-local",
+          resolution_status: :local_resolved,
+          resolution_source: :local,
+          authority_ids: [],
+          settings: settings
+        }
+      ]
+      |> resolved_style_element()
+      |> StylePrecedence.resolve_with_custom_css_provenance()
+
+    assert result.custom_css_provenance.base.provenance.class_id == "class-local"
+    assert result.custom_css_provenance.base.provenance.resolution_source == :local
+    assert result.custom_css_provenance.base.provenance.layer_settings === settings
+  end
+
+  test "element local custom CSS provenance preserves exact settings and no class identity" do
+    local_settings = %{"_cssCustom" => ".local { color: purple; }"}
+
+    result =
+      resolved_style_element([], local_settings)
+      |> StylePrecedence.resolve_with_custom_css_provenance()
+
+    assert result.custom_css_provenance.base.value == ".local { color: purple; }"
+
+    assert result.custom_css_provenance.base.provenance == %{
+             origin: :element_local,
+             class_id: nil,
+             resolution_source: nil,
+             authority_ids: [],
+             class_reference_index: nil,
+             source_id: "element-1",
+             layer_settings: local_settings
+           }
+  end
+
+  test "unresolved and conflicted class references do not provide global CSS provenance" do
+    class_refs =
+      Enum.map([{:unresolved_external, "class-u"}, {:conflicted, "class-c"}], fn {status, id} ->
+        %{id: id, resolution_status: status, settings: %{"_cssCustom" => ".fake { color: red; }"}}
+      end)
+
+    result =
+      class_refs
+      |> resolved_style_element()
+      |> StylePrecedence.resolve_with_custom_css_provenance()
+
+    assert result.custom_css_provenance.base == nil
   end
 
   defp stage_a_result(

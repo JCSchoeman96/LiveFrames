@@ -1,0 +1,595 @@
+defmodule LiveFrames.BricksCustomCssNormalizerTest do
+  use ExUnit.Case, async: true
+
+  alias LiveFrames.Adapters.Bricks.CustomCssNormalizer
+  alias LiveFrames.Adapters.Bricks.Diagnostic
+  alias LiveFrames.IR.ResponsiveOverride
+  alias LiveFrames.IR.SourceTrace
+  alias LiveFrames.IR.StyleValue
+
+  @owner "owner"
+  @child "child"
+  @token "pointer-active"
+
+  defp interaction_pair do
+    [
+      %{
+        "action" => "setAttribute",
+        "actionAttributeKey" => "class",
+        "actionAttributeValue" => @token,
+        "id" => "enter",
+        "trigger" => "mouseenter"
+      },
+      %{
+        "action" => "removeAttribute",
+        "actionAttributeKey" => "class",
+        "actionAttributeValue" => @token,
+        "id" => "leave",
+        "trigger" => "mouseleave"
+      }
+    ]
+  end
+
+  defp provenance(source_id, settings, opts) do
+    origin = Keyword.get(opts, :origin, :global_class)
+
+    %{
+      origin: origin,
+      class_id: if(origin == :global_class, do: "class-owner"),
+      resolution_source: if(origin == :global_class, do: :local),
+      authority_ids: [],
+      class_reference_index:
+        if(origin == :global_class, do: Keyword.get(opts, :class_reference_index, 0)),
+      source_id: source_id,
+      layer_settings: settings
+    }
+  end
+
+  defp node(id, classes, path, opts \\ []) do
+    %{
+      node_id: "node_" <> Enum.map_join(path, "_", &Integer.to_string/1),
+      source_id: id,
+      parent_id: Keyword.get(opts, :parent_id),
+      classes: classes,
+      path: path,
+      styles: Keyword.get(opts, :styles, %{}),
+      responsive: Keyword.get(opts, :responsive, %{}),
+      source_trace: %SourceTrace{source_id: id, source_path: "elements[#{id}]"}
+    }
+  end
+
+  defp owner(css, opts \\ []) do
+    settings = Keyword.get(opts, :settings, %{})
+
+    %{
+      source_id: Keyword.get(opts, :source_id, @owner),
+      value: css,
+      source_key: Keyword.get(opts, :source_key, "_cssCustom"),
+      provenance:
+        provenance(Keyword.get(opts, :source_id, @owner), settings,
+          origin: Keyword.get(opts, :origin, :global_class),
+          class_reference_index: Keyword.get(opts, :class_reference_index, 0)
+        )
+    }
+  end
+
+  defp run(css, opts \\ []) do
+    source_owner = owner(css, opts)
+
+    nodes = %{
+      @owner =>
+        node(@owner, ["owner"], [1],
+          styles: Keyword.get(opts, :owner_styles, %{}),
+          responsive: Keyword.get(opts, :owner_responsive, %{})
+        ),
+      @child => node(@child, ["child"], [1, 1], parent_id: @owner)
+    }
+
+    CustomCssNormalizer.normalize(
+      [source_owner],
+      nodes,
+      %{@owner => [@child]},
+      Keyword.get(opts, :claimed_source_ids, MapSet.new()),
+      Keyword.get(opts, :opts, [])
+    )
+  end
+
+  defp normalize_tree(css, nodes, children_by_source_id) do
+    CustomCssNormalizer.normalize(
+      [owner(css)],
+      nodes,
+      children_by_source_id,
+      MapSet.new()
+    )
+  end
+
+  test "relocates a safe conditionless rule to its target node" do
+    result = run(".owner { color: red; }")
+
+    assert %StyleValue{kind: :literal, value: "red"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    assert result.custom_css_by_source_id[@owner] == nil
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "relocates conditionless descendant rules only to descendants in the owner subtree" do
+    result = run(".owner .child { color: red; }")
+
+    assert %StyleValue{kind: :literal, value: "red"} =
+             result.styles_by_source_id[@child]["color"]
+
+    refute Map.has_key?(result.styles_by_source_id, @owner)
+  end
+
+  test "applies a conditionless descendant selector to every matching node in scope" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "late-item" => node("late-item", ["item"], [1, 10], parent_id: @owner),
+      "early-item" => node("early-item", ["item"], [1, 2], parent_id: @owner),
+      "outside-item" => node("outside-item", ["item"], [2])
+    }
+
+    result =
+      normalize_tree(
+        ".owner .item { color: red; }",
+        nodes,
+        %{@owner => ["late-item", "early-item"]}
+      )
+
+    for source_id <- ["early-item", "late-item"] do
+      assert %StyleValue{kind: :literal, value: "red"} =
+               result.styles_by_source_id[source_id]["color"]
+    end
+
+    refute Map.has_key?(result.styles_by_source_id, "outside-item")
+  end
+
+  test "relocates min-only responsive rules with an inclusive resolved override" do
+    result = run("@media (min-width: 767px) { .owner { color: red; } }")
+
+    assert %ResponsiveOverride{min_width: 767.0, max_width: nil, resolution_status: :resolved} =
+             result.responsive_by_source_id[@owner]["custom_min_767"]
+
+    assert %StyleValue{kind: :literal, value: "red"} =
+             result.responsive_by_source_id[@owner]["custom_min_767"].styles["color"]
+  end
+
+  test "relocates max-only responsive rules" do
+    result = run("@media (max-width: 767px) { .owner { color: red; } }")
+
+    assert %ResponsiveOverride{min_width: nil, max_width: 767.0} =
+             result.responsive_by_source_id[@owner]["custom_max_767"]
+  end
+
+  test "relocates bounded responsive ranges" do
+    result = run("@media (min-width: 767.5px) and (max-width: 991px) { .owner { color: red; } }")
+
+    assert %ResponsiveOverride{min_width: 767.5, max_width: 991.0} =
+             result.responsive_by_source_id[@owner]["custom_range_767p5_991"]
+  end
+
+  test "canonicalizes integer-like responsive dimensions without dropping integer zeros" do
+    for {dimension, key} <- [{"767.0", "custom_min_767"}, {"1000.0", "custom_min_1000"}] do
+      result = run("@media (min-width: #{dimension}px) { .owner { color: red; } }")
+
+      assert Map.has_key?(result.responsive_by_source_id[@owner], key)
+    end
+  end
+
+  test "canonicalizes fractional responsive dimensions" do
+    result = run("@media (min-width: 767.5px) { .owner { color: red; } }")
+
+    assert Map.has_key?(result.responsive_by_source_id[@owner], "custom_min_767p5")
+  end
+
+  test "expands large finite responsive dimensions without colliding with one pixel" do
+    result =
+      run(
+        "@media (min-width: 1px) { .owner { color: red; } }\n" <>
+          "@media (min-width: 100000000000000000000px) { .owner { color: red; } }"
+      )
+
+    assert Map.keys(result.responsive_by_source_id[@owner]) |> MapSet.new() ==
+             MapSet.new(["custom_min_1", "custom_min_100000000000000000000"])
+  end
+
+  test "expands very small finite responsive dimensions from exponent notation" do
+    result = run("@media (min-width: 0.0000001px) { .owner { color: red; } }")
+
+    assert Map.has_key?(result.responsive_by_source_id[@owner], "custom_min_0p0000001")
+  end
+
+  test "maps a proven same-layer transient alias to hover and removes its source token" do
+    result =
+      run(".owner.#{@token} { opacity: 1; }", settings: %{"_interactions" => interaction_pair()})
+
+    state = result.custom_css_by_source_id[@owner].value
+    assert state["type"] == "state_rules"
+    assert [%{"condition" => "hover", "target_node_id" => "node_1"}] = state["rules"]
+    refute String.contains?(inspect(state), @token)
+  end
+
+  test "maps literal focus-within to a state rule" do
+    result = run(".owner:focus-within .child { opacity: 1; }")
+
+    assert [%{"condition" => "focus_within", "target_node_id" => "node_1_1"}] =
+             result.custom_css_by_source_id[@owner].value["rules"]
+  end
+
+  test "expands hover descendant selectors to every matching node in numeric path order" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "late-item" => node("late-item", ["item"], [1, 10], parent_id: @owner),
+      "early-item" => node("early-item", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner:hover .item { opacity: 1; }",
+        nodes,
+        %{@owner => ["late-item", "early-item"]}
+      )
+
+    assert %StyleValue{value: %{"type" => "state_rules", "rules" => rules}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert Enum.map(rules, &{&1["condition"], &1["target_node_id"]}) == [
+             {"hover", "node_1_2"},
+             {"hover", "node_1_10"}
+           ]
+  end
+
+  test "expands focus-within descendant selectors to every matching node" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "item-a" => node("item-a", ["item"], [1, 1], parent_id: @owner),
+      "item-b" => node("item-b", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner:focus-within .item { opacity: 1; }",
+        nodes,
+        %{@owner => ["item-a", "item-b"]}
+      )
+
+    assert %StyleValue{value: %{"type" => "state_rules", "rules" => rules}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert Enum.map(rules, &{&1["condition"], &1["target_node_id"]}) == [
+             {"focus_within", "node_1_1"},
+             {"focus_within", "node_1_2"}
+           ]
+  end
+
+  test "expands comma groups and orders hover before focus-within" do
+    result = run(".owner:focus-within, .owner:hover { opacity: 1; }")
+    rules = result.custom_css_by_source_id[@owner].value["rules"]
+
+    assert Enum.map(rules, &{&1["condition"], &1["order"]}) == [
+             {"hover", 0},
+             {"focus_within", 1}
+           ]
+  end
+
+  test "retains an unproven transient token as inert residual" do
+    result = run(".owner.#{@token} { opacity: 1; }")
+
+    assert %StyleValue{value: %{"type" => "custom_css", "rules" => [residual]}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert residual =~ @token
+    assert [%{"reason" => "unsupported_selector"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "fails closed on an existing base style collision" do
+    result =
+      run(".owner { color: red; }",
+        owner_styles: %{"color" => StyleValue.literal("blue")}
+      )
+
+    assert result.styles_by_source_id == %{}
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "style_collision"
+  end
+
+  test "fails closed on an existing responsive key collision" do
+    existing = %ResponsiveOverride{
+      breakpoint_id: "custom_min_767",
+      source_name: "custom_min_767",
+      min_width: 767.0,
+      max_width: nil,
+      resolution_status: :resolved,
+      styles: %{"color" => StyleValue.literal("blue")}
+    }
+
+    result =
+      run("@media (min-width: 767px) { .owner { color: red; } }",
+        owner_responsive: %{"custom_min_767" => existing}
+      )
+
+    assert result.responsive_by_source_id == %{}
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "responsive_collision"
+  end
+
+  test "fails closed when inclusive responsive intervals overlap with different values" do
+    result =
+      run(
+        "@media (max-width: 767px) { .owner { color: red; } }\n@media (min-width: 767px) { .owner { color: blue; } }"
+      )
+
+    assert result.responsive_by_source_id == %{}
+
+    assert Enum.map(result.residuals_by_source_id[@owner], & &1["reason"]) == [
+             "responsive_overlap_conflict",
+             "responsive_overlap_conflict"
+           ]
+  end
+
+  test "deduplicates exact responsive intervals and values" do
+    result =
+      run(
+        "@media (min-width: 767px) { .owner { color: red; } }\n@media (min-width: 767px) { .owner { color: red; } }"
+      )
+
+    assert map_size(result.responsive_by_source_id[@owner]) == 1
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "keeps unsupported selectors as residual" do
+    result = run(".owner > .child { color: red; }")
+
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unsupported_selector"
+    assert result.styles_by_source_id == %{}
+  end
+
+  test "preserves the full source value when unsupported CSS is residual-only" do
+    css = " \n\n.owner img {\n  height: 100%;\n}\n\n\n"
+    result = run(css)
+
+    assert result.styles_by_source_id == %{}
+
+    assert result.residuals_by_source_id[@owner] == [
+             %{
+               "reason" => "unsupported_selector",
+               "source_text" => ".owner img {\n  height: 100%;\n}"
+             }
+           ]
+
+    assert %StyleValue{value: %{"type" => "custom_css", "rules" => [^css]}} =
+             result.custom_css_by_source_id[@owner]
+  end
+
+  test "keeps mixed state-rule residuals atomic" do
+    css = ".owner:hover { opacity: 1; }\n\n.owner > .child { color: red; }\n\n"
+    result = run(css)
+
+    assert %StyleValue{
+             value: %{
+               "type" => "state_rules",
+               "rules" => [%{"condition" => "hover"}],
+               "residual" => [
+                 %{
+                   "reason" => "unsupported_selector",
+                   "source_text" => ".owner > .child { color: red; }"
+                 }
+               ]
+             }
+           } = result.custom_css_by_source_id[@owner]
+  end
+
+  test "does not restore normalized conditionless rules into residual fallback" do
+    css = ".owner { color: red; }\n\n.owner > .child { opacity: 1; }\n\n"
+    result = run(css)
+
+    assert %StyleValue{kind: :literal, value: "red"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    assert %StyleValue{value: %{"type" => "custom_css", "rules" => [residual]}} =
+             result.custom_css_by_source_id[@owner]
+
+    assert residual == ".owner > .child { opacity: 1; }"
+  end
+
+  test "diagnostics trace unsupported global class CSS through its class reference" do
+    result = run(".owner > .child { color: red; }", class_reference_index: 1)
+
+    assert %Diagnostic{source_path: "elements[owner].class_refs[1].settings._cssCustom"} =
+             hd(result.diagnostics)
+
+    refute String.contains?(hd(result.diagnostics).source_path, ".settings.settings.")
+  end
+
+  test "diagnostics trace element-local CSS through element settings" do
+    result = run(".owner > .child { color: red; }", origin: :element_local)
+
+    assert %Diagnostic{source_path: "elements[owner].settings._cssCustom"} =
+             hd(result.diagnostics)
+
+    refute String.contains?(hd(result.diagnostics).source_path, "class_refs[")
+  end
+
+  test "diagnostics preserve responsive custom CSS source keys and nonzero class indexes" do
+    result =
+      run(".owner > .child { color: red; }",
+        source_key: "_cssCustom:tablet",
+        class_reference_index: 2
+      )
+
+    assert %Diagnostic{
+             source_path: "elements[owner].class_refs[2].settings._cssCustom:tablet"
+           } = hd(result.diagnostics)
+  end
+
+  test "keeps an unsafe declaration and its whole rule as residual" do
+    result = run(".owner { color: red; background-image: url(https://example.test/a.png); }")
+
+    assert result.styles_by_source_id == %{}
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unsafe_declaration"
+  end
+
+  test "keeps a duplicate-property rule as residual" do
+    result = run(".owner { color: red; color: blue; }")
+
+    assert result.styles_by_source_id == %{}
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unsupported_declaration"
+  end
+
+  test "preserves malformed framing as one inert residual" do
+    css = ".owner { color: red;"
+    result = run(css)
+
+    assert [%{"reason" => "malformed_block", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "assigns deterministic state order by source rule and numeric node path" do
+    source_owner =
+      owner(
+        ".owner:hover .child-b, .owner:hover .child-a { opacity: 1; }\n.owner:focus-within { color: red; }"
+      )
+
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "child-b" => node("child-b", ["child-b"], [1, 2], parent_id: @owner),
+      "child-a" => node("child-a", ["child-a"], [1, 1], parent_id: @owner)
+    }
+
+    result =
+      CustomCssNormalizer.normalize(
+        [source_owner],
+        nodes,
+        %{@owner => ["child-b", "child-a"]},
+        MapSet.new()
+      )
+
+    rules = result.custom_css_by_source_id[@owner].value["rules"]
+
+    assert Enum.map(rules, &{&1["condition"], &1["target_node_id"], &1["order"]}) == [
+             {"hover", "node_1_1", 0},
+             {"hover", "node_1_2", 1},
+             {"focus_within", "node_1", 2}
+           ]
+  end
+
+  test "state rules may target the owner itself" do
+    result = run(".owner:hover { opacity: 1; }")
+    assert hd(result.custom_css_by_source_id[@owner].value["rules"])["target_node_id"] == "node_1"
+  end
+
+  test "state rules may target descendants inside the owner subtree" do
+    result = run(".owner:hover .child { opacity: 1; }")
+
+    assert hd(result.custom_css_by_source_id[@owner].value["rules"])["target_node_id"] ==
+             "node_1_1"
+  end
+
+  test "state selectors cannot target siblings outside the owner subtree" do
+    source_owner = owner(".owner:hover .sibling { opacity: 1; }")
+
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      @child => node(@child, ["child"], [1, 1], parent_id: @owner),
+      "sibling" => node("sibling", ["sibling"], [2])
+    }
+
+    result =
+      CustomCssNormalizer.normalize([source_owner], nodes, %{@owner => [@child]}, MapSet.new())
+
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unresolved_target"
+    assert result.custom_css_by_source_id[@owner].value["type"] == "custom_css"
+  end
+
+  test "state selectors cannot target ancestors outside the owner subtree" do
+    source_owner = owner(".owner:hover .ancestor { opacity: 1; }")
+
+    nodes = %{
+      "ancestor" => node("ancestor", ["ancestor"], [1]),
+      @owner => node(@owner, ["owner"], [1, 1], parent_id: "ancestor"),
+      @child => node(@child, ["child"], [1, 1, 1], parent_id: @owner)
+    }
+
+    result =
+      CustomCssNormalizer.normalize([source_owner], nodes, %{@owner => [@child]}, MapSet.new())
+
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unresolved_target"
+  end
+
+  test "state selectors cannot target nodes outside the selected component" do
+    source_owner = owner(".owner:hover .outside { opacity: 1; }")
+
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      @child => node(@child, ["child"], [1, 1], parent_id: @owner),
+      "outside" => node("outside", ["outside"], [2])
+    }
+
+    result =
+      CustomCssNormalizer.normalize([source_owner], nodes, %{@owner => [@child]}, MapSet.new())
+
+    assert hd(result.residuals_by_source_id[@owner])["reason"] == "unresolved_target"
+  end
+
+  test "keeps a state selector ambiguous when its owner compound matches multiple nodes" do
+    css = ".owner:hover .item { opacity: 1; }"
+
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "nested-owner" => node("nested-owner", ["owner"], [1, 1], parent_id: @owner),
+      "item" => node("item", ["item"], [1, 1, 1], parent_id: "nested-owner")
+    }
+
+    result =
+      normalize_tree(
+        css,
+        nodes,
+        %{@owner => ["nested-owner"], "nested-owner" => ["item"]}
+      )
+
+    assert [%{"reason" => "ambiguous_selector"}] = result.residuals_by_source_id[@owner]
+    assert result.custom_css_by_source_id[@owner].value["type"] == "custom_css"
+  end
+
+  test "claimed Tango owners are excluded from generic normalization" do
+    result =
+      run(".owner { color: red; }",
+        claimed_source_ids: MapSet.new([@owner])
+      )
+
+    assert result.styles_by_source_id == %{}
+    assert result.custom_css_by_source_id == %{}
+  end
+
+  test "shared class owners resolve state targets within their own subtrees" do
+    css = ".owner.#{@token} .child { opacity: 1; }"
+    pair = interaction_pair()
+
+    owners = [
+      owner(css, source_id: "owner-a", settings: %{"_interactions" => pair}),
+      owner(css, source_id: "owner-b", settings: %{"_interactions" => pair})
+    ]
+
+    nodes = %{
+      "owner-a" => node("owner-a", ["owner"], [1]),
+      "child-a" => node("child-a", ["child"], [1, 1], parent_id: "owner-a"),
+      "owner-b" => node("owner-b", ["owner"], [2]),
+      "child-b" => node("child-b", ["child"], [2, 1], parent_id: "owner-b")
+    }
+
+    result =
+      CustomCssNormalizer.normalize(
+        owners,
+        nodes,
+        %{"owner-a" => ["child-a"], "owner-b" => ["child-b"]},
+        MapSet.new()
+      )
+
+    rules_a = result.custom_css_by_source_id["owner-a"].value["rules"]
+    rules_b = result.custom_css_by_source_id["owner-b"].value["rules"]
+
+    assert Enum.map(rules_a, & &1["target_node_id"]) == ["node_1_1"]
+    assert Enum.map(rules_b, & &1["target_node_id"]) == ["node_2_1"]
+    refute String.contains?(inspect(result.custom_css_by_source_id["owner-a"].value), @token)
+    refute String.contains?(inspect(result.custom_css_by_source_id["owner-b"].value), @token)
+  end
+end
