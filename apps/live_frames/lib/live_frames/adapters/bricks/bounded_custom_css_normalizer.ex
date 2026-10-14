@@ -485,15 +485,12 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp frame_to_rule(frame) do
-    case CustomCssParser.parse_declarations(frame.body) do
+    case parse_legacy_declarations(frame.body) do
       {:ok, declarations} ->
         {:ok, rule_from_frame(frame, declarations)}
 
       {:error, _} ->
-        case parse_legacy_declarations(frame.body) do
-          {:ok, declarations} -> {:ok, rule_from_frame(frame, declarations)}
-          {:error, _} -> {:error, :invalid_declarations}
-        end
+        {:error, :invalid_declarations}
     end
   end
 
@@ -506,6 +503,7 @@ defmodule LiveFrames.Adapters.Bricks.BoundedCustomCssNormalizer do
   end
 
   defp parse_legacy_declarations(body) do
+    # Keep Tango's historical declaration splitting independent of the generic parser.
     body
     |> String.split(";", trim: true)
     |> Enum.map(&String.trim/1)

@@ -40,6 +40,87 @@ defmodule LiveFrames.BricksCustomCssParserTest do
     assert frame.selector == ".group-a, .group-b"
   end
 
+  test "does not split quoted semicolons or colons into declarations" do
+    frame = parse_single(".card { font-family: \"A;color:red\"; }")
+
+    assert frame.declarations == %{"font-family" => "\"A;color:red\""}
+  end
+
+  test "does not split semicolons inside single-quoted strings" do
+    frame = parse_single(".card { content: 'A;color:red'; opacity: 1; }")
+
+    assert frame.declarations == %{"content" => "'A;color:red'", "opacity" => "1"}
+  end
+
+  test "does not split escaped quotes or semicolons inside strings" do
+    frame = parse_single(~s(.card { content: "A\\\";B"; opacity: 1; }))
+
+    assert frame.declarations == %{"content" => "\"A\\\";B\"", "opacity" => "1"}
+  end
+
+  test "does not treat comment markers inside strings as comments" do
+    frame = parse_single(".card { content: \"/* ; display:block */\"; opacity: 1; }")
+
+    assert frame.declarations == %{
+             "content" => "\"/* ; display:block */\"",
+             "opacity" => "1"
+           }
+  end
+
+  test "ignores declaration delimiters inside CSS comments" do
+    frame = parse_single(".card { color: red /* ; display:block */; opacity: 1; }")
+
+    assert frame.declarations == %{
+             "color" => "red /* ; display:block */",
+             "opacity" => "1"
+           }
+  end
+
+  test "does not split semicolons or colons inside nested function values" do
+    frame = parse_single(".card { background-image: synthetic(data;part:value); opacity: 1; }")
+
+    assert frame.declarations == %{
+             "background-image" => "synthetic(data;part:value)",
+             "opacity" => "1"
+           }
+  end
+
+  test "does not split semicolons inside bracketed custom property values" do
+    frame = parse_single(".card { --raw: [left;right]; opacity: 1; }")
+
+    assert frame.declarations == %{"--raw" => "[left;right]", "opacity" => "1"}
+  end
+
+  test "rejects a complete rule with an unterminated declaration string" do
+    assert_rejected(
+      ".card { font-family: \"unfinished; color: red; }",
+      :malformed_framing
+    )
+  end
+
+  test "rejects a complete rule with an unterminated declaration comment" do
+    assert_rejected(".card { color: red /* unfinished; opacity: 1; }", :malformed_framing)
+  end
+
+  test "rejects a complete rule with unbalanced function or bracket nesting" do
+    assert_rejected(".card { background: synthetic(data; opacity: 1; }", :invalid_declaration)
+    assert_rejected(".card { --raw: [left; opacity: 1; }", :invalid_declaration)
+  end
+
+  test "rejects crossed function and bracket nesting" do
+    assert_rejected(".card { --raw: ([)]; }", :invalid_declaration)
+  end
+
+  test "preserves custom property case while lowercasing ordinary property names" do
+    frame = parse_single(".card { COLOR: red; --ThemeColor: blue; --themecolor: green; }")
+
+    assert frame.declarations == %{
+             "color" => "red",
+             "--ThemeColor" => "blue",
+             "--themecolor" => "green"
+           }
+  end
+
   test "quoted braces in selectors do not change generic block framing" do
     css = ~s([data-x="{"] { color: red; })
     frame = parse_single(css)
@@ -52,10 +133,109 @@ defmodule LiveFrames.BricksCustomCssParserTest do
     css = "@media (min-width: 600px) { .card { opacity: 0; } }"
     frame = parse_single(css)
 
-    assert frame.raw == css
+    assert frame.raw == ".card { opacity: 0; }"
+    assert frame.container_raw == css
     assert frame.selector == ".card"
     assert frame.min_width == 600
     assert frame.max_width == nil
+  end
+
+  test "rejects statement at-rules atomically and preserves the following rule" do
+    cases = [
+      {"@import url(\"x.css\");", :unsupported_at_rule},
+      {"@charset \"UTF;8\";", :unsupported_at_rule},
+      {"@import \"x;{.css\";", :unsupported_at_rule},
+      {"@import url(x;part.css);", :unsupported_at_rule},
+      {"@import url(x.css)/* ; { */;", :unsupported_at_rule}
+    ]
+
+    for {statement, reason} <- cases do
+      css = statement <> "\n.card { opacity: 1; }"
+      result = CustomCssParser.parse(css)
+
+      assert [%{raw: ^statement, reason: ^reason, source_order: 0}] = result.rejects
+      assert [%{raw: ".card { opacity: 1; }", selector: ".card", source_order: 1}] = result.frames
+    end
+  end
+
+  test "unsupported block at-rules do not consume following rules" do
+    at_rule = "@supports (display: grid) { .group-a { opacity: 0; } }"
+    result = CustomCssParser.parse(at_rule <> "\n.card { opacity: 1; }")
+
+    assert [%{raw: ^at_rule, reason: :unsupported_at_rule, source_order: 0}] = result.rejects
+    assert [%{selector: ".card", source_order: 1}] = result.frames
+  end
+
+  test "keeps bounded media child rules and rejects independently with atomic raw text" do
+    container_raw =
+      "@media (min-width: 767px) {\n" <>
+        "  .group-a { opacity: 0; }\n" <>
+        "  .group-b { opacity: 0; opacity: 1; }\n" <>
+        "  .group-c { color: red; }\n" <>
+        "}"
+
+    css = container_raw <> "\n.card { opacity: 1; }"
+    result = CustomCssParser.parse(css)
+
+    assert [
+             %{
+               raw: ".group-a { opacity: 0; }",
+               container_raw: ^container_raw,
+               min_width: 767.0,
+               source_order: 0
+             },
+             %{
+               raw: ".group-c { color: red; }",
+               container_raw: ^container_raw,
+               min_width: 767.0,
+               source_order: 2
+             },
+             %{raw: ".card { opacity: 1; }", container_raw: nil, min_width: nil, source_order: 3}
+           ] = result.frames
+
+    assert [
+             %{
+               raw: ".group-b { opacity: 0; opacity: 1; }",
+               reason: :duplicate_property,
+               container_raw: ^container_raw,
+               min_width: 767.0,
+               max_width: nil,
+               source_order: 1
+             }
+           ] = result.rejects
+  end
+
+  test "rejects an unsupported media child at-rule without dropping valid siblings" do
+    container_raw =
+      "@media (max-width: 900px) {\n" <>
+        "  .group-a { opacity: 0; }\n" <>
+        "  @supports (display: grid) { .group-b { opacity: 1; } }\n" <>
+        "  .group-c { color: red; }\n" <>
+        "}"
+
+    result = CustomCssParser.parse(container_raw)
+
+    assert Enum.map(result.frames, &{&1.selector, &1.source_order, &1.raw, &1.container_raw}) == [
+             {".group-a", 0, ".group-a { opacity: 0; }", container_raw},
+             {".group-c", 2, ".group-c { color: red; }", container_raw}
+           ]
+
+    assert [
+             %{
+               raw: "@supports (display: grid) { .group-b { opacity: 1; } }",
+               reason: :unsupported_at_rule,
+               source_order: 1,
+               min_width: nil,
+               max_width: 900.0,
+               container_raw: ^container_raw
+             }
+           ] = result.rejects
+  end
+
+  test "fails a malformed media container closed as one raw item" do
+    css = "@media (min-width: 767px) { .group-a { opacity: 0; }"
+
+    assert_rejected(css, :malformed_framing)
   end
 
   test "frames a max-width media rule" do

@@ -32,39 +32,248 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
   @doc false
   @spec parse_declarations(String.t()) :: {:ok, map()} | {:error, atom()}
   def parse_declarations(body) when is_binary(body) do
-    body
-    |> String.split(";")
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.reduce_while({:ok, %{}}, fn declaration, {:ok, declarations} ->
-      case String.split(declaration, ":", parts: 2) do
-        [property, value] ->
-          property = property |> String.trim() |> String.downcase()
-          value = String.trim(value)
+    with {:ok, segments} <- scan_declaration_segments(body) do
+      segments
+      |> Enum.reduce_while({:ok, %{}}, fn segment, {:ok, declarations} ->
+        case parse_declaration_segment(body, segment) do
+          {:ok, :skip} ->
+            {:cont, {:ok, declarations}}
 
-          cond do
-            not Regex.match?(@property_name, property) or value == "" ->
-              {:halt, {:error, :invalid_declaration}}
+          {:ok, {property, value}} ->
+            cond do
+              not Regex.match?(@property_name, property) ->
+                {:halt, {:error, :invalid_declaration}}
 
-            Map.has_key?(declarations, property) ->
-              {:halt, {:error, :duplicate_property}}
+              Map.has_key?(declarations, property) ->
+                {:halt, {:error, :duplicate_property}}
 
-            true ->
-              {:cont, {:ok, Map.put(declarations, property, value)}}
-          end
+              true ->
+                {:cont, {:ok, Map.put(declarations, property, value)}}
+            end
 
-        _ ->
-          {:halt, {:error, :invalid_declaration}}
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:ok, declarations} when map_size(declarations) > 0 -> {:ok, declarations}
+        {:ok, _} -> {:error, :invalid_declaration}
+        {:error, reason} -> {:error, reason}
       end
-    end)
-    |> case do
-      {:ok, declarations} when map_size(declarations) > 0 -> {:ok, declarations}
-      {:ok, _} -> {:error, :invalid_declaration}
-      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp scan_items(css, index, source_order, frames_rev, rejects_rev) do
+  defp scan_declaration_segments(body) do
+    scan_declaration_segments(body, 0, 0, nil, [], [])
+  end
+
+  defp scan_declaration_segments(body, index, start, colon, nesting, segments)
+       when index >= byte_size(body) do
+    if nesting == [] do
+      segment = {start, index - start, colon}
+      {:ok, Enum.reverse([segment | segments])}
+    else
+      {:error, :invalid_declaration}
+    end
+  end
+
+  defp scan_declaration_segments(body, index, start, colon, nesting, segments) do
+    cond do
+      comment_start?(body, index) ->
+        case skip_comment(body, index) do
+          {:ok, next_index} ->
+            scan_declaration_segments(
+              body,
+              next_index,
+              start,
+              colon,
+              nesting,
+              segments
+            )
+
+          {:error, _reason, _detail} ->
+            {:error, :invalid_declaration}
+        end
+
+      :binary.at(body, index) in [?\", ?'] ->
+        quote = :binary.at(body, index)
+
+        case skip_string(body, index + 1, quote) do
+          {:ok, next_index} ->
+            scan_declaration_segments(
+              body,
+              next_index,
+              start,
+              colon,
+              nesting,
+              segments
+            )
+
+          {:error, _reason, _detail} ->
+            {:error, :invalid_declaration}
+        end
+
+      true ->
+        scan_declaration_char(
+          body,
+          index,
+          start,
+          colon,
+          nesting,
+          segments
+        )
+    end
+  end
+
+  defp scan_declaration_char(body, index, start, colon, nesting, segments) do
+    case {:binary.at(body, index), nesting} do
+      {?(, _nesting} ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          colon,
+          [?( | nesting],
+          segments
+        )
+
+      {?), [?( | rest]} ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          colon,
+          rest,
+          segments
+        )
+
+      {?), _nesting} ->
+        {:error, :invalid_declaration}
+
+      {?[, _nesting} ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          colon,
+          [?[ | nesting],
+          segments
+        )
+
+      {?], [?[ | rest]} ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          colon,
+          rest,
+          segments
+        )
+
+      {?], _nesting} ->
+        {:error, :invalid_declaration}
+
+      {?:, []} when is_nil(colon) ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          index,
+          nesting,
+          segments
+        )
+
+      {?;, []} ->
+        segment = {start, index - start, colon}
+
+        scan_declaration_segments(
+          body,
+          index + 1,
+          index + 1,
+          nil,
+          nesting,
+          [segment | segments]
+        )
+
+      {_char, _nesting} ->
+        scan_declaration_segments(
+          body,
+          index + 1,
+          start,
+          colon,
+          nesting,
+          segments
+        )
+    end
+  end
+
+  defp parse_declaration_segment(body, {start, length, nil}) do
+    segment = binary_part(body, start, length)
+
+    case strip_comments(segment) do
+      {:ok, text} ->
+        if String.trim(text) == "", do: {:ok, :skip}, else: {:error, :invalid_declaration}
+
+      {:error, _reason} ->
+        {:error, :invalid_declaration}
+    end
+  end
+
+  defp parse_declaration_segment(body, {start, length, colon}) do
+    property_source = binary_part(body, start, colon - start)
+    value_source = binary_part(body, colon + 1, start + length - colon - 1)
+
+    with {:ok, property_source} <- strip_comments(property_source),
+         {:ok, value_without_comments} <- strip_comments(value_source) do
+      property = String.trim(property_source)
+      value = String.trim(value_source)
+
+      cond do
+        property == "" or String.trim(value_without_comments) == "" ->
+          {:error, :invalid_declaration}
+
+        true ->
+          property =
+            if String.starts_with?(property, "--"), do: property, else: String.downcase(property)
+
+          {:ok, {property, value}}
+      end
+    else
+      {:error, _reason} -> {:error, :invalid_declaration}
+    end
+  end
+
+  defp strip_comments(text) do
+    strip_comments(text, 0, 0, [])
+  end
+
+  defp strip_comments(text, index, chunk_start, chunks) when index >= byte_size(text) do
+    tail = binary_part(text, chunk_start, byte_size(text) - chunk_start)
+    {:ok, chunks |> Enum.reverse([tail]) |> IO.iodata_to_binary()}
+  end
+
+  defp strip_comments(text, index, chunk_start, chunks) do
+    cond do
+      comment_start?(text, index) ->
+        chunk = binary_part(text, chunk_start, index - chunk_start)
+
+        case skip_comment(text, index) do
+          {:ok, next_index} -> strip_comments(text, next_index, next_index, [chunk | chunks])
+          {:error, _reason, _detail} -> {:error, :invalid_declaration}
+        end
+
+      :binary.at(text, index) in [?\", ?'] ->
+        case skip_string(text, index + 1, :binary.at(text, index)) do
+          {:ok, next_index} -> strip_comments(text, next_index, chunk_start, chunks)
+          {:error, _reason, _detail} -> {:error, :invalid_declaration}
+        end
+
+      true ->
+        strip_comments(text, index + 1, chunk_start, chunks)
+    end
+  end
+
+  defp scan_items(css, index, source_order, frames_rev, rejects_rev, context \\ nil) do
     case skip_trivia(css, index) do
       {:error, _reason, _detail} ->
         {:error, :malformed_framing}
@@ -73,39 +282,45 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
         {:ok, Enum.reverse(frames_rev), Enum.reverse(rejects_rev), source_order}
 
       {:ok, index} ->
-        case read_block(css, index) do
+        case read_item(css, index) do
           {:error, _reason, _detail} ->
             {:error, :malformed_framing}
 
-          {:ok, block} ->
-            case parse_block(block, source_order) do
-              {:frames, frames, next_order} ->
-                frames_rev = Enum.reduce(frames, frames_rev, &[&1 | &2])
+          {:ok, item} ->
+            {:ok, frames, rejects, next_order} = parse_item(item, source_order, context)
+            frames_rev = Enum.reduce(frames, frames_rev, &[&1 | &2])
+            rejects_rev = Enum.reduce(rejects, rejects_rev, &[&1 | &2])
 
-                scan_items(
-                  css,
-                  block.next_index,
-                  next_order,
-                  frames_rev,
-                  rejects_rev
-                )
-
-              {:reject, reason, next_order} ->
-                reject = %{raw: block.raw, reason: reason, source_order: source_order}
-
-                scan_items(
-                  css,
-                  block.next_index,
-                  next_order,
-                  frames_rev,
-                  [reject | rejects_rev]
-                )
-            end
+            scan_items(
+              css,
+              item.next_index,
+              next_order,
+              frames_rev,
+              rejects_rev,
+              context
+            )
         end
     end
   end
 
-  defp parse_block(%{prelude: prelude} = block, source_order) do
+  defp parse_item(%{kind: :statement} = item, source_order, context) do
+    reason =
+      if String.starts_with?(String.trim(item.prelude), "@"),
+        do: :unsupported_at_rule,
+        else: :malformed_framing
+
+    {:ok, [], [reject_item(item, reason, source_order, context)], source_order + 1}
+  end
+
+  defp parse_item(%{kind: :block} = block, source_order, nil) do
+    parse_top_level_block(block, source_order)
+  end
+
+  defp parse_item(%{kind: :block} = block, source_order, context) do
+    parse_media_child_block(block, source_order, context)
+  end
+
+  defp parse_top_level_block(%{prelude: prelude} = block, source_order) do
     prelude = String.trim(prelude)
 
     cond do
@@ -113,24 +328,23 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
         parse_media_block(%{block | prelude: prelude}, source_order)
 
       String.starts_with?(prelude, "@") ->
-        {:reject, :unsupported_at_rule, source_order + 1}
+        {:ok, [], [reject_item(block, :unsupported_at_rule, source_order, nil)], source_order + 1}
 
       block.nested? ->
-        {:reject, :nested_construct, source_order + 1}
+        {:ok, [], [reject_item(block, :nested_construct, source_order, nil)], source_order + 1}
 
       prelude == "" ->
-        {:reject, :malformed_framing, source_order + 1}
+        {:ok, [], [reject_item(block, :malformed_framing, source_order, nil)], source_order + 1}
 
       true ->
         case parse_declarations(block.body) do
           {:ok, declarations} ->
-            frame =
-              frame(block, prelude, declarations, nil, nil, source_order, block.raw)
+            frame = frame(block, prelude, declarations, nil, nil, source_order, nil)
 
-            {:frames, [frame], source_order + 1}
+            {:ok, [frame], [], source_order + 1}
 
           {:error, reason} ->
-            {:reject, reason, source_order + 1}
+            {:ok, [], [reject_item(block, reason, source_order, nil)], source_order + 1}
         end
     end
   end
@@ -138,67 +352,83 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
   defp parse_media_block(block, source_order) do
     case parse_media_bounds(block.prelude) do
       {:ok, min_width, max_width} ->
-        case parse_media_rules(block.body, block.raw, min_width, max_width, source_order) do
-          {:ok, []} ->
-            {:reject, :malformed_framing, source_order + 1}
+        context = %{container_raw: block.raw, min_width: min_width, max_width: max_width}
 
-          {:ok, frames} ->
-            {:frames, frames, source_order + length(frames)}
+        case scan_items(block.body, 0, source_order, [], [], context) do
+          {:ok, [], [], _next_order} ->
+            {:ok, [], [reject_item(block, :malformed_framing, source_order, nil)],
+             source_order + 1}
 
-          {:error, reason} ->
-            {:reject, reason, source_order + 1}
+          {:ok, frames, rejects, next_order} ->
+            {:ok, frames, rejects, next_order}
+
+          {:error, _reason} ->
+            {:ok, [], [reject_item(block, :malformed_framing, source_order, nil)],
+             source_order + 1}
         end
 
       {:error, reason} ->
-        {:reject, reason, source_order + 1}
+        {:ok, [], [reject_item(block, reason, source_order, nil)], source_order + 1}
     end
   end
 
-  defp parse_media_rules(body, media_raw, min_width, max_width, source_order) do
-    case parse_flat_blocks(body) do
-      {:ok, []} ->
-        {:ok, []}
+  defp parse_media_child_block(%{prelude: prelude} = block, source_order, context) do
+    selector = String.trim(prelude)
 
-      {:ok, rules} ->
-        rules
-        |> Enum.with_index(source_order)
-        |> Enum.reduce_while({:ok, []}, fn {rule, order}, {:ok, frames} ->
-          case parse_declarations(rule.body) do
-            {:ok, declarations} ->
-              frame =
-                frame(
-                  %{rule | raw: media_raw},
-                  rule.selector,
-                  declarations,
-                  min_width,
-                  max_width,
-                  order,
-                  rule.raw
-                )
+    cond do
+      String.starts_with?(selector, "@") ->
+        {:ok, [], [reject_item(block, :unsupported_at_rule, source_order, context)],
+         source_order + 1}
 
-              {:cont, {:ok, [frame | frames]}}
+      block.nested? ->
+        {:ok, [], [reject_item(block, :nested_construct, source_order, context)],
+         source_order + 1}
 
-            {:error, reason} ->
-              {:halt, {:error, reason}}
-          end
-        end)
-        |> case do
-          {:ok, frames} -> {:ok, Enum.reverse(frames)}
-          {:error, reason} -> {:error, reason}
+      selector == "" ->
+        {:ok, [], [reject_item(block, :malformed_framing, source_order, context)],
+         source_order + 1}
+
+      true ->
+        case parse_declarations(block.body) do
+          {:ok, declarations} ->
+            frame =
+              frame(
+                block,
+                selector,
+                declarations,
+                context.min_width,
+                context.max_width,
+                source_order,
+                context.container_raw
+              )
+
+            {:ok, [frame], [], source_order + 1}
+
+          {:error, reason} ->
+            {:ok, [], [reject_item(block, reason, source_order, context)], source_order + 1}
         end
-
-      {:error, :nested_block, _detail} ->
-        {:error, :nested_construct}
-
-      {:error, _reason, _detail} ->
-        {:error, :malformed_framing}
     end
   end
 
-  defp frame(block, selector, declarations, min_width, max_width, source_order, rule_raw) do
+  defp reject_item(item, reason, source_order, nil) do
+    %{raw: item.raw, reason: reason, source_order: source_order}
+  end
+
+  defp reject_item(item, reason, source_order, context) do
+    %{
+      raw: item.raw,
+      reason: reason,
+      source_order: source_order,
+      min_width: context.min_width,
+      max_width: context.max_width,
+      container_raw: context.container_raw
+    }
+  end
+
+  defp frame(block, selector, declarations, min_width, max_width, source_order, container_raw) do
     %{
       raw: block.raw,
-      rule_raw: rule_raw,
+      container_raw: container_raw,
       selector: selector,
       body: block.body,
       declarations: declarations,
@@ -437,45 +667,94 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
   end
 
   defp read_block(css, start_index) do
-    with {:ok, open_index} <- read_until_open(css, start_index),
-         {:ok, close_index, nested?} <- read_block_end(css, open_index + 1, 1, false) do
-      block = %{
-        prelude: binary_part(css, start_index, open_index - start_index),
-        body: binary_part(css, open_index + 1, close_index - open_index - 1),
-        raw: binary_part(css, start_index, close_index - start_index + 1),
-        next_index: close_index + 1,
-        nested?: nested?
-      }
-
-      {:ok, block}
+    case read_item(css, start_index) do
+      {:ok, %{kind: :block} = block} -> {:ok, block}
+      {:ok, _statement} -> {:error, :statement_item, start_index}
+      {:error, _reason, _detail} = error -> error
     end
   end
 
-  defp read_until_open(css, index) when index >= byte_size(css),
-    do: {:error, :orphan_text, index}
+  defp read_item(css, start_index) do
+    case read_item_boundary(css, start_index, 0, 0) do
+      {:ok, :statement, end_index} ->
+        raw = binary_part(css, start_index, end_index - start_index + 1)
 
-  defp read_until_open(css, index) do
-    case :binary.at(css, index) do
-      ?{ ->
-        {:ok, index}
+        {:ok,
+         %{
+           kind: :statement,
+           prelude: binary_part(css, start_index, end_index - start_index),
+           raw: raw,
+           next_index: end_index + 1
+         }}
 
-      ?} ->
-        {:error, :unmatched_closing_brace, index}
-
-      quote when quote in [?', ?"] ->
-        with {:ok, next_index} <- skip_string(css, index + 1, quote),
-             do: read_until_open(css, next_index)
-
-      ?/ ->
-        if index + 1 < byte_size(css) and :binary.at(css, index + 1) == ?* do
-          with {:ok, next_index} <- skip_comment(css, index),
-               do: read_until_open(css, next_index)
-        else
-          read_until_open(css, index + 1)
+      {:ok, :block, open_index} ->
+        with {:ok, close_index, nested?} <- read_block_end(css, open_index + 1, 1, false) do
+          {:ok,
+           %{
+             kind: :block,
+             prelude: binary_part(css, start_index, open_index - start_index),
+             body: binary_part(css, open_index + 1, close_index - open_index - 1),
+             raw: binary_part(css, start_index, close_index - start_index + 1),
+             next_index: close_index + 1,
+             nested?: nested?
+           }}
         end
 
+      {:error, _reason, _detail} = error ->
+        error
+    end
+  end
+
+  defp read_item_boundary(css, index, _paren_depth, _bracket_depth)
+       when index >= byte_size(css),
+       do: {:error, :orphan_text, index}
+
+  defp read_item_boundary(css, index, paren_depth, bracket_depth) do
+    cond do
+      comment_start?(css, index) ->
+        with {:ok, next_index} <- skip_comment(css, index),
+             do: read_item_boundary(css, next_index, paren_depth, bracket_depth)
+
+      :binary.at(css, index) in [?\", ?'] ->
+        with {:ok, next_index} <- skip_string(css, index + 1, :binary.at(css, index)),
+             do: read_item_boundary(css, next_index, paren_depth, bracket_depth)
+
+      true ->
+        read_item_boundary_char(css, index, paren_depth, bracket_depth)
+    end
+  end
+
+  defp read_item_boundary_char(css, index, paren_depth, bracket_depth) do
+    case :binary.at(css, index) do
+      ?( ->
+        read_item_boundary(css, index + 1, paren_depth + 1, bracket_depth)
+
+      ?) when paren_depth > 0 ->
+        read_item_boundary(css, index + 1, paren_depth - 1, bracket_depth)
+
+      ?) ->
+        {:error, :unbalanced_parenthesis, index}
+
+      ?[ ->
+        read_item_boundary(css, index + 1, paren_depth, bracket_depth + 1)
+
+      ?] when bracket_depth > 0 ->
+        read_item_boundary(css, index + 1, paren_depth, bracket_depth - 1)
+
+      ?] ->
+        {:error, :unbalanced_bracket, index}
+
+      ?; when paren_depth == 0 and bracket_depth == 0 ->
+        {:ok, :statement, index}
+
+      ?{ when paren_depth == 0 and bracket_depth == 0 ->
+        {:ok, :block, index}
+
+      ?} when paren_depth == 0 and bracket_depth == 0 ->
+        {:error, :unmatched_closing_brace, index}
+
       _ ->
-        read_until_open(css, index + 1)
+        read_item_boundary(css, index + 1, paren_depth, bracket_depth)
     end
   end
 
@@ -527,6 +806,11 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
         {:ok, index}
     end
   end
+
+  defp comment_start?(css, index) when index + 1 < byte_size(css),
+    do: :binary.part(css, index, 2) == "/*"
+
+  defp comment_start?(_css, _index), do: false
 
   defp skip_comment(css, index) do
     comment_body_start = index + 2

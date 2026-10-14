@@ -779,6 +779,18 @@ defmodule LiveFrames.BricksBoundedCustomCssNormalizerTest do
             ], []} = BoundedCustomCssNormalizer.parse_parts(css)
   end
 
+  test "parse_parts preserves historical quoted-semicolon declaration splitting" do
+    css = ".legacy { font-family: \"A;color:red\"; }"
+
+    assert {[
+              %{
+                selector: ".legacy",
+                declarations: %{"font-family" => "\"A", "color" => "red\""},
+                raw: ^css
+              }
+            ], []} = BoundedCustomCssNormalizer.parse_parts(css)
+  end
+
   test "parse_parts rejects malformed framing as the complete source blob" do
     css = ".image-group-tango { min-height: 675px; }\n.future-rule { width: 90%;"
 
