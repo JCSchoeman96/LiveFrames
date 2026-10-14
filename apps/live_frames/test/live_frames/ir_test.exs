@@ -180,6 +180,25 @@ defmodule LiveFrames.IRTest do
     assert decoded_override["source_name"] == "tablet_portrait"
   end
 
+  test "general validation preserves malformed state_rules as complex_css JSON" do
+    document = valid_document()
+    node = hd(document.root_nodes)
+
+    malformed_state_rules = %{
+      "type" => "state_rules",
+      "rules" => [],
+      "residual" => [],
+      "unexpected" => true
+    }
+
+    node = %{
+      node
+      | styles: Map.put(node.styles, "custom-css", StyleValue.complex_css(malformed_state_rules))
+    }
+
+    assert IR.validate(%{document | root_nodes: [node]}) == :ok
+  end
+
   test "preserves unresolved style values through validation and JSON" do
     document = valid_document()
     unresolved = hd(document.root_nodes).styles["unknown"]
