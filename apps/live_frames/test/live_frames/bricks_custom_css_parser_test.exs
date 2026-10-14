@@ -121,6 +121,30 @@ defmodule LiveFrames.BricksCustomCssParserTest do
            }
   end
 
+  test "accepts a complete property token followed by a comment" do
+    frame = parse_single(".card { color/**/: red; }")
+
+    assert frame.declarations == %{"color" => "red"}
+  end
+
+  test "accepts a complete property token preceded by a comment" do
+    frame = parse_single(".card { /**/color: red; }")
+
+    assert frame.declarations == %{"color" => "red"}
+  end
+
+  test "rejects comments that fuse ordinary property-name tokens" do
+    assert_rejected(".card { co/**/lor: red; }", :invalid_declaration)
+  end
+
+  test "rejects comments that fuse custom property-name tokens" do
+    assert_rejected(".card { --Theme/**/Color: red; }", :invalid_declaration)
+  end
+
+  test "rejects comments that fuse custom property prefix tokens" do
+    assert_rejected(".card { -/**/-Theme: red; }", :invalid_declaration)
+  end
+
   test "quoted braces in selectors do not change generic block framing" do
     css = ~s([data-x="{"] { color: red; })
     frame = parse_single(css)

@@ -258,7 +258,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
         chunk = binary_part(text, chunk_start, index - chunk_start)
 
         case skip_comment(text, index) do
-          {:ok, next_index} -> strip_comments(text, next_index, next_index, [chunk | chunks])
+          {:ok, next_index} -> strip_comments(text, next_index, next_index, [" ", chunk | chunks])
           {:error, _reason, _detail} -> {:error, :invalid_declaration}
         end
 
