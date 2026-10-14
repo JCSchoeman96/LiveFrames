@@ -15,13 +15,14 @@ defmodule LiveFrames.Catalogue.RegistryTest do
     "template" => "templates"
   }
 
-  test "the production Registry compiles the absent canonical root as empty" do
+  test "the production Registry compiles committed canonical Catalogue manifests" do
     app_root = Path.expand("../../../", __DIR__)
     source_root = Path.join(app_root, "priv/catalogue")
+    id = "live_frames.section.media_call_to_action"
 
-    assert {:error, :enoent} = File.lstat(source_root)
-    assert Registry.all() == []
-    assert Registry.fetch("live_frames.section.hero") == :error
+    assert {:ok, %File.Stat{type: :directory}} = File.lstat(source_root)
+    assert {:ok, %Manifest{id: ^id, kind: "section"}} = Registry.fetch(id)
+    assert Enum.count(Registry.all(), &(&1.id == id)) == 1
     assert Registry.fetch(nil) == :error
     refute Registry.__mix_recompile__?()
 
