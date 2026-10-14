@@ -328,6 +328,7 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
   alias LiveFrames.Catalogue.Contract.ReflectionTest.RaisedComponents
   alias LiveFrames.Catalogue.Contract.ReflectionTest.ThrownComponents
   alias LiveFrames.Components.Sections.Hero
+  alias LiveFrames.Components.Sections.MediaCallToAction
 
   test "reads Hero's exact raw Phoenix reflection and persisted metadata" do
     assert Application.spec(:phoenix_live_view, :vsn) == ~c"1.2.11"
@@ -360,6 +361,95 @@ defmodule LiveFrames.Catalogue.Contract.ReflectionTest do
     assert metadata.slot_cardinality == %{
              "primary_action" => {0, 1},
              "secondary_action" => {0, 1}
+           }
+
+    heading_level = Enum.find(component.attrs, &(&1.name == :heading_level))
+    assert Keyword.fetch!(heading_level.opts, :default) == 2
+    assert Keyword.fetch!(heading_level.opts, :values) == 1..6
+  end
+
+  test "reads CTA's exact raw Phoenix reflection and persisted metadata" do
+    assert Application.spec(:phoenix_live_view, :vsn) == ~c"1.2.11"
+
+    assert {:ok, %{component: component, metadata: metadata}} =
+             Reflection.read(MediaCallToAction, :media_call_to_action)
+
+    assert Map.keys(component) |> MapSet.new() == MapSet.new([:kind, :attrs, :slots, :line])
+    assert component.kind == :def
+
+    assert component.attrs
+           |> Enum.map(& &1.name)
+           |> Enum.sort() ==
+             [
+               :class,
+               :eyebrow,
+               :heading,
+               :heading_level,
+               :image_1_alt,
+               :image_1_src,
+               :image_2_alt,
+               :image_2_src,
+               :image_3_alt,
+               :image_3_src,
+               :rest
+             ]
+
+    assert Enum.all?(component.attrs, &(&1.slot == nil))
+
+    assert component.slots
+           |> Enum.map(& &1.name)
+           |> Enum.sort() == [:body, :primary_action]
+
+    assert [persisted_metadata] =
+             MediaCallToAction.__info__(:attributes)[:liveframes_public_contract_metadata]
+
+    assert metadata == Map.fetch!(persisted_metadata, :media_call_to_action)
+
+    assert metadata == %{
+             capabilities: [
+               "liveframes.consumer.owns_action_navigation_and_events",
+               "liveframes.consumer.owns_global_root_attributes",
+               "liveframes.integration.requires_liveframes_css",
+               "liveframes.validation.argument_error_on_contract_violation"
+             ],
+             css_theme_contract: [
+               "--lf-action-primary-background",
+               "--lf-action-primary-background-hover",
+               "--lf-action-primary-border",
+               "--lf-action-primary-border-style",
+               "--lf-action-primary-border-width",
+               "--lf-action-primary-focus",
+               "--lf-action-primary-font-size",
+               "--lf-action-primary-font-weight",
+               "--lf-action-primary-line-height",
+               "--lf-action-primary-min-width",
+               "--lf-action-primary-padding-block",
+               "--lf-action-primary-padding-inline",
+               "--lf-action-primary-radius",
+               "--lf-action-primary-text",
+               "--lf-radius-base",
+               "--lf-space-content-gap",
+               "--lf-space-grid-gap",
+               "--lf-space-scale-xs",
+               "--lf-typography-body-size-small",
+               "--lf-typography-display-line-height",
+               "--lf-typography-display-weight",
+               "--lf-typography-heading-size-h2"
+             ],
+             global_prefixes: [],
+             slot_cardinality: %{
+               "body" => {0, 1},
+               "primary_action" => {1, 1}
+             }
+           }
+
+    assert length(metadata.capabilities) == 4
+    assert length(metadata.css_theme_contract) == 22
+    assert metadata.global_prefixes == []
+
+    assert metadata.slot_cardinality == %{
+             "body" => {0, 1},
+             "primary_action" => {1, 1}
            }
 
     heading_level = Enum.find(component.attrs, &(&1.name == :heading_level))
