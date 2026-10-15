@@ -143,6 +143,18 @@ defmodule LiveFrames.NativeGenerator.StatefulStylePipelineTest do
     assert hover_b["target_node_id"] == target_b.node_id
     assert focus_b["target_node_id"] == target_b.node_id
 
+    assert %{"kind" => "literal", "value" => "1"} =
+             hover_a["declarations"]["opacity"]
+
+    assert %{"kind" => "literal", "value" => "1"} =
+             hover_b["declarations"]["opacity"]
+
+    assert %{"kind" => "keyword", "value" => "visible"} =
+             focus_a["declarations"]["visibility"]
+
+    assert %{"kind" => "keyword", "value" => "visible"} =
+             focus_b["declarations"]["visibility"]
+
     refute Enum.any?(owner_a_rules, &(&1["target_node_id"] == target_b.node_id))
     refute Enum.any?(owner_b_rules, &(&1["target_node_id"] == target_a.node_id))
 
@@ -214,6 +226,38 @@ defmodule LiveFrames.NativeGenerator.StatefulStylePipelineTest do
     assert stylesheet_a =~ ".#{owner_a_private}:focus-within .#{target_a_private} {"
     assert stylesheet_a =~ ".#{owner_b_private}:hover .#{target_b_private} {"
     assert stylesheet_a =~ ".#{owner_b_private}:focus-within .#{target_b_private} {"
+
+    assert_css_rule(stylesheet_a, ".#{target_a_private}", "color: red;")
+    assert_css_rule(stylesheet_a, ".#{target_b_private}", "color: red;")
+
+    assert_css_rule(
+      stylesheet_a,
+      ".#{owner_a_private}:hover .#{target_a_private}",
+      "opacity: 1;"
+    )
+
+    assert_css_rule(
+      stylesheet_a,
+      ".#{owner_b_private}:hover .#{target_b_private}",
+      "opacity: 1;"
+    )
+
+    assert_css_rule(
+      stylesheet_a,
+      ".#{owner_a_private}:focus-within .#{target_a_private}",
+      "visibility: visible;"
+    )
+
+    assert_css_rule(
+      stylesheet_a,
+      ".#{owner_b_private}:focus-within .#{target_b_private}",
+      "visibility: visible;"
+    )
+
+    assert module_a =~ ~s(class={"#{owner_a_private}"})
+    assert module_a =~ ~s(class={"#{owner_b_private}"})
+    assert module_a =~ ~s(class={"#{target_a_private}"})
+    assert module_a =~ ~s(class={"#{target_b_private}"})
 
     refute stylesheet_a =~ ".#{owner_a_private}:hover .#{target_b_private} {"
     refute stylesheet_a =~ ".#{owner_a_private}:focus-within .#{target_b_private} {"
@@ -356,5 +400,9 @@ defmodule LiveFrames.NativeGenerator.StatefulStylePipelineTest do
       %{content: content} -> content
       nil -> flunk("expected a #{kind} artifact")
     end
+  end
+
+  defp assert_css_rule(stylesheet, selector, declaration) do
+    assert stylesheet =~ "#{selector} {\n  #{declaration}\n}"
   end
 end
