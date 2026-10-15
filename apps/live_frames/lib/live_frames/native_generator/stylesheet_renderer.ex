@@ -178,13 +178,13 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
     do: responsive_rules(Map.values(overrides))
 
   defp responsive_rules(overrides) when is_list(overrides) do
-    Enum.reduce_while(overrides, {:ok, %{}}, fn override, {:ok, widths} ->
-      case responsive_width(override) do
-        {:ok, numeric_width, css_width, styles} ->
+    Enum.reduce_while(overrides, {:ok, %{}}, fn override, {:ok, intervals} ->
+      case responsive_interval(override) do
+        {:ok, interval, styles} ->
           case serialize_styles(styles) do
             {:ok, declarations} ->
-              case merge_width_declarations(widths, numeric_width, css_width, declarations) do
-                {:ok, updated_widths} -> {:cont, {:ok, updated_widths}}
+              case merge_interval_declarations(intervals, interval, declarations) do
+                {:ok, updated_intervals} -> {:cont, {:ok, updated_intervals}}
                 {:error, diagnostic} -> {:halt, {:error, diagnostic}}
               end
 
@@ -197,27 +197,64 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
       end
     end)
     |> case do
-      {:ok, widths} -> {:ok, Enum.sort_by(widths, fn {_css_width, {width, _}} -> -width end)}
-      {:error, _} = error -> error
+      {:ok, intervals} ->
+        ordered_intervals = intervals |> Map.values() |> Enum.sort_by(&interval_sort_key/1)
+
+        case validate_interval_overlaps(ordered_intervals) do
+          :ok -> {:ok, ordered_intervals}
+          {:error, _} = error -> error
+        end
+
+      {:error, _} = error ->
+        error
     end
   end
 
   defp responsive_rules(_overrides), do: {:error, responsive_gap()}
 
-  defp responsive_width(%ResponsiveOverride{
+  defp responsive_interval(%ResponsiveOverride{
          resolution_status: :resolved,
-         min_width: nil,
-         max_width: width,
+         min_width: min_width,
+         max_width: max_width,
          styles: styles
        })
-       when is_map(styles) and (is_integer(width) or is_float(width)) and width >= 0 do
-    case serialize_width(width) do
-      {:ok, css_width} -> {:ok, width, css_width, styles}
-      :error -> :error
+       when is_map(styles) do
+    with true <- is_number(min_width) or is_nil(min_width),
+         true <- is_number(max_width) or is_nil(max_width),
+         false <- is_nil(min_width) and is_nil(max_width),
+         {:ok, normalized_min, serialized_min} <- normalize_bound(min_width),
+         {:ok, normalized_max, serialized_max} <- normalize_bound(max_width),
+         true <-
+           is_nil(normalized_min) or is_nil(normalized_max) or normalized_min <= normalized_max do
+      interval = %{
+        min_width: normalized_min,
+        max_width: normalized_max,
+        serialized_min: serialized_min,
+        serialized_max: serialized_max
+      }
+
+      {:ok, interval, styles}
+    else
+      _ -> :error
     end
   end
 
-  defp responsive_width(_override), do: :error
+  defp responsive_interval(_override), do: :error
+
+  defp normalize_bound(nil), do: {:ok, nil, nil}
+
+  defp normalize_bound(width) when is_integer(width) or is_float(width) do
+    if width >= 0 do
+      case serialize_width(width) do
+        {:ok, serialized_width} -> {:ok, width, serialized_width}
+        :error -> :error
+      end
+    else
+      :error
+    end
+  end
+
+  defp normalize_bound(_width), do: :error
 
   defp serialize_width(width) when is_integer(width), do: {:ok, Integer.to_string(width)}
 
@@ -237,10 +274,11 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
     ArgumentError -> :error
   end
 
-  defp merge_width_declarations(widths, numeric_width, css_width, declarations) do
-    {existing_width, existing_declarations} = Map.get(widths, css_width, {numeric_width, %{}})
+  defp merge_interval_declarations(intervals, interval, declarations) do
+    identity = interval_identity(interval)
+    existing = Map.get(intervals, identity, Map.put(interval, :declarations, %{}))
 
-    Enum.reduce_while(declarations, {:ok, existing_declarations}, fn {property, value},
+    Enum.reduce_while(declarations, {:ok, existing.declarations}, fn {property, value},
                                                                      {:ok, acc} ->
       case Map.fetch(acc, property) do
         :error -> {:cont, {:ok, Map.put(acc, property, value)}}
@@ -249,25 +287,99 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
       end
     end)
     |> case do
-      {:ok, merged} -> {:ok, Map.put(widths, css_width, {existing_width, merged})}
-      {:error, _} = error -> error
+      {:ok, merged} ->
+        {:ok, Map.put(intervals, identity, Map.put(existing, :declarations, merged))}
+
+      {:error, _} = error ->
+        error
     end
   end
 
+  defp interval_identity(interval) do
+    {interval.serialized_min, interval.serialized_max}
+  end
+
+  defp interval_sort_key(interval) do
+    {
+      lower_bound_sort_key(interval.min_width),
+      upper_bound_sort_key(interval.max_width),
+      interval.serialized_min || "",
+      interval.serialized_max || ""
+    }
+  end
+
+  defp lower_bound_sort_key(nil), do: {0, 0}
+  defp lower_bound_sort_key(width), do: {1, width}
+
+  defp upper_bound_sort_key(nil), do: {0, 0}
+  defp upper_bound_sort_key(width), do: {1, -width}
+
+  defp validate_interval_overlaps(intervals) do
+    if Enum.any?(intervals, &interval_has_conflicting_overlap?(&1, intervals)) do
+      {:error, responsive_gap()}
+    else
+      :ok
+    end
+  end
+
+  defp interval_has_conflicting_overlap?(interval, intervals) do
+    Enum.any?(intervals, fn other ->
+      interval_identity(interval) != interval_identity(other) and
+        conflicting_interval_values?(interval, other)
+    end)
+  end
+
+  defp conflicting_interval_values?(left, right) do
+    not (max_only_interval?(left) and max_only_interval?(right)) and
+      intervals_overlap?(left, right) and
+      Enum.any?(left.declarations, fn {property, value} ->
+        case Map.fetch(right.declarations, property) do
+          {:ok, other_value} -> value != other_value
+          :error -> false
+        end
+      end)
+  end
+
+  defp max_only_interval?(%{min_width: nil, max_width: max_width})
+       when is_number(max_width),
+       do: true
+
+  defp max_only_interval?(_interval), do: false
+
+  defp intervals_overlap?(left, right) do
+    lower_bound = greater_lower_bound(left.min_width, right.min_width)
+    upper_bound = lesser_upper_bound(left.max_width, right.max_width)
+
+    is_nil(lower_bound) or is_nil(upper_bound) or lower_bound <= upper_bound
+  end
+
+  defp greater_lower_bound(nil, width), do: width
+  defp greater_lower_bound(width, nil), do: width
+  defp greater_lower_bound(left, right), do: max(left, right)
+
+  defp lesser_upper_bound(nil, width), do: width
+  defp lesser_upper_bound(width, nil), do: width
+  defp lesser_upper_bound(left, right), do: min(left, right)
+
   defp render_responsive(private_class, responsive_rules) do
-    Enum.reduce_while(responsive_rules, {:ok, []}, fn {css_width, {_numeric_width, declarations}},
-                                                      {:ok, acc} ->
-      case declarations do
+    Enum.reduce_while(responsive_rules, {:ok, []}, fn interval, {:ok, acc} ->
+      case interval.declarations do
         empty when map_size(empty) == 0 ->
           {:cont, {:ok, acc}}
 
         _declarations ->
-          sorted_declarations = Enum.sort_by(declarations, &elem(&1, 0))
+          sorted_declarations = Enum.sort_by(interval.declarations, &elem(&1, 0))
           block = render_block("." <> private_class, sorted_declarations, 2)
 
+          media_conditions =
+            []
+            |> maybe_add_media_condition(interval.serialized_min, "min-width")
+            |> maybe_add_media_condition(interval.serialized_max, "max-width")
+            |> Enum.join(") and (")
+
           media_rule =
-            "@media (max-width: " <>
-              css_width <> "px) {\n  " <> String.replace(block, "\n", "\n  ") <> "\n}"
+            "@media (" <>
+              media_conditions <> ") {\n  " <> String.replace(block, "\n", "\n  ") <> "\n}"
 
           {:cont, {:ok, [media_rule | acc]}}
       end
@@ -277,6 +389,11 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
       {:error, _} = error -> error
     end
   end
+
+  defp maybe_add_media_condition(conditions, nil, _name), do: conditions
+
+  defp maybe_add_media_condition(conditions, width, name),
+    do: conditions ++ [name <> ": " <> width <> "px"]
 
   defp render_block(_selector, [], _indent), do: nil
 
@@ -302,7 +419,7 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
   defp responsive_gap do
     Diagnostic.error(
       @responsive_gap_code,
-      "Responsive max-width cascade authority is incomplete or conflicting",
+      "Responsive interval authority is incomplete or conflicting",
       %{}
     )
   end
