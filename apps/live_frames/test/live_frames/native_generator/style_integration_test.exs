@@ -158,6 +158,127 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     assert module =~ "class={\"#{target_class}\"}"
   end
 
+  test "rejects a self state rule target on a figure-backed image at the style locus boundary" do
+    figure_id = DesignNode.deterministic_id([1, 1])
+
+    figure = %DesignNode{
+      node_id: figure_id,
+      semantic_type: "image",
+      attributes: %{"tag" => "figure"},
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", figure_id, %{"object-fit" => keyword("cover")}, 0)])
+      }
+    }
+
+    root = boundary([figure])
+    c = contract()
+    document = %DesignDocument{root_nodes: [root]}
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             StyleIntegration.build(c, plan_for(root, c), document)
+
+    assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+    assert diagnostic.metadata.node_id == figure_id
+  end
+
+  test "rejects an ancestor state rule targeting a figure-backed image" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+    figure_id = DesignNode.deterministic_id([1, 1, 1])
+
+    figure = %DesignNode{
+      node_id: figure_id,
+      semantic_type: "image",
+      attributes: %{"tag" => "figure"}
+    }
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", figure_id, %{"object-fit" => keyword("cover")}, 0)])
+      },
+      children: [figure]
+    }
+
+    root = boundary([owner])
+    c = contract()
+    document = %DesignDocument{root_nodes: [root]}
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             StyleIntegration.build(c, plan_for(root, c), document)
+
+    assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+    assert diagnostic.metadata.node_id == figure_id
+  end
+
+  test "rejects a multi-locus state declaration for a figure-backed image as a whole" do
+    figure_id = DesignNode.deterministic_id([1, 1])
+
+    figure = %DesignNode{
+      node_id: figure_id,
+      semantic_type: "image",
+      attributes: %{"tag" => "figure"},
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("focus_within", figure_id, %{"width" => literal("100%")}, 0)])
+      }
+    }
+
+    root = boundary([figure])
+    c = contract()
+    document = %DesignDocument{root_nodes: [root]}
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             StyleIntegration.build(c, plan_for(root, c), document)
+
+    assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+    assert diagnostic.metadata.node_id == figure_id
+  end
+
+  test "state rules still render for a normal image target" do
+    image_id = DesignNode.deterministic_id([1, 1])
+
+    image = %DesignNode{
+      node_id: image_id,
+      semantic_type: "image",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", image_id, %{"object-fit" => keyword("cover")}, 0)])
+      }
+    }
+
+    source_attr = %Attr{
+      name: "src",
+      type: :string,
+      required: true,
+      semantic_purpose: "image source",
+      accessibility: %{"image_alt_policy" => "decorative"}
+    }
+
+    projection = %RenderProjection{
+      public_attr_name: "src",
+      render_role: :asset_src,
+      target_node_id: image_id
+    }
+
+    bundle =
+      bundle!(
+        generate(
+          %DesignDocument{root_nodes: [boundary([image])]},
+          contract(:section, [source_attr]),
+          [projection]
+        )
+      )
+
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert stylesheet ==
+             ".lf-section-style-fixture__n-000001-000001:hover {\n" <>
+               "  object-fit: cover;\n}\n"
+  end
+
   test "serializes all closed declaration kinds through native style values" do
     owner_id = DesignNode.deterministic_id([1, 1])
 

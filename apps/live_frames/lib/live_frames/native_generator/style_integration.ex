@@ -266,6 +266,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
                style_context
              ) do
           {:ok, state_rule} -> {:cont, {:ok, [state_rule | acc]}}
+          {:error, %Diagnostic{} = diagnostic} -> {:halt, {:error, diagnostic}}
           {:error, reason} -> {:halt, {:error, style_diagnostic(reason)}}
         end
       end)
@@ -287,7 +288,8 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
        ) do
     target_node_id = wire_rule["target_node_id"]
 
-    with {:ok, _target_node} <- identity_node(style_context, target_node_id),
+    with {:ok, target_node} <- identity_node(style_context, target_node_id),
+         :ok <- state_rule_target_locus(target_node),
          {:ok, target_path} <-
            identity_path(style_context, target_node_id, :missing_state_rule_target),
          :ok <- validate_state_target_path(target_path, owner_path, style_context),
@@ -320,6 +322,15 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
       :error -> {:error, :missing_state_rule_target}
     end
   end
+
+  defp state_rule_target_locus(%DesignNode{
+         node_id: node_id,
+         semantic_type: "image",
+         attributes: %{"tag" => "figure"}
+       }),
+       do: {:error, style_locus_gap(node_id)}
+
+  defp state_rule_target_locus(_target_node), do: :ok
 
   defp identity_path(style_context, node_id, missing_reason) do
     case Map.fetch(style_context.path_by_id, node_id) do
