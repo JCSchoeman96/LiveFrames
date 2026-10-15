@@ -129,6 +129,77 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
   def render_pseudo(_private_class, _pseudo, _styles),
     do: {:error, style_diagnostic(:unsupported_pseudo)}
 
+  @spec render_state_rule(String.t(), String.t(), :hover | :focus_within, map(), map() | nil) ::
+          {:ok, String.t()} | {:error, Diagnostic.t()}
+  def render_state_rule(owner_private_class, target_private_class, condition, styles, viewport) do
+    with :ok <- validate_private_class(owner_private_class),
+         :ok <- validate_private_class(target_private_class),
+         {:ok, pseudo} <- state_rule_pseudo(condition),
+         {:ok, declarations} <- serialize_styles(styles),
+         {:ok, media_bounds} <- state_rule_media_bounds(viewport) do
+      selector =
+        "." <>
+          owner_private_class <>
+          pseudo <>
+          if(owner_private_class == target_private_class,
+            do: "",
+            else: " ." <> target_private_class
+          )
+
+      case render_block(selector, declarations, 2) do
+        nil ->
+          {:ok, ""}
+
+        block when is_nil(media_bounds) ->
+          {:ok, block <> "\n"}
+
+        block ->
+          media_conditions =
+            []
+            |> maybe_add_media_condition(media_bounds.serialized_min, "min-width")
+            |> maybe_add_media_condition(media_bounds.serialized_max, "max-width")
+            |> Enum.join(") and (")
+
+          media_rule =
+            "@media (" <>
+              media_conditions <>
+              ") {\n  " <> String.replace(block, "\n", "\n  ") <> "\n}"
+
+          {:ok, media_rule <> "\n"}
+      end
+    else
+      {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
+      {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
+  defp state_rule_pseudo(:hover), do: {:ok, ":hover"}
+  defp state_rule_pseudo(:focus_within), do: {:ok, ":focus-within"}
+  defp state_rule_pseudo(_condition), do: {:error, :unsupported_state_condition}
+
+  defp state_rule_media_bounds(nil), do: {:ok, nil}
+
+  defp state_rule_media_bounds(%{min_width: min_width, max_width: max_width} = viewport)
+       when not is_struct(viewport) and map_size(viewport) == 2 do
+    with true <- not (is_nil(min_width) and is_nil(max_width)),
+         {:ok, normalized_min, serialized_min} <- normalize_bound(min_width),
+         {:ok, normalized_max, serialized_max} <- normalize_bound(max_width),
+         true <-
+           is_nil(normalized_min) or is_nil(normalized_max) or normalized_min <= normalized_max do
+      {:ok,
+       %{
+         min_width: normalized_min,
+         max_width: normalized_max,
+         serialized_min: serialized_min,
+         serialized_max: serialized_max
+       }}
+    else
+      _ -> {:error, :invalid_state_rule_viewport}
+    end
+  end
+
+  defp state_rule_media_bounds(_viewport), do: {:error, :invalid_state_rule_viewport}
+
   defp validate_private_class(class) when is_binary(class) do
     if Regex.match?(@selector_pattern, class), do: :ok, else: {:error, :unsafe_private_class}
   end
