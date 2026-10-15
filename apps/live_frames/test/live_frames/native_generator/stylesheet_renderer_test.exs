@@ -42,6 +42,195 @@ defmodule LiveFrames.NativeGenerator.StylesheetRendererTest do
     assert diagnostic.code == "native_generator.styling.css_serialization_failed"
   end
 
+  test "renders only the four generated-class hover and focus-within selectors" do
+    styles = %{"opacity" => StyleValue.literal(0.5)}
+    target_class = @private_class <> "__target"
+
+    assert {:ok, ".#{@private_class}:hover {\n  opacity: 0.5;\n}\n"} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :hover,
+               styles,
+               nil
+             )
+
+    expected = ".#{@private_class}:hover .#{target_class} {\n  opacity: 0.5;\n}\n"
+
+    assert {:ok, ^expected} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               target_class,
+               :hover,
+               styles,
+               nil
+             )
+
+    assert {:ok, ".#{@private_class}:focus-within {\n  opacity: 0.5;\n}\n"} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :focus_within,
+               styles,
+               nil
+             )
+
+    expected = ".#{@private_class}:focus-within .#{target_class} {\n  opacity: 0.5;\n}\n"
+
+    assert {:ok, ^expected} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               target_class,
+               :focus_within,
+               styles,
+               nil
+             )
+  end
+
+  test "renders inclusive state-rule min max range and exact-width media queries" do
+    styles = %{"gap" => StyleValue.literal(2)}
+    target_class = @private_class <> "__target"
+
+    assert {:ok,
+            "@media (min-width: 767px) {\n" <>
+              "  .#{@private_class}:hover {\n    gap: 2;\n  }\n}\n"} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :hover,
+               styles,
+               %{min_width: 767, max_width: nil}
+             )
+
+    expected =
+      "@media (max-width: 767px) {\n" <>
+        "  .#{@private_class}:hover .#{target_class} {\n    gap: 2;\n  }\n}\n"
+
+    assert {:ok, ^expected} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               target_class,
+               :hover,
+               styles,
+               %{min_width: nil, max_width: 767}
+             )
+
+    assert {:ok,
+            "@media (min-width: 500px) and (max-width: 900px) {\n" <>
+              "  .#{@private_class}:focus-within {\n    gap: 2;\n  }\n}\n"} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :focus_within,
+               styles,
+               %{min_width: 500, max_width: 900}
+             )
+
+    expected =
+      "@media (min-width: 767px) and (max-width: 767px) {\n" <>
+        "  .#{@private_class}:focus-within .#{target_class} {\n    gap: 2;\n  }\n}\n"
+
+    assert {:ok, ^expected} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               target_class,
+               :focus_within,
+               styles,
+               %{min_width: 767, max_width: 767}
+             )
+  end
+
+  test "canonicalizes zero thresholds for state-rule media queries" do
+    assert {:ok,
+            "@media (min-width: 0px) and (max-width: 0px) {\n" <>
+              "  .#{@private_class}:hover {\n    gap: 2;\n  }\n}\n"} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :hover,
+               %{"gap" => StyleValue.literal(2)},
+               %{min_width: 0.0, max_width: 0}
+             )
+  end
+
+  test "rejects unsafe classes unsupported state conditions and declarations" do
+    styles = %{"opacity" => StyleValue.literal(0.5)}
+
+    assert {:error, owner_diagnostic} =
+             StylesheetRenderer.render_state_rule(
+               "unsafe .owner",
+               @private_class,
+               :hover,
+               styles,
+               nil
+             )
+
+    assert owner_diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    assert {:error, target_diagnostic} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               "unsafe .target",
+               :hover,
+               styles,
+               nil
+             )
+
+    assert target_diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    assert {:error, condition_diagnostic} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               "hover",
+               styles,
+               nil
+             )
+
+    assert condition_diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    assert {:error, property_diagnostic} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :hover,
+               %{"bad property" => StyleValue.literal(1)},
+               nil
+             )
+
+    assert property_diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    assert {:error, value_diagnostic} =
+             StylesheetRenderer.render_state_rule(
+               @private_class,
+               @private_class,
+               :hover,
+               %{"color" => StyleValue.literal("red; display: none")},
+               nil
+             )
+
+    assert value_diagnostic.code == "native_generator.styling.css_serialization_failed"
+
+    for viewport <- [
+          %{min_width: nil, max_width: nil},
+          %{min_width: 900, max_width: 500},
+          %{min_width: -1, max_width: nil},
+          %{"min_width" => 500, "max_width" => nil},
+          %{min_width: 500, max_width: nil, source: "untrusted"}
+        ] do
+      assert {:error, viewport_diagnostic} =
+               StylesheetRenderer.render_state_rule(
+                 @private_class,
+                 @private_class,
+                 :hover,
+                 styles,
+                 viewport
+               )
+
+      assert viewport_diagnostic.code == "native_generator.styling.css_serialization_failed"
+    end
+  end
+
   test "renders broader responsive max-width overrides before narrower ones" do
     overrides = [
       %ResponsiveOverride{

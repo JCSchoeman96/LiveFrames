@@ -27,12 +27,16 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
   end
 
   defp generate(document, contract, projections \\ []) do
+    generate_at(document, contract, DesignNode.deterministic_id([1]), projections)
+  end
+
+  defp generate_at(document, contract, boundary_node_id, projections \\ []) do
     {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
 
     plan = %ComponentizationPlan{
       contract_id: contract.contract_id,
       design_document_sha256: fingerprint,
-      boundary_node_id: DesignNode.deterministic_id([1]),
+      boundary_node_id: boundary_node_id,
       render_projections: projections
     }
 
@@ -50,6 +54,45 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
   defp bundle!(result) do
     assert {:ok, bundle} = result
     bundle
+  end
+
+  defp blocked_reason(result) do
+    assert {:error, :generation_blocked, [diagnostic]} = result
+    diagnostic.metadata.reason
+  end
+
+  defp state_value(rules, residual \\ [], opts \\ []) do
+    StyleValue.complex_css(
+      %{"type" => "state_rules", "rules" => rules, "residual" => residual},
+      opts
+    )
+  end
+
+  defp state_rule(condition, target_node_id, declarations, order, viewport \\ nil) do
+    %{
+      "condition" => condition,
+      "target_node_id" => target_node_id,
+      "declarations" => declarations,
+      "viewport" => viewport,
+      "order" => order
+    }
+  end
+
+  defp literal(value), do: %{"kind" => "literal", "value" => value}
+  defp keyword(value), do: %{"kind" => "keyword", "value" => value}
+  defp token_ref(value), do: %{"kind" => "token_ref", "value" => value}
+
+  defp calculation(token_path, multiplier) do
+    %{
+      "kind" => "calculation",
+      "value" => %{
+        "operation" => "multiply",
+        "operands" => [
+          %{"kind" => "token_ref", "path" => token_path},
+          %{"kind" => "literal", "value" => multiplier}
+        ]
+      }
+    }
   end
 
   test "primary button intent emits token backed base, hover, and focus-visible rules" do
@@ -76,6 +119,494 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     refute stylesheet.content =~ ".lf-hero__action--primary"
     refute module.content =~ "btn--primary"
     assert module.content =~ "lf-section-style-fixture__n-000001-000001"
+  end
+
+  test "renders ordered self and descendant hover and focus-within rules" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+    target_id = DesignNode.deterministic_id([1, 1, 1])
+
+    rules = [
+      state_rule("hover", owner_id, %{"opacity" => literal(0.5)}, 0),
+      state_rule("hover", target_id, %{"color" => keyword("tomato")}, 1),
+      state_rule("focus_within", owner_id, %{"border-style" => keyword("solid")}, 2),
+      state_rule("focus_within", target_id, %{"display" => keyword("grid")}, 3)
+    ]
+
+    target = %DesignNode{node_id: target_id, semantic_type: "container"}
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{"custom-css" => state_value(rules)},
+      children: [target]
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([owner])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    module = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
+    owner_class = "lf-section-style-fixture__n-000001-000001"
+    target_class = owner_class <> "-000001"
+
+    expected =
+      ".#{owner_class}:hover {\n  opacity: 0.5;\n}\n\n" <>
+        ".#{owner_class}:hover .#{target_class} {\n  color: tomato;\n}\n\n" <>
+        ".#{owner_class}:focus-within {\n  border-style: solid;\n}\n\n" <>
+        ".#{owner_class}:focus-within .#{target_class} {\n  display: grid;\n}\n"
+
+    assert stylesheet == expected
+    assert module =~ "class={\"#{owner_class}\"}"
+    assert module =~ "class={\"#{target_class}\"}"
+  end
+
+  test "serializes all closed declaration kinds through native style values" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+
+    declarations = %{
+      "opacity" => literal(0.5),
+      "display" => keyword("flex"),
+      "gap" => token_ref("spacing.grid_gap"),
+      "margin-inline" => calculation("spacing.grid_gap", 2)
+    }
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" => state_value([state_rule("hover", owner_id, declarations, 0)])
+      }
+    }
+
+    stylesheet =
+      generate(%DesignDocument{root_nodes: [boundary([owner])]}, contract())
+      |> bundle!()
+      |> then(&Enum.find(&1.artifacts, fn artifact -> artifact.kind == :stylesheet end).content)
+
+    assert stylesheet ==
+             ".lf-section-style-fixture__n-000001-000001:hover {\n" <>
+               "  display: flex;\n" <>
+               "  gap: var(--lf-space-grid-gap);\n" <>
+               "  margin-inline: calc(var(--lf-space-grid-gap) * 2);\n" <>
+               "  opacity: 0.5;\n}\n"
+  end
+
+  test "renders each state viewport form with inclusive media bounds" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+
+    rules = [
+      state_rule("hover", owner_id, %{"opacity" => literal(0.5)}, 0, %{
+        "min_width" => 767,
+        "max_width" => nil
+      }),
+      state_rule("hover", owner_id, %{"display" => keyword("grid")}, 1, %{
+        "min_width" => nil,
+        "max_width" => 767
+      }),
+      state_rule("focus_within", owner_id, %{"gap" => literal(2)}, 2, %{
+        "min_width" => 500,
+        "max_width" => 900
+      }),
+      state_rule("focus_within", owner_id, %{"color" => keyword("red")}, 3, %{
+        "min_width" => 767,
+        "max_width" => 767
+      })
+    ]
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{"custom-css" => state_value(rules)}
+    }
+
+    stylesheet =
+      generate(%DesignDocument{root_nodes: [boundary([owner])]}, contract())
+      |> bundle!()
+      |> then(&Enum.find(&1.artifacts, fn artifact -> artifact.kind == :stylesheet end).content)
+
+    assert stylesheet =~
+             "@media (min-width: 767px) {\n  .lf-section-style-fixture__n-000001-000001:hover {"
+
+    assert stylesheet =~
+             "@media (max-width: 767px) {\n  .lf-section-style-fixture__n-000001-000001:hover {"
+
+    assert stylesheet =~
+             "@media (min-width: 500px) and (max-width: 900px) {\n  .lf-section-style-fixture__n-000001-000001:focus-within {"
+
+    assert stylesheet =~
+             "@media (min-width: 767px) and (max-width: 767px) {\n  .lf-section-style-fixture__n-000001-000001:focus-within {"
+  end
+
+  test "rejects missing sibling ancestor and outside-boundary targets" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+    sibling_id = DesignNode.deterministic_id([1, 2])
+    parent_id = DesignNode.deterministic_id([1, 1])
+    nested_owner_id = DesignNode.deterministic_id([1, 1, 1])
+
+    missing_owner = %DesignNode{
+      node_id: DesignNode.deterministic_id([1]),
+      semantic_type: "section",
+      styles: %{
+        "custom-css" =>
+          state_value([
+            state_rule("hover", "node_missing_synthetic_target", %{"opacity" => literal(1)}, 0)
+          ])
+      }
+    }
+
+    assert blocked_reason(generate(%DesignDocument{root_nodes: [missing_owner]}, contract())) ==
+             :missing_state_rule_target
+
+    sibling_owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", sibling_id, %{"opacity" => literal(1)}, 0)])
+      }
+    }
+
+    sibling = %DesignNode{node_id: sibling_id, semantic_type: "container"}
+
+    assert blocked_reason(
+             generate(
+               %DesignDocument{root_nodes: [boundary([sibling_owner, sibling])]},
+               contract()
+             )
+           ) == :state_rule_target_not_self_or_descendant
+
+    nested_owner = %DesignNode{
+      node_id: nested_owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", parent_id, %{"opacity" => literal(1)}, 0)])
+      }
+    }
+
+    parent = %DesignNode{node_id: parent_id, semantic_type: "container", children: [nested_owner]}
+
+    assert blocked_reason(generate(%DesignDocument{root_nodes: [boundary([parent])]}, contract())) ==
+             :state_rule_target_not_self_or_descendant
+
+    selected_boundary_id = DesignNode.deterministic_id([1, 1])
+    outside_target_id = DesignNode.deterministic_id([1, 2])
+
+    selected_boundary = %DesignNode{
+      node_id: selected_boundary_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", outside_target_id, %{"opacity" => literal(1)}, 0)])
+      }
+    }
+
+    outside_target = %DesignNode{node_id: outside_target_id, semantic_type: "container"}
+    document = %DesignDocument{root_nodes: [boundary([selected_boundary, outside_target])]}
+
+    assert blocked_reason(generate_at(document, contract(), selected_boundary_id)) ==
+             :state_rule_target_outside_component_boundary
+  end
+
+  test "rejects state targets inside a pruned subtree slot" do
+    slot_id = DesignNode.deterministic_id([1, 1])
+    target_id = DesignNode.deterministic_id([1, 1, 1])
+
+    root = %DesignNode{
+      boundary()
+      | styles: %{
+          "custom-css" =>
+            state_value([state_rule("hover", target_id, %{"opacity" => literal(1)}, 0)])
+        },
+        children: [
+          %DesignNode{
+            node_id: slot_id,
+            semantic_type: "actions",
+            children: [%DesignNode{node_id: target_id, semantic_type: "container"}]
+          }
+        ]
+    }
+
+    document = %DesignDocument{root_nodes: [root]}
+
+    projection = %RenderProjection{
+      public_slot_name: "actions",
+      target_node_id: slot_id,
+      render_role: :subtree_slot
+    }
+
+    slot = %Slot{
+      name: "actions",
+      semantic_purpose: "caller actions",
+      consumer_responsibility: "caller"
+    }
+
+    assert blocked_reason(generate(document, contract(:section, [], [slot]), [projection])) ==
+             :state_rule_pruned_slot_target
+  end
+
+  test "malformed state rules block and unknown or raw complex CSS remains non-generatable" do
+    node_id = DesignNode.deterministic_id([1])
+    malformed = %{"type" => "state_rules", "rules" => [], "residual" => []}
+
+    assert {:error, :generation_blocked, [malformed_diagnostic]} =
+             generate(
+               %DesignDocument{
+                 root_nodes: [
+                   %DesignNode{
+                     node_id: node_id,
+                     semantic_type: "section",
+                     styles: %{"custom-css" => StyleValue.complex_css(malformed)}
+                   }
+                 ]
+               },
+               contract()
+             )
+
+    assert malformed_diagnostic.metadata.reason == :invalid_state_rule_set
+
+    for subtype <- [
+          %{"type" => "something_else"},
+          %{
+            "type" => "custom_css",
+            "property" => "custom-css",
+            "source_key" => "_cssCustom",
+            "rules" => [".synthetic-source-rule { color: red; }"]
+          }
+        ] do
+      document = %DesignDocument{
+        root_nodes: [
+          %DesignNode{
+            node_id: node_id,
+            semantic_type: "section",
+            styles: %{"custom-css" => StyleValue.complex_css(subtype)}
+          }
+        ]
+      }
+
+      assert {:error, :generation_blocked, [_]} = generate(document, contract())
+    end
+  end
+
+  test "renders valid state rules and ignores malicious-looking residual and provenance text" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+    target_id = DesignNode.deterministic_id([1, 1, 1])
+    source_class = "source-card-73"
+    source_selector = ".#{source_class}:hover .source-heading-41"
+    transient_token = "interaction-class-62"
+    residual_text = "#{source_selector} { --#{transient_token}: display; }"
+
+    residual = [%{"reason" => "unsupported_selector", "source_text" => residual_text}]
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      attributes: %{"source-class" => source_class},
+      styles: %{
+        "custom-css" =>
+          state_value(
+            [state_rule("hover", target_id, %{"opacity" => literal(0.75)}, 0)],
+            residual,
+            source_expression: "#{source_selector} #{transient_token}"
+          )
+      },
+      children: [%DesignNode{node_id: target_id, semantic_type: "container"}]
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([owner])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    module = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
+
+    assert stylesheet =~
+             ".lf-section-style-fixture__n-000001-000001:hover .lf-section-style-fixture__n-000001-000001-000001 {"
+
+    for leaked_text <- [source_class, source_selector, transient_token, residual_text] do
+      refute stylesheet =~ leaked_text
+      refute module =~ leaked_text
+    end
+  end
+
+  test "unmapped state token references fail at the existing CSS value boundary" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([
+            state_rule("hover", owner_id, %{"color" => token_ref("unmapped.synthetic.token")}, 0)
+          ])
+      }
+    }
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             generate(%DesignDocument{root_nodes: [boundary([owner])]}, contract())
+
+    assert diagnostic.code == "native_generator.styling.css_serialization_failed"
+  end
+
+  test "fails closed when a primary action hover property collides with a self state rule" do
+    button_id = DesignNode.deterministic_id([1, 1])
+
+    button = %DesignNode{
+      node_id: button_id,
+      semantic_type: "button",
+      attributes: %{"style" => "primary"},
+      styles: %{
+        "custom-css" =>
+          state_value([
+            state_rule("hover", button_id, %{"background-color" => literal("red")}, 0)
+          ])
+      }
+    }
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             generate(%DesignDocument{root_nodes: [boundary([button])]}, contract())
+
+    assert diagnostic.metadata.reason == :state_rule_pseudo_precedence_gap
+  end
+
+  test "preserves focus-visible output when unrelated focus-within rules exist" do
+    button_id = DesignNode.deterministic_id([1, 1])
+    panel_id = DesignNode.deterministic_id([1, 2])
+
+    button = %DesignNode{
+      node_id: button_id,
+      semantic_type: "button",
+      attributes: %{"style" => "primary"}
+    }
+
+    panel = %DesignNode{
+      node_id: panel_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("focus_within", panel_id, %{"opacity" => literal(0.9)}, 0)])
+      }
+    }
+
+    bundle =
+      bundle!(generate(%DesignDocument{root_nodes: [boundary([button, panel])]}, contract()))
+
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert stylesheet =~
+             ".lf-section-style-fixture__n-000001-000001:focus-visible {\n  outline-color: var(--lf-action-primary-focus);\n  outline-offset: 2px;\n  outline-style: solid;\n  outline-width: 2px;\n}"
+
+    refute stylesheet =~ "outline: 0"
+    refute stylesheet =~ "box-shadow: none"
+  end
+
+  test "rejects conflicting cross-owner state declarations on a shared target" do
+    outer_id = DesignNode.deterministic_id([1, 1])
+    inner_id = DesignNode.deterministic_id([1, 1, 1])
+    target_id = DesignNode.deterministic_id([1, 1, 1, 1])
+
+    target = %DesignNode{node_id: target_id, semantic_type: "container"}
+
+    inner = %DesignNode{
+      node_id: inner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([
+            state_rule("focus_within", target_id, %{"opacity" => literal(0.7)}, 0)
+          ])
+      },
+      children: [target]
+    }
+
+    outer = %DesignNode{
+      node_id: outer_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("hover", target_id, %{"opacity" => literal(0.2)}, 0)])
+      },
+      children: [inner]
+    }
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             generate(%DesignDocument{root_nodes: [boundary([outer])]}, contract())
+
+    assert diagnostic.metadata.reason == :state_rule_cross_owner_cascade_authority_gap
+  end
+
+  test "uses inclusive viewport overlap for cross-owner state conflicts" do
+    for {outer_max, inner_min, overlaps?} <- [{499, 500, false}, {500, 500, true}] do
+      outer_id = DesignNode.deterministic_id([1, 1])
+      inner_id = DesignNode.deterministic_id([1, 1, 1])
+      target_id = DesignNode.deterministic_id([1, 1, 1, 1])
+
+      target = %DesignNode{node_id: target_id, semantic_type: "container"}
+
+      inner = %DesignNode{
+        node_id: inner_id,
+        semantic_type: "container",
+        styles: %{
+          "custom-css" =>
+            state_value([
+              state_rule("focus_within", target_id, %{"opacity" => literal(0.7)}, 0, %{
+                "min_width" => inner_min,
+                "max_width" => nil
+              })
+            ])
+        },
+        children: [target]
+      }
+
+      outer = %DesignNode{
+        node_id: outer_id,
+        semantic_type: "container",
+        styles: %{
+          "custom-css" =>
+            state_value([
+              state_rule("hover", target_id, %{"opacity" => literal(0.2)}, 0, %{
+                "min_width" => nil,
+                "max_width" => outer_max
+              })
+            ])
+        },
+        children: [inner]
+      }
+
+      result = generate(%DesignDocument{root_nodes: [boundary([outer])]}, contract())
+
+      if overlaps? do
+        assert blocked_reason(result) == :state_rule_cross_owner_cascade_authority_gap
+      else
+        bundle = bundle!(result)
+        stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+        assert stylesheet =~ "@media (max-width: 499px)"
+        assert stylesheet =~ "@media (min-width: 500px)"
+      end
+    end
+  end
+
+  test "keeps ordinary stylesheet bytes unchanged without state rules" do
+    node = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "container",
+      styles: %{"display" => StyleValue.keyword("grid")},
+      responsive: %{
+        "mobile" => %ResponsiveOverride{
+          breakpoint_id: "mobile",
+          source_name: "mobile",
+          resolution_status: :resolved,
+          max_width: 767,
+          styles: %{"gap" => StyleValue.literal(8)}
+        }
+      }
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([node])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+
+    assert stylesheet ==
+             ".lf-section-style-fixture__n-000001-000001 {\n" <>
+               "  display: grid;\n}\n\n" <>
+               "@media (max-width: 767px) {\n" <>
+               "  .lf-section-style-fixture__n-000001-000001 {\n" <>
+               "    gap: 8;\n  }\n}\n"
   end
 
   test "primary outline intent blocks instead of guessing a variant" do
