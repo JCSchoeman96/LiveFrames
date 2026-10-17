@@ -98,7 +98,7 @@ OWNER_OBSERVED_766_REPRODUCED=NO
 Sanitized screenshot evidence references (hashes only; image files are not
 published):
 
-- Bricks breakpoint manager capture:
+- Bricks live breakpoint data and toolbar capture:
   `ced1a1837dd290cf3ad2c7db11020fa22ab979b1a30843919beb129917186506`
 - ACSS website dimensions capture:
   `95edd01c8cb70d1a4808122e738b3c436f9045245e5d8a62169b018e3da5df1b`
