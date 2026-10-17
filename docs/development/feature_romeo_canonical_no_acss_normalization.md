@@ -260,14 +260,19 @@ The 20 UNKNOWN_REQUIREMENT residuals are four border-radius value residuals,
 four unresolved-value records with no whitelisted property name, and 12
 unsupported-selector residuals. The 12 selector findings include
 pseudo-element rules and geometry rules. The accepted authorities do not
-establish that these are non-required, so they remain blocking unknowns. No
+establish whether these are required, so they remain blocking unknowns. No
 residual was classified as a duplicate or proven non-required. Property overlap
 alone was not treated as duplicate presentation; no residual had an accepted
-proof of equivalent target, condition, viewport, and normalized value.
+proof of equivalent target, condition, viewport, and normalized value. The 24
+confirmed visually required residuals and 20 unknown-requirement residuals
+make 44 blocking residuals. The four source-focus-suppression residuals are
+intentionally inert and excluded from that blocking count.
 
 ~~~text
 CANONICAL_RESIDUAL_COUNT=48
-CANONICAL_REQUIRED_RESIDUAL_COUNT=44
+CANONICAL_CONFIRMED_REQUIRED_RESIDUAL_COUNT=24
+CANONICAL_BLOCKING_UNKNOWN_RESIDUAL_COUNT=20
+CANONICAL_BLOCKING_RESIDUAL_COUNT=44
 CANONICAL_UNRESOLVED_VALUE_COUNT=32
 
 CANONICAL_VISUALLY_REQUIRED_UNSUPPORTED_RESIDUALS=24
@@ -275,6 +280,9 @@ CANONICAL_UNKNOWN_REQUIREMENT_RESIDUALS=20
 CANONICAL_SOURCE_FOCUS_SUPPRESSION_RESIDUALS=4
 CANONICAL_DUPLICATE_RESIDUALS=0
 CANONICAL_NON_REQUIRED_RESIDUALS=0
+
+BLOCKING_RESIDUAL_INVARIANT=PASS; 24+20=44
+TOTAL_RESIDUAL_INVARIANT=PASS; 24+20+4=48
 
 RESIDUAL_REASON_COUNTS=unresolved_value:32;unsupported_selector:16
 UNRESOLVED_VALUE_CAUSE_COUNTS=SOURCE_LOCAL_CUSTOM_PROPERTY:20;EXTERNAL_VALUE_AUTHORITY_MISSING:4;UNSUPPORTED_COMPOUND_EXPRESSION:8;UNSUPPORTED_VALUE_GRAMMAR:0;TOKEN_LOOKUP_NOT_AUTHORIZED:0;OTHER_PROVEN_CAUSE:0;UNKNOWN_CAUSE:0
@@ -309,9 +317,24 @@ OLD_DIAGNOSTIC_REQUIRED_CLASSIFICATION=44_PROVISIONAL
 OLD_DIAGNOSTIC_UNRESOLVED_VALUE_COUNT=32
 
 DELTA_RESIDUAL_COUNT=0
-DELTA_REQUIRED_COUNT=0
 DELTA_UNRESOLVED_VALUE_COUNT=0
+
+OLD_PROVISIONAL_BLOCKING_SET_COUNT=44
+CANONICAL_BLOCKING_RESIDUAL_COUNT=44
+DELTA_BLOCKING_SET_COUNT=0
+
+OLD_PROVISIONAL_CONFIRMED_REQUIRED_COUNT=NOT_ESTABLISHED
+CANONICAL_CONFIRMED_REQUIRED_RESIDUAL_COUNT=24
+DELTA_CONFIRMED_REQUIRED_COUNT=NOT_COMPARABLE
 ~~~
+
+The earlier diagnostic probe provisionally treated all 44 non-focus residuals
+as required or blocking. The canonical authority refines that provisional set
+into 24 confirmed visually required residuals and 20 unknown-requirement
+residuals. The blocking-set cardinality is unchanged, but the requirement
+certainty is more precise. A `DELTA_REQUIRED_COUNT=0` claim would be
+misleading because the earlier probe did not establish how many residuals
+were confirmed required.
 
 ## Privacy, runtime, and authorization boundary
 
@@ -352,10 +375,11 @@ PRIVATE_SOURCE_COMMITTED=NO
 
 ## Readiness verdict
 
-Canonical IR retains componentization-critical gaps in source-local values,
-CSS value grammar, unsupported selectors, navigation carriers, unresolved
+Canonical IR has 44 blocking residuals: 24 confirmed visually required and 20
+with unknown requirements. It also has gaps in navigation carriers, unresolved
 assets, unsupported settings, and named breakpoints. The four focus-suppression
-residuals remain inert by authority and do not count as target focus rules.
+residuals remain inert by authority and do not count as target focus rules or
+blocking residuals.
 
 ~~~text
 ROMEO_COMPONENTIZATION_READINESS=BLOCKED
