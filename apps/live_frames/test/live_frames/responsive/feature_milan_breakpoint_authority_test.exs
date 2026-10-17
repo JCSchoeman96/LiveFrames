@@ -14,7 +14,7 @@ defmodule LiveFrames.Responsive.FeatureMilanBreakpointAuthorityTest do
     assert authority.schema_version == "1.0.0"
 
     assert authority.authority_hash ==
-             "92d63ba30c805a014deb09731cb5e4a79c724204b8937643fb243c921a245556"
+             "e507d7d6ff33bbb4fb0880d46c44f3b5337d6c95c227154e11510e6a7a2c1b34"
 
     assert authority.authority_level == 3
     assert authority.authority_type == "direct_source_environment_runtime_confirmed"
@@ -69,6 +69,10 @@ defmodule LiveFrames.Responsive.FeatureMilanBreakpointAuthorityTest do
 
     assert raw_authority["source_context"]["exact_runtime_version"] == "unproven"
     assert raw_authority["source_context"]["acss_l_m_s"] == "unproven"
+
+    assert raw_authority["source_context"]["custom_breakpoints_status"] ==
+             "no_custom_breakpoints_observed_in_live_breakpoint_data"
+
     assert raw_authority["configuration_observations"]["owner_observed_766_reproduced"] == false
     assert raw_authority["configuration_observations"]["acss_l_m_s_mapping_proven"] == false
     assert raw_authority["configuration_observations"]["hero_india_authority_imported"] == false

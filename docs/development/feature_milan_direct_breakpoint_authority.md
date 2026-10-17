@@ -46,5 +46,62 @@ Evidence identities:
 - Direct evidence capture SHA-256:
   `c4050958d5993eb028ad2440ebd923b27fd611a1432525b5e4d0399785a9ad86`
 
+## Owner-scoped publication clearance
+
+The project owner approved public-repository publication on 2026-10-17 only
+for the sanitized Feature Milan Q12 breakpoint interoperability facts and
+minimum provenance metadata: DanBricks source-environment identity; breakpoint
+names and widths `991px`, `767px`, and `478px`; `px` units; `max-width`
+semantics and exact media conditions; enabled state; cascade order; and the
+hashes needed to trace the evidence. This scope is recorded in the
+[canonical provenance register](../04_SOURCE_AND_PROVENANCE.md). It excludes
+the private Milan export, DanBricks SQL/database contents, screenshots
+themselves, credentials, proprietary Bricks or Automatic.css source, ACSS
+configuration exports, generated stylesheets, and unrelated source or private
+evidence.
+Broader Bricks and Automatic.css provenance status is unchanged.
+
+## Durable sanitized source capture
+
+```text
+CAPTURE_MODE=authenticated_read_only_source_environment
+SOURCE_ENVIRONMENT=DanBricks
+
+LIVE_BREAKPOINT_ORDER=
+desktop > tablet_portrait > mobile_landscape > mobile_portrait
+
+LIVE_BREAKPOINTS=
+desktop=1279
+tablet_portrait=991
+mobile_landscape=767
+mobile_portrait=478
+
+MOBILE_LANDSCAPE_ENABLED=true
+
+GENERATED_MEDIA_QUERIES=
+@media (max-width: 991px)
+@media (max-width: 767px)
+@media (max-width: 478px)
+
+DIRECT_EVIDENCE_MANIFEST_SHA256=
+c4050958d5993eb028ad2440ebd923b27fd611a1432525b5e4d0399785a9ad86
+
+SETTINGS_CHANGED=NO
+SAVE_CLICKED=NO
+CSS_REGENERATED=NO
+
+E02_RUNTIME_VERSION=UNPROVEN
+ACSS_L_M_S_MAPPING=UNPROVEN
+OWNER_OBSERVED_766_REPRODUCED=NO
+```
+
+Sanitized screenshot evidence references (hashes only; image files are not
+published):
+
+- Bricks breakpoint manager capture:
+  `ced1a1837dd290cf3ad2c7db11020fa22ab979b1a30843919beb129917186506`
+- ACSS website dimensions capture:
+  `95edd01c8cb70d1a4808122e738b3c436f9045245e5d8a62169b018e3da5df1b`
+
 This change creates breakpoint authority only. It does not resolve the
 DesignDocument, reissue Behavior artifacts, start A1 or P7-D0, or waive Q13.

@@ -15,7 +15,7 @@
   "source_context": {
     "exact_runtime_version": "unproven",
     "exact_runtime_version_required_for_q12": false,
-    "custom_breakpoints_status": "no_custom_breakpoints_reported_live",
+    "custom_breakpoints_status": "no_custom_breakpoints_observed_in_live_breakpoint_data",
     "evidence_mode": "direct_authenticated_source_environment_plus_generated_css",
     "acss_version": "4.0.1",
     "acss_content_width": "1366px",
