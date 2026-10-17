@@ -1,0 +1,114 @@
+{
+  "schema_version": "1.0.0",
+  "authority_status": "accepted",
+  "authority_level": 3,
+  "authority_type": "direct_source_environment_runtime_confirmed",
+  "source_environment": {
+    "type": "LocalWP",
+    "name": "DanBricks",
+    "domain": "danbricks.local",
+    "http_port": 10049,
+    "source_system": "bricks",
+    "source_url": "http://localhost:10049",
+    "milan_component_id": "ybsqrl"
+  },
+  "source_context": {
+    "exact_runtime_version": "unproven",
+    "exact_runtime_version_required_for_q12": false,
+    "custom_breakpoints_status": "no_custom_breakpoints_observed_in_live_breakpoint_data",
+    "evidence_mode": "direct_authenticated_source_environment_plus_generated_css",
+    "acss_version": "4.0.1",
+    "acss_content_width": "1366px",
+    "acss_minimum_width": "360px",
+    "acss_l_m_s": "unproven",
+    "acss_bricks_mapping": "unproven"
+  },
+  "breakpoints": {
+    "tablet_portrait": {
+      "source_name": "tablet_portrait",
+      "source_width": 991,
+      "min_width": null,
+      "max_width": 991,
+      "unit": "px",
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 991px)",
+      "enabled": true,
+      "cascade_order": 2,
+      "authority_level": 3,
+      "authority_type": "direct_source_environment_runtime_confirmed",
+      "status": "accepted"
+    },
+    "mobile_landscape": {
+      "source_name": "mobile_landscape",
+      "source_width": 767,
+      "min_width": null,
+      "max_width": 767,
+      "unit": "px",
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 767px)",
+      "enabled": true,
+      "cascade_order": 3,
+      "authority_level": 3,
+      "authority_type": "direct_source_environment_runtime_confirmed",
+      "status": "accepted"
+    },
+    "mobile_portrait": {
+      "source_name": "mobile_portrait",
+      "source_width": 478,
+      "min_width": null,
+      "max_width": 478,
+      "unit": "px",
+      "query_semantics": "max-width",
+      "media_condition": "@media (max-width: 478px)",
+      "enabled": true,
+      "cascade_order": 4,
+      "authority_level": 3,
+      "authority_type": "direct_source_environment_runtime_confirmed",
+      "status": "accepted"
+    }
+  },
+  "cascade": {
+    "base_breakpoint": {
+      "source_name": "desktop",
+      "source_width": 1279,
+      "unit": "px",
+      "base": true
+    },
+    "ordering": "descending_width",
+    "source_order": [
+      "desktop",
+      "tablet_portrait",
+      "mobile_landscape",
+      "mobile_portrait"
+    ]
+  },
+  "configuration_observations": {
+    "live_breakpoints": {
+      "desktop": 1279,
+      "tablet_portrait": 991,
+      "mobile_landscape": 767,
+      "mobile_portrait": 478
+    },
+    "mobile_landscape_enabled": true,
+    "owner_observed_766_reproduced": false,
+    "acss_l_m_s_mapping_proven": false,
+    "hero_india_authority_imported": false
+  },
+  "evidence": [
+    {
+      "reference": "Feature Milan private source artifact",
+      "sha256": "f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132",
+      "proves": "canonical Milan component ybsqrl identity"
+    },
+    {
+      "reference": "Current DanBricks SQL snapshot",
+      "sha256": "78aa02fe494dd5e07e46e09323c0328e68a5cbc08902a08c0b0b61a158e5bef7",
+      "proves": "Milan corpus-to-DanBricks snapshot binding"
+    },
+    {
+      "reference": "Direct authenticated DanBricks source-environment evidence capture",
+      "sha256": "c4050958d5993eb028ad2440ebd923b27fd611a1432525b5e4d0399785a9ad86",
+      "proves": "live Bricks breakpoint data and toolbar capture; generated frontend CSS confirmation"
+    }
+  ]
+}
