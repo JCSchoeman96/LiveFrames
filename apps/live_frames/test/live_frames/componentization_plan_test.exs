@@ -3,6 +3,7 @@ defmodule LiveFrames.ComponentizationPlanTest do
 
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Serializer
   alias LiveFrames.ComponentizationPlan.ValidationError
@@ -429,9 +430,10 @@ defmodule LiveFrames.ComponentizationPlanTest do
   test "exposes only the versioned plan fields with stable defaults" do
     plan = %ComponentizationPlan{}
 
-    assert ComponentizationPlan.current_format_version() == "1.0.0"
-    assert plan.plan_format_version == "1.0.0"
+    assert ComponentizationPlan.current_format_version() == "1.1.0"
+    assert plan.plan_format_version == "1.1.0"
     assert plan.render_projections == []
+    assert plan.node_dispositions == []
     assert plan.diagnostics == []
     assert plan.provenance == %{}
 
@@ -442,10 +444,99 @@ defmodule LiveFrames.ComponentizationPlanTest do
                :contract_id,
                :design_document_sha256,
                :diagnostics,
+               :node_dispositions,
                :plan_format_version,
                :provenance,
                :render_projections
              ]
+  end
+
+  test "1.1.0 encodes an empty disposition list and 1.0.0 keeps historical bytes" do
+    current_map = ComponentizationPlan.to_map(valid_plan())
+    assert current_map["node_dispositions"] == []
+    assert {:ok, current_bytes} = ComponentizationPlan.encode(valid_plan())
+    assert Jason.decode!(current_bytes)["node_dispositions"] == []
+
+    legacy = valid_plan(plan_format_version: "1.0.0")
+    assert legacy.node_dispositions == []
+    legacy_map = ComponentizationPlan.to_map(legacy)
+    refute Map.has_key?(legacy_map, "node_dispositions")
+
+    assert {:ok, legacy_bytes} = ComponentizationPlan.encode(legacy)
+
+    assert legacy_bytes ==
+             ~s({"boundary_node_id":"node_000001","contract_id":"hero","design_document_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","diagnostics":[],"plan_format_version":"1.0.0","provenance":{},"render_projections":[]})
+
+    refute String.contains?(legacy_bytes, "node_dispositions")
+
+    projection = %RenderProjection{
+      public_attr_name: "title",
+      target_node_id: "node_000001_000001",
+      render_role: :text_content
+    }
+
+    legacy_projection =
+      valid_plan(plan_format_version: "1.0.0", render_projections: [projection])
+
+    assert {:ok, projection_bytes} = ComponentizationPlan.encode(legacy_projection)
+
+    assert projection_bytes ==
+             ~s({"boundary_node_id":"node_000001","contract_id":"hero","design_document_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","diagnostics":[],"plan_format_version":"1.0.0","provenance":{},"render_projections":[{"public_attr_name":"title","public_slot_name":null,"render_role":"text_content","target_node_id":"node_000001_000001"}]})
+  end
+
+  test "1.0.0 rejects non-empty in-memory dispositions" do
+    assert Code.ensure_loaded?(NodeDisposition)
+    disposition = valid_node_disposition()
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate(
+               valid_plan(plan_format_version: "1.0.0", node_dispositions: [disposition])
+             )
+
+    assert Enum.any?(
+             diagnostics,
+             &String.starts_with?(&1.code, "componentization_plan.node_disposition.")
+           )
+  end
+
+  test "1.1.0 serializes the closed NodeDisposition wire fields" do
+    assert Code.ensure_loaded?(NodeDisposition)
+    disposition = valid_node_disposition()
+
+    assert {:ok, encoded} =
+             ComponentizationPlan.encode(valid_plan(node_dispositions: [disposition]))
+
+    assert Jason.decode!(encoded)["node_dispositions"] == [
+             %{
+               "behavior_binding_id" => "binding_1",
+               "behavior_contract_digest" => String.duplicate("a", 64),
+               "behavior_review_id" => "brv_" <> String.duplicate("b", 64),
+               "design_node_id" => "node_000001_000001",
+               "disposition" => "exclude_source_runtime_carrier",
+               "evidence_refs" => ["evidence_a", "evidence_z"],
+               "source_id" => "source_1",
+               "source_type" => "source_type_1"
+             }
+           ]
+  end
+
+  defp valid_node_disposition(attrs \\ []) do
+    struct!(
+      NodeDisposition,
+      Keyword.merge(
+        [
+          design_node_id: "node_000001_000001",
+          disposition: :exclude_source_runtime_carrier,
+          source_type: "source_type_1",
+          source_id: "source_1",
+          behavior_binding_id: "binding_1",
+          behavior_contract_digest: String.duplicate("a", 64),
+          behavior_review_id: "brv_" <> String.duplicate("b", 64),
+          evidence_refs: ["evidence_a", "evidence_z"]
+        ],
+        attrs
+      )
+    )
   end
 
   test "validates an empty structural plan" do

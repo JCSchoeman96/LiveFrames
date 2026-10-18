@@ -4,6 +4,7 @@ defmodule LiveFrames.ComponentizationPlan do
   """
 
   alias LiveFrames.ComponentizationPlan.Diagnostic
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.ReferenceValidation
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Serializer
@@ -11,7 +12,7 @@ defmodule LiveFrames.ComponentizationPlan do
   alias LiveFrames.ComponentizationPlan.ValidationError
   alias LiveFrames.IR.Identity
 
-  @current_format_version "1.0.0"
+  @current_format_version "1.1.0"
 
   @type t :: %__MODULE__{
           plan_format_version: String.t(),
@@ -19,6 +20,7 @@ defmodule LiveFrames.ComponentizationPlan do
           design_document_sha256: String.t() | nil,
           boundary_node_id: String.t() | nil,
           render_projections: [RenderProjection.t()],
+          node_dispositions: [NodeDisposition.t()],
           diagnostics: [Diagnostic.t()],
           provenance: map()
         }
@@ -28,6 +30,7 @@ defmodule LiveFrames.ComponentizationPlan do
             design_document_sha256: nil,
             boundary_node_id: nil,
             render_projections: [],
+            node_dispositions: [],
             diagnostics: [],
             provenance: %{}
 

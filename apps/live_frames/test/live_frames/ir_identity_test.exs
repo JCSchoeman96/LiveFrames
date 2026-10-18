@@ -169,21 +169,26 @@ defmodule LiveFrames.IR.IdentityTest do
     end
   end
 
-  test "keeps ComponentizationPlan 1.0.0 and its serialized field set" do
+  test "keeps historical ComponentizationPlan 1.0.0 serialized field set" do
     plan = %ComponentizationPlan{
+      plan_format_version: "1.0.0",
       contract_id: "component",
       boundary_node_id: "node_000001",
       design_document_sha256: @baseline_golden_digest
     }
 
-    assert ComponentizationPlan.current_format_version() == "1.0.0"
     assert plan.plan_format_version == "1.0.0"
 
     expected_fields =
       ~w(boundary_node_id contract_id design_document_sha256 diagnostics plan_format_version provenance render_projections)
 
-    assert ComponentizationPlan.to_map(plan) |> Map.keys() |> Enum.sort() == expected_fields
+    plan_map = ComponentizationPlan.to_map(plan)
+    assert Map.keys(plan_map) |> Enum.sort() == expected_fields
+    refute Map.has_key?(plan_map, "node_dispositions")
+
     assert {:ok, encoded} = ComponentizationPlan.encode(plan)
-    assert Jason.decode!(encoded) |> Map.keys() |> Enum.sort() == expected_fields
+    decoded = Jason.decode!(encoded)
+    assert Map.keys(decoded) |> Enum.sort() == expected_fields
+    refute Map.has_key?(decoded, "node_dispositions")
   end
 end
