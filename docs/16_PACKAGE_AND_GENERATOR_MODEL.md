@@ -20,17 +20,22 @@ not imply Mix, Hex, GitHub, or other package publication. Package publication
 requires separate evidence, and package version is independent of CatalogueItem
 release_version.
 
-The `:live_frames` source package must include the canonical JSON under
-`priv/catalogue/` when that tree exists. Package compilation uses those files
-as `Registry.Builder` input, while runtime reads only the compiled Registry.
+The canonical Catalogue source tree exists at
+`apps/live_frames/priv/catalogue/` and contains the production CTA manifest.
+Package compilation uses these files as `Registry.Builder` input, while runtime
+reads only the compiled Registry. The CTA item
+`live_frames.section.media_call_to_action` is `APPROVED`; its `distribution`
+field is absent. C2D2A proves that the built and unpacked LiveFrames source
+package contains the canonical Catalogue JSON and `LICENSE-PROPRIETARY.txt`.
+
 These manifests are inspectable package source. The public Catalogue API's
-visibility rules do not make them confidential. See the #51 build and CI
-contract in [docs/23](23_CATALOGUE_ARCHITECTURE.md).
+visibility rules do not make them confidential. The proprietary notice and
+package metadata do not grant CTA redistribution permission. See the #51 build
+and CI contract in [docs/23](23_CATALOGUE_ARCHITECTURE.md).
 
 Library, native generation, and ejection are independent capabilities.
 Catalogue release does not require generator or ejection support. Native
-generation is implemented; P10 ejection is not. Production Catalogue content
-is absent. See
+generation is implemented; P10 ejection is not. See
 [docs/23_CATALOGUE_ARCHITECTURE.md](23_CATALOGUE_ARCHITECTURE.md) and
 [docs/24_CATALOGUE_VERSIONING_POLICY.md](24_CATALOGUE_VERSIONING_POLICY.md).
 
@@ -46,15 +51,16 @@ is absent. See
 | `assets/css/components/sections/media_call_to_action.css` | CTA package-owned presentation CSS, imported by the source CSS entry |
 | `priv/static/live_frames/css/live_frames.css` | **Precompiled** CSS (primary runtime path) |
 | `priv/token_maps/` | Token bridge inputs (build/generation; not a runtime API) |
-| `priv/catalogue/` | Reserved for canonical Catalogue JSON and Registry build input. The production directory is currently absent. |
+| `priv/catalogue/` | Existing canonical Catalogue source and `Registry.Builder` input |
+| `LICENSE-PROPRIETARY.txt` | Proprietary package notice; it grants no redistribution permission |
 
-The separately authorized #51 implementation must include `priv/catalogue` in
-`apps/live_frames/mix.exs` `package/0 :files`, alongside `lib`, `assets/css`,
-`priv/static/live_frames`, and `priv/token_maps`. This docs-only contract does
-not claim that package configuration changed, a package was built, or a package
-was published. Package inclusion does not filter manifests by lifecycle or
-discovery state and does not imply Hex publication, redistribution clearance,
-generator support, or ejection support.
+`apps/live_frames/mix.exs` includes `priv/catalogue` and
+`LICENSE-PROPRIETARY.txt` in `package/0 :files`. CI builds and unpacks the real
+package with `mix hex.build --unpack`, then verifies the required package roots
+and canonical Catalogue JSON byte-for-byte. C2D2A proves this package boundary;
+it does not prove Hex publication or accept `distribution.library=supported`.
+Package inclusion does not filter manifests by lifecycle or discovery state and
+does not grant redistribution clearance or generator or ejection support.
 
 ## 2. Component import and use
 
@@ -89,8 +95,18 @@ import LiveFrames.Components.Sections.MediaCallToAction
 ```
 
 The API above follows the implementation and component tests. The preview has a
-Storybook story and route test. These repository checks do not prove clean
-external CTA consumer compatibility; C09D7-C owns that proof.
+Storybook story and route test. C1's accepted clean external consumer proof used
+a local path dependency to the exact LiveFrames application. C1 does not prove:
+
+- the distributable package boundary;
+- Hex publication;
+- `distribution.library=supported`;
+- P10 consumer-project ejection.
+
+C2D2A separately proves that the actual built and unpacked LiveFrames source
+package contains the required package roots and canonical Catalogue content.
+These proofs do not establish library capability evidence; C2D2R1 must repeat
+that review.
 
 Module and function:
 
@@ -314,8 +330,8 @@ Hero and CTA presentation require LiveFrames CSS (precompiled or source-built).
 The CTA stylesheet is part of the source CSS import graph and the committed
 precompiled `priv/static/live_frames/css/live_frames.css` artifact. Repository
 tests and the preview Storybook test verify CTA rendering and styling presence.
-They do not prove compatibility in a clean external consumer project; C09D7-C
-has not yet established that boundary.
+The accepted C1 external consumer proof and C2D2A package-boundary proof are
+recorded separately above; neither establishes `distribution.library=supported`.
 
 ## 11. Source-asset and fidelity truth
 
@@ -344,9 +360,10 @@ P10 consumer-project ejection
 ```
 
 P10 would copy or adapt a selected Catalogue item into a consumer project. It is
-not implemented. CTA external consumer proof remains unproven until the
-dedicated C09D7-C preflight establishes it. This guide does not claim clean
-external consumer compatibility, Hex publication, or public release readiness.
+not implemented. C1's accepted local-path consumer proof and C2D2A's accepted
+package-boundary proof are separate evidence; neither establishes P10 or
+`distribution.library=supported`. This guide makes no Hex publication or public
+release claim.
 
 ## 13. Performance model
 

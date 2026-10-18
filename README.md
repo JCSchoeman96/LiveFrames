@@ -62,16 +62,19 @@ implemented on `main`.
 CTA Tango native delivery is implemented on `main` as
 `LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1`.
 Its component tests, preview Storybook story and Storybook test exist. CTA CSS
-is included in both the source CSS graph and precompiled package CSS. A clean
-external CTA consumer has not yet been proven; see
-[`docs/17_ROADMAP.md`](docs/17_ROADMAP.md) for the current checkpoint.
+is included in both the source CSS graph and precompiled package CSS. The C1
+clean external consumer proof is accepted. It used a local path dependency to
+the exact LiveFrames application. C1 does not prove package-boundary behavior,
+Hex publication, or `distribution.library=supported`.
 
-Catalogue library infrastructure exists, but production Catalogue content is
-absent. No production Catalogue membership is claimed. C09D7-C consumer proof /
-Catalogue handoff has not yet been proven. P10 consumer-project ejection remains
-unimplemented. `LiveFrames.NativeGenerator` and P10 ejection are separate
-capabilities. These status statements do not claim Hex or public release
-readiness.
+The production Catalogue contains `live_frames.section.media_call_to_action`,
+whose state is `APPROVED`. C2D2A proves that the built and unpacked LiveFrames
+source package includes canonical `priv/catalogue/` content and
+`LICENSE-PROPRIETARY.txt`; CI runs the package-boundary check. The CTA
+`distribution` field remains absent. Package inclusion does not grant CTA
+redistribution permission. P10 consumer-project ejection remains unimplemented.
+No public package publication or Catalogue `RELEASED` claim is made. See
+[`docs/17_ROADMAP.md`](docs/17_ROADMAP.md) for the current checkpoint.
 
 ## Consumer quick start (native Hero)
 
