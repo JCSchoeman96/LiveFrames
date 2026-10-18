@@ -33,11 +33,14 @@ STATUS_EVIDENCE_BASE_CI_RESULT=PASS
   C2D2A proves that the built and unpacked LiveFrames source package contains
   canonical `priv/catalogue/` content and `LICENSE-PROPRIETARY.txt`; package
   boundary CI verifies this content.
-- C2D2B current-facing documentation remediation is represented by this update.
-  It does not perform the repeat capability evidence review.
-- C2D2R1 remains a separate required step and has not been executed. It must
-  repeat the capability evidence review before any
-  `distribution.library=supported` claim.
+- C2D2B current-facing documentation remediation is accepted on `main`. It
+  corrected the current-facing package and consumer status documentation; it
+  did not perform the repeat capability evidence review.
+- C2D2R1 is the separate capability-evidence review gate required before any
+  `distribution.library=supported` claim. If it is accepted on `main`, its
+  durable decision is recorded in
+  `docs/development/c09d7c2d2r1_cta_library_capability_evidence_review.md`.
+  The existence of an R1 review does not authorize C2D3.
 - C2D3 is not authorized. P10 consumer-project ejection is not implemented.
 - Hex and public package publication are not authorized or proven. The CTA
   Catalogue item remains `APPROVED`; `APPROVED → RELEASED` is not authorized.
