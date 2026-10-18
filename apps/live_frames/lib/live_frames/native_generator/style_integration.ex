@@ -175,6 +175,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
          :ok <- validate_state_rule_pseudo_precedence(node_state_rules, pseudo_styles) do
       styled? = base_styles != %{} or responsive != [] or pseudo_styles != %{}
       root? = node.node_id == boundary_id
+      heading_navigation? = navigable_heading?(node)
       class = Map.fetch!(style_context.private_class_by_id, node.node_id)
 
       classes =
@@ -198,12 +199,18 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
           {rendered, classes, slot_targets, state_rule_acc}
         )
       else
-        classes = if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
+        classes =
+          if root? or styled? or heading_navigation?,
+            do: Map.put(classes, node.node_id, class),
+            else: classes
 
         rendered =
           if styled?,
             do: [{:single, class, base_styles, responsive, pseudo_styles} | rendered],
             else: rendered
+
+        rendered =
+          if heading_navigation?, do: [{:heading_navigation, class} | rendered], else: rendered
 
         {:ok, {rendered, classes, slot_targets, state_rule_acc}}
       end
@@ -861,6 +868,19 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
       {:error, diagnostic} -> {:error, diagnostic}
     end
   end
+
+  defp render_style_entry({:heading_navigation, class}) do
+    case StylesheetRenderer.render_heading_navigation_anchor(class) do
+      {:ok, css} -> {:ok, css, ""}
+      {:error, diagnostic} -> {:error, diagnostic}
+    end
+  end
+
+  defp navigable_heading?(%DesignNode{semantic_type: "heading", attributes: attributes})
+       when is_map(attributes),
+       do: Map.has_key?(attributes, "navigation")
+
+  defp navigable_heading?(_node), do: false
 
   defp render_pseudos(class, pseudos) do
     Enum.reduce_while([:hover, :focus_visible], {:ok, []}, fn pseudo, {:ok, acc} ->

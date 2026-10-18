@@ -979,8 +979,18 @@ defmodule LiveFrames.NativeGenerator.Renderer do
         {:ok, tag} when is_binary(tag) ->
           attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
 
-          with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
-            {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
+          if Map.has_key?(node.attributes, "navigation") do
+            case heading_navigation_attrs(node) do
+              {:ok, nav_attrs} ->
+                {:ok, "<#{tag}#{attrs}><a#{nav_attrs}>#{body}</a></#{tag}>"}
+
+              {:error, diagnostic} ->
+                {:error, diagnostic}
+            end
+          else
+            with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
+              {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
+            end
           end
 
         _ ->
@@ -1065,9 +1075,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     if static_navigation?(indexes, node) do
       case StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
         {:ok, attrs} ->
-          Enum.map_join(attrs, "", fn {name, value} ->
-            " #{name}=\"#{html_escape_attr(value)}\""
-          end)
+          navigation_attrs_fragment(attrs)
 
         _ ->
           ""
@@ -1075,6 +1083,27 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     else
       ""
     end
+  end
+
+  defp heading_navigation_attrs(node) do
+    case StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
+      {:ok, attrs} ->
+        {:ok, navigation_attrs_fragment(attrs)}
+
+      {:error, reason} ->
+        {:error,
+         Diagnostic.error(
+           "native_generator.static_navigation_invalid",
+           "heading static navigation could not be validated",
+           %{reason: reason}
+         )}
+    end
+  end
+
+  defp navigation_attrs_fragment(attrs) do
+    Enum.map_join(attrs, "", fn {name, value} ->
+      " #{name}=\"#{html_escape_attr(value)}\""
+    end)
   end
 
   defp html_escape_attr(value) when is_binary(value) do

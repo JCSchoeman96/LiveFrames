@@ -1509,7 +1509,8 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
             id
           )
 
-        Map.has_key?(indexes.slot_owners, id) ->
+        Map.has_key?(indexes.slot_owners, id) and
+            not (node.semantic_type == "heading" and Map.has_key?(node.attributes, "navigation")) ->
           acc
 
         true ->
@@ -1517,7 +1518,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
           |> validate_native_tag(node, node_roles, indexes)
           |> validate_native_node_surface(node)
           |> validate_native_boundary_image(node, node_roles, plan, indexes)
-          |> validate_native_navigation(node, node_roles)
+          |> validate_native_navigation(node, node_roles, Map.has_key?(indexes.slot_owners, id))
       end
     end)
   end
@@ -1528,6 +1529,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   )
 
   @native_nil_content_only ~w(image actions)
+  @heading_navigation_tags ~w(h1 h2 h3 h4 h5 h6)
 
   defp validate_native_node_surface(diagnostics, %DesignNode{} = node) do
     diagnostics =
@@ -1753,23 +1755,64 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
   defp boundary_item_field_src_input(%ItemField{}), do: {:optional, :no_default}
 
-  defp validate_native_navigation(diagnostics, node, roles) do
-    if node.semantic_type in ["link", "button"] and
-         Map.has_key?(node.attributes, "navigation") and not Map.has_key?(roles, :link_url) do
-      case LiveFrames.StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
-        {:ok, _attrs} ->
-          diagnostics
-
-        {:error, _reason} ->
-          native_error(
-            diagnostics,
-            "static_navigation_invalid",
-            "internal static navigation is invalid",
-            node.node_id
-          )
+  defp validate_native_navigation(
+         diagnostics,
+         %DesignNode{semantic_type: "heading"} = node,
+         roles,
+         slot_owned?
+       ) do
+    if Map.has_key?(node.attributes, "navigation") do
+      if static_heading_navigation_shape?(node, roles, slot_owned?) do
+        validate_static_navigation(diagnostics, node)
+      else
+        native_error(
+          diagnostics,
+          "heading_navigation_invalid",
+          "navigable heading requires a proven heading tag, non-empty static text, no children, and no dynamic or slot placement",
+          node.node_id
+        )
       end
     else
       diagnostics
+    end
+  end
+
+  defp validate_native_navigation(diagnostics, node, roles, _slot_owned?) do
+    if node.semantic_type in ["link", "button"] and
+         Map.has_key?(node.attributes, "navigation") and not Map.has_key?(roles, :link_url) do
+      validate_static_navigation(diagnostics, node)
+    else
+      diagnostics
+    end
+  end
+
+  defp static_heading_navigation_shape?(
+         %DesignNode{attributes: attributes, content: content, children: []},
+         roles,
+         false
+       )
+       when is_map(attributes) and is_binary(content) do
+    attributes["tag"] in @heading_navigation_tags and String.valid?(content) and
+      String.trim(content) != "" and
+      Enum.all?([:text_content, :heading_level, :link_url, :subtree_slot], fn role ->
+        not Map.has_key?(roles, role)
+      end)
+  end
+
+  defp static_heading_navigation_shape?(_node, _roles, _slot_owned?), do: false
+
+  defp validate_static_navigation(diagnostics, node) do
+    case LiveFrames.StaticNavigation.validate_navigation_map(node.attributes["navigation"]) do
+      {:ok, _attrs} ->
+        diagnostics
+
+      {:error, _reason} ->
+        native_error(
+          diagnostics,
+          "static_navigation_invalid",
+          "internal static navigation is invalid",
+          node.node_id
+        )
     end
   end
 

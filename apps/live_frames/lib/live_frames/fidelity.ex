@@ -13,6 +13,7 @@ defmodule LiveFrames.Fidelity do
 
   @version "1.0.0"
   @safe_class ~r/^[A-Za-z_][A-Za-z0-9_-]*$/
+  @heading_tags ~w(h1 h2 h3 h4 h5 h6)
 
   def version, do: @version
 
@@ -153,7 +154,10 @@ defmodule LiveFrames.Fidelity do
 
     {asset, diagnostics} = asset_decision(node, document, diagnostics)
     {element, tag_diagnostics} = element(node)
-    {navigation_attrs, element, navigation_diagnostics} = navigation_markup(node, element)
+
+    {navigation_attrs, element, navigation_diagnostics, inner_navigation_attrs} =
+      navigation_markup(node, element)
+
     generated_attrs = generated_attrs(node, asset, element) ++ navigation_attrs
     {source_attrs, attribute_diagnostics} = source_attributes(node, element, generated_attrs)
     attrs = generated_attrs ++ source_attrs
@@ -178,6 +182,7 @@ defmodule LiveFrames.Fidelity do
        id: node.node_id,
        element: element,
        content: node.content,
+       inner_navigation_attrs: inner_navigation_attrs,
        attrs: attrs,
        class: fidelity_class(node.node_id) <> classes,
        styles: styles,
@@ -248,25 +253,66 @@ defmodule LiveFrames.Fidelity do
   defp semantic_element(%{semantic_type: "heading"}), do: "h2"
   defp semantic_element(_), do: "div"
 
+  defp navigation_markup(%{semantic_type: "heading"} = node, element) do
+    case Map.fetch(node.attributes, "navigation") do
+      :error ->
+        {[], element, [], []}
+
+      {:ok, navigation} ->
+        if navigable_heading_shape?(node) do
+          case StaticNavigation.validate_navigation_map(navigation) do
+            {:ok, attrs} ->
+              {[], element, [], attrs}
+
+            {:error, reason} ->
+              {[], element, navigation_rejection_diagnostics(node, navigation, reason), []}
+          end
+        else
+          {[], element, [invalid_heading_navigation_shape_diagnostic(node)], []}
+        end
+    end
+  end
+
   defp navigation_markup(node, element) do
     if node.semantic_type in ["button", "link"] do
       case Map.get(node.attributes, "navigation") do
         nav when is_map(nav) ->
           case StaticNavigation.validate_navigation_map(nav) do
             {:ok, attrs} ->
-              {attrs, "a", []}
+              {attrs, "a", [], []}
 
             {:error, reason} ->
               {[], navigation_fallback_element(node),
-               navigation_rejection_diagnostics(node, nav, reason)}
+               navigation_rejection_diagnostics(node, nav, reason), []}
           end
 
         _other ->
-          {[], navigation_fallback_element(node), []}
+          {[], navigation_fallback_element(node), [], []}
       end
     else
-      {[], element, []}
+      {[], element, [], []}
     end
+  end
+
+  defp navigable_heading_shape?(%{
+         semantic_type: "heading",
+         attributes: attributes,
+         content: content,
+         children: []
+       })
+       when is_map(attributes) and is_binary(content) do
+    attributes["tag"] in @heading_tags and String.valid?(content) and String.trim(content) != ""
+  end
+
+  defp navigable_heading_shape?(_node), do: false
+
+  defp invalid_heading_navigation_shape_diagnostic(node) do
+    diagnostic(
+      "fidelity.navigation.heading_shape_invalid",
+      "navigable heading requires a proven heading tag, non-empty static text, and no children",
+      node,
+      %{}
+    )
   end
 
   defp navigation_fallback_element(%{semantic_type: "link"}), do: "span"
@@ -1164,6 +1210,17 @@ defmodule LiveFrames.Fidelity do
     attrs = serialize_node_attributes(node, [])
 
     content = if is_binary(node.content), do: "<%= #{inspect(node.content)} %>", else: ""
+
+    content =
+      case node.inner_navigation_attrs do
+        [] ->
+          content
+
+        navigation_attrs ->
+          anchor_attrs = Enum.map_join(navigation_attrs, " ", &serialize_html_attr/1)
+          "<a #{anchor_attrs}>#{content}</a>"
+      end
+
     open = "<#{node.element} #{attrs}>"
 
     open <>
@@ -1265,6 +1322,16 @@ defmodule LiveFrames.Fidelity do
         Enum.map(states, fn {selector, values} ->
           ".#{fidelity_class(node.id)}#{CSSDeclaration.selector_suffix(selector)} {\n#{Enum.map_join(values, "\n", &serialized_declaration/1)}\n}"
         end)
+
+    rules =
+      if node.inner_navigation_attrs == [] do
+        rules
+      else
+        rules ++
+          [
+            ".#{fidelity_class(node.id)} > a {\n  color: inherit;\n  text-decoration: inherit;\n}"
+          ]
+      end
 
     Enum.join(Enum.reject([custom | rules], &(&1 == "")), "\n")
   end

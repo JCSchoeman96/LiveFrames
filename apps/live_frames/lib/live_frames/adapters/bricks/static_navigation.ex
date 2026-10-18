@@ -88,6 +88,9 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
       name == "button" and link_object?(settings["link"]) ->
         true
 
+      name == "heading" and link_object?(settings["link"]) ->
+        true
+
       true ->
         false
     end
@@ -193,6 +196,7 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
 
   defp semantic_type_override(%Element{name: "text-link"}), do: "link"
   defp semantic_type_override(%Element{name: "button"}), do: nil
+  defp semantic_type_override(%Element{name: "heading"}), do: nil
 
   defp build_navigation_map(href, target) do
     base = %{"href" => href}

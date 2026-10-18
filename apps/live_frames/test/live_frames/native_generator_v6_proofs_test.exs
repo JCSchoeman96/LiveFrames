@@ -397,6 +397,26 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
     assert source =~ ~s(rel="noopener noreferrer")
   end
 
+  test "static heading navigation preserves its heading root and emits a protected inner anchor" do
+    heading = %DesignNode{
+      node_id: @heading_id,
+      semantic_type: "heading",
+      attributes: %{
+        "tag" => "h2",
+        "navigation" => %{"href" => "/go", "target" => "_blank"}
+      },
+      content: "Title"
+    }
+
+    document = %DesignDocument{root_nodes: [section_node([heading])]}
+    component_contract = approved_contract()
+    component_plan = plan_for(component_contract, document)
+    source = generate_source(component_contract, component_plan, document)
+
+    assert source =~
+             ~r/<h2\b[^>]*>\s*<a\b[^>]*href="\/go"[^>]*target="_blank"[^>]*rel="noopener noreferrer">\{"Title"\}<\/a><\/h2>/s
+  end
+
   defp nested_collection_count_fixture do
     paragraph_id = DesignNode.deterministic_id([1, 1])
     container_id = DesignNode.deterministic_id([1, 2])

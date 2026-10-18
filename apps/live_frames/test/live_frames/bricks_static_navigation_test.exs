@@ -70,6 +70,18 @@ defmodule LiveFrames.BricksStaticNavigationTest do
 
   defp external_link(url), do: %{"type" => "external", "url" => url}
 
+  defp fidelity_heading_document(attributes, content, children \\ []) do
+    heading =
+      DesignNode.new([1],
+        semantic_type: "heading",
+        attributes: attributes,
+        content: content,
+        children: children
+      )
+
+    %DesignDocument{root_nodes: [heading]}
+  end
+
   test "non-linked button remains button type=button" do
     assert {:ok, document} =
              to_ir([
@@ -620,21 +632,92 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     refute bundle.heex =~ ~s(href="/same")
   end
 
-  test "heading with link object is unsupported carrier without href" do
+  test "heading with static link object retains heading semantics and renders an inner anchor" do
     assert {:ok, document} =
              to_ir([
                source_element("root", "block", 0, %{}, ["title"]),
                source_element("title", "heading", "root", %{
                  "text" => "Title",
+                 "tag" => "h1",
                  "link" => external_link("#")
                })
              ])
 
-    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.unsupported_carrier"))
-    refute node_by_source_id(document, "title").attributes["navigation"]
+    node = node_by_source_id(document, "title")
+    assert node.semantic_type == "heading"
+    assert node.attributes["tag"] == "h1"
+    assert node.attributes["navigation"] == %{"href" => "#"}
+
+    refute Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.unsupported_carrier"))
 
     assert {:ok, bundle} = Fidelity.generate(document)
-    refute bundle.heex =~ ~s(href="#")
+    assert bundle.heex =~ ~r/<h1\b[^>]*>\s*<a\b[^>]*href="#"/s
+    assert bundle.heex =~ ~r/<a\b[^>]*href="#"[^>]*>\s*<%= "Title" %>\s*<\/a>\s*<\/h1>/s
+    refute String.trim(bundle.heex) =~ ~r/^<a\b/
+
+    assert [heading_class] =
+             Regex.run(~r/<h1 class="([^"]+)"/, bundle.heex, capture: :all_but_first)
+
+    assert bundle.css =~
+             ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}"
+
+    refute bundle.css =~ ~r/^a \{/m
+    refute bundle.css =~ ~r/(?:outline|box-shadow):\s*(?:none|0)/
+  end
+
+  test "heading new-tab navigation retains noopener protection" do
+    document =
+      fidelity_heading_document(
+        %{
+          "tag" => "h1",
+          "navigation" => %{"href" => "/go", "target" => "_blank"}
+        },
+        "Title"
+      )
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+
+    assert bundle.heex =~
+             ~r/<h1\b[^>]*>\s*<a\b[^>]*href="\/go"[^>]*target="_blank"[^>]*rel="noopener noreferrer"><%= "Title" %><\/a>\s*<\/h1>/s
+  end
+
+  test "heading navigation fails closed for unsupported tags empty text and child nodes" do
+    child = DesignNode.new([1, 1], semantic_type: "paragraph", content: "Child")
+
+    invalid_shapes = [
+      {%{"navigation" => %{"href" => "#"}}, "Title", []},
+      {%{"tag" => "div", "navigation" => %{"href" => "#"}}, "Title", []},
+      {%{"tag" => "h2", "navigation" => %{"href" => "#"}}, " \t ", []},
+      {%{"tag" => "h2", "navigation" => %{"href" => "#"}}, "Title", [child]}
+    ]
+
+    for {attributes, content, children} <- invalid_shapes do
+      assert {:ok, bundle} =
+               Fidelity.generate(fidelity_heading_document(attributes, content, children))
+
+      refute bundle.heex =~ "<a"
+      assert bundle.manifest["diagnostic_counts"]["warning"] > 0
+    end
+  end
+
+  test "unsafe static destination on a heading is rejected by Bricks and Fidelity" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["title"]),
+               source_element("title", "heading", "root", %{
+                 "text" => "Title",
+                 "tag" => "h1",
+                 "link" => external_link("javascript:alert(1)")
+               })
+             ])
+
+    node = node_by_source_id(document, "title")
+    refute node.attributes["navigation"]
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.rejected"))
+
+    assert {:ok, bundle} = Fidelity.generate(document)
+    refute bundle.heex =~ "<a"
+    refute bundle.heex =~ "javascript:"
   end
 
   test "image link url mode does not become static navigation" do

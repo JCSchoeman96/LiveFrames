@@ -8,6 +8,19 @@ defmodule LiveFrames.NativeGenerator.StylesheetRendererTest do
 
   @private_class "lf-section-marketing-block__n-000001"
 
+  test "renders the bounded heading navigation anchor rule and rejects unsafe classes" do
+    expected =
+      ".lf-test-heading > a {\n  color: inherit;\n  text-decoration: inherit;\n}\n"
+
+    assert {:ok, ^expected} =
+             StylesheetRenderer.render_heading_navigation_anchor("lf-test-heading")
+
+    assert {:error, diagnostic} =
+             StylesheetRenderer.render_heading_navigation_anchor("unsafe .heading")
+
+    assert diagnostic.code == "native_generator.styling.css_serialization_failed"
+  end
+
   test "renders base declarations in property order with a stable trailing newline" do
     styles = %{
       "gap" => StyleValue.literal(2),
