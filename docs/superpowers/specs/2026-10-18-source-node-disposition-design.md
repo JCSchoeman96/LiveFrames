@@ -124,8 +124,10 @@ presentation, content, accessibility, or DOM role.
 **Disposition authority** is the conjunction of the structured SemanticInput
 decision, a durable plan record, exact Behavior authority references, and an
 approved ComponentReviewResult bound to the canonical bytes of the approved
-ComponentContract, encoded plan, and DesignDocument. No one part is sufficient
-on its own.
+ComponentContract, encoded plan, and DesignDocument. For disposition-bearing
+input, the proposer receives Behavior authority through the validated,
+ephemeral handoff from Behavior.ComponentizationDecision. No one part is
+sufficient on its own.
 
 ## 5. SemanticInput decision
 
@@ -150,9 +152,12 @@ design_node_id; reject a repeated target. SemanticInput remains ephemeral
 and has no persistence or serialization API. It cannot itself authorize
 generation.
 
-The proposer derives source_type, source_id, the BehaviorContract digest,
-and BehaviorReview ID from the exact input authorities. Callers cannot supply
-those durable identity fields in SemanticInput.
+The proposer derives source_type and source_id from the DesignDocument and
+SourceTrace. The behavior-aware gate derives the BehaviorContract digest and
+selected BehaviorReviewResult ID from the exact validated authorities, then
+passes them through an ephemeral BehaviorAuthorityContext. The proposer
+copies those two values from that context only after validating it. Callers
+cannot supply either value in SemanticInput.
 
 ## 6. Durable plan model
 
@@ -178,9 +183,9 @@ free-form metadata, or Boolean claims that bypass review.
 | disposition | Selects the one closed policy | Intrinsic validator, proposer, and generator gate | All phases | Yes | Yes |
 | source_type | Binds the disposition to the node's SourceTrace source family | Proposer and generation reference validator | Construction and generation | Yes | Yes |
 | source_id | Detects a changed or substituted SourceTrace identity | Proposer and generation reference validator | Construction and generation | Yes | Yes |
-| behavior_binding_id | Names the exact binding whose approved semantics replace the source runtime responsibility | Proposer and generation authority validator | Construction and generation | Yes | Yes |
-| behavior_contract_digest | Binds the exact complete BehaviorContract | Proposer and generation authority validator | Construction and generation | Yes | Yes |
-| behavior_review_id | Binds the exact approved BehaviorReviewResult | Proposer and generation authority validator | Construction and generation | Yes | Yes |
+| behavior_binding_id | Names the exact binding whose approved semantics replace the source runtime responsibility | Behavior.ComponentizationDecision and proposer validate it against the context contract; generation revalidates | Construction and generation | Yes | Yes |
+| behavior_contract_digest | Binds the exact complete BehaviorContract | Behavior.ComponentizationDecision derives it; proposer validates and copies it from context; generation revalidates | Handoff, construction, and generation | Yes | Yes |
+| behavior_review_id | Binds the exact approved BehaviorReviewResult | Behavior.ComponentizationDecision derives it; proposer validates and copies it from context; generation revalidates | Handoff, construction, and generation | Yes | Yes |
 | evidence_refs | Preserves review evidence pointers without granting authority | SemanticInput canonicalizer, ComponentReview, and plan validator | Construction, review, and generation | Yes | Yes |
 
 The plan-level design_document_sha256 scopes design_node_id; the repeated
@@ -259,32 +264,87 @@ byte-for-byte immutable and has its original semantics.
 
 ## 9. Trust boundary and exact review binding
 
-### 9.1 What proposal construction proves
+### 9.1 Behavior authority handoff and proposal construction
 
-The proposer must validate all mechanically decidable facts against the exact
-validated DesignDocument and supplied authority tuple:
+The existing `LiveFrames.Behavior.ComponentizationDecision` is the
+behavior-aware gate. It receives the DesignDocument, BehaviorContract, one
+selected BehaviorReviewResult, and SemanticInput. It owns exact Behavior
+authority validation and passes validated authority into the proposer.
 
-1. Recompute design_document_sha256; require it to match the plan identity.
-2. Require the target to exist, lie within the selected boundary, have
-   semantic_type raw, unsupported, or unknown, and have no children.
-3. Require SourceTrace and copy its exact non-empty source_type and
-   source_id into the plan. A missing trace or identity mismatch blocks.
-4. Require no behavior reference to the target, from the target, or within its
-   disposed subtree. This includes Behavior owners, controlled targets,
-   trigger origins, focus references, and relevant IR interaction references.
-5. Require the named BehaviorBinding to exist exactly once in the supplied
-   BehaviorContract. Require the contract's DesignDocument identity to match
-   the exact document.
-6. Require one explicitly selected BehaviorReviewResult. Compute its ID and
-   require an exact match with the decision's review authority. Validate that
-   singleton against the supplied BehaviorContract using the existing
-   Behavior.ReviewResult.require_approved/2 rule. Recompute and store the
-   BehaviorContract digest and selected review ID.
-7. Require non-empty evidence references and construct the disposition only
-   from the validated decision. No provenance field may substitute for one.
+For non-empty `source_node_dispositions`, the gate performs this sequence:
+
+1. Validate the exact DesignDocument identity.
+2. Validate that the exact BehaviorContract is valid and belongs to that
+   DesignDocument.
+3. Require one explicitly selected BehaviorReviewResult and validate it as
+   the exact approved singleton for that BehaviorContract using
+   `Behavior.ReviewResult.require_approved/2`.
+4. Derive the BehaviorContract digest from the exact contract.
+5. Derive the selected BehaviorReviewResult ID from that exact result.
+6. Construct a BehaviorAuthorityContext from those validated values.
+7. Validate SemanticInput against the exact DesignDocument and produce its
+   canonical form.
+8. Pass the DesignDocument, canonical SemanticInput, and context to the
+   disposition-aware proposer path.
+
+The ephemeral, source-independent handoff has this conceptual shape:
+
+    BehaviorAuthorityContext
+      behavior_contract
+      behavior_contract_digest
+      selected_behavior_review_result
+      behavior_review_result_id
+
+The context carries the exact existing BehaviorContract and selected review
+result. It does not copy their semantic fields into a second behavior model.
+It has `serialization=NONE`, `persistence=NONE`, and
+`runtime_presence=NONE`. It exists only between the behavior-aware gate and
+proposal construction. `Behavior.ComponentizationDecision` constructs it from
+its validated input authorities; callers cannot populate its digest or review
+ID through SemanticInput or provenance fields. A context-aware proposer path
+receives the context as one authority value, not as caller-asserted digest and
+ID arguments. The gate is its only constructor, and disposition-aware proposal
+construction is its only consumer.
+
+The proposer revalidates the handoff against the supplied document before
+construction:
+
+    Serializer.digest(context.behavior_contract)
+      == context.behavior_contract_digest
+    ReviewResult.id(context.selected_behavior_review_result)
+      == context.behavior_review_result_id
+    ReviewResult.require_approved(
+      [context.selected_behavior_review_result], context.behavior_contract
+    )
+    context BehaviorContract belongs to the supplied DesignDocument
+    each decision behavior_binding_id exists exactly once in that contract
+
+It copies `behavior_contract_digest` and `behavior_review_result_id` from the
+validated context into NodeDisposition. It takes `behavior_binding_id` from
+the canonical decision only after proving that binding exists exactly once in
+the context contract. SemanticInput cannot carry a BehaviorContract digest or
+BehaviorReviewResult ID.
+
+Existing direct `ComponentizationProposer.propose/2`, `propose/3` with
+breakpoint authority, and preflighted paths without a BehaviorAuthorityContext
+remain valid for ordinary input when `source_node_dispositions` is empty. If
+the list is non-empty and no context is supplied, they return invalid input
+with `componentization_proposer.behavior_authority_required`. They must not
+construct a disposition or plan. Only the behavior-aware gate can call the
+context-aware proposer path for a disposition-bearing SemanticInput.
+This is an input-level proposer diagnostic, separate from plan validation.
+
+The proposer still validates the target exists within the exact selected
+boundary, has semantic_type raw, unsupported, or unknown, and is a leaf. It
+requires SourceTrace and copies the exact non-empty source_type and source_id
+into the plan. It rejects Behavior references to or from the target or its
+subtree, including owners, controlled targets, trigger origins, focus
+references, and relevant IR interaction references. It recomputes the
+DesignDocument digest and requires it to match the plan identity. A missing
+trace, stale identity, or invalid context blocks.
 
 The proposer cannot establish from identifiers alone that source runtime
-responsibility is semantically covered, or that the source node has no
+responsibility is semantically covered or that the source node has no
 independently required presentation, content, accessibility, or generated-DOM
 role. Those are review judgments. Until reviewed, the constructed plan is only
 a candidate and is not generation authority.
@@ -469,6 +529,9 @@ ineligible:
     review confirms no independently required generated-DOM role
     exact BehaviorBinding exists exactly once
     exact BehaviorContract belongs to the exact DesignDocument
+    proposal received its BehaviorContract and selected review through a validated BehaviorAuthorityContext from Behavior.ComponentizationDecision
+    context BehaviorContract digest matches the exact context contract
+    context BehaviorReviewResult ID matches the selected result and singleton approval
     exact BehaviorContract is approved by the one explicitly selected BehaviorReviewResult
     selected BehaviorReviewResult ID equals NodeDisposition.behavior_review_id
     singleton BehaviorReviewResult approval validation passes against the supplied BehaviorContract
@@ -493,10 +556,18 @@ The default rule remains:
     → componentization_plan.unsupported_node
     → ERROR; generation ineligible
 
+Before construction, a non-empty `source_node_dispositions` list without a
+BehaviorAuthorityContext returns invalid input with
+`componentization_proposer.behavior_authority_required`. This applies to
+direct public proposer calls and preflighted paths that do not receive the
+context. An ordinary SemanticInput with no dispositions and no context keeps
+the existing proposer behavior.
+
 The authorized rule is:
 
     raw | unsupported | unknown in-boundary node
     + one exact valid NodeDisposition
+    + validated BehaviorAuthorityContext from the behavior-aware gate
     + exact current Behavior and ComponentReview authority
     → omit target from generated structure
 
@@ -520,6 +591,12 @@ identity. Add only these disposition diagnostics:
     componentization_plan.node_disposition.required_role_conflict
     componentization_plan.node_disposition.review_authority_mismatch
     componentization_plan.node_disposition.unused
+
+When a context is present, its contract digest, selected review ID, and
+singleton approval must match the contained exact authorities. Fail those
+checks with `componentization_plan.node_disposition.behavior_authority_mismatch`.
+If the decision's binding is absent from or duplicated in the context contract,
+use `componentization_plan.node_disposition.behavior_binding_mismatch`.
 
 Intrinsic validation covers closed fields, enum, strings/digests, reference
 lists, ordering, and uniqueness. Reference validation covers exact identities,
@@ -621,6 +698,11 @@ The exact format decision is:
 | Unsupported type becomes supported later | Semantic-incompatible and/or unused error; reissue and review |
 | Behavior binding changes | Binding or Behavior-authority mismatch |
 | BehaviorContract changes | Contract digest mismatch; new approved review and plan required |
+| Disposition-bearing SemanticInput goes to a direct proposer without BehaviorAuthorityContext | Invalid input with componentization_proposer.behavior_authority_required; no disposition is constructed |
+| Context BehaviorContract differs from the exact contract whose digest the gate derived | Context digest mismatch; componentization_plan.node_disposition.behavior_authority_mismatch |
+| Context review ID differs from the selected review result content ID | Context identity mismatch; componentization_plan.node_disposition.behavior_authority_mismatch |
+| Decision behavior_binding_id is absent from the context contract | componentization_plan.node_disposition.behavior_binding_mismatch; no disposition is constructed |
+| Ordinary SemanticInput has no source_node_dispositions and no BehaviorAuthorityContext | Existing direct proposer behavior remains unchanged |
 | Wrong BehaviorReviewResult selected | Its derived ID differs from NodeDisposition.behavior_review_id; generation blocks |
 | BehaviorReviewResult is not approved for the supplied BehaviorContract | Singleton approval validation fails |
 | Same contract_id but changed public API | Approved ComponentContract digest mismatch |
@@ -715,6 +797,12 @@ task does not modify them.
       apps/live_frames/lib/live_frames/componentization_proposer.ex
       apps/live_frames/lib/live_frames/componentization_proposer/construction.ex
 
+    Behavior-authority validation and handoff:
+      apps/live_frames/lib/live_frames/behavior/componentization_decision.ex
+      owns exact Behavior authority validation, ephemeral
+      BehaviorAuthorityContext construction, and handoff into the
+      disposition-aware proposer path
+
     Exact-plan ComponentReview result and validation:
       apps/live_frames/lib/live_frames/component_review.ex
       new ComponentReviewResult type, validator, canonical serializer, and
@@ -742,8 +830,9 @@ task does not modify them.
 
 No dedicated BehaviorProjection or realization-selector module exists under
 apps/live_frames/lib/live_frames at this base. Neither downstream area needs
-disposition awareness. The existing behavior/componentization_decision.ex
-is not an owner for this work and must not be changed as part of this design.
+disposition awareness. `Behavior.ComponentizationDecision` owns only the
+Behavior-authority gate and handoff; proposer and construction code consume
+the validated context and build the plan.
 
 ## 20. Future high-level sequencing
 
@@ -752,7 +841,7 @@ micro-prompts:
 
     Phase 1 — plan/schema/version support
     Phase 2 — SemanticInput decision family
-    Phase 3 — proposer construction/guards
+    Phase 3 — BehaviorAuthorityContext handoff and proposer construction/guards
     Phase 4 — reference-validation disposition handling
     Phase 5 — native-generation omission
     Phase 6 — Milan exact proof
@@ -785,6 +874,7 @@ Additional invariants:
     SN-I17 ComponentReviewResult binds exact approved ComponentContract canonical bytes
     SN-I18 generation receives one explicitly selected BehaviorReviewResult and verifies its exact ID
     SN-I19 generation receives one explicitly selected ComponentReviewResult, verifies its content-derived ID, and checks its exact contract/plan/document digests
+    SN-I20 source-node dispositions can be constructed only through an explicit validated Behavior-authority handoff; direct proposer paths without that authority fail closed
 
 ## 22. Explicit non-goals
 
