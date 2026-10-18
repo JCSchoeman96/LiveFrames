@@ -8,9 +8,18 @@ compound-value grammar, another Romeo normalization, componentization, or native
 generation.
 
 ```text
-BASE_SHA=b30778d04ee016b8815a222a85c92869bc5e60a9
-BASE_TREE=c9d21c2c6e6f00b35c1a00f32a031b3384d14664
-BASE_CI=39128177913 SUCCESS
+PR_251_MERGED=YES
+PR_251_AUTHORITY_ACCEPTED=NO
+PR_251_POST_MERGE_REVIEW_FOUND_OPEN_SCOPE_CONTRACTS=YES
+PR_251_HEAD=d0f055b62f70a21fda311e8ceb653f9dcd116870
+PR_251_MERGE_SHA=64a6ee93d9eeb6c23cc810235184c6ebece7b2f5
+PR_251_MERGE_TREE=57cae5cd5176552d309f3dfb6c5efaa08469f8c1
+PR_251_POST_MERGE_CI=39136736344 SUCCESS
+
+CORRECTION_BASE_SHA=4d0388606831562dc1b344a2bbf2e1169af52c42
+CORRECTION_BASE_TREE=7bed181b96aabbe2afeed23a4f57d0d31e998082
+CORRECTION_BASE_CI=39136743693 SUCCESS
+CORRECTION_REASON=TARGET_RELATION_AND_SELECTOR_SCOPE_WERE_NOT_CLOSED
 
 CSS_LOCAL_CUSTOM_PROPERTY_STATE=AUTHORITY_READY_PENDING_PR_ACCEPTANCE
 CSS_LOCAL_CUSTOM_PROPERTY_IMPLEMENTATION_AUTHORIZED=NO
@@ -21,6 +30,11 @@ ROMEO_NATIVE_GENERATION_AUTHORIZED=NO
 
 Implementation remains unauthorized until this authority PR is independently
 reviewed, merged, and verified against its exact merge SHA.
+
+PR #251's merge and passing CI did not constitute authority acceptance. This
+post-merge correction closes the required target and selector-scope contracts
+from accepted canonical evidence. Its own PR must still be independently
+reviewed and accepted before implementation can be authorized.
 
 The accepted programme records are [the post-NAV-CARRIER canonical rerun](feature_romeo_post_nav_carrier_canonical_rerun.md), [the canonical gap decomposition](feature_romeo_canonical_gap_decomposition.md), and [the no-ACSS normalization record](feature_romeo_canonical_no_acss_normalization.md). Source privacy follows [source and provenance](../04_SOURCE_AND_PROVENANCE.md). The IR boundary follows [the Design IR specification](../03_DESIGN_IR_SPEC.md).
 
@@ -33,6 +47,11 @@ resolves only a unique permitted reference, sends the resulting terminal value
 through the existing declaration and value checks, then emits an ordinary
 Design IR style value.
 
+```text
+SELECTED_ARCHITECTURE=OPTION_A
+OPTION_A_VERDICT=SELECTED_BOUNDED_NORMALIZATION_TIME_RESOLVER
+```
+
 The resolver consumes custom-property definitions as internal input. It emits
 no definition into Design IR or generated CSS. It does not use `VariableAuthority`
 to obtain a local value, infer token authority from a name, search shadowed
@@ -40,18 +59,24 @@ layers, or simulate browser cascade behavior.
 
 Adopt **Policy P1, the transparent source-syntax policy**, for the four
 currently unknown border-radius findings. Their requirement status remains
-unknown. A generic local resolver may make them executable when the same
-source-neutral eligibility checks used for every declaration pass. The owner
-accepts that side effect because the resolver only removes indirection from
-declarations already inside the generic selector, property, viewport, and state
-grammar. The observed border-radius source shape has a finite numeric or
-dimensional terminal value, and the existing property and value safety checks
-still apply.
+unknown. A generic local resolver may make an unknown declaration executable
+only when the same source-neutral eligibility checks used for every declaration
+pass. The owner accepts that generic side effect. In the current canonical
+evidence, the border-radius frame's target relation is unprovable under the
+accepted selector authority, so all four owner findings remain fail-closed
+residuals. This is not a Romeo-specific exception and does not change P1.
 
 ```text
 UNKNOWN_BORDER_RADIUS_REQUIREMENT_STATUS_REMAINS=UNKNOWN
 GENERIC_POLICY_MAY_RENDER_THEM_EXECUTABLE=YES
 OWNER_POLICY_ACCEPTS_THIS_SIDE_EFFECT=YES
+UNKNOWN_BORDER_RADIUS_OWNER_FINDING_COUNT=4
+UNKNOWN_BORDER_RADIUS_FINDINGS_EXECUTABLE=0
+UNKNOWN_BORDER_RADIUS_FINDINGS_REMAIN_FAIL_CLOSED=4
+UNPROVABLE_UNKNOWN_REFERENCE_DISPOSITION=FAIL_CLOSED_RESIDUAL
+SELECTED_UNKNOWN_RULE_POLICY=P1
+POLICY_P1_VERDICT=SELECTED_TRANSPARENT_SOURCE_SYNTAX_POLICY
+P1_POLICY_CHANGED=NO
 ```
 
 This policy does not relabel any finding as required. A failed ownership,
@@ -60,19 +85,68 @@ scope, resolution, or safety check leaves the declaration unresolved.
 ## Accepted finding counts
 
 ```text
-CSS_LOCAL_CUSTOM_PROPERTY_TOTAL=20
-CONFIRMED_REQUIRED=16
-UNKNOWN_REQUIREMENT=4
+ACCEPTED_LOCAL_PROPERTY_FINGERPRINT_COUNT=20
+ACCEPTED_CONFIRMED_REQUIRED_FINGERPRINT_COUNT=16
+ACCEPTED_UNKNOWN_BORDER_RADIUS_FINGERPRINT_COUNT=4
+
+MATCHED_CANONICAL_LOCAL_PROPERTY_FRAME_IDENTITY_COUNT=5
+MATCHED_OWNER_FINDINGS_PER_FRAME_IDENTITY=4
+CONFIRMED_REQUIRED_FRAME_IDENTITY_COUNT=4
+UNKNOWN_BORDER_RADIUS_FRAME_IDENTITY_COUNT=1
+
+CONFIRMED_REQUIRED_OWNER_FINDING_COUNT=16
+CONFIRMED_REQUIRED_OWNER_FINDINGS_COVERED=16
+CONFIRMED_REQUIRED_OWNER_FINDINGS_UNRESOLVED=0
+
+LOCAL_REFERENCE_COUNT=25
+LOCAL_REFERENCE_OCCURRENCES_IN_CANONICAL_LOCAL_PROPERTY_FRAMES=19
+LOCAL_REFERENCE_OCCURRENCES_OUTSIDE_CANONICAL_LOCAL_PROPERTY_FINDINGS=6
+OUTSIDE_REFERENCE_PRIMARY_LANE=CSS_COMPOUND_VALUE
+
+CANONICAL_SELECTOR_FINDING_COUNT=12
+CONFIRMED_REQUIRED_SELECTOR_FINDING_COUNT=0
+UNKNOWN_SELECTOR_FINDING_COUNT=12
+CSS_SELECTOR_LANE_COUNT_CHANGED=NO
+CSS_SELECTOR_REQUIREMENT_CLASSIFICATION_CHANGED=NO
 
 CSS_COMPOUND_VALUE_TOTAL=8
 COMPOUND_VALUE_DEPENDENT_FINDINGS=8
 COMPOUND_VALUE_CONFIRMED_REQUIRED=8
 CSS_COMPOUND_VALUE_IMPLEMENTATION_AUTHORIZED=NO
+CSS_COMPOUND_VALUE_LANE_CHANGED=NO
 ```
 
-The eight compound-value findings depend on local-variable resolution. This
-record defines the resolver interface only. It does not authorize grammar for
-`FUNCTION_CALL`, `MULTI_TOKEN_VALUE`, or `VAR_REFERENCE_WITH_OPERATION`.
+The accepted canonical residual fingerprints reconstruct five source-frame
+identities with four owner-specific findings each: four confirmed-required
+frame identities produce 16 required findings, and one unknown border-radius
+frame identity produces four unknown findings. The 25 source local-reference
+occurrences are a separate unit. Nineteen occur in those five canonical
+local-property frames; six occur in two compound-value frames and are not
+additional local-property findings. Those six remain within the existing
+compound-value lane. The eight compound-value findings depend on local-variable
+resolution, but this record does not authorize grammar for `FUNCTION_CALL`,
+`MULTI_TOKEN_VALUE`, or `VAR_REFERENCE_WITH_OPERATION`.
+
+## Local-name validation
+
+The canonical local definition and reference names pass the selected validator.
+The resolver validates the exact source spelling with the existing
+`CSSDeclaration.safe_property?/1` boundary and the custom-property prefix
+requirement. This is the sole resolver name contract; it does not add a regex
+or normalize names.
+
+```text
+LOCAL_NAME_VALIDATOR=CSSDeclaration.safe_property?/1 AND String.starts_with?(name, "--")
+CANONICAL_LOCAL_DEFINITION_NAMES_PASS_SELECTED_VALIDATOR=YES
+CANONICAL_LOCAL_REFERENCE_NAMES_PASS_SELECTED_VALIDATOR=YES
+LOCAL_NAME_CASE_SENSITIVE=YES
+LOCAL_NAME_NORMALIZATION=NONE
+LOCAL_NAME_CASE_FOLDING=NO
+LOCAL_NAME_REGEX_DUPLICATED_IN_RESOLVER=NO
+CUSTOM_CSS_PARSER_IMPLEMENTATION_OWNER_REQUIRED=NO
+```
+
+Lookup preserves exact string identity after validation.
 
 ## Sanitized source-shape inventory
 
@@ -103,8 +177,17 @@ RESPONSIVE_DEFINITION_COUNT=0
 STATE_DEFINITION_COUNT=0
 
 SAME_RULE_DEFINITION_AND_USE_COUNT=0
-ANCESTOR_TO_DESCENDANT_REFERENCE_COUNT=NOT_ESTABLISHED
-CROSS_SELECTOR_REFERENCE_COUNT=21
+
+CANONICAL_LOCAL_PROPERTY_FRAME_REFERENCE_COUNT=19
+CONFIRMED_REQUIRED_BASE_REFERENCE_COUNT=10
+CONFIRMED_REQUIRED_BASE_SAME_TARGET_COUNT=4
+CONFIRMED_REQUIRED_BASE_ANCESTOR_COUNT=6
+CONFIRMED_REQUIRED_BASE_UNRESOLVED_COUNT=0
+CONFIRMED_REQUIRED_RESPONSIVE_REFERENCE_COUNT=8
+CONFIRMED_REQUIRED_RESPONSIVE_SAME_TARGET_COUNT=0
+CONFIRMED_REQUIRED_RESPONSIVE_ANCESTOR_COUNT=8
+CONFIRMED_REQUIRED_RESPONSIVE_UNRESOLVED_COUNT=0
+UNKNOWN_BORDER_RADIUS_UNRESOLVED_REFERENCE_COUNT=1
 
 MULTIPLE_DEFINITION_NAME_COUNT=0
 DUPLICATE_IDENTICAL_DEFINITION_COUNT=0
@@ -132,15 +215,17 @@ as external authority.
 `NESTED_VAR_REFERENCE_COUNT=3` counts definition values that themselves
 contain a `var()` call. None points to another local definition. There are no
 syntactically nested `var()` calls, fallbacks, self-references, or cycles among
-the local definitions. `ANCESTOR_TO_DESCENDANT_REFERENCE_COUNT` remains
-`NOT_ESTABLISHED` because the sanitized CSS selector scan alone does not prove
-how those selectors map to ancestor nodes in each owner tree. The resolver must
-prove that mapping from its bounded owner input before it uses inheritance.
+the local definitions.
 
-The one source border-radius declaration shape has a same-source local
-reference and a numeric or dimensional terminal shape. The canonical record
-classifies its four owner findings as unknown. This supports P1 without
-changing their requirement status.
+The accepted identity join links the 19 local references in the five
+canonical local-property frames to their owner-specific residual findings.
+Across the four confirmed-required frames, all 18 references have established
+same-target or proven-ancestor relations: the ten base references split into
+four same-target and six ancestor relations, and all eight responsive
+references use proven ancestors. The remaining reference belongs to the
+unknown border-radius frame; its target relation is unprovable, so its four
+owner findings stay fail-closed. This is consistent with P1 because generic
+eligibility is conditional on proven scope.
 
 ## Architecture options
 
@@ -247,9 +332,11 @@ The scope used for a lookup is the tuple:
 ### Owner and selector scope
 
 Definitions are available only to declarations within the owner subtree already
-passed to `CustomCssNormalizer`. The resolver may use the current accepted
-selector grammar and the supplied source-tree paths to prove that a definition
-matches the reference target or an ancestor of that target.
+passed to `CustomCssNormalizer`. `CustomCssNormalizer` owns selector parsing and
+target matching under the accepted selector grammar. It resolves the selector
+and source-tree relationship before handing bounded scope records to the local
+resolver. The resolver receives no raw selector text and does not implement a
+second selector grammar.
 
 A proven definition on the target node wins over inherited definitions. If no
 direct definition exists, a definition on the nearest proven ancestor may
@@ -262,9 +349,41 @@ fails closed. Siblings never inherit from one another.
 DEFINITION_SCOPE_OWNER=ONE_CUSTOM_CSS_OWNER_SOURCE_ID
 DEFINITION_SCOPE_CLASS=EXACT_STYLEPRECEDENCE_SELECTED_CLASS_REFERENCE_OR_ELEMENT_LOCAL_LAYER
 DESCENDANT_INHERITANCE=YES_ONLY_FOR_A_PROVEN_ANCESTOR_WITHIN_THE_SAME_OWNER_AND_LAYER
+SELECTOR_PARSE_OWNER=CustomCssNormalizer
+SELECTOR_TARGET_MATCH_OWNER=CustomCssNormalizer
+SELECTOR_SEMANTICS_OWNER=CustomCssNormalizer_OR_SEPARATELY_ACCEPTED_SHARED_BRICKS_SELECTOR_HELPER
+EMITTABLE_STYLE_SELECTOR_GRAMMAR_EXPANDED=NO
+CSS_SELECTOR_IMPLEMENTATION_AUTHORIZED=NO
+INTERNAL_DEFINITION_SCOPE_SELECTOR_MAY_ENABLE_ORDINARY_STYLE_RULE=NO
+LOCAL_DEFINITION_INDEX_OWNER=SourceLocalCustomPropertyResolver
+LOCAL_REFERENCE_RESOLUTION_OWNER=SourceLocalCustomPropertyResolver
+RESOLVER_ACCEPTS_RAW_SELECTOR_TEXT=NO
+RESOLVER_REIMPLEMENTS_SELECTOR_GRAMMAR=NO
 CROSS_OWNER_LOOKUP=NO
 CROSS_COMPONENT_LOOKUP=NO
+FOREIGN_SCOPE_DISCOVERY_SEARCH=NO
+ARBITRARY_SELECTOR_SEARCH=NO
 ```
+
+The resolver does not search foreign owners or components to determine whether
+a missing definition exists elsewhere. An ordinary bounded miss returns
+`NO_LOCAL_DEFINITION`. `CROSS_OWNER_REFERENCE` and
+`CROSS_COMPONENT_REFERENCE` are invariant-failure states only if foreign scope
+data is supplied to the resolver.
+
+An unsupported selector never becomes generatable through local-definition
+processing. If an unsupported-selector frame contains ordinary declarations,
+those declarations remain residual unless the CSS-SELECTOR lane separately
+authorizes their selector. Consuming an internal definition cannot enable a
+mixed frame's ordinary style declarations.
+
+The adapter-to-resolver input is an internal bounded record containing only
+already parsed data: `owner_source_id`, `effective_provenance_identity`,
+`target_source_id`, `target_path`, `ancestor_path_relation`, `viewport_scope`,
+`state_scope`, `source_order`, `local_name`, `record_kind`, and
+`terminal_text_if_definition`. `record_kind` is `definition` or `reference`;
+terminal text is present only for a definition. This conceptual contract adds
+no Design IR struct, serialized shape, or style-value field.
 
 ### Source order and duplicate definitions
 
@@ -299,7 +418,7 @@ for unobserved scope transitions.
 
 ```text
 BASE_TO_BASE_REFERENCE=YES_WITHIN_THE_SAME_OWNER_AND_EFFECTIVE_LAYER
-BASE_TO_RESPONSIVE_REFERENCE=YES_IF_PROVENANCE_MATCHES_AND_NO_RESPONSIVE_DEFINITION_OVERRIDES_IT
+BASE_TO_RESPONSIVE_REFERENCE=YES_IF_SAME_TARGET_OR_NEAREST_PROVEN_ANCESTOR_WITHIN_SAME_OWNER_AND_EXACT_EFFECTIVE_PROVENANCE
 BASE_TO_STATE_REFERENCE=NO
 RESPONSIVE_TO_RESPONSIVE_REFERENCE=NO
 STATE_TO_STATE_REFERENCE=NO
@@ -311,11 +430,22 @@ SELF_REFERENCE_POLICY=FAIL_CLOSED
 CYCLE_POLICY=FAIL_CLOSED
 ```
 
-Responsive lookup may use a base definition only for the same target and exact
-effective provenance identity. It does not infer a named breakpoint, combine
-or compare media ranges, use an overlapping responsive definition, or change
-a source media boundary. State-scoped variable lookup remains unsupported,
-even when the state itself is an accepted generic state condition.
+The accepted required topology contains ten base references: four resolve on
+the same target and six use a proven ancestor. It contains eight required
+responsive references: none resolves from a same-target base definition, and
+all eight use a proven base ancestor. All 18 required references have
+established relations. Accordingly, responsive lookup may use a base definition
+only for the same owner, exact selected effective provenance identity, and same
+component, when no selected responsive definition overrides it. The definition
+must resolve on the consumer target or its nearest proven ancestor within that
+owner and layer. A direct target definition wins; otherwise the nearest proven
+ancestor may supply the base definition. The source-tree path and unique
+candidate must be established deterministically. Siblings, foreign owners or
+components, and browser-cascade inference are excluded; an unproven path fails
+closed. The rule does not infer a named breakpoint, combine or compare media
+ranges, use an overlapping responsive definition, or change a source media
+boundary. State-scoped variable lookup remains unsupported, even when the state
+itself is an accepted generic state condition.
 
 The three definition values with downstream `var()` references point to names
 with no local definition in the evidence. They remain unresolved. The resolver
@@ -346,7 +476,7 @@ or rejected with a stable diagnostic:
 | `AMBIGUOUS_DEFINITION` | More than one different candidate applies at the same resolved node and scope. |
 | `CONFLICTING_SOURCE_ORDER` | Conflicting values would require choosing a cascade winner. |
 | `UNSUPPORTED_SCOPE` | The viewport or state transition is outside the explicit rules above. |
-| `CROSS_OWNER_REFERENCE` | The definition and consumer have different owner source IDs. |
+| `CROSS_OWNER_REFERENCE` | Foreign owner scope data was supplied despite the owner boundary. |
 | `UNSUPPORTED_INHERITANCE` | The source-tree ancestry or selector target cannot be proven within the owner subtree. |
 | `UNSUPPORTED_FALLBACK` | The reference has a fallback argument. |
 | `UNSUPPORTED_NESTED_REFERENCE` | A definition value requires a second local substitution step. |
@@ -355,7 +485,7 @@ or rejected with a stable diagnostic:
 | `UNSAFE_TERMINAL_VALUE` | Existing CSS declaration safety rejects the terminal value. |
 | `UNSUPPORTED_TERMINAL_VALUE` | Safety passes, but existing value normalization does not support the terminal form. |
 | `EXTERNAL_AUTHORITY_COLLISION` | A local definition and an external authority candidate use the same exact name. |
-| `CROSS_COMPONENT_REFERENCE` | A candidate would leave the current component boundary. |
+| `CROSS_COMPONENT_REFERENCE` | Foreign component scope data was supplied despite the component boundary. |
 | `RESOURCE_LIMIT_EXCEEDED` | A fixed input, graph, reference, ancestry, or terminal-value limit is exceeded. |
 
 The resolver validates the local name before lookup. It builds a bounded
@@ -484,11 +614,12 @@ policy or fixtures.
 
 ## Lifecycle and next gate
 
-This record closes architecture, unknown-rule policy, scope, failure behavior,
-IR impact, bounds, and implementation ownership. It therefore establishes
-`AUTHORITY_READY_PENDING_PR_ACCEPTANCE` only. A later implementation PR must
-wait for independent review, merge, and exact-head post-merge verification of
-this authority.
+This correction closes architecture, unknown-rule policy, canonical target
+topology, responsive inheritance, selector ownership, failure behavior, IR
+impact, bounds, and implementation ownership. It establishes
+`AUTHORITY_READY_PENDING_PR_ACCEPTANCE` only. The correction PR must be
+independently reviewed and accepted; a later implementation PR must wait for
+that acceptance, merge, and exact-head post-merge verification.
 
 ```text
 CSS_LOCAL_CUSTOM_PROPERTY_STATE=AUTHORITY_READY_PENDING_PR_ACCEPTANCE
@@ -502,6 +633,6 @@ IMPLEMENTATION_STARTED=NO
 
 ROMEO_COMPONENTIZATION_AUTHORIZED=NO
 ROMEO_NATIVE_GENERATION_AUTHORIZED=NO
-NEXT_GATE=REVIEW_AND_ACCEPT_CSS_LOCAL_CUSTOM_PROPERTY_RESOLUTION_AUTHORITY
+NEXT_GATE=INDEPENDENT_REVIEW_CSS_LOCAL_CUSTOM_PROPERTY_AUTHORITY_CORRECTION
 STOP=NONE
 ```
