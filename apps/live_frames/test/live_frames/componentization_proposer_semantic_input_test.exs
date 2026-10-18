@@ -2,6 +2,7 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
   use ExUnit.Case, async: false
 
   alias LiveFrames.ComponentizationProposer.SemanticInput, as: Input
+  alias LiveFrames.ComponentizationProposer
 
   alias LiveFrames.ComponentizationProposer.SemanticInput.{
     ContractIdentityDecision,
@@ -18,6 +19,8 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
     EvidenceHandlingDecision,
     StaticContentDispositionDecision
   }
+
+  @source_node_disposition_module Module.concat(Input, "SourceNodeDispositionDecision")
 
   alias LiveFrames.IR.{DesignDocument, DesignNode, CollectionBinding, ValueBinding}
 
@@ -56,6 +59,26 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
       overrides
     )
   end
+
+  defp decision(node_id, refs) do
+    fields = [
+      design_node_id: node_id,
+      outcome: :exclude_source_runtime_carrier,
+      behavior_binding_id: "behavior-binding",
+      evidence_refs: refs
+    ]
+
+    case Code.ensure_loaded(@source_node_disposition_module) do
+      {:module, _module} ->
+        struct(@source_node_disposition_module, fields)
+
+      {:error, _reason} ->
+        Map.new([{:__struct__, @source_node_disposition_module} | fields])
+    end
+  end
+
+  defp input_with_dispositions(input, decisions),
+    do: Map.put(input, :source_node_dispositions, decisions)
 
   defp attr(name, overrides \\ []) do
     struct!(
@@ -200,6 +223,169 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
     assert %Input{} = struct(Input)
     assert struct(Input).contract_identity == nil
     assert struct(Input).public_attrs == []
+    assert Map.get(struct(Input), :source_node_dispositions) == []
+  end
+
+  test "source node disposition decision is accepted without inspecting the design target" do
+    disposition = decision("target_not_in_document", ["review-ref"])
+    canonical = valid(document(), input_with_dispositions(input(), [disposition]))
+
+    assert canonical.source_node_dispositions == [disposition]
+  end
+
+  test "source node dispositions and evidence refs canonicalize independent of caller order" do
+    left =
+      input_with_dispositions(input(), [
+        decision("node_b", ["z", "a"]),
+        decision("node_a", ["b"])
+      ])
+
+    right =
+      input_with_dispositions(input(), [
+        decision("node_a", ["b"]),
+        decision("node_b", ["a", "z"])
+      ])
+
+    assert {:ok, left} = Input.validate(left, document())
+    assert {:ok, right} = Input.validate(right, document())
+    assert left.source_node_dispositions == right.source_node_dispositions
+    assert Enum.map(left.source_node_dispositions, & &1.design_node_id) == ["node_a", "node_b"]
+    assert Enum.at(left.source_node_dispositions, 1).evidence_refs == ["a", "z"]
+  end
+
+  test "source node and evidence ordering follows UTF-8 byte and Unicode scalar order" do
+    canonical =
+      valid(
+        document(),
+        input_with_dispositions(input(), [
+          decision("é", ["é", "z", "ä"]),
+          decision("z", ["é", "z", "ä"]),
+          decision("ä", ["é", "z", "ä"])
+        ])
+      )
+
+    assert Enum.map(canonical.source_node_dispositions, & &1.design_node_id) == ["z", "ä", "é"]
+
+    assert Enum.all?(canonical.source_node_dispositions, fn disposition ->
+             disposition.evidence_refs == ["z", "ä", "é"]
+           end)
+  end
+
+  test "duplicate source node disposition identities conflict" do
+    error(
+      input_with_dispositions(input(), [
+        decision("same-target", ["first-ref"]),
+        decision("same-target", ["second-ref"])
+      ]),
+      document(),
+      "conflict"
+    )
+  end
+
+  test "duplicate source node disposition evidence refs are invalid" do
+    error(
+      input_with_dispositions(input(), [decision("target", ["same-ref", "same-ref"])]),
+      document()
+    )
+  end
+
+  test "source node disposition accepts only its declared outcome" do
+    invalid = Map.put(decision("target", ["ref"]), :outcome, :exclude)
+    error(input_with_dispositions(input(), [invalid]), document())
+  end
+
+  test "source node disposition requires a non-empty valid UTF-8 node ID" do
+    for node_id <- [nil, "", <<255>>] do
+      error(
+        input_with_dispositions(input(), [decision(node_id, ["ref"])]),
+        document(),
+        if(is_nil(node_id), do: "missing_decision", else: "invalid")
+      )
+    end
+  end
+
+  test "source node disposition requires a non-empty valid UTF-8 Behavior binding ID" do
+    for binding_id <- [nil, "", <<255>>] do
+      invalid = Map.put(decision("target", ["ref"]), :behavior_binding_id, binding_id)
+
+      error(
+        input_with_dispositions(input(), [invalid]),
+        document(),
+        if(is_nil(binding_id), do: "missing_decision", else: "invalid")
+      )
+    end
+  end
+
+  test "source node disposition requires proper non-empty evidence refs" do
+    for refs <- [[], nil, "ref", ["ref" | :improper_tail]] do
+      error(
+        input_with_dispositions(input(), [decision("target", refs)]),
+        document()
+      )
+    end
+  end
+
+  test "source node disposition evidence refs require non-empty valid UTF-8 strings" do
+    for refs <- [[""], [:atom], [<<255>>]] do
+      error(
+        input_with_dispositions(input(), [decision("target", refs)]),
+        document()
+      )
+    end
+  end
+
+  test "source node disposition rejects Behavior authority fields and wrong record shapes" do
+    disposition = decision("target", ["ref"])
+
+    for field <- [:behavior_contract_digest, :behavior_review_id] do
+      error(
+        input_with_dispositions(input(), [Map.put(disposition, field, "caller-value")]),
+        document()
+      )
+    end
+
+    wrong_map = %{
+      design_node_id: "target",
+      outcome: :exclude_source_runtime_carrier,
+      behavior_binding_id: "behavior-binding",
+      evidence_refs: ["ref"]
+    }
+
+    wrong_struct = %StaticContentDispositionDecision{
+      target_kind: :internal_node,
+      design_node_id: "target"
+    }
+
+    for wrong <- [wrong_map, wrong_struct] do
+      error(input_with_dispositions(input(), [wrong]), document())
+    end
+  end
+
+  test "no-disposition input retains prior canonical values and proposer behavior" do
+    canonical = valid(document(), input())
+
+    assert canonical.contract_identity == input().contract_identity
+    assert canonical.classification == input().classification
+    assert canonical.boundary == input().boundary
+
+    proposed_input =
+      input(
+        contract_identity: %ContractIdentityDecision{contract_id: "card_contract"},
+        classification: %ClassificationDecision{
+          category: :component,
+          module_intent: "content_card",
+          function_intent: "card"
+        },
+        public_attrs: [attr("title")],
+        render_placements: [render("title")]
+      )
+
+    proposal = ComponentizationProposer.propose(document(), proposed_input)
+
+    assert proposal.outcome == :needs_review
+    assert proposal.contract.contract_id == "card_contract"
+    assert proposal.plan.boundary_node_id == "node_000001"
+    assert Map.get(canonical, :source_node_dispositions) == []
   end
 
   test "singleton and semantic fields fail closed" do
