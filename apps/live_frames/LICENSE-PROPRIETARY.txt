@@ -1,0 +1,19 @@
+LiveFrames Proprietary Notice
+
+Copyright (c) LiveFrames rights holder. All rights reserved.
+
+LiveFrames is proprietary software. This notice and the package metadata
+identifier LicenseRef-LiveFrames-Proprietary do not themselves grant any
+right to copy, modify, distribute, sublicense, publish, publicly release, or
+otherwise make LiveFrames or its bundled source-derived material available to
+third parties.
+
+Any permission to use, copy, modify, distribute, publish, sublicense, or make
+LiveFrames available must come from separate explicit written authorization
+from the applicable rights holder.
+
+This proprietary package policy does not establish or alter copyright
+ownership, source provenance, licence validity, redistribution permission, or
+publication clearance for third-party or source-derived material incorporated
+into LiveFrames. Those matters remain governed by the project's separate
+provenance and clearance authorities.

@@ -9,7 +9,21 @@ defmodule LiveFrames.Styling.PackageContractTest do
     assert "assets/css" in @package_files
     assert "priv/token_maps" in @package_files
     assert "priv/static/live_frames" in @package_files
+    assert "priv/catalogue" in @package_files
+    assert "LICENSE-PROPRIETARY.txt" in @package_files
     refute "README.md" in @package_files
+  end
+
+  test "hex package metadata matches the approved proprietary contract" do
+    assert LiveFrames.MixProject.project()[:description] ==
+             "Phoenix/LiveView design compiler and reusable UI-component library."
+
+    package = LiveFrames.MixProject.package()
+    assert package[:licenses] == ["LicenseRef-LiveFrames-Proprietary"]
+
+    assert package[:links] == %{
+             "GitHub" => "https://github.com/JCSchoeman96/LiveFrames"
+           }
   end
 
   test "configured package paths exist in the live_frames app" do

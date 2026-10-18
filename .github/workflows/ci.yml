@@ -25,6 +25,220 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
+      - name: Verify LiveFrames Hex package contents
+        working-directory: apps/live_frames
+        run: |
+          set -euo pipefail
+
+          export LC_ALL=C.UTF-8
+
+          app_root="$(pwd -P)"
+          catalogue_root="${app_root}/priv/catalogue"
+          sections_root="${catalogue_root}/sections"
+          probe_path="${sections_root}/package_probe.json"
+          package_output="$(mktemp -d)"
+          probe_created=0
+          sections_root_created=0
+          catalogue_root_created=0
+          synthetic_probe_used=NO
+
+          cleanup() {
+            local cleanup_status=$?
+            trap - EXIT
+
+            if (( probe_created )); then
+              find "${sections_root}" -maxdepth 1 -name package_probe.json -delete || cleanup_status=1
+            fi
+
+            if (( sections_root_created )); then
+              rmdir -- "${sections_root}" || cleanup_status=1
+            fi
+
+            if (( catalogue_root_created )); then
+              rmdir -- "${catalogue_root}" || cleanup_status=1
+            fi
+
+            if [[ -e "${probe_path}" || -L "${probe_path}" ]]; then
+              printf 'package probe remains after cleanup: %s\n' "${probe_path}" >&2
+              cleanup_status=1
+            fi
+
+            find "${package_output}" -depth -delete || cleanup_status=1
+            if [[ -e "${package_output}" || -L "${package_output}" ]]; then
+              printf 'temporary package output remains after cleanup: %s\n' "${package_output}" >&2
+              cleanup_status=1
+            else
+              printf 'GENERATED_PACKAGE_ARTIFACT_REMAINS=NO\n'
+            fi
+
+            if [[ -e "${probe_path}" || -L "${probe_path}" ]]; then
+              printf 'SYNTHETIC_PROBE_REMAINS=YES\n' >&2
+              cleanup_status=1
+            else
+              printf 'SYNTHETIC_PROBE_REMAINS=NO\n'
+            fi
+
+            exit "${cleanup_status}"
+          }
+
+          trap cleanup EXIT
+          package_output="$(cd "${package_output}" && pwd -P)"
+
+          case "${package_output}/" in
+            "${app_root}/"*)
+              printf 'temporary package output must be outside %s\n' "${app_root}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ -L "${catalogue_root}" || ( -e "${catalogue_root}" && ! -d "${catalogue_root}" ) ]]; then
+            printf 'Catalogue root must be a real directory: %s\n' "${catalogue_root}" >&2
+            exit 1
+          fi
+
+          canonical_json_list=""
+          if [[ -d "${catalogue_root}" ]]; then
+            canonical_json_list="$(find "${catalogue_root}" -type f -name '*.json' ! -type l | sort)"
+          fi
+
+          canonical_catalogue_files=()
+          if [[ -n "${canonical_json_list}" ]]; then
+            while IFS= read -r source_path; do
+              canonical_catalogue_files+=("${source_path}")
+            done <<< "${canonical_json_list}"
+          fi
+
+          if (( ${#canonical_catalogue_files[@]} == 0 )); then
+            if [[ -e "${probe_path}" || -L "${probe_path}" ]]; then
+              printf 'refusing to overwrite existing package probe: %s\n' "${probe_path}" >&2
+              exit 1
+            fi
+
+            if [[ ! -d "${catalogue_root}" ]]; then
+              mkdir -- "${catalogue_root}"
+              catalogue_root_created=1
+            fi
+
+            if [[ -L "${sections_root}" || ( -e "${sections_root}" && ! -d "${sections_root}" ) ]]; then
+              printf 'Catalogue sections path must be a real directory: %s\n' "${sections_root}" >&2
+              exit 1
+            fi
+
+            if [[ ! -d "${sections_root}" ]]; then
+              mkdir -- "${sections_root}"
+              sections_root_created=1
+            fi
+
+            probe_created=1
+            printf '%s\n' '{"package_probe":true}' > "${probe_path}"
+            synthetic_probe_used=YES
+          fi
+
+          mix hex.build --unpack --output "${package_output}"
+          printf 'HEX_BUILD_UNPACK=PASS\n'
+          printf 'SYNTHETIC_PROBE_USED=%s\n' "${synthetic_probe_used}"
+          printf 'CANONICAL_CATALOGUE_JSON_COUNT=%s\n' "${#canonical_catalogue_files[@]}"
+
+          for required_directory in lib assets/css priv/static/live_frames priv/token_maps priv/catalogue; do
+            if [[ ! -d "${package_output}/${required_directory}" ]]; then
+              printf 'required package directory is missing: %s\n' "${required_directory}" >&2
+              exit 1
+            fi
+          done
+
+          if [[ ! -f "${package_output}/mix.exs" ]]; then
+            printf 'required package file is missing: mix.exs\n' >&2
+            exit 1
+          fi
+
+          if [[ -L "${package_output}/LICENSE-PROPRIETARY.txt" || ! -f "${package_output}/LICENSE-PROPRIETARY.txt" ]]; then
+            printf 'required package file is missing or not regular: LICENSE-PROPRIETARY.txt\n' >&2
+            exit 1
+          fi
+
+          for required_file in \
+            assets/css/components/sections/media_call_to_action.css \
+            priv/static/live_frames/css/live_frames.css; do
+            if [[ -L "${package_output}/${required_file}" || ! -f "${package_output}/${required_file}" ]]; then
+              printf 'required package file is missing or not regular: %s\n' "${required_file}" >&2
+              exit 1
+            fi
+          done
+
+          printf 'PACKAGED_LIB_PRESENT=YES\n'
+          printf 'PACKAGED_SOURCE_CSS_PRESENT=YES\n'
+          printf 'PACKAGED_PRECOMPILED_CSS_PRESENT=YES\n'
+          printf 'PACKAGED_TOKEN_MAPS_PRESENT=YES\n'
+          printf 'PACKAGED_CATALOGUE_PRESENT=YES\n'
+          printf 'PACKAGED_PROPRIETARY_NOTICE_PRESENT=YES\n'
+          printf 'PACKAGED_CTA_SOURCE_CSS_PRESENT=YES\n'
+          printf 'PACKAGED_CTA_PRECOMPILED_CSS_PRESENT=YES\n'
+
+          if (( ${#canonical_catalogue_files[@]} == 0 )); then
+            packaged_probe="${package_output}/priv/catalogue/sections/package_probe.json"
+            if [[ -L "${packaged_probe}" || ! -f "${packaged_probe}" ]]; then
+              printf 'packaged Catalogue probe is missing: priv/catalogue/sections/package_probe.json\n' >&2
+              exit 1
+            fi
+            if ! cmp -s "${probe_path}" "${packaged_probe}"; then
+              printf 'packaged Catalogue probe bytes differ: priv/catalogue/sections/package_probe.json\n' >&2
+              exit 1
+            fi
+            printf 'PACKAGED_PROBE_PRESENT=YES\n'
+            printf 'PACKAGED_PROBE_BYTE_IDENTICAL=YES\n'
+          else
+            for source_path in "${canonical_catalogue_files[@]}"; do
+              relative_path="${source_path#${app_root}/}"
+              packaged_path="${package_output}/${relative_path}"
+
+              if [[ -L "${packaged_path}" || ! -f "${packaged_path}" ]]; then
+                printf 'packaged Catalogue file is missing or not regular: %s\n' "${relative_path}" >&2
+                exit 1
+              fi
+
+              if ! cmp -s "${source_path}" "${packaged_path}"; then
+                printf 'packaged Catalogue bytes differ: %s\n' "${relative_path}" >&2
+                exit 1
+              fi
+            done
+
+            packaged_cta_manifest="${package_output}/priv/catalogue/sections/media_call_to_action.json"
+            if [[ -L "${packaged_cta_manifest}" || ! -f "${packaged_cta_manifest}" ]]; then
+              printf 'packaged CTA manifest is missing or not regular: priv/catalogue/sections/media_call_to_action.json\n' >&2
+              exit 1
+            fi
+
+            if ! cmp -s \
+              "${app_root}/priv/catalogue/sections/media_call_to_action.json" \
+              "${packaged_cta_manifest}"; then
+              printf 'packaged CTA manifest bytes differ: priv/catalogue/sections/media_call_to_action.json\n' >&2
+              exit 1
+            fi
+
+            printf 'PACKAGED_CTA_MANIFEST_PRESENT=YES\n'
+            printf 'PACKAGED_CTA_MANIFEST_BYTE_IDENTICAL=YES\n'
+            printf 'ALL_CANONICAL_CATALOGUE_JSON_PRESENT=YES\n'
+            printf 'ALL_CANONICAL_CATALOGUE_JSON_BYTE_IDENTICAL=YES\n'
+          fi
+
+          if ! cmp -s \
+            "${app_root}/LICENSE-PROPRIETARY.txt" \
+            "${package_output}/LICENSE-PROPRIETARY.txt"; then
+            printf 'packaged proprietary notice bytes differ: LICENSE-PROPRIETARY.txt\n' >&2
+            exit 1
+          fi
+
+          printf 'PACKAGED_PROPRIETARY_NOTICE_BYTE_IDENTICAL=YES\n'
+
+          preview_path="$(find "${package_output}" -mindepth 1 -path '*live_frames_preview*' -print -quit)"
+          if [[ -n "${preview_path}" ]]; then
+            printf 'preview app path found in package: %s\n' "${preview_path}" >&2
+            exit 1
+          fi
+
+          printf 'PACKAGED_PREVIEW_PRESENT=NO\n'
+          printf 'Verified %s canonical Catalogue JSON file(s) in the unpacked Hex package.\n' "${#canonical_catalogue_files[@]}"
+
       - name: Check formatting
         run: mix format --check-formatted
 
