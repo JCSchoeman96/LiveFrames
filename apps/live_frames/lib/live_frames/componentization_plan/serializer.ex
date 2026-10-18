@@ -4,6 +4,7 @@ defmodule LiveFrames.ComponentizationPlan.Serializer do
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
   alias LiveFrames.ComponentizationPlan.Json
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Validation
 
@@ -54,7 +55,7 @@ defmodule LiveFrames.ComponentizationPlan.Serializer do
   defp to_map_valid(plan) do
     {:ok, provenance} = Json.normalize(plan.provenance)
 
-    %{
+    map = %{
       "plan_format_version" => plan.plan_format_version,
       "contract_id" => plan.contract_id,
       "design_document_sha256" => plan.design_document_sha256,
@@ -63,6 +64,16 @@ defmodule LiveFrames.ComponentizationPlan.Serializer do
       "diagnostics" => Enum.map(plan.diagnostics, &diagnostic_to_map/1),
       "provenance" => provenance
     }
+
+    if plan.plan_format_version == "1.1.0" do
+      Map.put(
+        map,
+        "node_dispositions",
+        Enum.map(plan.node_dispositions, &node_disposition_to_map/1)
+      )
+    else
+      map
+    end
   end
 
   defp render_projection_to_map(%RenderProjection{} = projection) do
@@ -71,6 +82,19 @@ defmodule LiveFrames.ComponentizationPlan.Serializer do
       "public_slot_name" => projection.public_slot_name,
       "target_node_id" => projection.target_node_id,
       "render_role" => Atom.to_string(projection.render_role)
+    }
+  end
+
+  defp node_disposition_to_map(%NodeDisposition{} = disposition) do
+    %{
+      "design_node_id" => disposition.design_node_id,
+      "disposition" => Atom.to_string(disposition.disposition),
+      "source_type" => disposition.source_type,
+      "source_id" => disposition.source_id,
+      "behavior_binding_id" => disposition.behavior_binding_id,
+      "behavior_contract_digest" => disposition.behavior_contract_digest,
+      "behavior_review_id" => disposition.behavior_review_id,
+      "evidence_refs" => disposition.evidence_refs
     }
   end
 

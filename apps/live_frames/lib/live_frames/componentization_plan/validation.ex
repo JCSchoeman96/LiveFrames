@@ -4,6 +4,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
   alias LiveFrames.ComponentizationPlan.Json
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
 
   @fingerprint_pattern ~r/^[0-9a-f]{64}$/
@@ -34,6 +35,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
       )
 
     {diagnostics, _targets} = validate_render_projections(plan.render_projections, diagnostics)
+    diagnostics = validate_node_dispositions(plan, diagnostics)
     diagnostics = validate_diagnostics(plan.diagnostics, diagnostics)
 
     diagnostics =
@@ -63,6 +65,7 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
   end
 
   defp validate_version(diagnostics, "1.0.0"), do: diagnostics
+  defp validate_version(diagnostics, "1.1.0"), do: diagnostics
 
   defp validate_version(diagnostics, version) when is_binary(version) do
     add(
@@ -93,6 +96,41 @@ defmodule LiveFrames.ComponentizationPlan.Validation do
       add(diagnostics, error_at(code, message, path))
     end
   end
+
+  defp validate_node_dispositions(
+         %ComponentizationPlan{plan_format_version: "1.0.0", node_dispositions: []},
+         diagnostics
+       ),
+       do: diagnostics
+
+  defp validate_node_dispositions(
+         %ComponentizationPlan{plan_format_version: "1.0.0"},
+         diagnostics
+       ) do
+    add(
+      diagnostics,
+      error_at(
+        "componentization_plan.node_disposition.version_incompatible",
+        "1.0.0 plans require an empty node_dispositions list",
+        "node_dispositions"
+      )
+    )
+  end
+
+  defp validate_node_dispositions(
+         %ComponentizationPlan{plan_format_version: "1.1.0", node_dispositions: values},
+         diagnostics
+       ) do
+    case NodeDisposition.validate_list(values) do
+      :ok ->
+        diagnostics
+
+      {:error, errors} ->
+        Enum.reduce(errors, diagnostics, &add(&2, &1))
+    end
+  end
+
+  defp validate_node_dispositions(_plan, diagnostics), do: diagnostics
 
   defp validate_fingerprint(diagnostics, value) do
     if valid_string?(value) and Regex.match?(@fingerprint_pattern, value) do

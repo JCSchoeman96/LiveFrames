@@ -717,8 +717,6 @@ defmodule LiveFrames.ComponentizationProposerTest do
   end
 
   test "construction failures return only transient construction diagnostics" do
-    assert function_exported?(LiveFrames.ComponentizationProposer.Construction, :build, 2)
-
     assert {:error, diagnostics} =
              LiveFrames.ComponentizationProposer.Construction.build(
                document(),
