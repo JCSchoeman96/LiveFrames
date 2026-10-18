@@ -57,7 +57,10 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Canonicalization do
 
     case {result, conflicts} do
       {{:ok, canonical}, []} ->
-        {:ok, Map.put(canonical, family, Enum.sort_by(decisions, &sort_key(family, &1)))}
+        canonical_decisions = Enum.map(decisions, &canonicalize_decision(family, &1))
+
+        {:ok,
+         Map.put(canonical, family, Enum.sort_by(canonical_decisions, &sort_key(family, &1)))}
 
       {{:ok, _}, errors} ->
         {:error, errors}
@@ -97,6 +100,13 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Canonicalization do
     do: {:promote_attr, d.public_target_name}
 
   def identity(:static_content_dispositions, d), do: {:promote_slot, d.public_target_name}
+
+  def identity(:source_node_dispositions, d), do: d.design_node_id
+
+  defp canonicalize_decision(:source_node_dispositions, decision),
+    do: %{decision | evidence_refs: Enum.sort(decision.evidence_refs)}
+
+  defp canonicalize_decision(_family, decision), do: decision
 
   defp sort_key(family, d) when family in [:binding_assignments, :evidence_handling],
     do: {binding_rank(d.source_binding_kind), d.source_binding_id}

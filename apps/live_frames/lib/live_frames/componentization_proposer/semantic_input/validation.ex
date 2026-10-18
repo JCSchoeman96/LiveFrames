@@ -16,7 +16,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
     RenderPlacementDecision,
     ImageAccessibilityDecision,
     EvidenceHandlingDecision,
-    StaticContentDispositionDecision
+    StaticContentDispositionDecision,
+    SourceNodeDispositionDecision
   }
 
   alias LiveFrames.{ComponentContract, ComponentizationPlan}
@@ -39,7 +40,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
     render_placements: RenderPlacementDecision,
     image_accessibility: ImageAccessibilityDecision,
     evidence_handling: EvidenceHandlingDecision,
-    static_content_dispositions: StaticContentDispositionDecision
+    static_content_dispositions: StaticContentDispositionDecision,
+    source_node_dispositions: SourceNodeDispositionDecision
   ]
   @assignment_kinds [
     :scalar_attr,
@@ -266,6 +268,43 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
           public_name(d.public_target_name, p <> ".public_target_name") ++
             absent(d.design_node_id, p <> ".design_node_id")
   end
+
+  defp checks(d, :source_node_dispositions, p) do
+    string(d.design_node_id, p <> ".design_node_id") ++
+      enum(d.outcome, [:exclude_source_runtime_carrier], p <> ".outcome") ++
+      string(d.behavior_binding_id, p <> ".behavior_binding_id") ++
+      evidence_refs(d.evidence_refs, p <> ".evidence_refs")
+  end
+
+  defp evidence_refs(refs, p) when is_list(refs) do
+    cond do
+      not proper_list?(refs) ->
+        [diagnostic(:invalid, p, "Evidence refs must be a proper list")]
+
+      refs == [] ->
+        [diagnostic(:invalid, p, "Evidence refs must be non-empty")]
+
+      true ->
+        {_, errors} =
+          Enum.reduce(refs, {MapSet.new(), []}, fn ref, {seen, errors} ->
+            ref_errors = string(ref, p)
+
+            ref_errors =
+              if MapSet.member?(seen, ref) do
+                [diagnostic(:invalid, p, "Evidence refs must be unique") | ref_errors]
+              else
+                ref_errors
+              end
+
+            {MapSet.put(seen, ref), Enum.reverse(ref_errors, errors)}
+          end)
+
+        Enum.reverse(errors)
+    end
+  end
+
+  defp evidence_refs(_refs, p),
+    do: [diagnostic(:invalid, p, "Evidence refs must be a proper list")]
 
   defp member(d, p),
     do:

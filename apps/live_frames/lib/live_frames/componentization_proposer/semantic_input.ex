@@ -195,6 +195,19 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.StaticContentDisposi
   defstruct target_kind: nil, design_node_id: nil, public_target_name: nil
 end
 
+defmodule LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision do
+  @type t :: %__MODULE__{
+          design_node_id: String.t() | nil,
+          outcome: :exclude_source_runtime_carrier | nil,
+          behavior_binding_id: String.t() | nil,
+          evidence_refs: [String.t()]
+        }
+  defstruct design_node_id: nil,
+            outcome: nil,
+            behavior_binding_id: nil,
+            evidence_refs: []
+end
+
 defmodule LiveFrames.ComponentizationProposer.SemanticInput do
   @moduledoc """
   Explicit compile-time semantic decisions, validated against a supplied validated DesignDocument.
@@ -214,7 +227,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput do
     :render_placements,
     :image_accessibility,
     :evidence_handling,
-    :static_content_dispositions
+    :static_content_dispositions,
+    :source_node_dispositions
   ]
   @type t :: %__MODULE__{
           contract_identity: __MODULE__.ContractIdentityDecision.t() | nil,
@@ -229,7 +243,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput do
           render_placements: [__MODULE__.RenderPlacementDecision.t()],
           image_accessibility: [__MODULE__.ImageAccessibilityDecision.t()],
           evidence_handling: [__MODULE__.EvidenceHandlingDecision.t()],
-          static_content_dispositions: [__MODULE__.StaticContentDispositionDecision.t()]
+          static_content_dispositions: [__MODULE__.StaticContentDispositionDecision.t()],
+          source_node_dispositions: [__MODULE__.SourceNodeDispositionDecision.t()]
         }
   defstruct contract_identity: nil,
             classification: nil,
@@ -243,7 +258,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput do
             render_placements: [],
             image_accessibility: [],
             evidence_handling: [],
-            static_content_dispositions: []
+            static_content_dispositions: [],
+            source_node_dispositions: []
 
   @spec repeatable_families() :: [atom()]
   def repeatable_families, do: @repeatable_families
