@@ -366,6 +366,106 @@ FIDELITY_NAVIGATION_ANCHOR_INTERNAL=YES
 FIDELITY_ANCHOR_PRESENTATION_NEUTRALIZED=YES
 ```
 
+## Relationship to C09D6 native-generation authority
+
+C09D6 remains the authority governing native generation. This NAV-CARRIER
+record does not replace it. Once this record is accepted, it amends only
+C09D6 §10.10.4 and §21.3 for the closed static heading-navigation shape
+defined here. It adds exactly one source-neutral static-navigation carrier.
+
+```text
+NAV_CARRIER_AUTHORITY_RELATIONSHIP=SCOPED_LATER_AMENDMENT_TO_C09D6_NATIVE_GENERATION_AUTHORITY
+AMENDS_C09D6_SECTIONS=10.10.4_STATIC_NAVIGATION_GENERATION_RULE; 21.3_NATIVE_STYLE_LOCUS_RULE_AS_NEEDED_FOR_RENDERER_OWNED_STRUCTURAL_NEUTRALIZATION
+AMENDMENT_SCOPE=CLOSED_STATIC_HEADING_NAVIGATION_ONLY
+ALL_OTHER_C09D6_RULES_REMAIN_IN_FORCE=YES
+C09D6_STATIC_NAVIGATION_CARRIERS=link; button_with_static_navigation; heading_with_NAV_CARRIER_closed_static_shape
+HEADING_STATIC_NAVIGATION_SHAPE_RECONCILED=YES
+HEADING_DYNAMIC_LINK_URL_AUTHORIZED=NO
+HEADING_DYNAMIC_TEXT_AUTHORIZED=NO
+HEADING_DYNAMIC_LEVEL_AUTHORIZED=NO
+```
+
+The added carrier requires every part of this closed shape:
+
+```text
+semantic_type=heading
+tag=h1-through-h6-required
+navigation=validated-existing-static-map
+content=non-empty-static-UTF8-string
+children=[]
+dynamic_heading_level=forbidden
+dynamic_text=forbidden
+dynamic_link_url=forbidden
+slot=forbidden
+```
+
+NativeGenerator must revalidate the existing navigation map before emission
+and preserve the heading as the native and style root:
+
+```html
+<hN ...heading-root attrs/classes...>
+  <a ...validate_navigation_map/1 attrs...>escaped static heading text</a>
+</hN>
+```
+
+The existing `link` and `button` behavior remains unchanged. This amendment
+does not change dynamic `link_url` placement rules, and it does not add
+`link_url` support to headings. Dynamic `heading_level` placement is
+unsupported for navigable headings in this lane. Dynamic heading navigation
+remains unauthorized. C09D6's generator lifecycle, tuple, prerequisite
+ownership, result taxonomy, security rules, determinism rules, and performance
+rules remain in force. The extension does not change these contracts:
+
+```text
+BINDING_NATIVE_EMISSION_RULE=UNCHANGED
+RENDER_PROJECTION_ROLES=UNCHANGED
+VALUE_BINDING_TARGET_KINDS=UNCHANGED
+DYNAMIC_LINK_URL_SUPPORT=UNCHANGED_FOR_EXISTING_CARRIERS
+GENERATOR_TUPLE=UNCHANGED
+COMPONENT_CONTRACT_SCHEMA=UNCHANGED
+COMPONENTIZATION_PLAN_SCHEMA=UNCHANGED
+DESIGN_IR_SCHEMA_AND_VERSION=UNCHANGED
+HEADING_LEVEL_SEMANTICS=UNCHANGED
+STATIC_DEFAULT_RULE=UNCHANGED
+CATALOGUE_BEHAVIOR=UNCHANGED
+P10_BEHAVIOR=UNCHANGED
+BEHAVIOR_IR=UNCHANGED
+
+DESIGN_IR_DATA_SHAPE_CHANGE_REQUIRED=NO
+DESIGN_IR_VERSION_BUMP_REQUIRED=NO
+COMPONENT_CONTRACT_SCHEMA_CHANGE_REQUIRED=NO
+COMPONENTIZATION_PLAN_SCHEMA_CHANGE_REQUIRED=NO
+GENERATOR_TUPLE_CHANGE_REQUIRED=NO
+NEW_RENDER_PROJECTION_ROLE_REQUIRED=NO
+```
+
+The internal anchor's `color: inherit` and `text-decoration: inherit` rules
+are structural CSS for markup created by the renderer. They do not create a
+DesignNode style locus or move base, responsive, or state styles, source
+classes, package classes, or private node classes from the heading. The
+heading remains the only DesignNode style root. `StyleIntegration` owns this
+rule. `StylesheetRenderer` remains conditional on the API limitation recorded
+above.
+
+This amendment keeps C09D6's compile/build-time performance classification:
+
+```text
+PATH=cold compile/build-time
+HOT_DATA=N/A
+WARM_DATA=N/A
+REDIS=N/A
+POSTGRES=N/A
+PUBSUB=N/A
+OBAN=N/A
+PGBouncer=N/A
+100K_RUNTIME_CONCURRENCY=N/A
+NETWORK=NO
+DB=NO
+CACHE=NO
+RUNTIME_CSS_GENERATION=NO
+FILESYSTEM_DISCOVERY=NO
+```
+
 ## NativeGenerator and componentization-plan contract
 
 NativeGenerator emits the same static structure as Fidelity. Its heading
