@@ -632,37 +632,42 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     refute bundle.heex =~ ~s(href="/same")
   end
 
-  test "heading with static link object retains heading semantics and renders an inner anchor" do
-    assert {:ok, document} =
-             to_ir([
-               source_element("root", "block", 0, %{}, ["title"]),
-               source_element("title", "heading", "root", %{
-                 "text" => "Title",
-                 "tag" => "h1",
-                 "link" => external_link("#")
-               })
-             ])
+  test "Bricks headings preserve each supported tag through Fidelity" do
+    for tag <- ~w(h1 h2 h3 h4 h5 h6) do
+      assert {:ok, document} =
+               to_ir([
+                 source_element("root", "block", 0, %{}, ["title"]),
+                 source_element("title", "heading", "root", %{
+                   "text" => "Title",
+                   "tag" => tag,
+                   "link" => external_link("#")
+                 })
+               ])
 
-    node = node_by_source_id(document, "title")
-    assert node.semantic_type == "heading"
-    assert node.attributes["tag"] == "h1"
-    assert node.attributes["navigation"] == %{"href" => "#"}
+      node = node_by_source_id(document, "title")
+      assert node.semantic_type == "heading"
+      assert node.attributes["tag"] == tag
+      assert node.attributes["navigation"] == %{"href" => "#"}
 
-    refute Enum.any?(document.diagnostics, &(&1.code == "bricks.navigation.unsupported_carrier"))
+      refute Enum.any?(
+               document.diagnostics,
+               &(&1.code == "bricks.navigation.unsupported_carrier")
+             )
 
-    assert {:ok, bundle} = Fidelity.generate(document)
-    assert bundle.heex =~ ~r/<h1\b[^>]*>\s*<a\b[^>]*href="#"/s
-    assert bundle.heex =~ ~r/<a\b[^>]*href="#"[^>]*>\s*<%= "Title" %>\s*<\/a>\s*<\/h1>/s
-    refute String.trim(bundle.heex) =~ ~r/^<a\b/
+      assert {:ok, bundle} = Fidelity.generate(document)
+      assert bundle.heex =~ ~r/<#{tag}\b[^>]*>\s*<a\b[^>]*href="#"/s
+      assert bundle.heex =~ ~r/<a\b[^>]*href="#"[^>]*>\s*<%= "Title" %>\s*<\/a>\s*<\/#{tag}>/s
+      refute bundle.heex =~ ~r/<#{tag}\b[^>]*href="#"/
 
-    assert [heading_class] =
-             Regex.run(~r/<h1 class="([^"]+)"/, bundle.heex, capture: :all_but_first)
+      assert [heading_class] =
+               Regex.run(~r/<#{tag} class="([^"]+)"/, bundle.heex, capture: :all_but_first)
 
-    assert bundle.css =~
-             ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}"
+      assert bundle.css =~
+               ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}"
 
-    refute bundle.css =~ ~r/^a \{/m
-    refute bundle.css =~ ~r/(?:outline|box-shadow):\s*(?:none|0)/
+      refute bundle.css =~ ~r/^a \{/m
+      refute bundle.css =~ ~r/(?:outline|box-shadow):\s*(?:none|0)/
+    end
   end
 
   test "heading new-tab navigation retains noopener protection" do
@@ -788,6 +793,47 @@ defmodule LiveFrames.BricksStaticNavigationTest do
     node = node_by_source_id(document, "btn")
     assert node.attributes["navigation"]["href"] == "/go"
     refute node.attributes["tag"] == "a"
+  end
+
+  test "heading with missing tag does not admit static navigation" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("root", "block", 0, %{}, ["title"]),
+               source_element("title", "heading", "root", %{
+                 "text" => "Title",
+                 "link" => external_link("#target")
+               })
+             ])
+
+    node = node_by_source_id(document, "title")
+    refute Map.has_key?(node.attributes, "navigation")
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.navigation.unsupported_carrier" and
+               diagnostic.source_trace.source_id == "title"
+           end)
+  end
+
+  test "headings with tags outside h1-h6 do not admit static navigation" do
+    for tag <- ["div", "a", "h7"] do
+      assert {:ok, document} =
+               to_ir([
+                 source_element("root", "block", 0, %{}, ["title"]),
+                 source_element("title", "heading", "root", %{
+                   "text" => "Title",
+                   "tag" => tag,
+                   "link" => external_link("#target")
+                 })
+               ])
+
+      node = node_by_source_id(document, "title")
+      refute Map.has_key?(node.attributes, "navigation")
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.navigation.unsupported_carrier" and
+                 diagnostic.source_trace.source_id == "title"
+             end)
+    end
   end
 
   test "Fidelity rejects malicious navigation IR without emitting anchor markup" do

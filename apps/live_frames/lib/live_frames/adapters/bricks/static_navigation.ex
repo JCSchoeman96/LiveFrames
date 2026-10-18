@@ -2,13 +2,16 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
   @moduledoc """
   Corpus-backed Bricks static navigation normalization for Design IR attributes.
 
-  Navigation carriers are limited to proven source forms (`text-link`, `button` with
-  a static `link` object). Raw `link`/`url` evidence is preserved separately.
+  Supported carriers are `text-link`, `button` elements with a supported static `link`
+  object, and `heading` elements with a proven `h1`-`h6` tag and a supported static
+  `link` object. Raw `link`/`url` evidence is preserved separately.
   """
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
   alias LiveFrames.StaticNavigation
+
+  @heading_tags ~w(h1 h2 h3 h4 h5 h6)
 
   @type normalization :: %{
           optional(:semantic_type_override) => String.t(),
@@ -88,7 +91,8 @@ defmodule LiveFrames.Adapters.Bricks.StaticNavigation do
       name == "button" and link_object?(settings["link"]) ->
         true
 
-      name == "heading" and link_object?(settings["link"]) ->
+      name == "heading" and settings["tag"] in @heading_tags and
+          link_object?(settings["link"]) ->
         true
 
       true ->
