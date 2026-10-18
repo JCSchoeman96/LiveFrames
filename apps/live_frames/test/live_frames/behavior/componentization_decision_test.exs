@@ -18,6 +18,7 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
   alias LiveFrames.ComponentizationProposer.SemanticInput.BoundaryDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.ClassificationDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.ContractIdentityDecision
+  alias LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision
   alias LiveFrames.IR.{DesignDocument, DesignNode, Identity, ResponsiveOverride, StyleValue}
   alias LiveFrames.Responsive.{BreakpointAuthority, DesignDocumentResolver}
 
@@ -45,6 +46,130 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
            ]
 
     assert gated_result == direct_result
+  end
+
+  test "authority context retains the exact approved contract and selected review" do
+    design_document = document()
+    contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(design_document, contract)
+
+    assert {:ok, context} =
+             apply(ComponentizationDecision, :authority_context, [
+               design_document,
+               contract,
+               review
+             ])
+
+    assert context.__struct__ == Module.concat(LiveFrames, "BehaviorAuthorityContext")
+    assert context.behavior_contract == contract
+    assert {:ok, digest} = Serializer.digest(contract)
+    assert context.behavior_contract_digest == digest
+    assert context.selected_behavior_review_result == review
+    assert {:ok, review_id} = ReviewResult.id(review)
+    assert context.behavior_review_result_id == review_id
+
+    assert Enum.sort(Map.keys(context)) ==
+             [
+               :__struct__,
+               :behavior_contract,
+               :behavior_contract_digest,
+               :behavior_review_result_id,
+               :selected_behavior_review_result
+             ]
+  end
+
+  test "authority context rejects a contract bound to a different document" do
+    design_document = document()
+    contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(design_document, contract)
+    other_document = %{design_document | source_metadata: %{"task_3_variant" => "other"}}
+
+    assert {:error, {:prerequisite, :behavior_contract, diagnostics}} =
+             apply(ComponentizationDecision, :authority_context, [
+               other_document,
+               contract,
+               review
+             ])
+
+    assert diagnostics != []
+  end
+
+  test "authority context rejects an unapproved or mismatched selected review" do
+    design_document = document()
+    contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
+    approved = approved_review(design_document, contract)
+    unapproved = %{approved | decision: "needs_review"}
+    wrong_contract = reviewed_contract(design_document, [behavior_binding(owner: ids().outside)])
+    wrong_review = approved_review(design_document, wrong_contract)
+
+    assert {:error, {:prerequisite, :behavior_review, _diagnostics}} =
+             apply(ComponentizationDecision, :authority_context, [
+               design_document,
+               contract,
+               unapproved
+             ])
+
+    assert {:error, {:prerequisite, :behavior_review, _diagnostics}} =
+             apply(ComponentizationDecision, :authority_context, [
+               design_document,
+               contract,
+               wrong_review
+             ])
+  end
+
+  test "Behavior gate hands disposition input through the authority-aware proposer path" do
+    design_document = document()
+    input = semantic_input_with_disposition(ids().candidate, ids().presentation)
+    contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(design_document, contract)
+
+    assert {:ok, canonical_input} = SemanticInput.validate(input, design_document)
+
+    assert {:ok, context} =
+             apply(ComponentizationDecision, :authority_context, [
+               design_document,
+               contract,
+               review
+             ])
+
+    expected =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        context
+      ])
+
+    assert {:ok, decision, gated_result} =
+             ComponentizationDecision.propose(design_document, contract, review, input)
+
+    assert decision.outcome == :admissible
+    assert gated_result == expected
+    assert gated_result.outcome == :proposed
+  end
+
+  test "responsive disposition authority is bound to the resolved document" do
+    unresolved_document = responsive_document()
+    authority = breakpoint_authority()
+
+    assert {:ok, resolved_document} =
+             DesignDocumentResolver.resolve(unresolved_document, authority)
+
+    contract = reviewed_contract(resolved_document, [behavior_binding(owner: ids().candidate)])
+    review = approved_review(resolved_document, contract)
+    input = semantic_input_with_disposition(ids().candidate, ids().presentation)
+
+    assert {:ok, decision, proposal} =
+             ComponentizationDecision.propose(
+               unresolved_document,
+               contract,
+               review,
+               input,
+               authority
+             )
+
+    assert decision.design_document_identity == elem(Identity.from_document(resolved_document), 1)
+    assert proposal.design_document == resolved_document
+    assert proposal.outcome == :proposed
   end
 
   test "authority-less behavior proposal rejects responsive input before identity is accepted" do
@@ -652,6 +777,17 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
       },
       boundary: %BoundaryDecision{boundary_node_id: boundary_node_id}
     }
+  end
+
+  defp semantic_input_with_disposition(boundary_node_id, design_node_id) do
+    disposition = %SourceNodeDispositionDecision{
+      design_node_id: design_node_id,
+      outcome: :exclude_source_runtime_carrier,
+      behavior_binding_id: "selected-behavior-binding",
+      evidence_refs: ["task-3-test-evidence"]
+    }
+
+    %{semantic_input(boundary_node_id) | source_node_dispositions: [disposition]}
   end
 
   defp responsive_document do

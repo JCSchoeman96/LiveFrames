@@ -21,10 +21,15 @@ defmodule LiveFrames.ComponentizationProposerTest do
     RenderPlacementDecision
   }
 
+  alias LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision
+
+  alias LiveFrames.Behavior.{BindingIdentity, Contract, ReviewResult, Serializer}
+
   alias LiveFrames.IR.{
     CollectionBinding,
     DesignDocument,
     DesignNode,
+    Identity,
     ResponsiveOverride,
     StyleValue,
     ValueBinding
@@ -69,6 +74,17 @@ defmodule LiveFrames.ComponentizationProposerTest do
       },
       overrides
     )
+  end
+
+  defp input_with_disposition do
+    disposition = %SourceNodeDispositionDecision{
+      design_node_id: @heading_id,
+      outcome: :exclude_source_runtime_carrier,
+      behavior_binding_id: "selected-behavior-binding",
+      evidence_refs: ["task-3-test-evidence"]
+    }
+
+    input(source_node_dispositions: [disposition])
   end
 
   defp attr(name, overrides \\ []) do
@@ -163,6 +179,54 @@ defmodule LiveFrames.ComponentizationProposerTest do
     assert ComponentizationPlan.validate(result.plan) == :ok
   end
 
+  defp assert_missing_behavior_authority(result) do
+    assert result.outcome == :invalid_input
+    assert result.contract == nil
+    assert result.plan == nil
+
+    assert Enum.any?(result.input_diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_proposer.behavior_authority_required"
+           end)
+  end
+
+  defp assert_blocked_context(result) do
+    assert result.outcome == :invalid_input
+    assert result.contract == nil
+    assert result.plan == nil
+    assert result.input_diagnostics != []
+  end
+
+  defp behavior_authority_context(design_document) do
+    {:ok, identity} = Identity.from_document(design_document)
+    {:ok, contract} = BindingIdentity.assign(%Contract{design_document_identity: identity})
+    {:ok, digest} = Serializer.digest(contract)
+
+    review = %ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: Serializer.algorithm(),
+      behavior_contract_digest: digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:task-3-test",
+      reviewed_at: "2026-10-18T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["task-3-test"]
+    }
+
+    {:ok, context} =
+      apply(LiveFrames.Behavior.ComponentizationDecision, :authority_context, [
+        design_document,
+        contract,
+        review
+      ])
+
+    context
+  end
+
+  defp different_document(design_document) do
+    %{design_document | source_metadata: %{"task_3_variant" => "other"}}
+  end
+
   test "invalid input returns no pair and preserves input diagnostics" do
     result = ComponentizationProposer.propose(document(), %{input() | classification: nil})
 
@@ -217,6 +281,152 @@ defmodule LiveFrames.ComponentizationProposerTest do
 
     assert ComponentizationPlan.validate_references(result.plan, result.contract, document()) ==
              :ok
+  end
+
+  test "direct proposal requires behavior authority for disposition input" do
+    result = ComponentizationProposer.propose(document(), input_with_disposition())
+
+    assert_missing_behavior_authority(result)
+  end
+
+  test "responsive direct proposal still requires behavior authority for disposition input" do
+    result = ComponentizationProposer.propose(responsive_document(), input_with_disposition())
+
+    assert_missing_behavior_authority(result)
+  end
+
+  test "breakpoint-authorized direct proposal requires behavior authority for disposition input" do
+    result =
+      ComponentizationProposer.propose(
+        responsive_document(),
+        input_with_disposition(),
+        breakpoint_authority()
+      )
+
+    assert_missing_behavior_authority(result)
+  end
+
+  test "preflighted proposal requires behavior authority for disposition input" do
+    design_document = document()
+    assert {:ok, canonical_input} = Input.validate(input_with_disposition(), design_document)
+
+    result =
+      apply(ComponentizationProposer, :propose_from_preflighted_document_internal, [
+        design_document,
+        canonical_input
+      ])
+
+    assert_missing_behavior_authority(result)
+  end
+
+  test "empty disposition input keeps the ordinary proposal result" do
+    design_document = document()
+    ordinary_result = ComponentizationProposer.propose(design_document, input())
+    assert {:ok, canonical_input} = Input.validate(input(), design_document)
+
+    preflighted_result =
+      ComponentizationProposer.propose_from_preflighted_document_internal(
+        design_document,
+        canonical_input
+      )
+
+    assert ordinary_result == preflighted_result
+    assert ordinary_result.outcome == :proposed
+    assert_pair_valid(ordinary_result)
+  end
+
+  test "context-aware proposal accepts a freshly validated Behavior authority context" do
+    design_document = document()
+    semantic_input = input_with_disposition()
+    assert {:ok, canonical_input} = Input.validate(semantic_input, design_document)
+    context = behavior_authority_context(design_document)
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        context
+      ])
+
+    assert result.outcome == :proposed
+    assert result.design_document == design_document
+    assert result.contract != nil
+    assert result.plan != nil
+  end
+
+  test "context-aware proposal blocks a forged contract digest" do
+    design_document = document()
+    assert {:ok, canonical_input} = Input.validate(input_with_disposition(), design_document)
+    context = behavior_authority_context(design_document)
+    forged_context = Map.put(context, :behavior_contract_digest, String.duplicate("0", 64))
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        forged_context
+      ])
+
+    assert_blocked_context(result)
+  end
+
+  test "context-aware proposal blocks a forged selected review ID" do
+    design_document = document()
+    assert {:ok, canonical_input} = Input.validate(input_with_disposition(), design_document)
+    context = behavior_authority_context(design_document)
+
+    forged_context =
+      Map.put(context, :behavior_review_result_id, "brv_" <> String.duplicate("0", 64))
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        forged_context
+      ])
+
+    assert_blocked_context(result)
+  end
+
+  test "context-aware proposal requires its selected review to remain the approved singleton" do
+    design_document = document()
+    assert {:ok, canonical_input} = Input.validate(input_with_disposition(), design_document)
+    context = behavior_authority_context(design_document)
+
+    unapproved_review =
+      Map.put(context.selected_behavior_review_result, :decision, "needs_review")
+
+    assert {:ok, unapproved_review_id} = ReviewResult.id(unapproved_review)
+
+    forged_context =
+      context
+      |> Map.put(:selected_behavior_review_result, unapproved_review)
+      |> Map.put(:behavior_review_result_id, unapproved_review_id)
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        forged_context
+      ])
+
+    assert_blocked_context(result)
+  end
+
+  test "context-aware proposal rejects a contract bound to another document" do
+    design_document = document()
+    other_document = different_document(design_document)
+    assert {:ok, canonical_input} = Input.validate(input_with_disposition(), other_document)
+    context = behavior_authority_context(design_document)
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        other_document,
+        canonical_input,
+        context
+      ])
+
+    assert_blocked_context(result)
   end
 
   test "authority-less proposal rejects a responsive document" do

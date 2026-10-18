@@ -11,6 +11,7 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
   alias LiveFrames.Behavior.ReviewResult
   alias LiveFrames.Behavior.Serializer
   alias LiveFrames.Behavior.Validation
+  alias LiveFrames.BehaviorAuthorityContext
   alias LiveFrames.ComponentizationProposer
   alias LiveFrames.ComponentizationProposer.Diagnostic, as: ProposerDiagnostic
   alias LiveFrames.ComponentizationProposer.SemanticInput
@@ -41,6 +42,33 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
     :binding_dispositions,
     :diagnostics
   ]
+
+  @spec authority_context(term(), term(), term()) ::
+          {:ok, BehaviorAuthorityContext.t()}
+          | {:error, {:prerequisite, atom(), list()}}
+  def authority_context(design_document, behavior_contract, selected_behavior_review_result) do
+    with :ok <- structure_prerequisite(design_document, behavior_contract),
+         {:ok, behavior_contract_digest} <-
+           prerequisite(:behavior_contract, Serializer.digest(behavior_contract)),
+         {:ok, selected_review} <-
+           prerequisite(
+             :behavior_review,
+             ReviewResult.require_approved(
+               [selected_behavior_review_result],
+               behavior_contract
+             )
+           ),
+         {:ok, behavior_review_result_id} <-
+           prerequisite(:behavior_review, ReviewResult.id(selected_review)) do
+      {:ok,
+       %BehaviorAuthorityContext{
+         behavior_contract: behavior_contract,
+         behavior_contract_digest: behavior_contract_digest,
+         selected_behavior_review_result: selected_review,
+         behavior_review_result_id: behavior_review_result_id
+       }}
+    end
+  end
 
   @spec propose(term(), term(), term(), term()) ::
           {:ok, t(), term()} | {:error, t()} | {:error, {:prerequisite, atom(), list()}}
@@ -103,7 +131,15 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
            prerequisite(:behavior_review, ReviewResult.id(review_result)),
          {:ok, canonical_input} <-
            prerequisite(:semantic_input, SemanticInput.validate(semantic_input, design_document)) do
-      structural = Validation.validate_structure(design_document, behavior_contract)
+      context_result =
+        authority_context_for_input(
+          design_document,
+          behavior_contract,
+          review_result,
+          canonical_input
+        )
+
+      structural = structural_result(context_result, design_document, behavior_contract)
       index = index_nodes(design_document.root_nodes)
       boundary_node_id = canonical_input.boundary.boundary_node_id
       candidate_nodes = subtree_node_ids(boundary_node_id, index)
@@ -147,7 +183,18 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
 
       case decision.outcome do
         :admissible ->
-          {:ok, decision, proposal_builder.(design_document, decision.semantic_input)}
+          case propose_with_authority_if_needed(
+                 design_document,
+                 decision.semantic_input,
+                 context_result,
+                 proposal_builder
+               ) do
+            {:error, {:prerequisite, _stage, _diagnostics}} = error ->
+              error
+
+            proposal ->
+              {:ok, decision, proposal}
+          end
 
         :rejected ->
           {:error, decision}
@@ -172,6 +219,62 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
 
   defp structural_diagnostics(:ok), do: []
   defp structural_diagnostics({:error, diagnostics}), do: diagnostics
+
+  defp structure_prerequisite(design_document, behavior_contract) do
+    case Validation.validate_structure(design_document, behavior_contract) do
+      :ok -> :ok
+      {:error, diagnostics} -> {:error, {:prerequisite, :behavior_contract, diagnostics}}
+    end
+  end
+
+  defp authority_context_for_input(
+         _design_document,
+         _behavior_contract,
+         _selected_behavior_review_result,
+         %SemanticInput{source_node_dispositions: []}
+       ),
+       do: :not_required
+
+  defp authority_context_for_input(
+         design_document,
+         behavior_contract,
+         selected_behavior_review_result,
+         _semantic_input
+       ),
+       do: authority_context(design_document, behavior_contract, selected_behavior_review_result)
+
+  defp structural_result(:not_required, design_document, behavior_contract),
+    do: Validation.validate_structure(design_document, behavior_contract)
+
+  defp structural_result({:ok, _context}, _design_document, _behavior_contract), do: :ok
+
+  defp structural_result(
+         {:error, {:prerequisite, _stage, diagnostics}},
+         _design_document,
+         _behavior_contract
+       ),
+       do: {:error, diagnostics}
+
+  defp propose_with_authority_if_needed(
+         design_document,
+         semantic_input,
+         :not_required,
+         proposal_builder
+       ),
+       do: proposal_builder.(design_document, semantic_input)
+
+  defp propose_with_authority_if_needed(
+         design_document,
+         semantic_input,
+         {:ok, context},
+         _proposal_builder
+       ) do
+    ComponentizationProposer.propose_with_behavior_authority_context_internal(
+      design_document,
+      semantic_input,
+      context
+    )
+  end
 
   defp index_nodes(nodes), do: index_nodes(nodes, %{})
 

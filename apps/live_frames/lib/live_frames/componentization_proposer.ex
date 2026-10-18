@@ -10,18 +10,26 @@ defmodule LiveFrames.ComponentizationProposer do
   alias LiveFrames.ComponentizationProposer.Diagnostic
   alias LiveFrames.ComponentizationProposer.Result
   alias LiveFrames.ComponentizationProposer.SemanticInput
+  alias LiveFrames.Behavior.{ReviewResult, Serializer, Validation}
+  alias LiveFrames.BehaviorAuthorityContext
   alias LiveFrames.Responsive.DesignDocumentResolver
 
   @evidence_plan_code "componentization_plan.binding.evidence_insufficient"
   @evidence_contract_code "component_contract.binding_evidence_insufficient"
   @construction_code "componentization_proposer.construction.failed"
+  @behavior_authority_required_code "componentization_proposer.behavior_authority_required"
 
   @spec propose(LiveFrames.IR.DesignDocument.t(), SemanticInput.t()) :: Result.t()
   def propose(design_document, semantic_input) do
-    if DesignDocumentResolver.has_responsive_overrides?(design_document) do
-      Result.invalid_input([authority_required_diagnostic()])
-    else
-      propose_document(design_document, semantic_input)
+    cond do
+      disposition_bearing_input?(semantic_input) ->
+        propose_document(design_document, semantic_input)
+
+      DesignDocumentResolver.has_responsive_overrides?(design_document) ->
+        Result.invalid_input([authority_required_diagnostic()])
+
+      true ->
+        propose_document(design_document, semantic_input)
     end
   end
 
@@ -56,7 +64,138 @@ defmodule LiveFrames.ComponentizationProposer do
           SemanticInput.t()
         ) :: Result.t()
   def propose_from_preflighted_document_internal(design_document, canonical_input) do
-    propose_canonical(design_document, canonical_input)
+    propose_without_behavior_authority(design_document, canonical_input)
+  end
+
+  @doc false
+  @spec propose_with_behavior_authority_context_internal(
+          LiveFrames.IR.DesignDocument.t(),
+          SemanticInput.t(),
+          BehaviorAuthorityContext.t()
+        ) :: Result.t()
+  def propose_with_behavior_authority_context_internal(
+        design_document,
+        canonical_semantic_input,
+        behavior_authority_context
+      ) do
+    case validate_behavior_authority_context(design_document, behavior_authority_context) do
+      :ok ->
+        propose_canonical(design_document, canonical_semantic_input)
+
+      {:error, diagnostics} ->
+        Result.invalid_input(diagnostics, design_document)
+    end
+  end
+
+  defp propose_without_behavior_authority(
+         design_document,
+         %SemanticInput{source_node_dispositions: dispositions}
+       )
+       when is_list(dispositions) and dispositions != [] do
+    Result.invalid_input([behavior_authority_required_diagnostic()], design_document)
+  end
+
+  defp propose_without_behavior_authority(design_document, canonical_input),
+    do: propose_canonical(design_document, canonical_input)
+
+  defp disposition_bearing_input?(%SemanticInput{source_node_dispositions: dispositions}),
+    do: is_list(dispositions) and dispositions != []
+
+  defp disposition_bearing_input?(_semantic_input), do: false
+
+  defp behavior_authority_required_diagnostic do
+    %Diagnostic{
+      code: @behavior_authority_required_code,
+      severity: :error,
+      path: "behavior_authority_context",
+      message: "source node dispositions require validated Behavior authority"
+    }
+  end
+
+  defp validate_behavior_authority_context(
+         design_document,
+         %BehaviorAuthorityContext{} = context
+       ) do
+    with :ok <- validate_context_shape(context),
+         {:ok, _validated} <-
+           context_validation(
+             :contract_binding,
+             Validation.validate_structure(design_document, context.behavior_contract)
+           ),
+         {:ok, behavior_contract_digest} <-
+           context_validation(:contract_digest, Serializer.digest(context.behavior_contract)),
+         :ok <-
+           context_value_matches(
+             :contract_digest,
+             behavior_contract_digest,
+             context.behavior_contract_digest
+           ),
+         {:ok, behavior_review_result_id} <-
+           context_validation(
+             :review_result_id,
+             ReviewResult.id(context.selected_behavior_review_result)
+           ),
+         :ok <-
+           context_value_matches(
+             :review_result_id,
+             behavior_review_result_id,
+             context.behavior_review_result_id
+           ),
+         {:ok, _approved_review} <-
+           context_validation(
+             :review_approval,
+             ReviewResult.require_approved(
+               [context.selected_behavior_review_result],
+               context.behavior_contract
+             )
+           ) do
+      :ok
+    else
+      {:error, diagnostic} -> {:error, [diagnostic]}
+    end
+  end
+
+  defp validate_behavior_authority_context(_design_document, _context),
+    do: {:error, [behavior_authority_context_diagnostic(:shape, [])]}
+
+  defp validate_context_shape(context) do
+    expected_keys = [
+      :__struct__,
+      :behavior_contract,
+      :behavior_contract_digest,
+      :selected_behavior_review_result,
+      :behavior_review_result_id
+    ]
+
+    if Enum.sort(Map.keys(context)) == Enum.sort(expected_keys),
+      do: :ok,
+      else: {:error, behavior_authority_context_diagnostic(:shape, [])}
+  end
+
+  defp context_validation(_stage, :ok), do: {:ok, :ok}
+  defp context_validation(_stage, {:ok, value}), do: {:ok, value}
+
+  defp context_validation(stage, {:error, diagnostics}),
+    do: {:error, behavior_authority_context_diagnostic(stage, diagnostics)}
+
+  defp context_value_matches(_stage, value, value), do: :ok
+
+  defp context_value_matches(stage, _actual, _expected),
+    do: {:error, behavior_authority_context_diagnostic(stage, [])}
+
+  defp behavior_authority_context_diagnostic(stage, diagnostics) do
+    diagnostic_codes =
+      diagnostics
+      |> Enum.map(&Map.get(&1, :code))
+      |> Enum.filter(&is_binary/1)
+
+    %Diagnostic{
+      code: "componentization_proposer.behavior_authority_context.invalid",
+      severity: :error,
+      path: "behavior_authority_context." <> Atom.to_string(stage),
+      message: "Behavior authority context failed validation at #{stage}",
+      metadata: %{"behavior_diagnostic_codes" => diagnostic_codes}
+    }
   end
 
   defp propose_canonical(design_document, canonical_input) do
