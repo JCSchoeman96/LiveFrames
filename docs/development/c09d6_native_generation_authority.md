@@ -1,6 +1,6 @@
 # C09D6-A — Native generation and review authority
 
-**Status:** v7 / C09D6-D1A authority accepted; D1 native styling implementation complete, merged, and accepted
+**Status:** v7 accepted; later scoped NAV-CARRIER heading-navigation amendment recorded below; D1 native styling implementation complete, merged, and accepted
 
 **Plan ID:** C09D6-A
 
@@ -26,7 +26,7 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
 
 **Accepted tree:** `4626a0348538979e933d955e1e67c21236536b57`
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-18
 
 ### Revision log
 
@@ -60,6 +60,10 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   (merge `de6dc96f3a852f7b5fc67b051b3ee04406ac8b1b`). D1D implementation later
   completed via PR #160 (merge `3e75c70433aac1f783221b0c6de3af43679598da`;
   post-merge CI `37961704551` passed).
+- `2026-10-18 NAV-CARRIER scoped amendment` — extends §10.10.4 with exactly
+  the closed static heading-navigation carrier and §21.3 only for
+  renderer-owned direct-child anchor neutralization. It does not replace v7;
+  all other C09D6 v7 authority remains unchanged. Tracked by PR #242.
 
 ---
 
@@ -838,6 +842,49 @@ Generator (after prerequisites pass):
 | `link` | `<a>` + `navigation_attrs` from `validate_navigation_map/1` |
 | `button` + static navigation | `<a>` + same `navigation_attrs`; **do not** emit `<button>` while dropping the destination; do not emit `type="button"` on the anchor |
 
+**Scoped later amendment from NAV-CARRIER.** Once
+`docs/development/nav_carrier_heading_link_representation_authority.md` is
+accepted, it extends the frozen carrier set with exactly one source-neutral
+case: a heading with the closed static shape below. Until that authority is
+accepted, this §10.10.4 rule remains limited to the `link` and `button` rows
+above. The existing URL-placement rule is unchanged; a heading is not
+eligible when dynamic `heading_level`, text, or `link_url` placement is present.
+
+```text
+C09D6_STATIC_NAVIGATION_CARRIERS=
+link;
+button_with_static_navigation;
+heading_with_NAV_CARRIER_closed_static_shape
+
+semantic_type=heading
+tag=h1-through-h6-required
+navigation=validated-existing-static-map
+content=non-empty-static-UTF8-string
+children=[]
+dynamic_heading_level=forbidden
+dynamic_text=forbidden
+dynamic_link_url=forbidden
+slot=forbidden
+```
+
+For the accepted heading shape, Plan prerequisites revalidate the existing
+navigation map with `LiveFrames.StaticNavigation.validate_navigation_map/1`
+before generation. The heading remains the DesignNode, native element, and
+style root. Native emission is:
+
+```html
+<hN ...heading-root attrs/classes...>
+  <a ...validated static navigation attrs...>escaped static heading text</a>
+</hN>
+```
+
+The renderer-created direct-child anchor receives only the NAV-CARRIER
+structural neutralization `color: inherit` and `text-decoration: inherit`.
+It does not receive source link styles. The rule does not suppress focus and
+does not authorize a global anchor reset. All other C09D6 generator,
+prerequisite, result, security, determinism, and performance rules remain in
+force.
+
 For `navigation["target"] == "_blank"`, frozen output includes:
 
 ```text
@@ -1352,6 +1399,18 @@ on a wrapper just because the renderer emits multiple elements. A compound
 native emission may use multiple per-property loci only when this authority
 explicitly proves and allowlists the mapping. Unproven mappings stop with
 `STYLE_LOCUS_AUTHORITY_GAP`.
+
+The scoped NAV-CARRIER amendment to §21.3 requires the renderer-created
+heading anchor to receive exactly `color: inherit` and
+`text-decoration: inherit` on the direct child. This is structural CSS for
+the generated compound markup, not a new DesignNode style locus. Keep all
+heading DesignNode presentation on h1 through h6, including base, responsive,
+and state styles, source classes, package semantic classes, and private node
+classes. Do not copy source link styles, suppress focus, or emit a global
+anchor reset. `StyleIntegration` owns the generated rule. Change
+`StylesheetRenderer` only if its existing API cannot express the bounded
+direct-child rule without duplication or ad-hoc raw CSS construction, as
+specified by NAV-CARRIER.
 
 #### 21.3.1 Proven `figure > img` image styles
 
