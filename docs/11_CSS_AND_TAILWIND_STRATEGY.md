@@ -67,6 +67,7 @@ Current composition:
 → tailwindcss/theme.css (theme layer only)
 → theme/lf_theme.css (generated public --lf-*)
 → components/sections/hero.css (Hero semantic presentation)
+→ components/sections/media_call_to_action.css (CTA semantic presentation)
 ```
 
 **Preflight / global reset is not shipped.** Importing LiveFrames does **not**
