@@ -166,6 +166,20 @@ defmodule LiveFrames.ComponentizationPlan.NodeDispositionTest do
     assert_invalid(NodeDisposition.validate_list([second, first]))
   end
 
+  test "validates a larger already-sorted disposition list without changing its order" do
+    assert Code.ensure_loaded?(NodeDisposition)
+
+    expected_ids =
+      Enum.map(0..127, fn index ->
+        "node_" <> String.pad_leading(Integer.to_string(index), 4, "0")
+      end)
+
+    dispositions = Enum.map(expected_ids, &valid_disposition(design_node_id: &1))
+
+    assert NodeDisposition.validate_list(dispositions) == :ok
+    assert Enum.map(dispositions, & &1.design_node_id) == expected_ids
+  end
+
   test "rejects duplicate design node IDs in a disposition list" do
     assert Code.ensure_loaded?(NodeDisposition)
     first = valid_disposition()

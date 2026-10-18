@@ -81,25 +81,29 @@ defmodule LiveFrames.ComponentizationPlan.NodeDisposition do
   @spec validate_list(term()) :: :ok | {:error, [Diagnostic.t()]}
   def validate_list(dispositions) do
     if proper_list?(dispositions) do
-      {diagnostics, design_node_ids} =
-        dispositions
-        |> Enum.with_index()
-        |> Enum.reduce({[], []}, fn {disposition, index}, {diagnostics, ids} ->
-          path = "node_dispositions[#{index}]"
+      {diagnostics, id_state, _index} =
+        Enum.reduce(dispositions, {[], initial_design_node_id_state(), 0}, fn
+          disposition, {diagnostics, id_state, index} ->
+            path = "node_dispositions[#{index}]"
 
-          diagnostics =
-            case validate(disposition) do
-              :ok -> diagnostics
-              {:error, errors} -> diagnostics ++ Enum.map(errors, &prefix_path(&1, path))
-            end
+            diagnostics =
+              case validate(disposition) do
+                :ok ->
+                  diagnostics
 
-          id = valid_design_node_id(disposition)
-          {diagnostics, ids ++ [id]}
+                {:error, errors} ->
+                  Enum.reduce(errors, diagnostics, fn error, acc ->
+                    [prefix_path(error, path) | acc]
+                  end)
+              end
+
+            id_state = track_design_node_id(valid_design_node_id(disposition), id_state)
+            {diagnostics, id_state, index + 1}
         end)
 
-      diagnostics = validate_unique_design_node_ids(design_node_ids, diagnostics)
-      diagnostics = validate_design_node_id_order(design_node_ids, diagnostics)
-      finish(diagnostics)
+      diagnostics
+      |> validate_design_node_id_state(id_state)
+      |> finish()
     else
       finish([
         error_at("list.invalid", "node_dispositions must be a proper list", "node_dispositions")
@@ -150,14 +154,7 @@ defmodule LiveFrames.ComponentizationPlan.NodeDisposition do
   defp validate_evidence_refs(refs, diagnostics) do
     cond do
       not proper_list?(refs) ->
-        add(
-          diagnostics,
-          error_at(
-            "evidence_refs.invalid",
-            "evidence_refs must be a proper list",
-            "evidence_refs"
-          )
-        )
+        invalid_evidence_refs_list(diagnostics)
 
       refs == [] ->
         add(
@@ -166,62 +163,45 @@ defmodule LiveFrames.ComponentizationPlan.NodeDisposition do
         )
 
       true ->
-        {diagnostics, valid_refs?} =
-          refs
-          |> Enum.with_index()
-          |> Enum.reduce({diagnostics, true}, fn {ref, index}, {diagnostics, valid_refs?} ->
-            if valid_string?(ref) and byte_size(ref) > 0 do
-              {diagnostics, valid_refs?}
-            else
-              diagnostic =
-                error_at(
-                  "evidence_refs.invalid",
-                  "evidence references must be non-empty UTF-8 strings",
-                  "evidence_refs[#{index}]"
-                )
+        {diagnostics, valid_refs?, _index, _seen, _previous, duplicate?, ordered?} =
+          Enum.reduce(
+            refs,
+            {diagnostics, true, 0, MapSet.new(), nil, false, true},
+            fn ref, {diagnostics, valid_refs?, index, seen, previous, duplicate?, ordered?} ->
+              if valid_string?(ref) and byte_size(ref) > 0 do
+                duplicate? = duplicate? or MapSet.member?(seen, ref)
+                ordered? = ordered? and (is_nil(previous) or previous <= ref)
 
-              {add(diagnostics, diagnostic), false}
+                {
+                  diagnostics,
+                  valid_refs?,
+                  index + 1,
+                  MapSet.put(seen, ref),
+                  ref,
+                  duplicate?,
+                  ordered?
+                }
+              else
+                diagnostic =
+                  error_at(
+                    "evidence_refs.invalid",
+                    "evidence references must be non-empty UTF-8 strings",
+                    "evidence_refs[#{index}]"
+                  )
+
+                {add(diagnostics, diagnostic), false, index + 1, seen, previous, duplicate?,
+                 ordered?}
+              end
             end
-          end)
+          )
 
         if valid_refs? do
           diagnostics
-          |> validate_unique_evidence_refs(refs)
-          |> validate_evidence_ref_order(refs)
+          |> maybe_add_evidence_duplicate(duplicate?)
+          |> maybe_add_evidence_order(not ordered?)
         else
           diagnostics
         end
-    end
-  end
-
-  defp validate_unique_evidence_refs(diagnostics, refs) do
-    if length(Enum.uniq(refs)) == length(refs) do
-      diagnostics
-    else
-      add(
-        diagnostics,
-        error_at(
-          "evidence_refs.duplicate",
-          "evidence_refs must be unique",
-          "evidence_refs"
-        )
-      )
-    end
-  end
-
-  defp validate_evidence_ref_order(diagnostics, refs) do
-    # UTF-8 byte order preserves Unicode scalar order for valid strings.
-    if Enum.sort(refs) == refs do
-      diagnostics
-    else
-      add(
-        diagnostics,
-        error_at(
-          "evidence_refs.order_invalid",
-          "evidence_refs must use ascending Unicode scalar order",
-          "evidence_refs"
-        )
-      )
     end
   end
 
@@ -231,41 +211,83 @@ defmodule LiveFrames.ComponentizationPlan.NodeDisposition do
 
   defp valid_design_node_id(_disposition), do: nil
 
-  defp validate_unique_design_node_ids(ids, diagnostics) do
-    valid_ids = Enum.reject(ids, &is_nil/1)
+  defp initial_design_node_id_state, do: {MapSet.new(), nil, false, true, false}
 
-    if length(Enum.uniq(valid_ids)) == length(valid_ids) do
+  defp track_design_node_id(nil, {seen, previous, duplicate?, ordered?, _invalid?}),
+    do: {seen, previous, duplicate?, ordered?, true}
+
+  defp track_design_node_id(id, {seen, previous, duplicate?, ordered?, invalid?}) do
+    duplicate? = duplicate? or MapSet.member?(seen, id)
+    ordered? = ordered? and (is_nil(previous) or previous <= id)
+
+    {MapSet.put(seen, id), id, duplicate?, ordered?, invalid?}
+  end
+
+  defp validate_design_node_id_state(diagnostics, {_, _, duplicate?, ordered?, invalid?}) do
+    diagnostics =
+      if duplicate? do
+        add(
+          diagnostics,
+          error_at(
+            "design_node_id.duplicate",
+            "each design_node_id may have one NodeDisposition",
+            "node_dispositions"
+          )
+        )
+      else
+        diagnostics
+      end
+
+    if invalid? or ordered? do
       diagnostics
     else
       add(
         diagnostics,
         error_at(
-          "design_node_id.duplicate",
-          "each design_node_id may have one NodeDisposition",
+          "design_node_id.order_invalid",
+          "node_dispositions must use ascending UTF-8 design_node_id byte order",
           "node_dispositions"
         )
       )
     end
   end
 
-  defp validate_design_node_id_order(ids, diagnostics) do
-    if Enum.all?(ids, &(is_binary(&1) and valid_string?(&1))) and Enum.sort(ids) == ids do
-      diagnostics
-    else
-      if Enum.any?(ids, &is_nil/1) do
-        diagnostics
-      else
-        add(
-          diagnostics,
-          error_at(
-            "design_node_id.order_invalid",
-            "node_dispositions must use ascending UTF-8 design_node_id byte order",
-            "node_dispositions"
-          )
-        )
-      end
-    end
+  defp invalid_evidence_refs_list(diagnostics) do
+    add(
+      diagnostics,
+      error_at(
+        "evidence_refs.invalid",
+        "evidence_refs must be a proper list",
+        "evidence_refs"
+      )
+    )
   end
+
+  defp maybe_add_evidence_duplicate(diagnostics, true) do
+    add(
+      diagnostics,
+      error_at(
+        "evidence_refs.duplicate",
+        "evidence_refs must be unique",
+        "evidence_refs"
+      )
+    )
+  end
+
+  defp maybe_add_evidence_duplicate(diagnostics, false), do: diagnostics
+
+  defp maybe_add_evidence_order(diagnostics, true) do
+    add(
+      diagnostics,
+      error_at(
+        "evidence_refs.order_invalid",
+        "evidence_refs must use ascending Unicode scalar order",
+        "evidence_refs"
+      )
+    )
+  end
+
+  defp maybe_add_evidence_order(diagnostics, false), do: diagnostics
 
   defp prefix_path(%Diagnostic{path: nil} = diagnostic, prefix),
     do: %{diagnostic | path: prefix}
