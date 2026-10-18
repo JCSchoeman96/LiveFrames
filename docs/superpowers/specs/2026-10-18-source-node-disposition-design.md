@@ -123,7 +123,8 @@ presentation, content, accessibility, or DOM role.
 
 **Disposition authority** is the conjunction of the structured SemanticInput
 decision, a durable plan record, exact Behavior authority references, and an
-approved ComponentReview bound to the encoded plan. No one part is sufficient
+approved ComponentReviewResult bound to the canonical bytes of the approved
+ComponentContract, encoded plan, and DesignDocument. No one part is sufficient
 on its own.
 
 ## 5. SemanticInput decision
@@ -274,9 +275,11 @@ validated DesignDocument and supplied authority tuple:
 5. Require the named BehaviorBinding to exist exactly once in the supplied
    BehaviorContract. Require the contract's DesignDocument identity to match
    the exact document.
-6. Require exactly one matching approved BehaviorReviewResult using the
-   existing Behavior.ReviewResult.require_approved/2 rule. Recompute and
-   store the BehaviorContract digest and review ID.
+6. Require one explicitly selected BehaviorReviewResult. Compute its ID and
+   require an exact match with the decision's review authority. Validate that
+   singleton against the supplied BehaviorContract using the existing
+   Behavior.ReviewResult.require_approved/2 rule. Recompute and store the
+   BehaviorContract digest and selected review ID.
 7. Require non-empty evidence references and construct the disposition only
    from the validated decision. No provenance field may substitute for one.
 
@@ -302,6 +305,8 @@ ComponentReviewResult, with this closed review-time shape:
 
     review_format_version        "1.0.0"
     component_contract_id        non-empty string
+    component_contract_digest_algorithm  "sha-256"
+    component_contract_digest            64 lowercase hexadecimal characters
     design_document_sha256       64 lowercase hexadecimal characters
     componentization_plan_digest_algorithm  "sha-256"
     componentization_plan_digest            64 lowercase hexadecimal characters
@@ -310,25 +315,54 @@ ComponentReviewResult, with this closed review-time shape:
     reviewed_at                  UTC timestamp in YYYY-MM-DDTHH:MM:SS.ffffffZ form
     evidence_refs                non-empty array of unique non-empty strings
 
+component_contract_digest is lowercase SHA-256 of the exact UTF-8 bytes
+returned by LiveFrames.ComponentContract.encode/1 for the approved contract.
+The hash input MUST have approval_status=:approved. Hash the resulting
+approved contract, not the pre-review candidate: approval_status is serialized
+and therefore changes the canonical bytes. component_contract_id remains the
+stable semantic identity and is not a content digest.
+
 componentization_plan_digest is lowercase SHA-256 of the exact UTF-8 bytes
 returned by ComponentizationPlan.encode/1. Define canonical serialization as
 the canonical JSON encoding of exactly these fields, with deterministic object
 keys and evidence_refs sorted by ascending Unicode-scalar order; duplicate
-references are invalid. review_format_version is the literal 1.0.0. The
-derived, non-serialized identity is:
+references are invalid. Both digest algorithm fields are the literal
+sha-256. review_format_version is the literal 1.0.0. The derived,
+non-serialized identity is:
 
     COMPONENT_REVIEW_ID_ALGORITHM=lf-component-review-v1-jcs-sha256
     COMPONENT_REVIEW_ID=crv_ + lowercase SHA-256 of canonical encoded result bytes
 
+The successful ComponentReview transition is one atomic authority operation:
+
+    proposed ComponentContract
+    + exact ComponentizationPlan
+    + exact DesignDocument
+    + review evidence
+            ↓
+    validate candidate and review guards
+            ↓
+    derive approved ComponentContract
+            ↓
+    encode that approved contract and derive component_contract_digest
+            ↓
+    create ComponentReviewResult binding approved contract, plan, and document
+            ↓
+    return and retain the approved contract with its matching review result
+
 The result is a durable structured review artifact, not a plan field,
-provenance text, or BehaviorContract. ComponentReview produces it only after
+provenance text, or BehaviorContract. ComponentReview creates it only after
 the exact plan review and retains it beside the approved contract and plan.
-Generation receives one explicitly selected ComponentReviewResult value,
-validates its content-derived ID, and requires decision="approved" plus exact
-contract, document, and plan identities. It does not search a result history
-or select by timestamp. A result for a changed plan does not authorize
-generation. Repeated reviews have distinct content IDs; the caller must name
-the exact result to use, and that result must still match the supplied plan.
+Generation receives one explicitly selected ComponentReviewResult and its
+derived-ID selector. It recomputes the ID from canonical result bytes and
+requires it to equal that selector, then requires decision="approved" plus
+the exact approved contract digest, plan digest, and document digest. The
+contract ID is checked as an additional semantic-identity consistency guard;
+it is not used as the exact contract identity. Generation does not search a
+result history or select by timestamp. A result for a changed contract, plan,
+or document does not authorize generation. Repeated reviews have distinct
+content IDs; the caller must name the exact result to use, and that result
+must still match the supplied approved contract, plan, and document.
 
 This result records the review workflow's decision; its digest binding is not
 a digital signature or proof of reviewer authentication. Authentication of
@@ -339,25 +373,52 @@ reviewer.
 
 ### 9.3 What generation revalidates
 
-Generation must receive the exact plan, ComponentContract, DesignDocument,
-BehaviorContract, BehaviorReviewResult collection, and explicitly selected
-ComponentReviewResult.
+Generation must receive these exact values:
+
+    ComponentizationPlan
+    approved ComponentContract
+    DesignDocument
+    BehaviorContract
+    one explicitly selected BehaviorReviewResult
+    one explicitly selected ComponentReviewResult and its derived-ID selector
+
+Generation does not accept a BehaviorReviewResult collection. The caller
+supplies the selected result; generation does not search review history or
+choose a result by timestamp or recency.
+
 It revalidates, rather than trusting a previous proposer pass:
 
     plan format and closed schema
-    plan/document digest and contract identity
+    exact plan digest, DesignDocument digest, and approved ComponentContract digest
+    ComponentContract.approval_status=approved
+    selected component review contract digest algorithm is sha-256
+    SHA256(ComponentContract.encode(supplied_approved_contract))
+      == ComponentReviewResult.component_contract_digest
+    supplied_contract.contract_id == ComponentReviewResult.component_contract_id
+    selected component review plan digest algorithm is sha-256
+    SHA256(ComponentizationPlan.encode(supplied_plan))
+      == ComponentReviewResult.componentization_plan_digest
+    selected component review document digest equals the supplied DesignDocument digest
     boundary, node ID, semantic type, SourceTrace type and source ID
     no behavior reference to the target/subtree
-    exact BehaviorBinding ID, BehaviorContract digest and approved review ID
-    exact approved ComponentReviewResult ID and plan/document/contract identities
+    exact BehaviorBinding ID and BehaviorContract digest
+    Behavior.ReviewResult.id(selected_behavior_review)
+      == NodeDisposition.behavior_review_id
+    Behavior.ReviewResult.require_approved([selected_behavior_review], supplied_behavior_contract)
+    ComponentReviewResult.id(selected_component_review_result)
+      == selected_component_review_result_id
+    selected component review decision is approved
+    selected component review contract ID equals the supplied contract's contract_id
     the target is consumed exactly once by generated-structure filtering
 
 Any changed DesignDocument, node, SourceTrace, behavior binding, contract,
 review result, plan, or review result identity makes the authority stale and
-blocks. Human review findings about independent roles remain frozen by the
-approved exact-plan review result; changing the node/document changes the plan
-or document digest and requires review again. A forged plan with no matching
-approved plan review is ineligible, even if its JSON is well-formed.
+blocks. A modified ComponentContract fails its canonical digest check even if
+it retains the same contract_id. Human review findings about independent roles
+remain frozen by the approved exact-plan review result; changing the
+node/document changes the plan or document digest and requires review again. A
+forged plan with no matching approved plan review is ineligible, even if its
+JSON is well-formed.
 
 No source runtime payload, decision prose, or source metadata is interpreted as
 a grant of authority.
@@ -372,7 +433,7 @@ The plan retains its existing valid/invalid model and has no approved lifecycle.
 | UNCLASSIFIED | Source node is present in a validated DesignDocument | None; it remains evidence |
 | UNCLASSIFIED → EVIDENCE_PRESERVED | Normalization produced the node and SourceTrace | Preserve the original node, ancestry, source identity, and diagnostics in IR |
 | EVIDENCE_PRESERVED → CLASSIFIED_SOURCE_RUNTIME_CARRIER | Explicit decision, evidence refs, exact supported Behavior authority; mechanical proposal guards pass | Candidate disposition is added to a new plan; source node remains in IR |
-| CLASSIFIED_SOURCE_RUNTIME_CARRIER → APPROVED_FOR_GENERATED_STRUCTURE_EXCLUSION | ComponentReview approves the exact plan and emits one matching ComponentReviewResult | Preserve that review record and exact plan/document/contract identities |
+| CLASSIFIED_SOURCE_RUNTIME_CARRIER → APPROVED_FOR_GENERATED_STRUCTURE_EXCLUSION | ComponentReview approves the exact plan and emits one matching ComponentReviewResult | Preserve the approved contract and plan with the content-ID-verified review result binding exact plan/document/approved-contract digests |
 | APPROVED_FOR_GENERATED_STRUCTURE_EXCLUSION → EXCLUDED_FROM_GENERATED_STRUCTURE | Generation revalidates all identities and guards | Filter exactly the target from generated structure; preserve it in Design IR and SourceTrace |
 
 Blocked terminal states are:
@@ -408,17 +469,20 @@ ineligible:
     review confirms no independently required generated-DOM role
     exact BehaviorBinding exists exactly once
     exact BehaviorContract belongs to the exact DesignDocument
-    exact BehaviorContract is approved by exactly one matching BehaviorReviewResult
+    exact BehaviorContract is approved by the one explicitly selected BehaviorReviewResult
+    selected BehaviorReviewResult ID equals NodeDisposition.behavior_review_id
+    singleton BehaviorReviewResult approval validation passes against the supplied BehaviorContract
     review confirms source runtime responsibility is represented by that Behavior authority
-    exact approved ComponentReviewResult binds the plan/document/contract tuple
+    exact approved ComponentReviewResult binds approved contract digest, plan, and document
     source runtime remains inert and is never executed or copied
 
 The ComponentReviewResult is not a replacement for the BehaviorReviewResult.
 The former approves the exact componentization plan and exclusion evidence;
 the latter approves the exact BehaviorContract. Both must be present and
-valid. The ComponentReviewResult ID is derived from its canonical bytes and
-is the explicit review-record selector; generation validates both that ID
-and the exact plan digest.
+valid. The ComponentReviewResult ID is derived from its canonical bytes.
+Generation receives that explicitly selected ID beside the selected result,
+recomputes the ID, and requires equality before validating the exact contract,
+plan, and document digests.
 
 ## 12. Validation and diagnostics
 
@@ -507,7 +571,7 @@ authority needed to justify removing source runtime responsibility.
 | Area | Disposition awareness | Rule |
 | --- | --- | --- |
 | ComponentizationPlan canonical identity | Yes | Serialized dispositions participate in exact plan bytes and fingerprint |
-| ComponentReview | Yes | Review the exact complete plan and evidence; bind approval to plan SHA-256 |
+| ComponentReview | Yes | Review the exact complete plan and evidence; bind approval to approved-contract, plan, and document SHA-256 digests |
 | P7-D1 BehaviorProjection | No | Behavior projection remains solely derived from BehaviorContract |
 | Realization selector | No | Selection and realization semantics do not change |
 | Runtime | No | Runtime receives no source disposition and no source payload |
@@ -519,6 +583,9 @@ being substituted with another valid-looking plan. The existing
 GeneratedArtifactBundle.plan_fingerprint already hashes
 ComponentizationPlan.encode/1; when the serializer gains the new field, that
 fingerprint includes the disposition records.
+
+The exact approved-contract hash prevents a modified contract from reusing a
+review even when its stable semantic contract_id is unchanged.
 
 ## 15. Backward compatibility and migration
 
@@ -554,7 +621,16 @@ The exact format decision is:
 | Unsupported type becomes supported later | Semantic-incompatible and/or unused error; reissue and review |
 | Behavior binding changes | Binding or Behavior-authority mismatch |
 | BehaviorContract changes | Contract digest mismatch; new approved review and plan required |
-| BehaviorReview changes or is no longer uniquely approved | Review ID mismatch or Behavior review failure |
+| Wrong BehaviorReviewResult selected | Its derived ID differs from NodeDisposition.behavior_review_id; generation blocks |
+| BehaviorReviewResult is not approved for the supplied BehaviorContract | Singleton approval validation fails |
+| Same contract_id but changed public API | Approved ComponentContract digest mismatch |
+| Same contract_id but changed binding projection | Approved ComponentContract digest mismatch |
+| Same contract_id but changed accessibility | Approved ComponentContract digest mismatch |
+| Same contract_id but changed default | Approved ComponentContract digest mismatch |
+| Same contract_id but changed validation | Approved ComponentContract digest mismatch |
+| Supplied contract has approval_status=:proposed | Contract state guard and approved-contract digest check fail |
+| ComponentReviewResult selector differs from its canonical content ID | Selected review result identity validation fails |
+| ComponentReviewResult binds another plan or document | Exact plan or document digest mismatch; generation blocks |
 | Behavior reference moves into or targets disposed node | Behavior-reference conflict |
 | Disposed node gains required content/accessibility responsibility | ComponentReview rejects or reopens review; exact changed IR identity invalidates plan |
 | Plan replay against changed source document | Document/source identity validation fails |
@@ -644,6 +720,10 @@ task does not modify them.
       new ComponentReviewResult type, validator, canonical serializer, and
       derived content ID defined by this spec
 
+    Exact approved ComponentContract digest:
+      apps/live_frames/lib/live_frames/component_contract.ex
+      apps/live_frames/lib/live_frames/component_contract/serializer.ex
+
     Behavior authority identities:
       apps/live_frames/lib/live_frames/behavior/contract.ex
       apps/live_frames/lib/live_frames/behavior/review_result.ex
@@ -702,6 +782,9 @@ Additional invariants:
     SN-I14 plan review is bound to exact ComponentizationPlan bytes
     SN-I15 a disposition target must be a leaf until subtree semantics receive authority
     SN-I16 all native generation traversals consume the same filtered structure
+    SN-I17 ComponentReviewResult binds exact approved ComponentContract canonical bytes
+    SN-I18 generation receives one explicitly selected BehaviorReviewResult and verifies its exact ID
+    SN-I19 generation receives one explicitly selected ComponentReviewResult, verifies its content-derived ID, and checks its exact contract/plan/document digests
 
 ## 22. Explicit non-goals
 
