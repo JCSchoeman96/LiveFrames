@@ -14,18 +14,24 @@
 
 ## Base and authority gate
 
-Fetch `origin/main` and stop if its commit or tree differs from the accepted base. Do not rebase automatically.
+This correction is based on the following exact `origin/main` identity and CI evidence:
 
 ```text
-BASE_SHA=f5dcaf534db675b16fe1a4fa90e347cb96f42c40
-BASE_TREE=443ca2e1e371ad05e0b0144b307860986629b849
-BASE_CI_RUN=39111159407
-BASE_CI_RESULT=success
-PR243_APPROVED_HEAD=33a54d0c048d8479a8ec5851ac3d40d5e0907ca3
-PR243_MERGE_SHA=f5dcaf534db675b16fe1a4fa90e347cb96f42c40
+CORRECTION_BASE_SHA=f75c9a19fb1965648b6e4c6dce2c88e4c376f014
+CORRECTION_BASE_TREE=1ee056644312c65acb006d4f48c84d8ab16cfae1
+CORRECTION_BASE_CI_RUN=39119253153
+CORRECTION_BASE_CI_RESULT=success
+PR245_REJECTED_HEAD=31baf490562672afddbd4d66c5a5857a8213c539
+PR245_MERGE_SHA=9fff912f4e05e628f8790c98a22fff6c701cb49a
+PR245_MERGE_TREE=be14b95f0e7feeb407f505b34882254054041e12
+PR245_MERGE_FIRST_PARENT=d5e2421f64766dffe328bc992e357e1854308fa2
+PR245_MERGE_SECOND_PARENT=31baf490562672afddbd4d66c5a5857a8213c539
+PR245_POST_MERGE_CI=39119244543
+PR245_POST_MERGE_CI_RESULT=success
+NAV_CARRIER_IMPLEMENTATION_MERGE=d5e2421f64766dffe328bc992e357e1854308fa2
 ```
 
-The plan was authored against this exact main tree. At implementation start, recheck the base, the primary spec, and the accepted authority files. A changed main, changed spec, or material authority conflict stops execution.
+After this correction merges, implementation authorization must record the then-current `origin/main` commit, tree, and successful CI run as the implementation base. Recheck that exact identity, the primary spec, and the accepted authority files before Task 1. If main moves after implementation starts, stop. Do not rebase automatically.
 
 The repository names the accepted native-generation authority `docs/development/c09d6_native_generation_authority.md`; the name in the request included an extra `_and_review`. Use the file that exists in the accepted tree. Preserve these authorities without editing them:
 
@@ -37,7 +43,9 @@ The repository names the accepted native-generation authority `docs/development/
 
 The Plan field and generation inputs apply only to the accepted SourceNodeDisposition capability. Keep `NativeGenerator.generate/3` for plans without dispositions. The disposition-aware overload must not change NAV-CARRIER markup, navigation validation, renderer-created anchor styling, or the existing C09D6 rules for ordinary generation.
 
-At this base, NAV-CARRIER is accepted authority but its heading carrier is not implemented in the renderer or style integration. The implementation must filter only explicitly authorized DesignNode IDs. If NAV-CARRIER code exists when execution reaches Task 9, add a regression proving that filtering another DesignNode leaves the renderer-created heading anchor and its bounded style rule intact. If it remains absent, record the cross-lane compatibility gate and do not invent NAV-CARRIER behavior in this work.
+PR #244 merged NAV-CARRIER implementation at `d5e2421f64766dffe328bc992e357e1854308fa2`. The implementation owners are `apps/live_frames/lib/live_frames/adapters/bricks/static_navigation.ex`, `apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex`, `apps/live_frames/lib/live_frames/fidelity.ex`, `apps/live_frames/lib/live_frames/native_generator/renderer.ex`, `apps/live_frames/lib/live_frames/native_generator/style_integration.ex`, and `apps/live_frames/lib/live_frames/native_generator/stylesheet_renderer.ex`. Relevant existing tests include `apps/live_frames/test/live_frames/bricks_static_navigation_test.exs`, `apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`, `apps/live_frames/test/live_frames/native_generator/style_integration_test.exs`, `apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs`, and `apps/live_frames/test/live_frames/native_generator_v6_proofs_test.exs`.
+
+The filter applies only to explicit disposed DesignNode IDs. Renderer-created anchor markup is not a disposable DesignNode. Task 9 must prove that disposing an unrelated DesignNode leaves NAV-CARRIER behavior intact.
 
 ## Implementation contract
 
@@ -267,6 +275,45 @@ COMPONENT_REVIEW_ID=crv_ + lowercase SHA-256 of canonical review-result bytes
 
 `validate/1` checks this exact shape. `encode/1` uses `LiveFrames.CanonicalJSON.encode/1`, deterministic object keys, and evidence refs sorted by Unicode-scalar order. `id/1` hashes those exact bytes. `validate_against/4` requires an approved contract and an approved result, then matches contract ID, exact approved contract bytes, exact encoded plan bytes, and exact DesignDocument digest.
 
+Freeze this synthetic review-result fixture and its canonical identity. Compute the byte count and ID independently from the literal canonical JSON, not with the production `ComponentReviewResult.id/1` implementation under test.
+
+```text
+review_format_version=1.0.0
+component_contract_id=component:test
+
+component_contract_digest_algorithm=sha-256
+component_contract_digest=
+1111111111111111111111111111111111111111111111111111111111111111
+
+design_document_sha256=
+2222222222222222222222222222222222222222222222222222222222222222
+
+componentization_plan_digest_algorithm=sha-256
+componentization_plan_digest=
+3333333333333333333333333333333333333333333333333333333333333333
+
+decision=approved
+reviewer_identity=reviewer:test
+reviewed_at=2026-10-18T00:00:00.000000Z
+
+evidence_refs=
+evidence:a
+evidence:b
+```
+
+The exact canonical JSON literal is:
+
+```json
+{"component_contract_digest":"1111111111111111111111111111111111111111111111111111111111111111","component_contract_digest_algorithm":"sha-256","component_contract_id":"component:test","componentization_plan_digest":"3333333333333333333333333333333333333333333333333333333333333333","componentization_plan_digest_algorithm":"sha-256","decision":"approved","design_document_sha256":"2222222222222222222222222222222222222222222222222222222222222222","evidence_refs":["evidence:a","evidence:b"],"review_format_version":"1.0.0","reviewed_at":"2026-10-18T00:00:00.000000Z","reviewer_identity":"reviewer:test"}
+```
+
+```text
+COMPONENT_REVIEW_GOLDEN_CANONICAL_BYTES=604
+COMPONENT_REVIEW_GOLDEN_ID=crv_1b012f7028cc1b15a4127403e12ed032e3ed6ead16b8c995690f8e12ef1136d7
+```
+
+If `CanonicalJSON` or `ComponentReviewResult.encode/1` does not reproduce these literal bytes, stop with `STOP=COMPONENT_REVIEW_GOLDEN_IDENTITY_MISMATCH`. Do not replace the golden with implementation output.
+
 `ComponentReviewResult` has no public constructor or approval operation. `ComponentReview.approve_with_result/8` is the only supported operation that creates an approved result, and it creates it in the same transition that returns the matching approved contract.
 
 `SourceNodeDispositionDecision` is the nested module shown in the Interfaces block. `SemanticInput` adds only `source_node_dispositions` to its struct and repeatable-family list; it remains transient and has no serializer or persistence API. Its four decision fields are closed, and Behavior digest/review identity fields are rejected as unknown fields.
@@ -280,6 +327,8 @@ COMPONENT_REVIEW_ID=crv_ + lowercase SHA-256 of canonical review-result bytes
 `ComponentReview.approve/3` remains compatible for plans without dispositions. It returns `component_contract.approval_blocked` without changing the candidate when `node_dispositions` is non-empty. `approve_with_result/8` is the only approval operation for a disposition-bearing plan. It validates the candidate, exact plan, document, Behavior contract, selected Behavior review, and review evidence; derives the approved contract; hashes that approved contract's encoded bytes; hashes the exact plan bytes and document identity; creates the approved ComponentReviewResult; and returns the approved contract and result together. It never hashes the proposed contract.
 
 `NativeGenerator.generate/3` remains the ordinary path and returns `:generation_blocked` with `native_generator.disposition_authority_required` for a disposition-bearing plan. `generate/7` is the disposition-aware path. It verifies the supplied Behavior and Component review identities and all exact digests before building the filtered structure. Any selected ComponentReviewResult ID, decision, contract-byte, plan-byte, or document-digest mismatch returns `native_generator.component_review_authority_mismatch`. It accepts one selected result and never searches review history. There is no persisted generation-authority wrapper.
+
+Preserve the original DesignDocument unchanged. Never execute or copy source runtime data.
 
 Plan diagnostics for defined failure modes remain deterministic and use these exact codes: `componentization_plan.node_disposition.invalid`, `target_missing`, `target_outside_boundary`, `target_semantic_incompatible`, `duplicate`, `outcome_unsupported`, `source_identity_mismatch`, `behavior_binding_mismatch`, `behavior_authority_mismatch`, `behavior_reference_conflict`, and `unused`. Prefix every short suffix after `componentization_plan.node_disposition.`. Keep the existing `componentization_plan.unsupported_node` blocker whenever a target has not passed every applicable plan and Behavior guard. Independent presentation, content, accessibility, and generated-DOM roles are human review judgments; do not claim the plan validator infers them from opaque evidence refs.
 
@@ -349,9 +398,53 @@ Freeze this map before Task 1. Do not add dependencies, change Design IR or Comp
 | `apps/live_frames/test/live_frames/componentization_plan/node_disposition_test.exs` | Exercise the closed NodeDisposition record, value constraints, and list uniqueness/order. |
 | `apps/live_frames/test/live_frames/component_review_result_test.exs` | Exercise canonical review bytes, content ID, and exact input binding. |
 | `apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs` | Prove filtering preserves original traversal paths while removing exactly authorized IDs from the shared view. |
-| `apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs` | Prove the synthetic SemanticInput-to-generation authority path preserves source IR and omits the authorized carrier from generated HTML and CSS. |
+| `apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs` | Task 8 synthetic proof that preserves DesignDocument and plan identity while omitting only authorized IDs from HEEx, CSS, state traversal, renderer indexes, and private-class ownership. |
 
 Use `behavior/componentization_decision_test.exs` for BehaviorAuthorityContext tests. Its existing fixtures construct exact contracts, approved singleton reviews, and resolved DesignDocuments.
+
+## Task ownership sequence
+
+```text
+Task 1
+Plan 1.1.0 schema + NodeDisposition
+
+Task 2
+SemanticInput SourceNodeDispositionDecision
+
+Task 3
+BehaviorAuthorityContext + behavior-aware proposer handoff
+
+Task 4
+guarded NodeDisposition construction
+
+Task 5
+reference-validation disposition semantics
+
+Task 6
+ComponentReviewResult + exact approval transition
+
+Task 7
+generation authority gate only
+
+Task 8
+shared FilteredStructure
++ synthetic end-to-end omission
++ multi-disposition structural determinism
+
+Task 9
+historical/API/NAV-CARRIER regression verification
+
+Task 10
+read-only exact Milan proof
+```
+
+## Task-boundary invariant
+
+```text
+TASK_BOUNDARY_WORKTREE_STATUS=clean
+```
+
+After every Task 1–9 commit, run `git status --porcelain` and require `EMPTY` before starting the next task. No task may carry another task's changed or untracked files forward. Apply this check before each subsequent task. If the status is not empty, stop with `STOP=TASK_BOUNDARY_WORKTREE_DIRTY` and resolve the task boundary before continuing.
 
 ## Task 1: Plan 1.1.0 schema and NodeDisposition
 
@@ -483,26 +576,25 @@ end
 - Create: `apps/live_frames/test/live_frames/component_review_result_test.exs`
 - Modify: `apps/live_frames/test/live_frames/component_review_test.exs`
 
-- [ ] **Step 1: Add failing artifact and transition tests.** Build `disposition_candidate/0` from the same synthetic document, exact NodeDisposition, Behavior contract, and singleton approved Behavior review used by the neighboring proposer fixtures. Cover the closed fields; algorithms and digest formats; decision enum; reviewer string; UTC microsecond timestamp; non-empty unique evidence refs; exact canonical bytes; deterministic `crv_` ID; plan/document/contract mismatch; and same `contract_id` with different approved contract bytes. Assert `approve/3` cannot approve a disposition plan.
+- [ ] **Step 1: Add failing artifact and transition tests.** Build `disposition_candidate/0` from the same synthetic document, exact NodeDisposition, Behavior contract, and singleton approved Behavior review used by the neighboring proposer fixtures. Use the frozen fixture and canonical JSON literal above. Assert `ComponentReviewResult.encode(fixture)` equals those exact bytes, `byte_size(encoded) == 604`, and `ComponentReviewResult.id(fixture)` equals `crv_1b012f7028cc1b15a4127403e12ed032e3ed6ead16b8c995690f8e12ef1136d7`. Compute and freeze the expected literal independently of the production ID function. Also cover the closed fields; algorithms and digest formats; decision enum; reviewer string; UTC microsecond timestamp; non-empty unique evidence refs; plan/document/contract mismatch; same `contract_id` with different approved contract bytes; and rejection by `approve/3` for a disposition plan.
 - [ ] **Step 2: Run focused review tests and confirm the bypass.** Run `mix test apps/live_frames/test/live_frames/component_review_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs`. Expected: the result module is absent and `approve/3` currently returns an approved contract for a valid plan.
 - [ ] **Step 3: Implement immutable result bytes and atomic approval.** Add exactly the eleven specified fields. Use `sha-256` for both stored digest algorithms and `lf-component-review-v1-jcs-sha256` for IDs. Encode canonical JSON with exact closed keys and evidence refs sorted by Unicode-scalar order. Derive `crv_` plus lowercase SHA-256 of those bytes. The private construction inside `approve_with_result/8` encodes `ComponentContract` only after `approval_status` becomes `:approved`, hashes those exact bytes, hashes `ComponentizationPlan.encode/1`, and captures the exact document digest. It validates all inputs and Behavior authority, then returns `{approved_contract, matching_result}` only when every step succeeds; there is no public `new_approved/6` bypass. The human review step must examine the cited evidence and confirm that Behavior owns the source runtime responsibility and no independent presentation, content, accessibility, or generated-DOM role is required; the function records the reviewer identity and evidence refs but does not infer those judgments from their strings. If the review cannot affirm those points, do not call this approval operation. Guard `approve/3` on non-empty dispositions and preserve it for empty lists.
-- [ ] **Step 4: Run result and review tests.** Run `mix test apps/live_frames/test/live_frames/component_review_result_test.exs apps/live_frames/test/live_frames/component_review_test.exs`. Expected: canonical bytes and ID match goldens; stale or same-ID/different-bytes contracts fail; only `approve_with_result/8` can approve a disposition plan.
+- [ ] **Step 4: Run result and review tests.** Run `mix test apps/live_frames/test/live_frames/component_review_result_test.exs apps/live_frames/test/live_frames/component_review_test.exs`. Expected: the fixture matches the frozen 604-byte canonical JSON and ID; stale or same-ID/different-bytes contracts fail; only `approve_with_result/8` can approve a disposition plan. If the serializer differs from the frozen literal, stop with `STOP=COMPONENT_REVIEW_GOLDEN_IDENTITY_MISMATCH`; do not change the golden.
 - [ ] **Step 5: Commit.** Commit as `feat: bind component review to exact plan bytes`.
 
-## Task 7: Disposition-aware generation authority gate
+## Task 7: Generation authority gate only
 
 **Files:**
 - Modify: `apps/live_frames/lib/live_frames/native_generator.ex`
 - Modify: `apps/live_frames/test/live_frames/native_generator_test.exs`
-- Create: `apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`
 
-- [ ] **Step 1: Add failing generation and end-to-end tests.** In `native_generator_test.exs`, cover missing Behavior contract, missing/stale selected BehaviorReviewResult, invalid singleton approval, wrong Behavior digest, missing ComponentReviewResult, wrong selected content ID, unapproved result, wrong contract digest with the same `contract_id`, changed plan bytes, and changed DesignDocument. In `disposition_end_to_end_test.exs`, build an inert unsupported leaf with fixture SourceTrace, drive it through SemanticInput and the Behavior-aware proposer, approve it with `approve_with_result/8`, and assert the proposed `/7` call preserves the source node in DesignDocument while omitting it from both HEEx and CSS. This is also Task 10's synthetic acceptance regression. Record its red result before implementing `/7`.
-- [ ] **Step 2: Run the focused generator suites and confirm the API gap.** Run `mix test apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`. Expected: `/3` has no explicit review inputs and `/7` is undefined, so the authority and end-to-end assertions fail.
-- [ ] **Step 3: Add the explicit overload.** Keep `generate/3` for empty disposition lists and return `native_generator.disposition_authority_required` for non-empty lists. Implement `generate/7` for the exact seven inputs in the Interfaces section. Recompute Behavior digest and review ID, require singleton approval against the exact contract, bind its document identity, verify each NodeDisposition binding, and validate the ComponentReviewResult ID selector, approved decision, contract ID, approved-contract bytes, plan bytes, and document digest before filtering. Authority failures return `:generation_blocked` with no partial artifacts. Do not add a persisted wrapper.
-- [ ] **Step 4: Run generation and review tests.** Run `mix test apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs apps/live_frames/test/live_frames/component_review_test.exs`. Expected: ordinary `/3` generation remains available; disposition `/3` blocks; exact `/7` authority passes and stale authority blocks.
-- [ ] **Step 5: Commit.** Commit as `feat: require exact review authority for disposition generation` with only the Task 7 implementation and `native_generator_test.exs`; leave `disposition_end_to_end_test.exs` uncommitted for Task 10's separate test commit.
+- [ ] **Step 1: Add failing authority-gate tests.** In `native_generator_test.exs`, prove that `generate/3` with non-empty `node_dispositions` returns `native_generator.disposition_authority_required`. Prove that `generate/7` blocks a missing or wrong BehaviorContract; a missing, stale, wrong, or non-approved selected BehaviorReviewResult; a missing or wrong ComponentReviewResult; a wrong selected ComponentReviewResult ID; changed approved ComponentContract bytes; changed plan bytes; and changed DesignDocument identity. For the exact valid authority tuple, assert only `AUTHORITY_GATE=PASS` and `GENERATION_PATH_ENTERED=YES`. Do not assert that the disposed node is omitted from generated HEEx or CSS in this task.
+- [ ] **Step 2: Run the focused generation tests and confirm the authority gap.** Run `mix test apps/live_frames/test/live_frames/native_generator_test.exs`. Expected: `/3` does not yet reject disposition-bearing plans with the required diagnostic, and `/7` does not yet validate the exact selected authority tuple.
+- [ ] **Step 3: Add the explicit overload and authority checks.** Keep `generate/3` compatible for plans with no dispositions and return `native_generator.disposition_authority_required` for plans that contain them. Implement `generate/7` for the exact seven inputs in the Interfaces section. Recompute Behavior digest and review ID, require singleton approval against the exact contract, bind its document identity, verify each NodeDisposition binding, and validate the ComponentReviewResult ID selector, approved decision, contract ID, approved-contract bytes, plan bytes, and document digest. Authority failures return `:generation_blocked` with no partial artifacts. This task adds no filtered traversal and makes no structural omission claim. Do not add a persisted wrapper.
+- [ ] **Step 4: Run the focused generation tests.** Run `mix test apps/live_frames/test/live_frames/native_generator_test.exs`. Expected: ordinary `/3` generation remains available; disposition `/3` blocks; invalid `/7` authority blocks; the exact valid tuple passes the authority gate and enters generation. Do not use output omission as Task 7 acceptance evidence.
+- [ ] **Step 5: Commit and check the task boundary.** Commit as `feat: require exact review authority for disposition generation` with only the Task 7 production and test files. Run `git status --porcelain` and require `EMPTY` before Task 8.
 
-## Task 8: Shared filtered structural view
+## Task 8: Shared FilteredStructure and structural omission
 
 **Files:**
 - Create: `apps/live_frames/lib/live_frames/native_generator/filtered_structure.ex`
@@ -512,69 +604,55 @@ end
 - Create: `apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs`
 - Modify: `apps/live_frames/test/live_frames/native_generator/style_integration_test.exs`
 - Modify: `apps/live_frames/test/live_frames/native_generator_test.exs`
+- Create and commit: `apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`
 
-- [ ] **Step 1: Add failing shared-view tests.** Define `filtered_fixture/0` as a synthetic document whose boundary is at `[1]`, with supported siblings at `[1,1]` and `[1,3]` and a SourceTrace-bearing unsupported leaf at `[1,2]`. Assert that the view excludes exactly the authorized ID from `nodes_by_id`, `children_by_id`, private-class ownership, CSS, state-rule traversal, renderer indexes, and HEEx. Assert the later sibling keeps the private class derived from its original Design IR path.
+- [ ] **Step 1: Add the synthetic end-to-end omission test before FilteredStructure exists.** Use one inert unsupported leaf with a harmless fixture SourceTrace. Assert that the original DesignDocument still contains the node and the plan still contains its NodeDisposition. Supply exact Behavior authority and create the accepted ComponentReviewResult through `ComponentReview.approve_with_result/8` so the Task 7 generation authority gate passes. The test must fail because generation still traverses the unfiltered DesignDocument. Require generated HEEx, generated CSS, state-rule traversal, renderer indexes, and private-class ownership to omit the disposed node. Require supported siblings to remain, including their canonical paths and private identities. Assert that no source payload appears in generated output and no source runtime is executed. Run this test and record the RED before writing FilteredStructure.
+- [ ] **Step 2: Add and run the two-disposition structural determinism regression before FilteredStructure implementation.** Use `unsupported_leaf_A`, `unsupported_leaf_B`, and `supported_sibling`. Generate once with caller decision order A,B and once with B,A. Before FilteredStructure, both runs must have valid exact Behavior and ComponentReview authority and pass the generation authority gate. The red reason is that traversals still use the original unfiltered DesignDocument. After Task 8, assert that encoded plan bytes are identical, the authorized disposed set is identical, and generated artifacts are identical. Only A and B are omitted. The supported sibling remains with its original canonical path and private identity.
+- [ ] **Step 3: Run the focused structural tests and confirm the FilteredStructure gap.** Run `mix test apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`. Expected: the shared view is absent and the synthetic end-to-end assertions fail while exact authority checks pass.
+- [ ] **Step 4: Build and share one filtered structure.** `FilteredStructure.build/4` first calls `NodeStyleIdentity.build/2` on the original document to preserve canonical path IDs and private classes. It then removes only validated disposed DesignNode IDs from `nodes_by_id`, `children_by_id`, `root_node_ids`, `path_by_id`, and private-class ownership. Keep order and parentage for included nodes. Never mutate or serialize DesignDocument. Build the ordinary generation view with an empty disposed set. Pass the same `FilteredStructure` value to StyleIntegration and Renderer. Replace direct `node.children` traversals with `FilteredStructure.children/2`. Renderer indexes must include only retained nodes, and `Renderer.build_indexes/5` must read private classes from this view. Never copy or execute source runtime data.
+- [ ] **Step 5: Run focused native-generation tests.** Run `mix test apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`. Expected: all structural surfaces omit only authorized IDs, both decision orders produce identical output, source payload is absent, and retained siblings keep their original path and private identity.
+- [ ] **Step 6: Commit all Task 8 files and check the task boundary.** Commit as `feat: share filtered design structure across generation`, including `disposition_end_to_end_test.exs`. Run `git status --porcelain` and require `EMPTY` before Task 9.
 
-```elixir
-test "filtered structure omits only the authorized ID and keeps original paths" do
-  {document, boundary_id, disposed_id, survivor_id, contract} = filtered_fixture()
-  assert {:ok, view} =
-           FilteredStructure.build(
-             document,
-             boundary_id,
-             MapSet.new([disposed_id]),
-             Renderer.package_root_class(contract)
-           )
-  refute Map.has_key?(view.nodes_by_id, disposed_id)
-  assert survivor_id in view.children_by_id[view.boundary_node_id]
-  assert view.path_by_id[survivor_id] == [1, 3]
-end
+## Task 9: Regression verification
+
+```text
+MODE=REGRESSION_VERIFICATION
 ```
 
-- [ ] **Step 2: Run the focused structural and generation tests and confirm failure.** Run `mix test apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator_test.exs`. Expected: the helper is absent and current traversals read DesignNode children directly.
-- [ ] **Step 3: Build one view after authority validation.** `FilteredStructure.build/4` first calls `NodeStyleIdentity.build/2` on the original document, preserving canonical path IDs and private classes. It then removes only the IDs in the validated set from `nodes_by_id`, `children_by_id`, `root_node_ids`, `path_by_id`, and private-class ownership. It retains order and parentage for included nodes. It never mutates or serializes DesignDocument. The ordinary generator path builds the same view with an empty set. Pass this exact view to StyleIntegration and Renderer. Replace their direct `node.children` walks with `FilteredStructure.children/2`; renderer indexes contain only included nodes. `Renderer.build_indexes/5` reads private classes from this view and does not accept a second class map.
-- [ ] **Step 4: Run focused native-generation tests.** Run `mix test apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`. Expected: no disposed node markup, CSS, state traversal, renderer index, or class remains; retained siblings keep original path identity.
-- [ ] **Step 5: Commit.** Commit as `feat: share filtered design structure across generation`, staging only Task 8 files and leaving `disposition_end_to_end_test.exs` out for Task 10.
-
-## Task 9: Historical, authority, and cross-feature regressions
-
 **Files:**
-- Modify: `apps/live_frames/test/live_frames/componentization_plan_test.exs`
-- Modify: `apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
-- Modify: `apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs`
-- Modify: `apps/live_frames/test/live_frames/componentization_proposer_test.exs`
-- Modify: `apps/live_frames/test/live_frames/behavior/componentization_decision_test.exs`
-- Modify: `apps/live_frames/test/live_frames/component_review_test.exs`
-- Modify: `apps/live_frames/test/live_frames/native_generator_test.exs`
-- Modify: `apps/live_frames/test/live_frames/native_generator/style_integration_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/componentization_plan_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/componentization_proposer_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/behavior/componentization_decision_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/component_review_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/component_review_result_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/native_generator_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/native_generator/style_integration_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/native_generator_v6_proofs_test.exs`
+- Modify as needed: `apps/live_frames/test/live_frames/bricks_static_navigation_test.exs`
 
-- [ ] **Step 1: Add failing multi-disposition integration regressions.** Use two unsupported leaves and one supported sibling. Construct decisions in both caller orders and prove encoded plans and generated artifacts match, only the two target IDs disappear, the supported sibling retains markup/styles, and no source payload is emitted. Add direct API/no-disposition compatibility assertions to the existing suites.
-- [ ] **Step 2: Run all focused suites and confirm the combined case fails before any correction.** Run:
+- [ ] **Step 1: Verify legacy and ordinary API behavior.** Verify historical Plan 1.0.0 canonical bytes and unsupported-node semantics, ordinary no-disposition proposer behavior, and ordinary `NativeGenerator.generate/3` behavior. Verify that stale or forged disposition authority remains blocked and a changed approved ComponentContract with the same `contract_id` remains blocked.
+- [ ] **Step 2: Verify multi-disposition determinism.** Rerun the Task 8 caller-order regression. Confirm the same encoded plan bytes, authorized disposed set, and generated artifacts for orders A,B and B,A; confirm only A and B disappear and the supported sibling retains its original canonical path and private identity. This capability already exists after Task 8, so this step does not claim a guaranteed RED.
+- [ ] **Step 3: Run the mandatory NAV-CARRIER regression.** NAV-CARRIER is implemented by PR #244 and this test is required. Dispose an unrelated explicit DesignNode ID, then prove the navigable heading retains its heading element and inner anchor, validated static `href`, applicable target attributes, heading root private class and style, and renderer-created anchor styling with `color: inherit` and `text-decoration: inherit`. The filter applies only to explicit disposed DesignNode IDs; it must never treat renderer-created anchor markup as a disposable DesignNode. On any regression, stop with `STOP=NAV_CARRIER_REGRESSION` and do not continue implementation.
+- [ ] **Step 4: Run focused regression suites.** Run the plan, proposer, Behavior, ComponentReview, generator, stylesheet, proof, Bricks navigation, and NAV-CARRIER suites named above. Existing tests may already prove a requirement. Add or adjust tests where evidence is missing, but do not change correct production code to manufacture a red phase.
+- [ ] **Step 5: Commit test-only hardening and check the task boundary.** If Task 9 adds or changes tests, commit only those tests as `test: cover source node disposition compatibility`. Task 9 owns no production files. If no tests need changes, create no commit. In either case, require `git status --porcelain` to be `EMPTY` before Task 10.
+
+## Task 10: Read-only exact Milan proof
+
+**Ownership:** No production files and no test files. No commit is expected.
+
+- [ ] **Step 1: Rerun the committed Task 8 synthetic regression and focused accepted suites.** Run:
 
 ```sh
-mix test apps/live_frames/test/live_frames/componentization_plan_test.exs apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs
-mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs
-mix test apps/live_frames/test/live_frames/behavior/componentization_decision_test.exs
-mix test apps/live_frames/test/live_frames/component_review_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs
-mix test apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs
+mix test apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/component_review_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs
+mix test apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs apps/live_frames/test/live_frames/native_generator_v6_proofs_test.exs apps/live_frames/test/live_frames/bricks_static_navigation_test.exs
 ```
 
-Expected: the new two-target assertions expose any ordering or shared-view gap; all listed suites pass after the smallest correction in an earlier owner.
-- [ ] **Step 3: Check NAV-CARRIER state.** Read `docs/development/nav_carrier_heading_link_representation_authority.md` and inspect its production owners and tests. If implementation exists by this step, add a regression proving a neighboring disposed DesignNode does not remove or rewrite the renderer-created heading anchor, heading root class/styles, safe `href`, or direct-child `color: inherit` and `text-decoration: inherit` rule. If absent, record the cross-lane compatibility gate. Do not change NAV-CARRIER implementation.
-- [ ] **Step 4: Rerun the focused suites and commit.** Run all five command groups from Step 2. Expected: zero failures, including the NAV-CARRIER gate where applicable. Commit as `test: cover source node disposition compatibility`, staging Task 9 files but leaving `disposition_end_to_end_test.exs` for Task 10.
-
-## Task 10: Synthetic proof and exact Milan local proof
-
-**Files:**
-- Commit the synthetic test created in Task 7: `apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs`
-- Read only: the authorized local Feature Milan resolved DesignDocument and its approved Behavior authority.
-- Do not create or commit private evidence, imported source, generated artifacts, or local proof output.
-
-- [ ] **Step 1: Rerun the synthetic end-to-end regression proven red in Task 7 before implementation.** Use its synthetic DesignDocument with one inert unsupported leaf carrying a harmless fixture SourceTrace. Drive it through SemanticInput, the Behavior-aware proposer, `ComponentReview.approve_with_result/8`, and `NativeGenerator.generate/7`. Assert DesignDocument retains the node and the plan records it; output HEEx/CSS contain no target representation or source payload; and all other supported nodes remain in output.
-- [ ] **Step 2: Run the focused proof suite.** Run `mix test apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs apps/live_frames/test/live_frames/native_generator_test.exs`. Expected: the acceptance test is green after Tasks 1–9. Its TDD sequence began with the red run in Task 7 before `/7` was implemented.
-- [ ] **Step 3: Run the exact local Milan proof without changing its source.** Use only the resolved DesignDocument whose SHA-256 is `1fdc6e859bdb624f0931106f78a46b25baae89f807b6bfc7ba3e14ee79da1045`, Behavior binding `bnd_fd4b72a566b2c38f00f5396bfc0f2c26453d49a1c19290dfe9dec2a67ee78fe4`, Behavior contract digest `5d2b37acbfa357a66357bf7ea09ce21f15353702d85a5d202f275dcb6794a344`, Behavior review ID `brv_d19b80b64c3e3281a42ae6763ea95877b45e2728c9a29f89a220777e8b45d2dd`, target `node_000001_000002`, and source ID `2265d2`. Recompute each identity. Require the target remains present and unchanged, has semantic type `unsupported`, and has a matching SourceTrace. Use reviewer-supplied identity, timestamp, and evidence refs for ComponentReviewResult; never invent those values. Generate only through `/7`. Confirm the old unsupported blocker disappears only for this validated target, generated HTML/CSS contain no source code element or source JavaScript, the generator did not execute source input, and all other Design IR nodes retain expected markup, classes, and styles. Keep proof output local and read-only.
-- [ ] **Step 4: Run synthetic and focused integration tests.** Run `mix test apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/component_review_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs`. Expected: all tests pass and no private Milan source bytes enter the repository.
-- [ ] **Step 5: Record readiness evidence and commit the synthetic acceptance test.** Record only pass/fail and authorized identity digests in the PR report; do not commit private source data or exact-source proof output. Commit `disposition_end_to_end_test.exs` separately as `test: prove reviewed carrier omission end to end`.
+Record sanitized pass/fail results and accepted identities only.
+- [ ] **Step 2: Run the exact local Milan proof without changing its source.** Use only the resolved DesignDocument whose SHA-256 is `1fdc6e859bdb624f0931106f78a46b25baae89f807b6bfc7ba3e14ee79da1045`, Behavior binding `bnd_fd4b72a566b2c38f00f5396bfc0f2c26453d49a1c19290dfe9dec2a67ee78fe4`, Behavior contract digest `5d2b37acbfa357a66357bf7ea09ce21f15353702d85a5d202f275dcb6794a344`, Behavior review ID `brv_d19b80b64c3e3281a42ae6763ea95877b45e2728c9a29f89a220777e8b45d2dd`, target `node_000001_000002`, and source ID `2265d2`. Recompute each identity. Require the target remains present and unchanged, has semantic type `unsupported`, and has a matching SourceTrace. Use reviewer-supplied identity, timestamp, and evidence refs for ComponentReviewResult; never invent those values. Generate only through `/7`. Confirm the unsupported blocker clears only for this validated target; generated HTML/CSS contain no source code element or source JavaScript; the generator does not execute source input; and all other Design IR nodes retain expected markup, classes, and styles. Keep all proof output local and read-only.
+- [ ] **Step 3: Record proof status.** Record sanitized pass/fail and accepted identities only. Do not commit private Milan evidence or create generated proof artifacts in the repository. Do not fix production defects or modify tests in Task 10. If the proof exposes a defect, stop with `STOP=MILAN_PROOF_IMPLEMENTATION_DEFECT` and return to the exact earlier task/module that owns it.
 
 ## Failure and risk coverage
 
@@ -587,10 +665,12 @@ Expected: the new two-target assertions expose any ordering or shared-view gap; 
 | Behavior contract digest changes; BehaviorReviewResult changes or loses singleton approval | Tasks 3, 5, and 7 |
 | Same `contract_id` with changed approved ComponentContract bytes | Tasks 6 and 7 |
 | Plan bytes, DesignDocument identity, ComponentReviewResult content, or selected result ID changes | Tasks 6 and 7 |
-| Source runtime copied or executed | Tasks 9 and 10 synthetic output checks; no eval or execution path is added |
+| Source runtime copied or executed | Task 8 synthetic output check and Task 10 proof; no execution or copy path is added |
 | Disposed node still emits CSS, state rules, HEEx, renderer index, or private class | Tasks 8 through 10 |
 | Style and renderer use different structures | Task 8 passes the same `FilteredStructure`; Task 9 checks every traversal |
-| NAV-CARRIER renderer-created structure is filtered or rewritten | Task 9 cross-lane gate and conditional regression |
+| NAV-CARRIER renderer-created structure is filtered or rewritten | Task 9 mandatory regression |
+| ComponentReviewResult canonical bytes or ID drift | Task 6 frozen literal, byte count, and independently computed ID |
+| Task files leak across commit boundaries | Task-boundary invariant after every Task 1–9 commit |
 | Ordinary callers or historical 1.0.0 plans regress | Tasks 1, 3, 7, and 9 |
 
 Every ambiguous or unlisted authority state fails closed. No target is silently dropped because it disappeared, became supported, moved, changed source identity, or failed to be consumed exactly once.
@@ -602,32 +682,38 @@ Every ambiguous or unlisted authority state fails closed. No target is silently 
 | Can a forged or stale disposition suppress an unsupported-node blocker? | `componentization_plan_reference_validation_test.exs`: mismatched Behavior context, changed source identity, duplicate, unused, and no-context cases retain `componentization_plan.unsupported_node`. |
 | Do historical 1.0.0 canonical bytes and semantics remain unchanged? | `componentization_plan_test.exs`: two literal 1.0.0 byte goldens with no `node_dispositions` key; reference tests retain the old unsupported blocker. |
 | Does the same `contract_id` with different approved contract bytes invalidate ComponentReviewResult? | `component_review_result_test.exs`: alter an encoded approved-contract field while keeping the ID; `validate_against/4` fails. |
+| Do ComponentReviewResult canonical bytes and ID match the frozen independent golden? | `component_review_result_test.exs`: assert the literal bytes, `byte_size == 604`, and the frozen `crv_...` value. |
 | Does every native-generation traversal use the same filtered structure? | `filtered_structure_test.exs`, `native_generator_test.exs`, and `style_integration_test.exs`: child list, index, path/class maps, CSS, state rules, and HEEx omit the same target. |
+| Do two disposition decision orders produce one canonical plan and identical output? | `disposition_end_to_end_test.exs`: compare A,B and B,A plan bytes, authorized sets, and artifacts; only A and B are absent and the sibling's original path and private identity remain. |
 | Do direct proposer/generator APIs fail only when dispositions lack exact authority, while ordinary callers continue to work? | `componentization_proposer_test.exs`, `behavior/componentization_decision_test.exs`, and `native_generator_test.exs`: no-context disposition calls fail closed; empty-list calls preserve prior behavior. |
+| Does filtering preserve implemented NAV-CARRIER markup and styling? | Task 9 tests retain the heading, inner anchor, validated static `href`, applicable target attributes, heading root class/style, and anchor rules `color: inherit` and `text-decoration: inherit` when an unrelated DesignNode is disposed. |
 
 ## Performance and scaling
 
 ```text
 DATA_LAYER=COLD_COMPILE_REVIEW_GENERATION_TIME
+VALIDATION_COMPLEXITY_TARGET=O(IR nodes + Behavior references + dispositions)
+INDEX_ONCE=YES
+TREE_RESCAN_PER_DISPOSITION=NO
 ETS=N/A
 CACHEX=N/A
 REDIS=N/A
 POSTGRES=N/A
 PGBouncer=N/A
 READ_REPLICA=N/A
-GENSERVER=N/A
-PUBSUB=N/A
-OBAN=N/A
 RUNTIME_DB_CALLS=0
 RUNTIME_NETWORK_CALLS=0
 RUNTIME_POLLING=0
+PUBSUB=N/A
+GENSERVER=N/A
+OBAN=N/A
 ```
 
-Target validation complexity is `O(IR nodes + Behavior references + dispositions)`. Build node, boundary, and Behavior-reference indexes once. Never rescan the DesignDocument per disposition. Build the filtered view once and pass that same immutable value to StyleIntegration and Renderer. No runtime infrastructure is part of this change.
+Build node, boundary, and Behavior-reference indexes once. Never rescan the DesignDocument per disposition. Build the filtered view once and pass that same immutable value to StyleIntegration and Renderer. No runtime infrastructure is part of this change.
 
 ## Global implementation restrictions
 
-Do not add a general `ignore_unsupported` flag, generic exclusion switch, Milan/source-ID allowlist, Bricks code-element allowlist, DesignDocument deletion or mutation, source JavaScript execution/translation/copy-through, provenance text as authority, optional NodeDisposition metadata, or Behavior semantics duplicated in NodeDisposition. Do not start Feature Milan A1 or real P7-D0. Do not add runtime Redis, Postgres, PubSub, GenServer, polling, or a new dependency. Do not add children-hoisting, subtree removal, a second review lifecycle on ComponentizationPlan, a serialized BehaviorAuthorityContext, or a persisted generation-authority wrapper.
+Do not add a general `ignore_unsupported` flag, generic exclusion switch, Milan/source-ID allowlist, Bricks code-element allowlist, DesignDocument deletion or mutation, source runtime execution, translation, or copying, provenance text as authority, optional NodeDisposition metadata, or Behavior semantics duplicated in NodeDisposition. Preserve the original DesignDocument unchanged. Never execute or copy source runtime data. Do not start Feature Milan A1 or real P7-D0. Do not add runtime Redis, Postgres, PubSub, GenServer, polling, or a new dependency. Do not add children-hoisting, subtree removal, a second review lifecycle on ComponentizationPlan, a serialized BehaviorAuthorityContext, or a persisted generation-authority wrapper.
 
 ## Stop conditions
 
@@ -646,6 +732,9 @@ STOP=SOURCE_RUNTIME_EXECUTION_REQUIRED
 STOP=SOURCE_RUNTIME_COPY_REQUIRED
 STOP=FILTERED_STRUCTURE_NOT_SHARED
 STOP=NAV_CARRIER_REGRESSION
+STOP=TASK_BOUNDARY_WORKTREE_DIRTY
+STOP=COMPONENT_REVIEW_GOLDEN_IDENTITY_MISMATCH
+STOP=MILAN_PROOF_IMPLEMENTATION_DEFECT
 STOP=MILAN_RESOLVED_IDENTITY_MISMATCH
 STOP=MILAN_BEHAVIOR_IDENTITY_MISMATCH
 STOP=UNEXPECTED_PUBLIC_API_BREAK_REQUIRED
@@ -654,7 +743,11 @@ STOP=NEW_DEPENDENCY_REQUIRED
 
 ## Verification strategy
 
-Tasks 1–9 each start with a focused failing ExUnit test, confirm the red result, implement only that task, rerun its focused suite, run neighboring suites, then create one task commit. Task 10's synthetic acceptance test is authored and proven red as the first step of Task 7, before `/7` implementation; its dedicated file remains separate so Task 10 can commit it after the test passes and the exact local proof is complete. Task 10 adds no production code or private evidence. Do not start a later task while a focused or relevant broader suite fails.
+Tasks 1–8 start each new production behavior with a focused failing ExUnit test. The red reason must match that task's missing capability. Each task implements only its assigned behavior, reruns its focused suite, runs neighboring suites, commits its owned files, and leaves a clean worktree.
+
+Task 7 proves only the generation authority gate. It does not prove structural omission. Task 8 owns the synthetic end-to-end omission test and multi-disposition structural determinism test, adds them before FilteredStructure implementation, and commits both with the shared view implementation. Task 9 is regression verification. Its tests may already pass when Tasks 1–8 are correct, and it must not manufacture a red phase by changing correct production code. Task 10 is read-only proof work with no production or test ownership and normally no commit.
+
+After every Task 1–9 commit, require `git status --porcelain` to print nothing. Stop with `STOP=TASK_BOUNDARY_WORKTREE_DIRTY` before starting another task if the worktree is not clean. Do not start a later task while a focused or relevant broader suite fails.
 
 ```sh
 mix test apps/live_frames/test/live_frames/componentization_plan_test.exs apps/live_frames/test/live_frames/componentization_plan/node_disposition_test.exs
@@ -663,6 +756,7 @@ mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs ap
 mix test apps/live_frames/test/live_frames/behavior/componentization_decision_test.exs
 mix test apps/live_frames/test/live_frames/component_review_test.exs apps/live_frames/test/live_frames/component_review_result_test.exs
 mix test apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/native_generator/filtered_structure_test.exs apps/live_frames/test/live_frames/native_generator/style_integration_test.exs apps/live_frames/test/live_frames/native_generator/disposition_end_to_end_test.exs
+mix test apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs apps/live_frames/test/live_frames/native_generator_v6_proofs_test.exs apps/live_frames/test/live_frames/bricks_static_navigation_test.exs
 ```
 
 Before implementation review, run all repository gates from the exact final implementation head:
@@ -681,9 +775,36 @@ CI must pass on the exact final implementation head before merge consideration. 
 
 ## Plan self-review
 
-The plan maps schema/version compatibility to Task 1, SemanticInput to Task 2, Behavior handoff to Task 3, construction guards to Task 4, reference validation to Task 5, the result and transition to Task 6, generation authority to Task 7, shared filtering to Task 8, compatibility and NAV-CARRIER to Task 9, and synthetic plus Milan proof to Task 10. Every task names files, a failing test, its focused command, implementation scope, broader tests, and a separate commit. The interfaces are consistent across tasks. Every Review Focus item maps to explicit assertions and test files. Each new module has one responsibility. This document contains no implementation code.
+Tasks 1–6 own the versioned plan schema, semantic input, Behavior authority handoff, guarded construction, reference validation, and exact ComponentReview approval transition. Task 7 owns the generation authority gate only. Task 8 owns the shared FilteredStructure, synthetic end-to-end omission, and multi-disposition structural determinism. Task 9 verifies historical behavior, ordinary APIs, stale authority rejection, and mandatory NAV-CARRIER compatibility. Task 10 owns read-only Milan proof only.
+
+Tasks 1–8 require a focused failing test for each new production behavior, with a red reason tied to the missing capability. Task 9 may already be green and requires no artificial failure. Task 10 adds no code or tests. The Task 8 end-to-end test is not assigned to Task 7 or Task 10. Task 9 has no production file ownership. Task-boundary cleanliness is required after each Task 1–9 commit.
+
+The ComponentReviewResult fixture includes the exact frozen canonical JSON literal, 604-byte length, and ID computed independently from that literal. The plan records PR #244's NAV-CARRIER implementation and requires an unconditional regression. Every Review Focus item maps to assertions and test files. The named interfaces match across task ownership. The accepted spec remains unchanged. This document contains no implementation code.
 
 ```text
+TASK7_SCOPE=GENERATION_AUTHORITY_ONLY
+END_TO_END_TEST_OWNER=TASK_8
+MULTI_DISPOSITION_STRUCTURAL_TEST_OWNER=TASK_8
+TASK7_TASK8_SEQUENCE_CONSISTENT=YES
+NO_CROSS_TASK_DIRTY_FILE=YES
+
+TASK9_MODE=REGRESSION_VERIFICATION
+TASK9_FALSE_RED_REQUIREMENT_REMOVED=YES
+TASK10_MODE=READ_ONLY_MILAN_PROOF
+TASK10_CODE_OR_TEST_OWNERSHIP=NONE
+
+TASK_BOUNDARY_WORKTREE_CLEAN_REQUIRED=YES
+TASK_BOUNDARY_DIRTY_STOP_DEFINED=YES
+
+NAV_CARRIER_CURRENT_IMPLEMENTATION_ACKNOWLEDGED=YES
+NAV_CARRIER_REGRESSION_MANDATORY=YES
+
+COMPONENT_REVIEW_GOLDEN_LITERAL_DEFINED=YES
+COMPONENT_REVIEW_GOLDEN_CANONICAL_BYTES=604
+COMPONENT_REVIEW_GOLDEN_BYTES=604
+COMPONENT_REVIEW_GOLDEN_ID=crv_1b012f7028cc1b15a4127403e12ed032e3ed6ead16b8c995690f8e12ef1136d7
+
+TDD_TASKS_1_TO_8_DEFINED=YES
 SPEC_COVERAGE_GAPS=NONE
 STEP_GRANULARITY=ONE_REVIEWABLE_CHANGE_PER_TASK
 INTERFACE_INCONSISTENCIES=NONE
