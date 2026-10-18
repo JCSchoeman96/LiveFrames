@@ -6,6 +6,7 @@ defmodule LiveFrames.MixProject do
       app: :live_frames,
       version: "0.1.0",
       elixir: "~> 1.19",
+      description: "Phoenix/LiveView design compiler and reusable UI-component library.",
       start_permanent: Mix.env() == :prod,
       deps: [
         {:phoenix_live_view, "~> 1.2.11"},
@@ -23,7 +24,12 @@ defmodule LiveFrames.MixProject do
 
   def package do
     [
-      files: ~w(lib mix.exs assets/css priv/token_maps priv/static/live_frames)
+      files:
+        ~w(lib mix.exs assets/css priv/token_maps priv/static/live_frames priv/catalogue LICENSE-PROPRIETARY.txt),
+      licenses: ["LicenseRef-LiveFrames-Proprietary"],
+      links: %{
+        "GitHub" => "https://github.com/JCSchoeman96/LiveFrames"
+      }
     ]
   end
 end
