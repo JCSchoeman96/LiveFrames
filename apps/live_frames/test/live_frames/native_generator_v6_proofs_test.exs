@@ -397,6 +397,53 @@ defmodule LiveFrames.NativeGeneratorV6ProofsTest do
     assert source =~ ~s(rel="noopener noreferrer")
   end
 
+  test "static heading navigation preserves its heading root and emits a protected inner anchor" do
+    heading = %DesignNode{
+      node_id: @heading_id,
+      semantic_type: "heading",
+      attributes: %{
+        "tag" => "h2",
+        "navigation" => %{"href" => "/go", "target" => "_blank"}
+      },
+      content: "Title"
+    }
+
+    document = %DesignDocument{root_nodes: [section_node([heading])]}
+    component_contract = approved_contract()
+    component_plan = plan_for(component_contract, document)
+    source = generate_source(component_contract, component_plan, document)
+
+    assert source =~
+             ~r/<h2\b[^>]*>\s*<a\b[^>]*href="\/go"[^>]*target="_blank"[^>]*rel="noopener noreferrer">\{"Title"\}<\/a><\/h2>/s
+  end
+
+  test "static heading navigation preserves every supported heading tag" do
+    for tag <- ~w(h1 h2 h3 h4 h5 h6) do
+      heading = %DesignNode{
+        node_id: @heading_id,
+        semantic_type: "heading",
+        attributes: %{
+          "tag" => tag,
+          "navigation" => %{"href" => "#target"}
+        },
+        content: "Title"
+      }
+
+      document = %DesignDocument{root_nodes: [section_node([heading])]}
+      contract = approved_contract()
+      plan = plan_for(contract, document)
+
+      assert :ok = ComponentContract.validate_for_generation(contract, document)
+      assert :ok = ComponentizationPlan.validate_for_generation(plan, contract, document)
+      assert {:ok, bundle} = NativeGenerator.generate(contract, plan, document)
+
+      source = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
+      assert source =~ ~r/<#{tag}\b[^>]*>\s*<a\b[^>]*href="#target"/s
+      assert source =~ ~r/<a\b[^>]*href="#target"[^>]*>\{"Title"\}<\/a><\/#{tag}>/s
+      refute source =~ ~r/<#{tag}\b[^>]*href="#target"/
+    end
+  end
+
   defp nested_collection_count_fixture do
     paragraph_id = DesignNode.deterministic_id([1, 1])
     container_id = DesignNode.deterministic_id([1, 2])

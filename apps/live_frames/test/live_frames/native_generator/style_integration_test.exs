@@ -121,6 +121,47 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     assert module.content =~ "lf-section-style-fixture__n-000001-000001"
   end
 
+  test "navigable unstyled heading gets a private class and only bounded anchor neutralization" do
+    heading = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "heading",
+      attributes: %{"tag" => "h1", "navigation" => %{"href" => "#"}},
+      content: "Linked title"
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([heading])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    module = Enum.find(bundle.artifacts, &(&1.kind == :elixir_module)).content
+    heading_class = "lf-section-style-fixture__n-000001-000001"
+
+    assert module =~ ~s(class={"#{heading_class}"})
+
+    assert stylesheet ==
+             ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}\n"
+
+    refute stylesheet =~ ~r/^a \{/m
+    refute stylesheet =~ ~r/(?:outline|box-shadow):\s*(?:none|0)/
+    refute stylesheet =~ "text-decoration: none;"
+  end
+
+  test "ordinary navigable heading styles stay on the heading class" do
+    heading = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "heading",
+      attributes: %{"tag" => "h1", "navigation" => %{"href" => "#"}},
+      styles: %{"font-size" => StyleValue.literal("2rem")},
+      content: "Linked title"
+    }
+
+    bundle = bundle!(generate(%DesignDocument{root_nodes: [boundary([heading])]}, contract()))
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    heading_class = "lf-section-style-fixture__n-000001-000001"
+
+    assert stylesheet ==
+             ".#{heading_class} {\n  font-size: 2rem;\n}\n\n" <>
+               ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}\n"
+  end
+
   test "renders ordered self and descendant hover and focus-within rules" do
     owner_id = DesignNode.deterministic_id([1, 1])
     target_id = DesignNode.deterministic_id([1, 1, 1])

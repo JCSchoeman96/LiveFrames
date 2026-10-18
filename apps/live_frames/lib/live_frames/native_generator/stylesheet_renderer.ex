@@ -54,6 +54,24 @@ defmodule LiveFrames.NativeGenerator.StylesheetRenderer do
     end
   end
 
+  @spec render_heading_navigation_anchor(String.t()) ::
+          {:ok, String.t()} | {:error, Diagnostic.t()}
+  def render_heading_navigation_anchor(private_class) do
+    styles = %{
+      "color" => StyleValue.keyword("inherit"),
+      "text-decoration" => StyleValue.keyword("inherit")
+    }
+
+    with :ok <- validate_private_class(private_class),
+         {:ok, declarations} <- serialize_styles(styles) do
+      css = render_block("." <> private_class <> " > a", declarations, 2)
+      {:ok, css <> "\n"}
+    else
+      {:error, %Diagnostic{} = diagnostic} -> {:error, diagnostic}
+      {:error, reason} -> {:error, style_diagnostic(reason)}
+    end
+  end
+
   @spec render_primary_action_slot(String.t(), map(), map()) ::
           {:ok, String.t()} | {:error, Diagnostic.t()}
   def render_primary_action_slot(private_class, base_styles, pseudo_styles) do

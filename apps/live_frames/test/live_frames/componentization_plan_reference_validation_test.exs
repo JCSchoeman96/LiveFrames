@@ -142,6 +142,29 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
     }
   end
 
+  defp navigable_heading_document(options \\ []) do
+    attributes =
+      if Keyword.get(options, :navigable?, true) do
+        %{"tag" => "h2", "navigation" => %{"href" => "#"}}
+      else
+        %{"tag" => "h2"}
+      end
+
+    heading = %DesignNode{
+      node_id: @heading_id,
+      semantic_type: "heading",
+      attributes: Map.merge(attributes, Keyword.get(options, :attributes, %{})),
+      content: Keyword.get(options, :content, "Title"),
+      children: Keyword.get(options, :children, [])
+    }
+
+    %DesignDocument{
+      root_nodes: [
+        %DesignNode{node_id: @boundary_id, semantic_type: "section", children: [heading]}
+      ]
+    }
+  end
+
   defp codes({:error, diagnostics}), do: Enum.map(diagnostics, & &1.code)
 
   test "fingerprint hashes canonical bytes and distinguishes documents with colliding node ids" do
@@ -1688,6 +1711,264 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
              blocked_diagnostics,
              &(&1.code == "componentization_plan.generation_blocked")
            )
+  end
+
+  test "generation blocks navigable headings with whitespace-only static text" do
+    design_document = navigable_heading_document(content: " \t ")
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.heading_navigation_invalid" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation accepts the closed static heading navigation shape" do
+    design_document = navigable_heading_document()
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert :ok =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+  end
+
+  test "generation blocks navigable headings with absent static text" do
+    design_document = navigable_heading_document(content: nil)
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.heading_navigation_invalid" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings with dynamic text ownership" do
+    design_document = navigable_heading_document()
+    component_contract = contract(public_attrs: [attr("title")])
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("title", :text_content)]
+      )
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.heading_navigation_invalid" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings with dynamic heading levels" do
+    design_document = navigable_heading_document()
+
+    component_contract =
+      contract(
+        public_attrs: [
+          attr("level", :integer, required: true, validation: %{"values" => [1, 2, 3, 4, 5, 6]})
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("level", :heading_level)]
+      )
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.heading_navigation_invalid" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings owned by a content slot" do
+    design_document = navigable_heading_document()
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "heading_content",
+            semantic_purpose: "heading content",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "heading_content",
+            target_node_id: @heading_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.render_projection.role_node_mismatch" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings with an invalid static navigation map" do
+    design_document =
+      navigable_heading_document(attributes: %{"navigation" => %{"href" => "javascript:bad"}})
+
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.static_navigation_invalid" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings without a proven heading tag" do
+    design_document = navigable_heading_document(attributes: %{"tag" => "div"})
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.tag_unsupported" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings with child subtrees" do
+    child = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1, 1]),
+      semantic_type: "paragraph",
+      content: "Child"
+    }
+
+    design_document = navigable_heading_document(children: [child])
+    component_contract = contract()
+    component_plan = plan(component_contract, design_document)
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    assert "componentization_plan.native_generation.heading_children_forbidden" in Enum.map(
+             diagnostics,
+             & &1.code
+           )
+  end
+
+  test "generation blocks navigable headings with a link_url projection" do
+    design_document = navigable_heading_document()
+    component_contract = contract(public_attrs: [attr("href")])
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("href", :link_url)]
+      )
+
+    assert {:error, _diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+  end
+
+  test "ordinary dynamic headings remain generation eligible without navigation" do
+    design_document =
+      navigable_heading_document(navigable?: false)
+
+    component_contract = contract(public_attrs: [attr("title")])
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("title", :text_content)]
+      )
+
+    assert :ok =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
+  end
+
+  test "ordinary dynamic heading levels remain generation eligible without navigation" do
+    design_document = navigable_heading_document(navigable?: false)
+
+    component_contract =
+      contract(
+        public_attrs: [
+          attr("level", :integer, required: true, validation: %{"values" => [1, 2, 3, 4, 5, 6]})
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [render_attr("level", :heading_level)]
+      )
+
+    assert :ok =
+             ComponentizationPlan.validate_generation_prerequisites(
+               component_plan,
+               component_contract,
+               design_document
+             )
   end
 
   test "info and warning plan diagnostics do not block generation" do
