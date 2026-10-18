@@ -68,7 +68,7 @@ to Fidelity.
 
 | Option | Preserves heading semantics | Preserves node identity | Requires synthetic DesignNode | Reuses navigation schema | Reuses URL safety | Renderer complexity | IR/schema impact | Style impact | Accessibility impact | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A. Heading node with navigation attribute and internal anchor | Yes | Yes | No | Yes | Yes | Medium. Both renderers add an internal native element. | None. Existing `heading`, attributes map, and navigation map remain. | Heading styles and classes stay on h1 through h6. Anchor gets navigation attributes. | Keeps native heading and link semantics; requires non-empty static text and no interactive descendants. | Selected |
+| A. Heading node with navigation attribute and internal anchor | Yes | Yes | No | Yes | Yes | Medium. Both renderers add an internal native element and a bounded structural style rule. | None. Existing `heading`, attributes map, and navigation map remain. | Heading styles and classes stay on h1 through h6. Anchor gets navigation attributes and only the renderer-owned `color: inherit` and `text-decoration: inherit` neutralization. | Keeps native heading and link semantics; requires non-empty static text and no interactive descendants. | Selected |
 | B. Heading with synthetic link child | Yes at the root | No. The child needs a new deterministic identity and source trace policy. | Yes | Yes | Yes | High. Both renderers, bindings, references, and styles must account for a new node. | Changes the IR tree and node count. | Requires ownership rules for heading styles, responsive styles, state styles, and link styles. | Can keep heading and link semantics, but adds content and interactive nesting ambiguity. | Reject |
 | C. Convert the heading node to a link | No | No as a semantic node. The node ID may remain, but its heading meaning is lost. | No | Yes | Yes | Low | Changes the node's semantic meaning and tag resolution. | Existing heading styles would be applied to a link root. | Link remains, heading level and native heading semantics are lost. | Reject |
 | D. Runtime click behavior or ARIA emulation | Not consistently | Usually yes | No | No | No | High. Requires event, keyboard, focus, and runtime rules. | Adds behavior-specific state and focus styling concerns. | An anchor with `role="heading"` overrides native link semantics; a heading click handler does not create native link behavior. | Reject |
@@ -98,6 +98,10 @@ This authority rejects:
 ## Selected representation
 
 ```text
+OPTION_A_VERDICT=SELECTED
+OPTION_B_VERDICT=REJECTED
+OPTION_C_VERDICT=REJECTED
+OPTION_D_VERDICT=REJECTED
 SELECTED_REPRESENTATION=HEADING_NODE_WITH_STATIC_NAVIGATION_ATTRIBUTE_AND_INTERNAL_NATIVE_ANCHOR
 HEADING_SEMANTIC_TYPE_PRESERVED=YES
 HEADING_NODE_ID_PRESERVED=YES
@@ -224,17 +228,49 @@ All heading-owned presentation remains on the outer h1 through h6 element:
 
 Fidelity does not move source classes or styles to the anchor. NativeGenerator
 does not move DesignNode styles or package classes to the anchor. The
-navigation attributes belong only to the inner anchor. No current normalized
-style semantic requires an anchor-specific class.
+navigation attributes belong only to the inner anchor. The anchor is a
+renderer-created element, so it needs a small structural rule that prevents
+browser link defaults from changing the heading's normalized presentation.
+This rule describes LiveFrames' generated markup. It does not reconstruct
+source CSS or claim what the historical source DOM contained.
 
 ```text
 HEADING_STYLES_REMAIN_ON_HEADING=YES
-ANCHOR_STYLE_SYNTHESIS=NO
+ANCHOR_SOURCE_STYLE_SYNTHESIS=NO
+ANCHOR_PRESENTATION_NEUTRALIZATION=REQUIRED
+ANCHOR_NEUTRALIZATION_PROPERTIES=color: inherit; text-decoration: inherit
+ANCHOR_NEUTRALIZATION_SCOPE=NAVIGABLE_HEADING_RENDERER_CREATED_DIRECT_CHILD_ONLY
+ANCHOR_FOCUS_SUPPRESSION=NO
+ANCHOR_STYLE_SOURCE=RENDERER_STRUCTURAL_CONTRACT
+GLOBAL_ANCHOR_RESET_AUTHORIZED=NO
 ```
 
-The anchor uses native keyboard focus and activation. Keep a visible focus
-indicator. Do not add `tabindex="-1"`, `outline: none`, or `box-shadow: none`
-to suppress it. This authority does not copy any source focus suppression.
+Apply exactly `color: inherit` and `text-decoration: inherit` to the
+renderer-created direct-child anchor. These declarations prevent browser
+default link color and underline from changing the heading presentation.
+They also let a normalized heading color or text decoration pass through.
+The anchor inherits ordinary typography from the heading through normal CSS
+inheritance.
+
+Do not add other declarations through this authority. In particular, do not
+add display, position, width, height, padding, margin, font-size,
+font-weight, line-height, background, border, transform, transition,
+opacity, hover presentation, active presentation, or visited-specific source
+styling. Do not copy source selectors or source link styles. Do not emit a
+general `a` reset. The structural rule applies only to the renderer-created
+anchor for a navigable heading. Fidelity may scope it with a deterministic
+direct-child selector or another bounded renderer-owned marker; this
+authority does not require a literal class name.
+
+The neutralization does not suppress native focus. The anchor remains
+keyboard focusable and keeps a visible focus indicator. Do not add
+`outline: none`, `outline: 0`, `box-shadow: none`, or `tabindex="-1"` as
+structural neutralization. Do not copy Romeo's source focus suppression.
+
+The structural `color: inherit` rule applies to the anchor independently of
+browser default link-state colors. Do not add source-derived `:link`,
+`:visited`, `:hover`, or `:active` presentation rules. Any normalized
+heading or heading-state presentation remains owned by the heading node.
 
 ```text
 ANCHOR_KEYBOARD_FOCUSABLE=YES
@@ -305,9 +341,18 @@ the DesignNode root and emits the validated anchor inside it:
 
 ```html
 <hN class="...heading classes...">
-  <a href="...">heading text</a>
+  <a class="renderer-owned-structural-anchor" href="...">
+    heading text
+  </a>
 </hN>
 ```
+
+The class name is conceptual. Fidelity may use a deterministic direct-child
+selector if it can scope the neutralization to this navigable heading. It must
+give the inner anchor the effective declarations `color: inherit` and
+`text-decoration: inherit`. It must not emit a global anchor reset, copy
+source presentation to the anchor, or move heading presentation off the
+heading root.
 
 Navigation attributes stay off the heading. Fidelity reuses
 `LiveFrames.StaticNavigation.validate_navigation_map/1` and emits no anchor
@@ -318,6 +363,7 @@ DesignNode.
 ```text
 FIDELITY_HEADING_ROOT_RETAINED=YES
 FIDELITY_NAVIGATION_ANCHOR_INTERNAL=YES
+FIDELITY_ANCHOR_PRESENTATION_NEUTRALIZED=YES
 ```
 
 ## NativeGenerator and componentization-plan contract
@@ -325,10 +371,16 @@ FIDELITY_NAVIGATION_ANCHOR_INTERNAL=YES
 NativeGenerator emits the same static structure as Fidelity. Its heading
 attributes, package classes, private style class, and normalized styles remain
 on the h1 through h6 root. The inner anchor receives the validated navigation
-attributes in the shared deterministic order.
+attributes in the shared deterministic order. Its generated stylesheet gives
+that anchor the same effective `color: inherit` and
+`text-decoration: inherit` declarations, scoped to the renderer-created
+direct-child anchor. The stylesheet must not add a global anchor reset, move
+DesignNode presentation classes to the anchor, or copy source link styling.
 
 ```text
+NATIVE_GENERATOR_ANCHOR_PRESENTATION_NEUTRALIZED=YES
 FIDELITY_NATIVE_GENERATOR_STRUCTURE_MATCH=YES
+FIDELITY_NATIVE_GENERATOR_PRESENTATION_CONTRACT_MATCH=YES
 ```
 
 `ComponentizationPlan.ReferenceValidation` currently revalidates static
@@ -368,7 +420,19 @@ The minimum production owners for this capability are:
 | `apps/live_frames/lib/live_frames/adapters/bricks/static_navigation.ex` | Recognize the bounded heading link object and keep existing static-only failure rules. |
 | `apps/live_frames/lib/live_frames/fidelity.ex` | Keep the heading root and emit the internal anchor. |
 | `apps/live_frames/lib/live_frames/native_generator/renderer.ex` | Emit the same nested structure and place navigation attributes on the anchor. |
+| `apps/live_frames/lib/live_frames/native_generator/style_integration.ex` | Own the bounded renderer-created heading-anchor presentation-neutralization rule in the generated stylesheet. |
 | `apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex` | Revalidate the closed heading navigation shape as generation-representable. |
+
+```text
+PRODUCTION_IMPLEMENTATION_OWNER_FILES=apps/live_frames/lib/live_frames/adapters/bricks/static_navigation.ex; apps/live_frames/lib/live_frames/fidelity.ex; apps/live_frames/lib/live_frames/native_generator/renderer.ex; apps/live_frames/lib/live_frames/native_generator/style_integration.ex; apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex
+CONDITIONAL_IMPLEMENTATION_OWNER=apps/live_frames/lib/live_frames/native_generator/stylesheet_renderer.ex
+```
+
+Change `StylesheetRenderer` only if the existing `StyleIntegration` and
+`StylesheetRenderer` API cannot express the bounded deterministic
+direct-child rule without duplication or ad-hoc raw CSS construction. If
+that condition arises, stop for review before expanding scope. Do not treat
+`StylesheetRenderer` as a required production change in this authority.
 
 `DesignIRNormalizer` already attaches a returned navigation map without
 changing heading semantics. `DesignNode`, IR validation, and the IR serializer
@@ -381,12 +445,40 @@ Expected focused test files:
 - `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`
 - `apps/live_frames/test/live_frames/native_generator_test.exs`
 - `apps/live_frames/test/live_frames/native_generator_v6_proofs_test.exs`
+- `apps/live_frames/test/live_frames/native_generator/style_integration_test.exs`
 - `apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
 
 Tests must cover tag preservation for h1 through h6, the static map and its
 URL safety, nested markup parity, class and style ownership, visible focus
 expectations, empty-content rejection, child and slot rejection, dynamic-link
-rejection, and deterministic output. No tests change in this authority PR.
+rejection, and deterministic output. Style integration tests must prove that
+the heading root retains its class and styles, the internal anchor receives
+navigation attributes, the anchor effectively receives `color: inherit` and
+`text-decoration: inherit`, no global anchor reset or source presentation is
+copied to it, no focus suppression is emitted, and Fidelity and
+NativeGenerator use the same presentation contract. If a later implementation
+needs a `StylesheetRenderer` change, also require
+`apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs`
+in that implementation PR. No tests change in this authority PR.
+
+```text
+EXPECTED_STYLE_INTEGRATION_TEST=apps/live_frames/test/live_frames/native_generator/style_integration_test.exs
+CONDITIONAL_STYLESHEET_RENDERER_TEST=apps/live_frames/test/live_frames/native_generator/stylesheet_renderer_test.exs
+```
+
+## Browser acceptance
+
+The eventual implementation requires browser acceptance. Browser proof must
+confirm that heading navigation preserves the heading level and does not
+change heading presentation by itself, browser-default link color does not
+leak through, and browser-default underline does not leak through unless the
+heading already has inherited text decoration. It must also confirm that the
+anchor remains keyboard focusable, visible focus remains present, and
+navigation works. Do not run browser acceptance in this documentation PR.
+
+```text
+BROWSER_ACCEPTANCE_REQUIRED=YES
+```
 
 ## Scope, performance, and lifecycle
 
