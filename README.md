@@ -70,10 +70,13 @@ Hex publication, or `distribution.library=supported`.
 The production Catalogue contains `live_frames.section.media_call_to_action`,
 whose state is `APPROVED`. C2D2A proves that the built and unpacked LiveFrames
 source package includes canonical `priv/catalogue/` content and
-`LICENSE-PROPRIETARY.txt`; CI runs the package-boundary check. The CTA
-`distribution` field remains absent. Package inclusion does not grant CTA
-redistribution permission. P10 consumer-project ejection remains unimplemented.
-No public package publication or Catalogue `RELEASED` claim is made. See
+`LICENSE-PROPRIETARY.txt`; CI verifies the package boundary. C2D2R1 records
+accepted evidence for the CTA library distribution capability. Persistence of
+that accepted capability claim is governed separately by the C2D3
+manifest-mutation gate. Neither package inclusion nor accepted library-
+capability evidence grants CTA redistribution permission. P10 consumer-project
+ejection remains separate and unimplemented. No public package publication or
+Catalogue `RELEASED` claim is implied. See
 [`docs/17_ROADMAP.md`](docs/17_ROADMAP.md) for the current checkpoint.
 
 ## Consumer quick start (native Hero)

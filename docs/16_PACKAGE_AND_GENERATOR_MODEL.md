@@ -24,9 +24,11 @@ The canonical Catalogue source tree exists at
 `apps/live_frames/priv/catalogue/` and contains the production CTA manifest.
 Package compilation uses these files as `Registry.Builder` input, while runtime
 reads only the compiled Registry. The CTA item
-`live_frames.section.media_call_to_action` is `APPROVED`; its `distribution`
-field is absent. C2D2A proves that the built and unpacked LiveFrames source
-package contains the canonical Catalogue JSON and `LICENSE-PROPRIETARY.txt`.
+`live_frames.section.media_call_to_action` is `APPROVED`. Its library
+distribution capability is governed by the accepted C2D2R1 evidence review and
+the separate C2D3 manifest-persistence gate. C2D2A proves that the built and
+unpacked LiveFrames source package contains the canonical Catalogue JSON and
+`LICENSE-PROPRIETARY.txt`.
 
 These manifests are inspectable package source. The public Catalogue API's
 visibility rules do not make them confidential. The proprietary notice and
@@ -105,8 +107,9 @@ a local path dependency to the exact LiveFrames application. C1 does not prove:
 
 C2D2A separately proves that the actual built and unpacked LiveFrames source
 package contains the required package roots and canonical Catalogue content.
-These proofs do not establish library capability evidence; C2D2R1 must repeat
-that review.
+C1 and C2D2A alone do not establish library capability evidence. C2D2R1
+separately records the accepted library-capability evidence. Persisting that
+accepted claim is the separate C2D3 manifest-mutation gate.
 
 Module and function:
 
