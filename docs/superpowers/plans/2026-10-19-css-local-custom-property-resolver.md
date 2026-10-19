@@ -236,7 +236,9 @@ MAX_LOCAL_SUBSTITUTION_DEPTH=1
 MAX_DEPENDENCY_EDGES=1024
 ```
 
-Check the CSS byte limit in `CustomCssNormalizer` before calling `CustomCssParser.parse/1`. Apply definition and reference counts to the post-selector records passed into each single-owner/single-provenance resolver call, across its selected base and responsive records. More than 256 definitions or more than 1,024 references returns top-level `{:error, :resource_limit_exceeded}`. Count only through `LIMIT + 1`; never truncate, partially process, or allocate one error result per excess reference. Build one index per owner/provenance call. Target complexity is `O(D + R * H)` where `D <= 256`, `R <= 1024`, and `H <= 64`. Do not rescan the full source for each reference.
+Check the CSS byte limit in `CustomCssNormalizer` before calling `CustomCssParser.parse/1`. Apply definition and reference counts to the post-selector records passed into each single-owner/single-provenance resolver call, across its selected base and responsive records. More than 256 definitions or more than 1,024 references returns top-level `{:error, :resource_limit_exceeded}`. Count only through `LIMIT + 1`; never truncate, partially process, or allocate one error result per excess reference. Build one index per owner/provenance call.
+
+The 64-hop limit applies only to relative ancestor search. It is not an absolute path-depth limit. Absolute structural path depth remains uncapped, so path-component work must be included in the complexity target. Let `D` be the definition count, `R` the reference count, `H` the relative ancestry limit, `E` the dependency-edge count, and `P` the total structural path-component work performed by bounded definition, reference, and dependency lookups, including index construction. The target complexity is `O(D + R * H + E * H + P)`, where `D <= 256`, `R <= 1024`, `H <= 64`, and `E <= 1024`. `P` has no separate fixed limit. Do not rescan the full source for each reference.
 
 ### Closed failure states
 
