@@ -253,8 +253,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp resolve_reference(_reference, _index, _owner_source_id, _provenance_identity),
     do: {:error, :cross_owner_reference}
 
-  # Absolute path depth is uncapped. Path complexity counts structural components:
-  # each reference may hash its path for up to H ancestor lookups and scan one prefix.
+  # Absolute path depth is uncapped. Path work is measured by structural components:
+  # each reference may hash up to H + 1 path prefixes and scan one prefix trie.
   defp resolve_target(local_name, target_path, index, viewport_scope) do
     reversed_path = Enum.reverse(target_path)
     trie = Map.get(index.tries_by_name, local_name, empty_path_trie())
@@ -266,20 +266,30 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       {:responsive_source_key, _source_key} = responsive_scope ->
         responsive_scope_key = {responsive_scope, nil}
 
-        case selected_relation_for_scope(
+        case selected_relation_for_scopes(
                index.by_name_and_path,
                local_name,
                reversed_path,
-               responsive_scope_key
+               [responsive_scope_key, {:base, nil}]
              ) do
-          {:found, _candidate_path, _scope_selections} ->
-            {:error, :unsupported_scope}
+          {:found, candidate_path, scope_selections} ->
+            if Map.has_key?(scope_selections, responsive_scope_key) do
+              {:error, :unsupported_scope}
+            else
+              resolve_scope_selection(
+                scope_selections,
+                local_name,
+                candidate_path,
+                index.dependency_states
+              )
+            end
 
           :none ->
-            if farther_ancestor_exists_in_scope?(trie, target_path, responsive_scope_key) do
+            if farther_ancestor_exists_in_scope?(trie, target_path, responsive_scope_key) or
+                 farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
               {:error, :resource_limit_exceeded}
             else
-              resolve_base_relation(local_name, target_path, reversed_path, trie, index)
+              {:error, :no_local_definition}
             end
         end
     end
@@ -322,6 +332,43 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
         nearest_relation_for_scope(index, local_name, reversed_path, scope_key)
     end
   end
+
+  defp selected_relation_for_scopes(index, local_name, reversed_path, scope_keys) do
+    nearest_relation_for_scopes(index, local_name, reversed_path, scope_keys, 0)
+  end
+
+  defp nearest_relation_for_scopes(index, local_name, reversed_path, scope_keys, distance)
+       when distance <= @max_ancestry_hops do
+    case Map.fetch(index, {local_name, reversed_path}) do
+      {:ok, selections} ->
+        if Enum.any?(scope_keys, &Map.has_key?(selections, &1)) do
+          {:found, reversed_path, selections}
+        else
+          nearest_relation_for_scopes(
+            index,
+            local_name,
+            drop_path_head(reversed_path),
+            scope_keys,
+            distance + 1
+          )
+        end
+
+      :error ->
+        nearest_relation_for_scopes(
+          index,
+          local_name,
+          drop_path_head(reversed_path),
+          scope_keys,
+          distance + 1
+        )
+    end
+  end
+
+  defp nearest_relation_for_scopes(_index, _local_name, _reversed_path, _scope_keys, _distance),
+    do: :none
+
+  defp drop_path_head([_component | rest]), do: rest
+  defp drop_path_head([]), do: []
 
   defp nearest_relation_for_scope(index, local_name, reversed_path, scope_key) do
     case nearest_ancestor_for_scope(index, local_name, reversed_path, scope_key, 1) do
