@@ -4,7 +4,9 @@ defmodule LiveFrames.ComponentizationProposerTest do
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentContract.{BindingProjection, CollectionInput, ItemField}
   alias LiveFrames.ComponentizationPlan
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationProposer
+  alias LiveFrames.ComponentizationProposer.Construction
   alias LiveFrames.ComponentizationProposer.SemanticInput, as: Input
 
   alias LiveFrames.ComponentizationProposer.SemanticInput.{
@@ -23,14 +25,29 @@ defmodule LiveFrames.ComponentizationProposerTest do
 
   alias LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision
 
-  alias LiveFrames.Behavior.{BindingIdentity, Contract, ReviewResult, Serializer}
+  alias LiveFrames.Behavior.{
+    Binding,
+    BindingIdentity,
+    Contract,
+    ReviewResult,
+    Serializer
+  }
+
+  alias LiveFrames.Behavior.Binding.{
+    ControlledTarget,
+    FocusPolicy,
+    PrimitiveRef,
+    Trigger
+  }
 
   alias LiveFrames.IR.{
     CollectionBinding,
     DesignDocument,
     DesignNode,
     Identity,
+    Interaction,
     ResponsiveOverride,
+    SourceTrace,
     StyleValue,
     ValueBinding
   }
@@ -223,6 +240,123 @@ defmodule LiveFrames.ComponentizationProposerTest do
     context
   end
 
+  defp disposition_document(target_overrides \\ [], document_overrides \\ []) do
+    target =
+      struct!(
+        %DesignNode{
+          node_id:
+            if(Keyword.get(document_overrides, :target_outside_boundary, false),
+              do: "node_000002",
+              else: @heading_id
+            ),
+          semantic_type: "unsupported",
+          source_trace: source_trace()
+        },
+        target_overrides
+      )
+
+    boundary_children =
+      if Keyword.get(document_overrides, :target_outside_boundary, false),
+        do: [],
+        else: [target]
+
+    boundary = %DesignNode{
+      node_id: @boundary_id,
+      semantic_type: "section",
+      children: boundary_children
+    }
+
+    roots =
+      if Keyword.get(document_overrides, :target_outside_boundary, false),
+        do: [boundary, target],
+        else: [boundary]
+
+    %DesignDocument{
+      root_nodes: roots,
+      interactions: Keyword.get(document_overrides, :interactions, %{})
+    }
+  end
+
+  defp source_trace(overrides \\ []) do
+    struct!(
+      %SourceTrace{source_type: "builder", source_id: "source-element-42"},
+      overrides
+    )
+  end
+
+  defp reference_binding(overrides \\ []) do
+    struct!(
+      %Binding{
+        primitive_ref: %PrimitiveRef{kind: "synthetic-primitive", definition_version: "1.0.0"},
+        owner_node_id: @boundary_id,
+        binding_role: "task4",
+        triggers: [],
+        controlled_targets: []
+      },
+      overrides
+    )
+  end
+
+  defp behavior_authority_context_with_bindings(design_document, bindings) do
+    {:ok, identity} = Identity.from_document(design_document)
+
+    {:ok, contract} =
+      BindingIdentity.assign(%Contract{design_document_identity: identity, bindings: bindings})
+
+    {:ok, digest} = Serializer.digest(contract)
+
+    review = %ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: Serializer.algorithm(),
+      behavior_contract_digest: digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:task-4-test",
+      reviewed_at: "2026-10-18T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["task-4-test"]
+    }
+
+    {:ok, context} =
+      apply(LiveFrames.Behavior.ComponentizationDecision, :authority_context, [
+        design_document,
+        contract,
+        review
+      ])
+
+    {context, contract.bindings}
+  end
+
+  defp disposition_input(node_id, binding_id, evidence_refs \\ ["evidence-z", "evidence-a"]) do
+    disposition = %SourceNodeDispositionDecision{
+      design_node_id: node_id,
+      outcome: :exclude_source_runtime_carrier,
+      behavior_binding_id: binding_id,
+      evidence_refs: evidence_refs
+    }
+
+    input(source_node_dispositions: [disposition])
+  end
+
+  defp propose_disposition(design_document, node_id, behavior_binding, selected_binding_id \\ nil) do
+    {context, [assigned_binding]} =
+      behavior_authority_context_with_bindings(design_document, [behavior_binding])
+
+    selected_binding_id = selected_binding_id || assigned_binding.binding_id
+
+    {:ok, canonical_input} =
+      Input.validate(disposition_input(node_id, selected_binding_id), design_document)
+
+    result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_input,
+        context
+      ])
+
+    {result, context, assigned_binding}
+  end
+
   defp different_document(design_document) do
     %{design_document | source_metadata: %{"task_3_variant" => "other"}}
   end
@@ -332,14 +466,82 @@ defmodule LiveFrames.ComponentizationProposerTest do
 
     assert ordinary_result == preflighted_result
     assert ordinary_result.outcome == :proposed
+    assert ordinary_result.plan.node_dispositions == []
     assert_pair_valid(ordinary_result)
   end
 
   test "context-aware proposal accepts a freshly validated Behavior authority context" do
-    design_document = document()
-    semantic_input = input_with_disposition()
-    assert {:ok, canonical_input} = Input.validate(semantic_input, design_document)
-    context = behavior_authority_context(design_document)
+    design_document = disposition_document()
+
+    {result, context, binding} =
+      propose_disposition(design_document, @heading_id, reference_binding())
+
+    expected = %NodeDisposition{
+      design_node_id: @heading_id,
+      disposition: :exclude_source_runtime_carrier,
+      source_type: "builder",
+      source_id: "source-element-42",
+      behavior_binding_id: binding.binding_id,
+      behavior_contract_digest: context.behavior_contract_digest,
+      behavior_review_id: context.behavior_review_result_id,
+      evidence_refs: ["evidence-a", "evidence-z"]
+    }
+
+    assert result.outcome == :needs_review
+    assert result.design_document == design_document
+    assert result.contract != nil
+    assert result.plan.node_dispositions == [expected]
+
+    assert Enum.any?(result.plan.diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_plan.unsupported_node"
+           end)
+  end
+
+  test "multiple dispositions sort records and reject the whole candidate when one target fails" do
+    node_a = "node_000001_000001"
+    node_b = "node_000001_000002"
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: node_a,
+              semantic_type: "unsupported",
+              source_trace: source_trace(source_id: "source-a")
+            },
+            %DesignNode{
+              node_id: node_b,
+              semantic_type: "raw",
+              source_trace: source_trace(source_id: "source-b")
+            }
+          ]
+        }
+      ]
+    }
+
+    {context, [binding]} =
+      behavior_authority_context_with_bindings(design_document, [reference_binding()])
+
+    decisions = [
+      %SourceNodeDispositionDecision{
+        design_node_id: node_b,
+        outcome: :exclude_source_runtime_carrier,
+        behavior_binding_id: binding.binding_id,
+        evidence_refs: ["z-ref", "a-ref"]
+      },
+      %SourceNodeDispositionDecision{
+        design_node_id: node_a,
+        outcome: :exclude_source_runtime_carrier,
+        behavior_binding_id: binding.binding_id,
+        evidence_refs: ["only-ref"]
+      }
+    ]
+
+    {:ok, canonical_input} =
+      Input.validate(input(source_node_dispositions: decisions), design_document)
 
     result =
       apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
@@ -348,10 +550,214 @@ defmodule LiveFrames.ComponentizationProposerTest do
         context
       ])
 
-    assert result.outcome == :proposed
-    assert result.design_document == design_document
-    assert result.contract != nil
-    assert result.plan != nil
+    assert Enum.map(result.plan.node_dispositions, & &1.design_node_id) == [node_a, node_b]
+    assert Enum.at(result.plan.node_dispositions, 1).evidence_refs == ["a-ref", "z-ref"]
+
+    invalid_input =
+      input(
+        source_node_dispositions: [
+          %SourceNodeDispositionDecision{
+            design_node_id: node_a,
+            outcome: :exclude_source_runtime_carrier,
+            behavior_binding_id: binding.binding_id,
+            evidence_refs: ["a-ref"]
+          },
+          %SourceNodeDispositionDecision{
+            design_node_id: "node_000001_000099",
+            outcome: :exclude_source_runtime_carrier,
+            behavior_binding_id: binding.binding_id,
+            evidence_refs: ["missing-target"]
+          }
+        ]
+      )
+
+    {:ok, canonical_invalid_input} = Input.validate(invalid_input, design_document)
+
+    failed_result =
+      apply(ComponentizationProposer, :propose_with_behavior_authority_context_internal, [
+        design_document,
+        canonical_invalid_input,
+        context
+      ])
+
+    assert failed_result.outcome == :construction_failed
+    assert failed_result.plan == nil
+
+    assert Enum.any?(
+             failed_result.construction_diagnostics,
+             &(&1.code == "componentization_plan.node_disposition.target_missing")
+           )
+  end
+
+  test "mechanical disposition guards reject invalid targets and source traces" do
+    scenarios = [
+      {"missing target", disposition_document(), "node_000001_000099", [], nil,
+       "componentization_plan.node_disposition.target_missing"},
+      {"outside boundary", disposition_document([], target_outside_boundary: true), "node_000002",
+       [], nil, "componentization_plan.node_disposition.target_outside_boundary"},
+      {"supported semantic type", disposition_document(semantic_type: "heading"), @heading_id, [],
+       nil, "componentization_plan.node_disposition.target_semantic_incompatible"},
+      {"non-leaf target",
+       disposition_document(
+         children: [
+           %DesignNode{node_id: "node_000001_000001_000001", semantic_type: "unknown"}
+         ]
+       ), @heading_id, [], nil,
+       "componentization_plan.node_disposition.target_semantic_incompatible"},
+      {"missing SourceTrace", disposition_document(source_trace: nil), @heading_id, [], nil,
+       "componentization_plan.node_disposition.source_identity_mismatch"},
+      {"nil source type", disposition_document(source_trace: source_trace(source_type: nil)),
+       @heading_id, [], nil, "componentization_plan.node_disposition.source_identity_mismatch"},
+      {"nil source ID", disposition_document(source_trace: source_trace(source_id: nil)),
+       @heading_id, [], nil, "componentization_plan.node_disposition.source_identity_mismatch"},
+      {"missing Behavior binding", disposition_document(), @heading_id, [], "missing-binding-id",
+       "componentization_plan.node_disposition.behavior_binding_mismatch"}
+    ]
+
+    Enum.each(scenarios, fn {label, design_document, node_id, binding_options, selected_id, code} ->
+      {result, _context, _binding} =
+        propose_disposition(
+          design_document,
+          node_id,
+          reference_binding(binding_options),
+          selected_id
+        )
+
+      assert result.outcome == :construction_failed, label
+      assert result.plan == nil, label
+      assert Enum.any?(result.construction_diagnostics, &(&1.code == code)), label
+    end)
+  end
+
+  test "non-string SourceTrace identity fields fail the source identity guard" do
+    valid_document = disposition_document()
+
+    {context, [binding]} =
+      behavior_authority_context_with_bindings(valid_document, [reference_binding()])
+
+    {:ok, canonical_input} =
+      Input.validate(disposition_input(@heading_id, binding.binding_id), valid_document)
+
+    invalid_documents = [
+      disposition_document(source_trace: source_trace(source_type: "")),
+      disposition_document(source_trace: source_trace(source_type: 42)),
+      disposition_document(source_trace: source_trace(source_id: "")),
+      disposition_document(source_trace: source_trace(source_id: 42))
+    ]
+
+    Enum.each(invalid_documents, fn design_document ->
+      assert {:error, diagnostics} =
+               apply(Construction, :build, [design_document, canonical_input, context])
+
+      assert Enum.any?(
+               diagnostics,
+               &(&1.code == "componentization_plan.node_disposition.source_identity_mismatch")
+             )
+    end)
+  end
+
+  test "Behavior and IR references to the target reject the disposition" do
+    target_id = @heading_id
+
+    focus_cases =
+      Enum.map(
+        [
+          :initial_target_node_id,
+          :scope_node_id,
+          :restoration_target_node_id,
+          :restoration_fallback_node_id
+        ],
+        fn field ->
+          focus_policy = struct!(%FocusPolicy{}, [{field, target_id}])
+          {"focus #{field}", [focus_policy: focus_policy]}
+        end
+      )
+
+    interactions = %{
+      "interaction-1" => %Interaction{
+        interaction_id: "interaction-1",
+        intent: "activate",
+        target_node_ids: [target_id]
+      }
+    }
+
+    scenarios =
+      [
+        {"binding owner", [], [owner_node_id: target_id]},
+        {"controlled target", [],
+         [controlled_targets: [%ControlledTarget{role: "content", node_id: target_id}]]},
+        {"trigger origin", [],
+         [triggers: [%Trigger{kind: "activate", origin_node_id: target_id}]]}
+      ] ++
+        Enum.map(focus_cases, fn {label, binding_options} -> {label, [], binding_options} end) ++
+        [
+          {"IR interaction ref", [interaction_refs: ["interaction-1"]], []},
+          {"IR interaction target", [], []}
+        ]
+
+    Enum.each(scenarios, fn {label, target_options, binding_options} ->
+      document_options =
+        if label == "IR interaction target", do: [interactions: interactions], else: []
+
+      if label == "IR interaction ref" do
+        document_options = [interactions: interactions]
+        design_document = disposition_document(target_options, document_options)
+
+        {result, _context, _binding} =
+          propose_disposition(design_document, target_id, reference_binding(binding_options))
+
+        assert result.outcome == :construction_failed, label
+
+        assert Enum.any?(
+                 result.construction_diagnostics,
+                 &(&1.code == "componentization_plan.node_disposition.behavior_reference_conflict")
+               ),
+               label
+      else
+        design_document = disposition_document([], document_options)
+
+        {result, _context, _binding} =
+          propose_disposition(design_document, target_id, reference_binding(binding_options))
+
+        assert result.outcome == :construction_failed, label
+
+        assert Enum.any?(
+                 result.construction_diagnostics,
+                 &(&1.code == "componentization_plan.node_disposition.behavior_reference_conflict")
+               ),
+               label
+      end
+    end)
+  end
+
+  test "Construction.build/3 rejects a duplicated Behavior binding identity" do
+    assert function_exported?(Construction, :build, 3)
+
+    design_document = disposition_document()
+
+    {context, [first, second]} =
+      behavior_authority_context_with_bindings(design_document, [
+        reference_binding(binding_role: "first"),
+        reference_binding(binding_role: "second")
+      ])
+
+    duplicated_contract = %{
+      context.behavior_contract
+      | bindings: [first, %{second | binding_id: first.binding_id}]
+    }
+
+    duplicated_context = %{context | behavior_contract: duplicated_contract}
+
+    {:ok, canonical_input} =
+      Input.validate(disposition_input(@heading_id, first.binding_id), design_document)
+
+    assert {:error, diagnostics} =
+             apply(Construction, :build, [design_document, canonical_input, duplicated_context])
+
+    assert Enum.any?(
+             diagnostics,
+             &(&1.code == "componentization_plan.node_disposition.behavior_binding_mismatch")
+           )
   end
 
   test "context-aware proposal blocks a forged contract digest" do

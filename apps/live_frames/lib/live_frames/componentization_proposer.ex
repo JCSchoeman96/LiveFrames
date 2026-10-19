@@ -80,7 +80,11 @@ defmodule LiveFrames.ComponentizationProposer do
       ) do
     case validate_behavior_authority_context(design_document, behavior_authority_context) do
       :ok ->
-        propose_canonical(design_document, canonical_semantic_input)
+        propose_canonical(
+          design_document,
+          canonical_semantic_input,
+          behavior_authority_context
+        )
 
       {:error, diagnostics} ->
         Result.invalid_input(diagnostics, design_document)
@@ -198,8 +202,19 @@ defmodule LiveFrames.ComponentizationProposer do
     }
   end
 
-  defp propose_canonical(design_document, canonical_input) do
-    case Construction.build(design_document, canonical_input) do
+  defp propose_canonical(design_document, canonical_input, behavior_authority_context \\ nil) do
+    construction_result =
+      if canonical_input.source_node_dispositions == [] do
+        Construction.build(design_document, canonical_input)
+      else
+        Construction.build(
+          design_document,
+          canonical_input,
+          behavior_authority_context
+        )
+      end
+
+    case construction_result do
       {:error, diagnostics} ->
         Result.construction_failed(diagnostics, design_document)
 

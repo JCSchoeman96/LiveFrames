@@ -19,8 +19,20 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
   alias LiveFrames.ComponentizationProposer.SemanticInput.ClassificationDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.ContractIdentityDecision
   alias LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision
-  alias LiveFrames.IR.{DesignDocument, DesignNode, Identity, ResponsiveOverride, StyleValue}
+
+  alias LiveFrames.IR.{
+    DesignDocument,
+    DesignNode,
+    Identity,
+    Interaction,
+    ResponsiveOverride,
+    SourceTrace,
+    StyleValue
+  }
+
   alias LiveFrames.Responsive.{BreakpointAuthority, DesignDocumentResolver}
+
+  @task4_target_id "node_000001_000001_000004"
 
   test "contained binding admits and passes the validated canonical input to the proposer" do
     document = document()
@@ -78,6 +90,81 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
              ]
   end
 
+  test "reference index records only the frozen Behavior and IR reference roles" do
+    root_id = "node_000001"
+    target_id = "node_000001_000001"
+
+    document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: root_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: target_id,
+              semantic_type: "unsupported",
+              interaction_refs: ["interaction-1"]
+            }
+          ]
+        }
+      ],
+      interactions: %{
+        "interaction-1" => %Interaction{
+          interaction_id: "interaction-1",
+          intent: "activate",
+          target_node_ids: [target_id]
+        }
+      }
+    }
+
+    focus = %FocusPolicy{
+      initial_target_node_id: target_id,
+      scope_node_id: target_id,
+      restoration_target_node_id: target_id,
+      restoration_fallback_node_id: target_id
+    }
+
+    binding = %Binding{
+      primitive_ref: %PrimitiveRef{kind: "future-primitive", definition_version: "9.9.9"},
+      owner_node_id: root_id,
+      binding_role: "reference-index",
+      triggers: [%Trigger{kind: "activate", origin_node_id: target_id}],
+      controlled_targets: [%ControlledTarget{role: "content", node_id: target_id}],
+      focus_policy: focus
+    }
+
+    contract = reviewed_contract(document, [binding])
+
+    expected_roles =
+      MapSet.new([
+        :controlled_target,
+        :focus_reference,
+        :ir_interaction_ref,
+        :ir_interaction_target,
+        :trigger_origin
+      ])
+
+    assert function_exported?(ComponentizationDecision, :reference_index, 2)
+
+    assert {:ok, index} =
+             apply(ComponentizationDecision, :reference_index, [document, contract])
+
+    assert index == %{root_id => MapSet.new([:binding_owner]), target_id => expected_roles}
+  end
+
+  test "reference index returns Behavior diagnostics for malformed authority inputs" do
+    assert function_exported?(ComponentizationDecision, :reference_index, 2)
+
+    assert {:error, diagnostics} =
+             apply(ComponentizationDecision, :reference_index, [
+               %DesignDocument{root_nodes: :malformed},
+               %Contract{}
+             ])
+
+    assert diagnostics != []
+    assert Enum.all?(diagnostics, &match?(%Diagnostic{}, &1))
+  end
+
   test "authority context rejects a contract bound to a different document" do
     design_document = document()
     contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
@@ -118,10 +205,16 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
   end
 
   test "Behavior gate hands disposition input through the authority-aware proposer path" do
-    design_document = document()
-    input = semantic_input_with_disposition(ids().candidate, ids().presentation)
+    design_document = with_disposition_target(document())
     contract = reviewed_contract(design_document, [behavior_binding(owner: ids().candidate)])
     review = approved_review(design_document, contract)
+
+    input =
+      semantic_input_with_disposition(
+        ids().candidate,
+        @task4_target_id,
+        hd(contract.bindings).binding_id
+      )
 
     assert {:ok, canonical_input} = SemanticInput.validate(input, design_document)
 
@@ -144,11 +237,12 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
 
     assert decision.outcome == :admissible
     assert gated_result == expected
-    assert gated_result.outcome == :proposed
+    assert gated_result.outcome == :needs_review
+    assert length(gated_result.plan.node_dispositions) == 1
   end
 
   test "responsive disposition authority is bound to the resolved document" do
-    unresolved_document = responsive_document()
+    unresolved_document = with_disposition_target(responsive_document())
     authority = breakpoint_authority()
 
     assert {:ok, resolved_document} =
@@ -156,7 +250,13 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
 
     contract = reviewed_contract(resolved_document, [behavior_binding(owner: ids().candidate)])
     review = approved_review(resolved_document, contract)
-    input = semantic_input_with_disposition(ids().candidate, ids().presentation)
+
+    input =
+      semantic_input_with_disposition(
+        ids().candidate,
+        @task4_target_id,
+        hd(contract.bindings).binding_id
+      )
 
     assert {:ok, decision, proposal} =
              ComponentizationDecision.propose(
@@ -169,7 +269,8 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
 
     assert decision.design_document_identity == elem(Identity.from_document(resolved_document), 1)
     assert proposal.design_document == resolved_document
-    assert proposal.outcome == :proposed
+    assert proposal.outcome == :needs_review
+    assert length(proposal.plan.node_dispositions) == 1
   end
 
   test "authority-less behavior proposal rejects responsive input before identity is accepted" do
@@ -691,6 +792,21 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
     }
   end
 
+  defp with_disposition_target(%DesignDocument{root_nodes: [%DesignNode{} = root | rest]} = doc) do
+    [candidate | siblings] = root.children
+    [control, presentation, focus | candidate_rest] = candidate.children
+
+    target = %DesignNode{
+      node_id: @task4_target_id,
+      semantic_type: "unsupported",
+      source_trace: %SourceTrace{source_type: "builder", source_id: "source-task4-node"}
+    }
+
+    candidate = %{candidate | children: [control, presentation, focus, target | candidate_rest]}
+    root = %{root | children: [candidate | siblings]}
+    %{doc | root_nodes: [root | rest]}
+  end
+
   defp ids do
     %{
       root: "node_000001",
@@ -779,11 +895,11 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
     }
   end
 
-  defp semantic_input_with_disposition(boundary_node_id, design_node_id) do
+  defp semantic_input_with_disposition(boundary_node_id, design_node_id, behavior_binding_id) do
     disposition = %SourceNodeDispositionDecision{
       design_node_id: design_node_id,
       outcome: :exclude_source_runtime_carrier,
-      behavior_binding_id: "selected-behavior-binding",
+      behavior_binding_id: behavior_binding_id,
       evidence_refs: ["task-3-test-evidence"]
     }
 
