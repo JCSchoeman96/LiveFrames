@@ -366,20 +366,47 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp generic_custom_css_owners(context) do
     Enum.flat_map(context.tree.ordered_elements, fn element ->
-      case get_in(context.dependencies.custom_css_provenance, [element.id, :base]) do
-        %{value: value, provenance: provenance} when is_binary(value) ->
-          [
-            %{
-              source_id: element.id,
-              value: value,
-              provenance: provenance,
-              source_key: "_cssCustom"
-            }
-          ]
+      provenance = Map.get(context.dependencies.custom_css_provenance, element.id, %{})
 
-        _ ->
-          []
-      end
+      base_owners =
+        case Map.get(provenance, :base) do
+          %{value: value, provenance: source_provenance} when is_binary(value) ->
+            [
+              %{
+                source_id: element.id,
+                value: value,
+                provenance: source_provenance,
+                source_key: "_cssCustom",
+                viewport_scope: :base
+              }
+            ]
+
+          _ ->
+            []
+        end
+
+      responsive_owners =
+        provenance
+        |> Map.get(:responsive, %{})
+        |> Enum.sort_by(&elem(&1, 0))
+        |> Enum.flat_map(fn
+          {source_key, %{value: value, provenance: source_provenance}}
+          when is_binary(source_key) and is_binary(value) ->
+            [
+              %{
+                source_id: element.id,
+                value: value,
+                provenance: source_provenance,
+                source_key: source_key,
+                viewport_scope: {:responsive_source_key, source_key}
+              }
+            ]
+
+          _entry ->
+            []
+        end)
+
+      base_owners ++ responsive_owners
     end)
   end
 
@@ -422,8 +449,54 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         :error -> styles
       end
 
+    processed_responsive_source_keys =
+      Map.get(result.responsive_source_keys_by_source_id, source_id, MapSet.new())
+
     responsive =
-      Map.merge(node.responsive, Map.get(result.responsive_by_source_id, source_id, %{}))
+      Enum.reduce(processed_responsive_source_keys, node.responsive, fn source_key, responsive ->
+        remove_responsive_custom_css(responsive, source_key)
+      end)
+
+    responsive =
+      Map.merge(responsive, Map.get(result.responsive_by_source_id, source_id, %{}))
+
+    responsive =
+      Enum.reduce(
+        Map.get(result.responsive_custom_css_by_source_id, source_id, %{}),
+        responsive,
+        fn {source_key, style}, responsive ->
+          case responsive_custom_css_authority(node.responsive, source_key) do
+            {breakpoint, authority} ->
+              existing = Map.get(responsive, breakpoint)
+
+              existing_styles =
+                case existing do
+                  %ResponsiveOverride{styles: styles} -> styles
+                  _missing_override -> Map.delete(authority.styles, "custom-css")
+                end
+
+              source_trace =
+                case existing do
+                  %ResponsiveOverride{source_trace: source_trace} when not is_nil(source_trace) ->
+                    source_trace
+
+                  _missing_override ->
+                    style.source_trace
+                end
+
+              override = %{
+                authority
+                | styles: Map.put(existing_styles, "custom-css", style),
+                  source_trace: source_trace
+              }
+
+              Map.put(responsive, breakpoint, override)
+
+            nil ->
+              responsive
+          end
+        end
+      )
 
     %{
       node
@@ -431,6 +504,45 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         responsive: responsive,
         children: Enum.map(node.children, &apply_generic_custom_css_node(&1, result))
     }
+  end
+
+  defp remove_responsive_custom_css(responsive, source_key) do
+    case responsive_breakpoint_for_source(responsive, source_key) do
+      nil ->
+        responsive
+
+      breakpoint ->
+        case Map.fetch(responsive, breakpoint) do
+          {:ok, %ResponsiveOverride{} = override} ->
+            styles = Map.delete(override.styles, "custom-css")
+
+            if map_size(styles) == 0,
+              do: Map.delete(responsive, breakpoint),
+              else: Map.put(responsive, breakpoint, %{override | styles: styles})
+
+          _other ->
+            responsive
+        end
+    end
+  end
+
+  defp responsive_breakpoint_for_source(responsive, source_key) do
+    case responsive_custom_css_authority(responsive, source_key) do
+      {breakpoint, _override} -> breakpoint
+      nil -> nil
+    end
+  end
+
+  defp responsive_custom_css_authority(responsive, source_key) do
+    Enum.find_value(responsive, fn {breakpoint, %ResponsiveOverride{styles: styles} = override} ->
+      case Map.get(styles, "custom-css") do
+        %StyleValue{metadata: metadata} when is_map(metadata) ->
+          if Map.get(metadata, "source_key") == source_key, do: {breakpoint, override}
+
+        _style ->
+          nil
+      end
+    end)
   end
 
   defp validate_and_serialize(document) do

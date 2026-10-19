@@ -344,6 +344,119 @@ defmodule LiveFrames.BricksDesignIRTest do
              "class-b"
   end
 
+  test "selected responsive custom CSS reaches the resolver without breakpoint inference" do
+    source_key = "_cssCustom:mobile_portrait"
+
+    document =
+      generic_custom_css_document(
+        owner_settings: %{"_cssGlobalClasses" => ["class-a", "class-b"]},
+        global_classes: [
+          %{
+            "id" => "class-a",
+            "name" => "owner",
+            "settings" => %{
+              "_cssCustom" => ".owner { --local-space: 6px; }",
+              source_key => ".owner > * { color: teal; }"
+            }
+          },
+          %{
+            "id" => "class-b",
+            "name" => "owner",
+            "settings" => %{
+              "_cssCustom" => ".owner { --local-space: 12px; }",
+              source_key => ".owner .child { color: var(--local-space); }"
+            }
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    child = node_by_source_id(document, "child")
+
+    selected_source_path =
+      "components[0].elements[0].class_refs[1].settings." <> source_key
+
+    assert %LiveFrames.IR.ResponsiveOverride{
+             breakpoint_id: "mobile_portrait",
+             source_name: "mobile_portrait",
+             min_width: nil,
+             max_width: nil,
+             resolution_status: :unresolved,
+             source_trace: %{source_name: ^source_key, source_path: ^selected_source_path},
+             styles: %{"color" => %StyleValue{kind: :literal, value: "12px"}}
+           } = child.responsive["mobile_portrait"]
+
+    refute Map.has_key?(child.responsive, source_key)
+
+    refute Map.has_key?(owner.responsive, source_key)
+    refute Map.has_key?(owner.styles, "--local-space")
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.custom_css.unsupported_selector" and
+               String.contains?(diagnostic.metadata["source_path"] || "", source_key)
+           end)
+  end
+
+  test "an ineligible local definition prevents external VariableAuthority fallback" do
+    document =
+      generic_custom_css_document(
+        global_classes: [
+          %{
+            "id" => "class-a",
+            "name" => "owner",
+            "settings" => %{
+              "_cssCustom" =>
+                ".owner { --content-gap: var(--content-gap, 30px); color: var(--content-gap); }"
+            }
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+
+    refute Map.has_key?(owner.styles, "color")
+
+    assert %StyleValue{kind: :complex_css, value: %{"type" => "custom_css", "rules" => rules}} =
+             owner.styles["custom-css"]
+
+    assert Enum.any?(rules, &String.contains?(&1, "var(--content-gap)"))
+  end
+
+  test "responsive residual CSS keeps its selected responsive source trace" do
+    source_key = "_cssCustom:tablet_portrait"
+
+    document =
+      generic_custom_css_document(
+        global_classes: [
+          %{
+            "id" => "class-a",
+            "name" => "owner",
+            "settings" => %{source_key => ".owner > * { color: teal; }"}
+          },
+          %{"id" => "class-child", "name" => "child", "settings" => %{}}
+        ]
+      )
+
+    owner = hd(document.root_nodes)
+    responsive_style = owner.responsive["tablet_portrait"].styles["custom-css"]
+
+    assert %StyleValue{
+             value: %{"type" => "custom_css"},
+             source_trace: %{
+               source_type: "bricks_responsive",
+               source_name: "tablet_portrait",
+               source_path: "components[0].elements[0].settings." <> ^source_key
+             }
+           } = responsive_style
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.custom_css.unsupported_selector" and
+               String.contains?(diagnostic.metadata["source_path"] || "", source_key)
+           end)
+  end
+
   test "normalizes hover only when the winning global class owns the interaction pair" do
     css = ".owner.pointer-active { opacity: 1; }"
     pair = transient_pair()
@@ -1679,13 +1792,23 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert "bricks.asset.unresolved" in codes
 
     custom_css_diagnostic =
-      Enum.find(document.diagnostics, &(&1.code == "bricks.custom_css.unsupported_selector"))
+      Enum.find(document.diagnostics, fn diagnostic ->
+        diagnostic.code == "bricks.custom_css.unsupported_selector" and
+          diagnostic.metadata["source_path"] ==
+            "components[0].elements[8].class_refs[0].settings._cssCustom"
+      end)
 
     assert custom_css_diagnostic.metadata["source_path"] ==
              "components[0].elements[8].class_refs[0].settings._cssCustom"
 
     assert custom_css_diagnostic.source_trace.source_path ==
              "components[0].elements[8].class_refs[0].settings._cssCustom"
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.custom_css.unsupported_selector" and
+               diagnostic.metadata["source_path"] ==
+                 "components[0].elements[4].class_refs[0].settings._cssCustom:mobile_portrait"
+           end)
 
     assert Enum.any?(document.diagnostics, fn diagnostic ->
              diagnostic.code == "bricks.variable.unresolved" and
