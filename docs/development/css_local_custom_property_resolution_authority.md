@@ -307,10 +307,19 @@ The collision count is therefore `NOT_ESTABLISHED`, not zero.
 
 `StylePrecedence.resolve_with_custom_css_provenance/2` selects the effective
 base custom-CSS layer and selected responsive custom-CSS layers. The resolver
-must consume only those values and provenance records.
+must consume only those values and provenance records. `CustomCssNormalizer`
+constructs the internal exact provenance identity from the provenance already
+selected by `StylePrecedence`, using only these existing fields:
+`source_id`, `origin`, `class_id`, `resolution_source`, `authority_ids`, and
+`class_reference_index`. Responsive source keys and viewport keys are not
+provenance identity fields. This contract does not require a `StylePrecedence`
+change or a lookup of shadowed layers.
 
 ```text
 EFFECTIVE_LAYER_PROVENANCE_REQUIRED=YES
+EFFECTIVE_PROVENANCE_IDENTITY_FIELDS=source_id,origin,class_id,resolution_source,authority_ids,class_reference_index
+STYLE_PRECEDENCE_CHANGE_REQUIRED=NO
+SHADOWED_LAYER_LOOKUP=NO
 SHADOWED_SOURCE_LAYER_LOOKUP=NO
 ARBITRARY_GLOBAL_CLASS_SEARCH=NO
 ```
@@ -318,9 +327,8 @@ ARBITRARY_GLOBAL_CLASS_SEARCH=NO
 A class-layer definition belongs to the exact selected class reference and
 owner provenance. An element-local definition belongs to that same owner. A
 responsive layer may use a base definition only when both records have the
-same effective provenance identity: owner source ID, layer origin, class ID,
-class-reference index, and resolution authority identifiers. Responsive source
-keys may differ only by the already selected viewport key. A different class
+same effective provenance identity and owner source ID. Responsive source keys
+may differ only by the already selected viewport key. A different class
 reference, element owner, or component is a different scope.
 
 The scope used for a lookup is the tuple:
@@ -335,8 +343,21 @@ Definitions are available only to declarations within the owner subtree already
 passed to `CustomCssNormalizer`. `CustomCssNormalizer` owns selector parsing and
 target matching under the accepted selector grammar. It resolves the selector
 and source-tree relationship before handing bounded scope records to the local
-resolver. The resolver receives no raw selector text and does not implement a
-second selector grammar.
+resolver. For each accepted parsed selector group,
+`CustomCssNormalizer` also produces an opaque `selector_identity` from that
+already-parsed group representation. The identity is deterministic for
+semantically identical parsed groups within one normalization call. It is not
+raw selector text. `SourceLocalCustomPropertyResolver` treats it as opaque and
+uses it only for exact equality comparison. The resolver does not parse,
+serialize, emit, or expose the identity. It is never serialized to Design IR,
+generated CSS, or public diagnostics, and it does not expand selector grammar.
+The resolver receives no raw selector text and does not implement a second
+selector grammar.
+
+The `CustomCssNormalizer` invocation and supplied owner subtree define the
+component boundary. There is no new component database, registry, ID lookup, or
+global search. Reject foreign targets before or during bounded scope
+validation.
 
 A proven definition on the target node wins over inherited definitions. If no
 direct definition exists, a definition on the nearest proven ancestor may
@@ -352,6 +373,11 @@ DESCENDANT_INHERITANCE=YES_ONLY_FOR_A_PROVEN_ANCESTOR_WITHIN_THE_SAME_OWNER_AND_
 SELECTOR_PARSE_OWNER=CustomCssNormalizer
 SELECTOR_TARGET_MATCH_OWNER=CustomCssNormalizer
 SELECTOR_SEMANTICS_OWNER=CustomCssNormalizer_OR_SEPARATELY_ACCEPTED_SHARED_BRICKS_SELECTOR_HELPER
+SELECTOR_IDENTITY_OWNER=CustomCssNormalizer
+SELECTOR_IDENTITY_RAW_TEXT=NO
+RESOLVER_SELECTOR_IDENTITY_OPERATION=EQUALITY_ONLY
+RESOLVER_SELECTOR_PARSE=NO
+SELECTOR_GRAMMAR_EXPANSION=NO
 EMITTABLE_STYLE_SELECTOR_GRAMMAR_EXPANDED=NO
 CSS_SELECTOR_IMPLEMENTATION_AUTHORIZED=NO
 INTERNAL_DEFINITION_SCOPE_SELECTOR_MAY_ENABLE_ORDINARY_STYLE_RULE=NO
@@ -379,34 +405,69 @@ mixed frame's ordinary style declarations.
 
 The adapter-to-resolver input is an internal bounded record containing only
 already parsed data: `owner_source_id`, `effective_provenance_identity`,
-`target_source_id`, `target_path`, `ancestor_path_relation`, `viewport_scope`,
+`target_source_id`, `target_path`, `selector_identity`, `viewport_scope`,
 `state_scope`, `source_order`, `local_name`, `record_kind`, and
-`terminal_text_if_definition`. `record_kind` is `definition` or `reference`;
+`terminal_text_if_definition`. `CustomCssNormalizer` proves each accepted
+selector group's target node and path inside the current owner subtree before
+passing it to the resolver. `record_kind` is `definition` or `reference`;
 terminal text is present only for a definition. This conceptual contract adds
 no Design IR struct, serialized shape, or style-value field.
+
+Ancestry is a definition/reference relationship derived from their already
+proven target paths, not a per-record input field. Compare structural path
+components, not textual prefixes. The resolver performs no selector
+interpretation or general tree search.
+
+```text
+SAME_TARGET=
+  definition.target_path equals reference.target_path
+
+PROVEN_ANCESTOR=
+  definition.target_path is a strict structural prefix of reference.target_path
+  inside the same owner_source_id and effective_provenance_identity
+
+NOT_INHERITABLE=otherwise
+```
+
+A sibling path is never an ancestor. A path outside the owner scope is never
+eligible. The resolver considers at most `MAX_OWNER_ANCESTRY_HOPS` (64) owner
+ancestry hops/components; if it cannot prove the relationship within that
+bound, resolution fails closed.
 
 ### Source order and duplicate definitions
 
 `CustomCssParser` provides deterministic frame order inside the selected CSS
 source. The resolver uses that order for stable diagnostics. It does not
 simulate specificity or use later source order to hide conflicting definitions.
+After owner, provenance, viewport, state, and name eligibility, it evaluates
+direct target candidates first. If any direct definition exists, ancestor
+candidates do not compete with it. If there is no direct definition, only
+candidates on the nearest proven ancestor are eligible. At that selected
+target node, the resolver applies these rules:
 
-- A single definition at the resolved node and scope is selected.
-- Identical definitions may coalesce only when name, owner, layer, selector,
-  viewport, state, and terminal text all match.
-- Different values for the same name and exact scope fail with
-  `CONFLICTING_SOURCE_ORDER`.
-- Candidates from different selectors that may both apply to the same node
-  fail with `AMBIGUOUS_DEFINITION` unless the owner-tree match identifies one
-  nearest ancestor under the inheritance rule.
-- A duplicate property in one rule remains subject to the parser's existing
-  rejection.
+1. One `selector_identity` and one definition selects that definition.
+2. One `selector_identity` and multiple definitions with byte-identical
+   terminal text coalesces them.
+3. One `selector_identity` and multiple definitions with different terminal
+   text fails with `CONFLICTING_SOURCE_ORDER`.
+4. More than one distinct `selector_identity` fails with
+   `AMBIGUOUS_DEFINITION`, even when the terminal texts match.
+
+Source order is for stable diagnostics only and never chooses a winner. A
+duplicate property in one rule remains subject to the parser's existing
+rejection.
 
 ```text
 SOURCE_ORDER_RULE=USE_PARSER_ORDER_FOR_STABLE_DIAGNOSTICS; NEVER_PICK_A_CONFLICTING_WINNER
 MULTIPLE_DEFINITION_RULE=ONE_UNAMBIGUOUS_CANDIDATE_OR_FAIL
-IDENTICAL_DUPLICATE_RULE=COALESCE_ONLY_IF_ALL_SCOPE_FIELDS_AND_TERMINAL_TEXT_MATCH
-CONFLICTING_DUPLICATE_RULE=FAIL_CLOSED
+DIRECT_TARGET_PRECEDENCE=YES
+NEAREST_PROVEN_ANCESTOR_PRECEDENCE=YES
+CROSS_SELECTOR_COALESCE=NO
+SAME_SELECTOR_IDENTICAL_TERMINAL_COALESCE=YES
+SAME_SELECTOR_CONFLICTING_TERMINAL=CONFLICTING_SOURCE_ORDER
+DIFFERENT_SELECTOR_SAME_NODE=AMBIGUOUS_DEFINITION
+IDENTICAL_DUPLICATE_RULE=COALESCE_ONLY_FOR_ONE_SELECTOR_IDENTITY_AND_BYTE_IDENTICAL_TERMINAL_TEXT
+CONFLICTING_DUPLICATE_RULE=ONE_SELECTOR_IDENTITY_WITH_DIFFERENT_TERMINAL_TEXT_FAILS_CLOSED
 ```
 
 ### Responsive and state scope
@@ -473,8 +534,8 @@ or rejected with a stable diagnostic:
 | --- | --- |
 | `INVALID_LOCAL_NAME` | The name does not pass the existing custom-property name boundary. |
 | `NO_LOCAL_DEFINITION` | The name has no definition in the selected owner and effective layer. There is no local-to-external fallback. |
-| `AMBIGUOUS_DEFINITION` | More than one different candidate applies at the same resolved node and scope. |
-| `CONFLICTING_SOURCE_ORDER` | Conflicting values would require choosing a cascade winner. |
+| `AMBIGUOUS_DEFINITION` | More than one distinct parsed selector identity supplies candidates at the selected target node and scope. |
+| `CONFLICTING_SOURCE_ORDER` | One selector identity supplies different terminal values, and source order cannot choose a cascade winner. |
 | `UNSUPPORTED_SCOPE` | The viewport or state transition is outside the explicit rules above. |
 | `CROSS_OWNER_REFERENCE` | Foreign owner scope data was supplied despite the owner boundary. |
 | `UNSUPPORTED_INHERITANCE` | The source-tree ancestry or selector target cannot be proven within the owner subtree. |
