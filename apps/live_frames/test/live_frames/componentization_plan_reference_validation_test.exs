@@ -9,11 +9,24 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
   alias LiveFrames.ComponentContract.Slot
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
+  alias LiveFrames.Behavior.Binding, as: BehaviorBinding
+  alias LiveFrames.Behavior.Binding.ControlledTarget
+  alias LiveFrames.Behavior.Binding.FocusPolicy
+  alias LiveFrames.Behavior.Binding.PrimitiveRef
+  alias LiveFrames.Behavior.Binding.Trigger
+  alias LiveFrames.Behavior.BindingIdentity
+  alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.ReviewResult
+  alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR
+  alias LiveFrames.IR.Identity
+  alias LiveFrames.IR.Interaction
+  alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.ValueBinding
 
   @boundary_id DesignNode.deterministic_id([1])
@@ -21,6 +34,10 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
   @image_id DesignNode.deterministic_id([1, 2])
   @actions_id DesignNode.deterministic_id([1, 3])
   @outside_id DesignNode.deterministic_id([2])
+  @disposition_target_id DesignNode.deterministic_id([1, 4])
+  @second_disposition_target_id DesignNode.deterministic_id([1, 5])
+  @disposition_source_type "synthetic-builder"
+  @disposition_source_id "synthetic-node-42"
 
   defp document(overrides \\ []) do
     roots = [
@@ -166,6 +183,625 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
   end
 
   defp codes({:error, diagnostics}), do: Enum.map(diagnostics, & &1.code)
+
+  defp disposition_tuple(options \\ []) do
+    reference_role = Keyword.get(options, :reference_role)
+    location = Keyword.get(options, :target_location, :inside)
+    target_id = if location == :outside, do: @outside_id, else: @disposition_target_id
+    disposition_target_id = Keyword.get(options, :disposition_target_id, target_id)
+
+    target = %DesignNode{
+      node_id: @disposition_target_id,
+      semantic_type: Keyword.get(options, :target_semantic_type, "unsupported"),
+      source_trace:
+        Keyword.get(options, :target_source_trace, %SourceTrace{
+          source_type: @disposition_source_type,
+          source_id: @disposition_source_id
+        }),
+      children: Keyword.get(options, :target_children, []),
+      interaction_refs:
+        if(reference_role == :ir_interaction_ref, do: ["task5-interaction"], else: [])
+    }
+
+    boundary_prefix = [
+      %DesignNode{
+        node_id: @heading_id,
+        semantic_type: "heading",
+        attributes: %{"tag" => "h2"}
+      },
+      %DesignNode{node_id: @image_id, semantic_type: "paragraph"},
+      %DesignNode{
+        node_id: @actions_id,
+        semantic_type: "actions",
+        children: [
+          %DesignNode{
+            node_id: DesignNode.deterministic_id([1, 3, 1]),
+            semantic_type: "button"
+          }
+        ]
+      }
+    ]
+
+    boundary_children =
+      if location == :inside, do: boundary_prefix ++ [target], else: boundary_prefix
+
+    second_target = %DesignNode{
+      node_id:
+        if(location == :inside, do: @second_disposition_target_id, else: @disposition_target_id),
+      semantic_type: "unknown",
+      source_trace: %SourceTrace{
+        source_type: @disposition_source_type,
+        source_id: "synthetic-node-43"
+      }
+    }
+
+    outside_node =
+      if location == :outside do
+        %DesignNode{
+          node_id: @outside_id,
+          semantic_type: "unsupported",
+          source_trace: %SourceTrace{
+            source_type: @disposition_source_type,
+            source_id: @disposition_source_id
+          }
+        }
+      else
+        %DesignNode{node_id: @outside_id, semantic_type: "paragraph"}
+      end
+
+    boundary_children =
+      if Keyword.get(options, :second_target, false),
+        do: boundary_children ++ [second_target],
+        else: boundary_children
+
+    boundary = %DesignNode{
+      node_id: @boundary_id,
+      semantic_type: "section",
+      children: boundary_children
+    }
+
+    interactions =
+      if reference_role in [:ir_interaction_ref, :ir_interaction_target] do
+        %{
+          "task5-interaction" => %Interaction{
+            interaction_id: "task5-interaction",
+            intent: "activate",
+            target_node_ids: [@disposition_target_id]
+          }
+        }
+      else
+        %{}
+      end
+
+    design_document = %DesignDocument{
+      root_nodes: [boundary, outside_node],
+      interactions: interactions
+    }
+
+    binding = behavior_binding(reference_role, @disposition_target_id)
+    {:ok, identity} = Identity.from_document(design_document)
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: identity,
+        bindings: [binding]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+    behavior_binding = hd(behavior_contract.bindings)
+    review = approved_review(identity, behavior_digest)
+    {:ok, review_id} = ReviewResult.id(review)
+
+    disposition = %NodeDisposition{
+      design_node_id: disposition_target_id,
+      disposition: :exclude_source_runtime_carrier,
+      source_type: @disposition_source_type,
+      source_id: @disposition_source_id,
+      behavior_binding_id: behavior_binding.binding_id,
+      behavior_contract_digest: behavior_digest,
+      behavior_review_id: review_id,
+      evidence_refs: ["synthetic-evidence-1"]
+    }
+
+    disposition =
+      struct!(disposition, Keyword.get(options, :disposition_overrides, []))
+
+    dispositions =
+      if Keyword.get(options, :duplicate_disposition, false),
+        do: [disposition, disposition],
+        else: [disposition]
+
+    diagnostics =
+      Keyword.get(options, :stored_diagnostics, [
+        %Diagnostic{
+          code: "componentization_plan.unsupported_node",
+          severity: :error,
+          message: "candidate-stage unsupported node blocker"
+        },
+        %Diagnostic{
+          code: "componentization_plan.node_disposition.behavior_authority_mismatch",
+          severity: :error,
+          message: "candidate-stage authority blocker"
+        }
+      ])
+
+    component_contract = contract()
+
+    plan =
+      plan(component_contract, design_document,
+        node_dispositions: dispositions,
+        diagnostics: diagnostics
+      )
+
+    review = Keyword.get(options, :selected_review, review)
+    behavior_contract = Keyword.get(options, :behavior_contract, behavior_contract)
+
+    {plan, component_contract, design_document, behavior_contract, review, behavior_binding}
+  end
+
+  defp behavior_binding(reference_role, target_id) do
+    %BehaviorBinding{
+      primitive_ref: %PrimitiveRef{kind: "synthetic-task5", definition_version: "1.0.0"},
+      owner_node_id: if(reference_role == :binding_owner, do: target_id, else: @boundary_id),
+      binding_role: "task5-reference-validation",
+      controlled_targets:
+        if(reference_role == :controlled_target,
+          do: [%ControlledTarget{role: "controlled", node_id: target_id}],
+          else: []
+        ),
+      triggers:
+        if(reference_role == :trigger_origin,
+          do: [%Trigger{kind: "activate", origin_node_id: target_id}],
+          else: []
+        ),
+      focus_policy:
+        if(reference_role == :focus_reference,
+          do: %FocusPolicy{initial_target_node_id: target_id},
+          else: nil
+        )
+    }
+  end
+
+  defp approved_review(identity, behavior_digest) do
+    %ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: BehaviorSerializer.algorithm(),
+      behavior_contract_digest: behavior_digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:synthetic-task5",
+      reviewed_at: "2026-10-18T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["synthetic-review-evidence"]
+    }
+  end
+
+  defp authority_result(
+         {plan, component_contract, document, behavior_contract, review, _binding},
+         api \\ :validate_references_with_behavior_authority
+       ) do
+    apply(ComponentizationPlan, api, [
+      plan,
+      component_contract,
+      document,
+      behavior_contract,
+      review
+    ])
+  end
+
+  defp disposition_codes(result), do: codes(result)
+
+  test "exact disposition and Behavior authority pass all three authority-aware APIs" do
+    tuple = disposition_tuple()
+
+    assert authority_result(tuple) == :ok
+
+    assert authority_result(
+             tuple,
+             :validate_generation_prerequisites_with_behavior_authority
+           ) == :ok
+
+    assert authority_result(tuple, :validate_for_generation_with_behavior_authority) == :ok
+  end
+
+  test "ordinary reference validation fails closed without Behavior authority" do
+    {plan, component_contract, document, _behavior_contract, _review, _binding} =
+      disposition_tuple()
+
+    result = ComponentizationPlan.validate_references(plan, component_contract, document)
+    result_codes = codes(result)
+
+    assert "componentization_plan.node_disposition.behavior_authority_mismatch" in result_codes
+    assert "componentization_plan.unsupported_node" in result_codes
+
+    generation_result =
+      ComponentizationPlan.validate_generation_prerequisites(
+        plan,
+        component_contract,
+        document
+      )
+
+    assert "componentization_plan.node_disposition.behavior_authority_mismatch" in codes(
+             generation_result
+           )
+
+    assert "componentization_plan.unsupported_node" in codes(generation_result)
+
+    for_generation_result =
+      ComponentizationPlan.validate_for_generation(plan, component_contract, document)
+
+    assert "componentization_plan.node_disposition.behavior_authority_mismatch" in codes(
+             for_generation_result
+           )
+
+    assert "componentization_plan.unsupported_node" in codes(for_generation_result)
+  end
+
+  test "authority-aware generation validation recomputes disposition blockers" do
+    tuple = disposition_tuple()
+
+    assert authority_result(
+             tuple,
+             :validate_generation_prerequisites_with_behavior_authority
+           ) == :ok
+
+    {plan, component_contract, document, behavior_contract, review, _binding} = tuple
+
+    unrelated = %Diagnostic{
+      code: "componentization_plan.accessibility.review_required",
+      severity: :error,
+      message: "independent stored blocker"
+    }
+
+    plan = %{
+      plan
+      | diagnostics: [
+          unrelated,
+          %Diagnostic{
+            code: "componentization_plan.unsupported_node",
+            severity: :error,
+            message: "stale candidate blocker"
+          },
+          %Diagnostic{
+            code: "componentization_plan.node_disposition.behavior_authority_mismatch",
+            severity: :error,
+            message: "stale candidate authority blocker"
+          }
+        ]
+    }
+
+    result =
+      apply(ComponentizationPlan, :validate_generation_prerequisites_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        behavior_contract,
+        review
+      ])
+
+    assert "componentization_plan.accessibility.review_required" in codes(result)
+    refute "componentization_plan.unsupported_node" in codes(result)
+    refute "componentization_plan.node_disposition.behavior_authority_mismatch" in codes(result)
+
+    for_generation_result =
+      apply(ComponentizationPlan, :validate_for_generation_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        behavior_contract,
+        review
+      ])
+
+    assert "componentization_plan.generation_blocked" in codes(for_generation_result)
+    assert "componentization_plan.accessibility.review_required" in codes(for_generation_result)
+  end
+
+  test "one valid disposition consumes only its exact target" do
+    tuple = disposition_tuple(second_target: true)
+    assert {:error, diagnostics} = authority_result(tuple)
+
+    assert Enum.count(diagnostics, &(&1.code == "componentization_plan.unsupported_node")) == 1
+    assert Enum.any?(diagnostics, &(&1.path == "nodes[#{@second_disposition_target_id}]"))
+  end
+
+  test "missing, outside, supported and non-leaf targets remain unconsumed" do
+    cases = [
+      {disposition_tuple(disposition_target_id: "missing-node"),
+       "componentization_plan.node_disposition.target_missing",
+       "componentization_plan.unsupported_node"},
+      {disposition_tuple(target_location: :outside, second_target: true),
+       "componentization_plan.node_disposition.target_outside_boundary",
+       "componentization_plan.unsupported_node"},
+      {disposition_tuple(target_semantic_type: "heading"),
+       "componentization_plan.node_disposition.target_semantic_incompatible", nil},
+      {disposition_tuple(
+         target_semantic_type: "raw",
+         target_children: [
+           %DesignNode{
+             node_id: DesignNode.deterministic_id([1, 4, 1]),
+             semantic_type: "paragraph"
+           }
+         ]
+       ), "componentization_plan.node_disposition.target_semantic_incompatible",
+       "componentization_plan.unsupported_node"}
+    ]
+
+    for {tuple, expected, unsupported_code} <- cases do
+      result_codes = disposition_codes(authority_result(tuple))
+      assert expected in result_codes
+
+      if unsupported_code do
+        assert unsupported_code in result_codes
+      end
+    end
+  end
+
+  test "missing and changed SourceTrace identity never consume the target" do
+    cases = [
+      disposition_tuple(target_source_trace: nil),
+      disposition_tuple(
+        target_source_trace: %SourceTrace{
+          source_type: "changed-builder",
+          source_id: @disposition_source_id
+        }
+      ),
+      disposition_tuple(
+        target_source_trace: %SourceTrace{
+          source_type: @disposition_source_type,
+          source_id: "changed-node"
+        }
+      )
+    ]
+
+    for tuple <- cases do
+      result_codes = disposition_codes(authority_result(tuple))
+      assert "componentization_plan.node_disposition.source_identity_mismatch" in result_codes
+      assert "componentization_plan.unsupported_node" in result_codes
+    end
+  end
+
+  test "digest, review identity, changed review and approval status are revalidated" do
+    wrong_digest =
+      disposition_tuple(
+        disposition_overrides: [behavior_contract_digest: String.duplicate("f", 64)]
+      )
+
+    wrong_review_id =
+      disposition_tuple(
+        disposition_overrides: [behavior_review_id: "brv_" <> String.duplicate("0", 64)]
+      )
+
+    changed_review = disposition_tuple()
+
+    changed_review =
+      put_elem(changed_review, 4, %{elem(changed_review, 4) | review_note: "changed"})
+
+    unapproved_review = disposition_tuple()
+
+    unapproved_review =
+      put_elem(unapproved_review, 4, %{elem(unapproved_review, 4) | decision: "needs_review"})
+
+    for tuple <- [wrong_digest, wrong_review_id, changed_review, unapproved_review] do
+      result_codes = disposition_codes(authority_result(tuple))
+      assert "componentization_plan.node_disposition.behavior_authority_mismatch" in result_codes
+      assert "componentization_plan.unsupported_node" in result_codes
+    end
+  end
+
+  test "BehaviorContract bound to another DesignDocument fails exact authority validation" do
+    tuple = disposition_tuple()
+    {plan, component_contract, document, _behavior_contract, _review, _binding} = tuple
+
+    other_document = %{document | source_metadata: %{"variant" => "other"}}
+    {:ok, other_identity} = Identity.from_document(other_document)
+    {:ok, original_contract_digest} = BehaviorSerializer.digest(elem(tuple, 3))
+    binding = behavior_binding(nil, @boundary_id)
+
+    {:ok, original_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: other_identity,
+        bindings: [binding]
+      })
+
+    {:ok, digest} = BehaviorSerializer.digest(original_contract)
+    review = approved_review(other_identity, digest)
+    {:ok, review_id} = ReviewResult.id(review)
+    [disposition] = plan.node_dispositions
+
+    plan = %{
+      plan
+      | node_dispositions: [
+          %{
+            disposition
+            | behavior_binding_id: hd(original_contract.bindings).binding_id,
+              behavior_contract_digest: digest,
+              behavior_review_id: review_id
+          }
+        ]
+    }
+
+    refute original_contract_digest == digest
+
+    result =
+      apply(ComponentizationPlan, :validate_references_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        original_contract,
+        review
+      ])
+
+    assert "componentization_plan.node_disposition.behavior_authority_mismatch" in codes(result)
+    assert "componentization_plan.unsupported_node" in codes(result)
+  end
+
+  test "binding selector must resolve exactly once" do
+    missing_binding =
+      disposition_tuple(disposition_overrides: [behavior_binding_id: "missing-binding"])
+
+    assert "componentization_plan.node_disposition.behavior_binding_mismatch" in disposition_codes(
+             authority_result(missing_binding)
+           )
+
+    duplicate_authority = disposition_tuple()
+
+    {plan, component_contract, document, behavior_contract, review, _binding} =
+      duplicate_authority
+
+    [binding] = behavior_contract.bindings
+    duplicate_contract = %{behavior_contract | bindings: [binding, binding]}
+
+    result =
+      apply(ComponentizationPlan, :validate_references_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        duplicate_contract,
+        review
+      ])
+
+    assert "componentization_plan.node_disposition.behavior_binding_mismatch" in codes(result)
+    assert "componentization_plan.unsupported_node" in codes(result)
+  end
+
+  test "all six frozen Behavior and IR reference roles block disposition consumption" do
+    roles = [
+      :binding_owner,
+      :controlled_target,
+      :trigger_origin,
+      :focus_reference,
+      :ir_interaction_ref,
+      :ir_interaction_target
+    ]
+
+    for role <- roles do
+      tuple = disposition_tuple(reference_role: role)
+      result_codes = disposition_codes(authority_result(tuple))
+
+      assert "componentization_plan.node_disposition.behavior_reference_conflict" in result_codes
+      assert "componentization_plan.unsupported_node" in result_codes
+    end
+  end
+
+  test "duplicate, unsupported and malformed dispositions preserve intrinsic diagnostics and blockers" do
+    duplicate = disposition_tuple(duplicate_disposition: true)
+
+    result_codes = disposition_codes(authority_result(duplicate))
+
+    assert Enum.any?(
+             result_codes,
+             &String.starts_with?(&1, "componentization_plan.node_disposition.")
+           )
+
+    assert "componentization_plan.node_disposition.duplicate" in result_codes
+    assert "componentization_plan.unsupported_node" in result_codes
+
+    unsupported = disposition_tuple(disposition_overrides: [disposition: :omit_runtime])
+    result_codes = disposition_codes(authority_result(unsupported))
+    assert "componentization_plan.node_disposition.outcome_unsupported" in result_codes
+    assert "componentization_plan.unsupported_node" in result_codes
+
+    malformed = disposition_tuple()
+    {plan, component_contract, document, behavior_contract, review, _binding} = malformed
+    [disposition] = plan.node_dispositions
+    plan = %{plan | node_dispositions: [Map.put(disposition, :extra_field, "invalid")]}
+
+    result =
+      apply(ComponentizationPlan, :validate_references_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        behavior_contract,
+        review
+      ])
+
+    assert "componentization_plan.node_disposition.invalid" in codes(result)
+    assert "componentization_plan.unsupported_node" in codes(result)
+  end
+
+  test "list-wide disposition ordering failure leaves every unsupported target unconsumed" do
+    tuple = disposition_tuple(second_target: true)
+    {plan, component_contract, document, behavior_contract, review, _binding} = tuple
+    [first] = plan.node_dispositions
+
+    second = %{
+      first
+      | design_node_id: @second_disposition_target_id,
+        source_id: "synthetic-node-43"
+    }
+
+    plan = %{plan | node_dispositions: [second, first]}
+
+    result =
+      apply(ComponentizationPlan, :validate_references_with_behavior_authority, [
+        plan,
+        component_contract,
+        document,
+        behavior_contract,
+        review
+      ])
+
+    result_codes = codes(result)
+    assert Enum.any?(result_codes, &String.ends_with?(&1, ".design_node_id.order_invalid"))
+    assert Enum.count(result_codes, &(&1 == "componentization_plan.unsupported_node")) == 2
+  end
+
+  test "empty-disposition authority entry point preserves ordinary and historical behavior" do
+    design_document = document()
+    component_contract = contract()
+    ordinary_plan = plan(component_contract, design_document)
+
+    ordinary =
+      ComponentizationPlan.validate_references(
+        ordinary_plan,
+        component_contract,
+        design_document
+      )
+
+    assert apply(ComponentizationPlan, :validate_references_with_behavior_authority, [
+             ordinary_plan,
+             component_contract,
+             design_document,
+             nil,
+             nil
+           ]) == ordinary
+
+    ordinary_prerequisites =
+      ComponentizationPlan.validate_generation_prerequisites(
+        ordinary_plan,
+        component_contract,
+        design_document
+      )
+
+    assert apply(
+             ComponentizationPlan,
+             :validate_generation_prerequisites_with_behavior_authority,
+             [ordinary_plan, component_contract, design_document, nil, nil]
+           ) == ordinary_prerequisites
+
+    ordinary_generation =
+      ComponentizationPlan.validate_for_generation(
+        ordinary_plan,
+        component_contract,
+        design_document
+      )
+
+    assert apply(ComponentizationPlan, :validate_for_generation_with_behavior_authority, [
+             ordinary_plan,
+             component_contract,
+             design_document,
+             nil,
+             nil
+           ]) == ordinary_generation
+
+    historical_plan = %{ordinary_plan | plan_format_version: "1.0.0"}
+
+    assert ComponentizationPlan.validate_references(
+             historical_plan,
+             component_contract,
+             design_document
+           ) == :ok
+  end
 
   test "fingerprint hashes canonical bytes and distinguishes documents with colliding node ids" do
     first = document()

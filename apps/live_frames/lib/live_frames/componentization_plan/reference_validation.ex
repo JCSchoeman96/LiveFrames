@@ -11,8 +11,12 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
   alias LiveFrames.ComponentizationPlan.Json
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Validation
+  alias LiveFrames.Behavior.ComponentizationDecision
+  alias LiveFrames.Behavior.ReviewResult
+  alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.ValueBinding
@@ -29,21 +33,59 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   }
 
   @root_roles [:root_id, :root_class, :root_global_attrs]
+  @node_disposition_prefix "componentization_plan.node_disposition."
 
   @spec validate(term(), term(), term()) :: :ok | {:error, [Diagnostic.t()]}
   def validate(plan, component_contract, design_document) do
-    case preflight(plan, component_contract, design_document) do
-      {:ok, plan, component_contract, design_document} ->
-        validate_indexed(plan, component_contract, design_document)
+    if dispositions_present?(plan) do
+      validate_disposition_references(plan, component_contract, design_document, :missing)
+    else
+      case preflight(plan, component_contract, design_document) do
+        {:ok, plan, component_contract, design_document} ->
+          validate_indexed(plan, component_contract, design_document)
 
-      {:error, diagnostics} ->
-        finish(diagnostics)
+        {:error, diagnostics} ->
+          finish(diagnostics)
+      end
+    end
+  end
+
+  @spec validate_with_behavior_authority(term(), term(), term(), term(), term()) ::
+          :ok | {:error, [Diagnostic.t()]}
+  def validate_with_behavior_authority(
+        plan,
+        component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ) do
+    if dispositions_present?(plan) do
+      validate_disposition_references(
+        plan,
+        component_contract,
+        design_document,
+        {:provided, behavior_contract, selected_behavior_review_result}
+      )
+    else
+      validate(plan, component_contract, design_document)
     end
   end
 
   @spec validate_generation_prerequisites(term(), term(), term()) ::
           :ok | {:error, [Diagnostic.t()]}
   def validate_generation_prerequisites(plan, component_contract, design_document) do
+    if dispositions_present?(plan) do
+      validate_generation_prerequisites_without_authority(
+        plan,
+        component_contract,
+        design_document
+      )
+    else
+      validate_generation_prerequisites_ordinary(plan, component_contract, design_document)
+    end
+  end
+
+  defp validate_generation_prerequisites_ordinary(plan, component_contract, design_document) do
     case preflight_generation(plan, component_contract, design_document) do
       {:ok, plan, component_contract, design_document} ->
         reference_result = validate_indexed(plan, component_contract, design_document, true)
@@ -58,6 +100,118 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
       {:error, diagnostics} ->
         finish(diagnostics)
+    end
+  rescue
+    _error ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  end
+
+  defp validate_generation_prerequisites_without_authority(
+         plan,
+         component_contract,
+         design_document
+       ) do
+    case preflight_disposition_generation(plan, component_contract, design_document) do
+      {:ok, plan, component_contract, design_document, intrinsic_diagnostics} ->
+        reference_result =
+          validate_indexed(
+            plan,
+            component_contract,
+            design_document,
+            true,
+            :missing,
+            intrinsic_diagnostics
+          )
+
+        stored_blockers =
+          Enum.filter(plan.diagnostics, fn diagnostic ->
+            diagnostic.severity in Diagnostic.blocking_severities()
+          end)
+
+        diagnostics = [] |> append_result(reference_result) |> Kernel.++(stored_blockers)
+        finish(diagnostics)
+
+      {:error, diagnostics} ->
+        finish(diagnostics)
+    end
+  rescue
+    _error ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error(
+          "componentization_plan.plan.invalid",
+          "generation prerequisite inputs are malformed"
+        )
+      ])
+  end
+
+  @spec validate_generation_prerequisites_with_behavior_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites_with_behavior_authority(
+        plan,
+        component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ) do
+    if dispositions_present?(plan) do
+      case preflight_disposition_generation(plan, component_contract, design_document) do
+        {:ok, plan, component_contract, design_document, intrinsic_diagnostics} ->
+          authority =
+            derive_disposition_authority(
+              design_document,
+              behavior_contract,
+              selected_behavior_review_result
+            )
+
+          reference_result =
+            validate_indexed(
+              plan,
+              component_contract,
+              design_document,
+              true,
+              authority,
+              intrinsic_diagnostics
+            )
+
+          stored_blockers =
+            plan.diagnostics
+            |> Enum.filter(&(&1.severity in Diagnostic.blocking_severities()))
+            |> Enum.reject(&revalidatable_disposition_blocker?/1)
+
+          diagnostics = [] |> append_result(reference_result) |> Kernel.++(stored_blockers)
+          finish(diagnostics)
+
+        {:error, diagnostics} ->
+          finish(diagnostics)
+      end
+    else
+      validate_generation_prerequisites_ordinary(plan, component_contract, design_document)
     end
   rescue
     _error ->
@@ -101,6 +255,186 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         error("componentization_plan.generation_blocked", "generation inputs are malformed")
       ])
   end
+
+  @spec validate_for_generation_with_behavior_authority(term(), term(), term(), term(), term()) ::
+          :ok | {:error, [Diagnostic.t()]}
+  def validate_for_generation_with_behavior_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ) do
+    prerequisite_result =
+      validate_generation_prerequisites_with_behavior_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      )
+
+    approval_result = contract_approval_result(approved_component_contract)
+
+    diagnostics =
+      []
+      |> append_result(prerequisite_result)
+      |> append_contract_gate(approval_result)
+
+    if diagnostics == [], do: :ok, else: finish([generation_blocked(diagnostics) | diagnostics])
+  rescue
+    _error ->
+      finish([
+        error("componentization_plan.generation_blocked", "generation inputs are malformed")
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error("componentization_plan.generation_blocked", "generation inputs are malformed")
+      ])
+  end
+
+  defp validate_disposition_references(plan, component_contract, design_document, authority_input) do
+    case preflight_disposition(plan, component_contract, design_document) do
+      {:ok, plan, component_contract, design_document, intrinsic_diagnostics} ->
+        authority =
+          case authority_input do
+            :missing ->
+              :missing
+
+            {:provided, behavior_contract, selected_review} ->
+              derive_disposition_authority(design_document, behavior_contract, selected_review)
+          end
+
+        validate_indexed(
+          plan,
+          component_contract,
+          design_document,
+          false,
+          authority,
+          intrinsic_diagnostics
+        )
+
+      {:error, diagnostics} ->
+        finish(diagnostics)
+    end
+  rescue
+    _error ->
+      finish([
+        error("componentization_plan.plan.invalid", "reference inputs failed closed validation")
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error("componentization_plan.plan.invalid", "reference inputs failed closed validation")
+      ])
+  end
+
+  defp preflight_disposition(plan, component_contract, design_document) do
+    with {:ok, intrinsic_diagnostics} <- disposition_intrinsic_diagnostics(plan),
+         {:ok, plan, component_contract, design_document} <-
+           preflight_contract(plan, component_contract, design_document) do
+      {:ok, plan, component_contract, design_document, intrinsic_diagnostics}
+    end
+  end
+
+  defp preflight_disposition_generation(plan, component_contract, design_document) do
+    with {:ok, intrinsic_diagnostics} <- disposition_intrinsic_diagnostics(plan),
+         {:ok, plan, component_contract, design_document} <-
+           preflight_generation_document(plan, component_contract, design_document) do
+      {:ok, plan, component_contract, design_document, intrinsic_diagnostics}
+    end
+  end
+
+  defp disposition_intrinsic_diagnostics(plan) do
+    case Validation.validate(plan) do
+      :ok ->
+        {:ok, []}
+
+      {:error, diagnostics} ->
+        if Enum.all?(diagnostics, &disposition_intrinsic_diagnostic?/1) do
+          {:ok, diagnostics}
+        else
+          {:error, diagnostics}
+        end
+    end
+  rescue
+    _error ->
+      {:error, [error("componentization_plan.plan.invalid", "plan failed intrinsic validation")]}
+  end
+
+  defp disposition_intrinsic_diagnostic?(%Diagnostic{code: code}) when is_binary(code),
+    do: String.starts_with?(code, @node_disposition_prefix)
+
+  defp disposition_intrinsic_diagnostic?(_diagnostic), do: false
+
+  defp derive_disposition_authority(design_document, behavior_contract, selected_review) do
+    binding_counts = behavior_binding_counts(behavior_contract)
+    digest_result = BehaviorSerializer.digest(behavior_contract)
+    approval_result = ReviewResult.require_approved([selected_review], behavior_contract)
+    review_id_result = ReviewResult.id(selected_review)
+
+    reference_result =
+      ComponentizationDecision.reference_index(design_document, behavior_contract)
+
+    valid? =
+      match?({:ok, _digest}, digest_result) and
+        match?({:ok, _review}, approval_result) and
+        match?({:ok, _review_id}, review_id_result) and
+        match?({:ok, _reference_index}, reference_result)
+
+    %{
+      authority_status: if(valid?, do: :valid, else: :invalid),
+      behavior_contract_digest: result_value(digest_result),
+      behavior_review_id: result_value(review_id_result),
+      binding_counts: binding_counts,
+      reference_index: result_value(reference_result) || %{}
+    }
+  rescue
+    _error ->
+      %{
+        authority_status: :invalid,
+        behavior_contract_digest: nil,
+        behavior_review_id: nil,
+        binding_counts: behavior_binding_counts(behavior_contract),
+        reference_index: %{}
+      }
+  end
+
+  defp behavior_binding_counts(%{bindings: bindings}) when is_list(bindings) do
+    if proper_list?(bindings) do
+      Enum.reduce(bindings, %{}, fn
+        %{binding_id: binding_id}, counts when not is_nil(binding_id) ->
+          Map.update(counts, binding_id, 1, &(&1 + 1))
+
+        _binding, counts ->
+          counts
+      end)
+    else
+      %{}
+    end
+  rescue
+    _error -> %{}
+  end
+
+  defp behavior_binding_counts(_behavior_contract), do: %{}
+
+  defp result_value({:ok, value}), do: value
+  defp result_value(_result), do: nil
+
+  defp dispositions_present?(%ComponentizationPlan{node_dispositions: []}), do: false
+  defp dispositions_present?(%ComponentizationPlan{}), do: true
+  defp dispositions_present?(_plan), do: false
+
+  defp revalidatable_disposition_blocker?(%Diagnostic{
+         code: "componentization_plan.unsupported_node"
+       }),
+       do: true
+
+  defp revalidatable_disposition_blocker?(%Diagnostic{code: code}) when is_binary(code),
+    do: String.starts_with?(code, @node_disposition_prefix)
+
+  defp revalidatable_disposition_blocker?(_diagnostic), do: false
 
   defp preflight_generation(plan, component_contract, design_document) do
     case Validation.validate(plan) do
@@ -279,24 +613,37 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  defp validate_indexed(plan, contract, document, generation? \\ false) do
+  defp validate_indexed(plan, contract, document, generation? \\ false),
+    do: validate_indexed(plan, contract, document, generation?, nil, [])
+
+  defp validate_indexed(plan, contract, document, generation?, disposition_authority, initial) do
     indexes = build_indexes(plan, contract, document)
 
     case Map.fetch(indexes.nodes_by_id, plan.boundary_node_id) do
       :error ->
-        finish([
-          error_at(
-            "componentization_plan.boundary.missing",
-            "boundary_node_id does not resolve to a DesignNode",
-            "boundary_node_id"
-          )
-        ])
+        finish(
+          [
+            initial,
+            error_at(
+              "componentization_plan.boundary.missing",
+              "boundary_node_id does not resolve to a DesignNode",
+              "boundary_node_id"
+            )
+          ]
+          |> List.flatten()
+        )
 
       {:ok, _boundary} ->
         boundary_ids = indexes.boundary_ids
         slot_owners = indexes.slot_owners
 
-        diagnostics = []
+        {consumed_node_ids, disposition_diagnostics} =
+          case disposition_authority do
+            nil -> {MapSet.new(), []}
+            authority -> validate_dispositions(plan, indexes, authority, initial)
+          end
+
+        diagnostics = initial ++ disposition_diagnostics
         diagnostics = validate_render_projections(plan, indexes, boundary_ids, diagnostics)
         diagnostics = validate_render_subtrees(plan, slot_owners, diagnostics)
         diagnostics = validate_binding_targets(contract, boundary_ids, slot_owners, diagnostics)
@@ -309,11 +656,18 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
         diagnostics = validate_static_images(indexes, image_sources, diagnostics)
 
-        diagnostics = validate_unsupported_nodes(indexes, diagnostics)
+        diagnostics = validate_unsupported_nodes(indexes, consumed_node_ids, diagnostics)
 
         diagnostics =
           if generation?,
-            do: validate_native_generation(plan, contract, indexes, diagnostics),
+            do:
+              validate_native_generation(
+                plan,
+                contract,
+                indexes,
+                consumed_node_ids,
+                diagnostics
+              ),
             else: diagnostics
 
         finish(diagnostics)
@@ -324,6 +678,345 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         error("componentization_plan.plan.invalid", "reference inputs failed closed validation")
       ])
   end
+
+  defp validate_dispositions(plan, indexes, authority, intrinsic_diagnostics) do
+    dispositions = plan.node_dispositions
+
+    {dispositions, invalid_list?} =
+      if proper_list?(dispositions), do: {dispositions, false}, else: {[], true}
+
+    duplicate_counts = disposition_target_counts(dispositions)
+
+    list_intrinsic_invalid? =
+      Enum.any?(intrinsic_diagnostics, &disposition_list_intrinsic_failure?/1)
+
+    initial_diagnostics =
+      if authority == :missing or authority.authority_status != :valid do
+        [
+          error_at(
+            "componentization_plan.node_disposition.behavior_authority_mismatch",
+            "disposition validation requires exact approved Behavior authority",
+            "node_dispositions"
+          )
+        ]
+      else
+        []
+      end
+
+    initial_diagnostics =
+      if invalid_list? do
+        [
+          error_at(
+            "componentization_plan.node_disposition.invalid",
+            "node_dispositions must be a proper list of NodeDisposition records",
+            "node_dispositions"
+          )
+          | initial_diagnostics
+        ]
+      else
+        initial_diagnostics
+      end
+
+    checked =
+      dispositions
+      |> Enum.with_index()
+      |> Enum.map(fn {disposition, index} ->
+        validate_one_disposition(
+          disposition,
+          index,
+          indexes,
+          authority,
+          duplicate_counts,
+          list_intrinsic_invalid?
+        )
+      end)
+
+    consumed_counts =
+      Enum.reduce(checked, %{}, fn
+        {:valid, id, _path, _diagnostics}, counts -> Map.update(counts, id, 1, &(&1 + 1))
+        _invalid, counts -> counts
+      end)
+
+    {consumed_node_ids, diagnostics} =
+      Enum.reduce(checked, {MapSet.new(), initial_diagnostics}, fn
+        {:valid, id, _path, diagnostics}, {consumed, acc} ->
+          consumed = MapSet.put(consumed, id)
+          {consumed, diagnostics ++ acc}
+
+        {:invalid, _id, _path, diagnostics}, {consumed, acc} ->
+          {consumed, diagnostics ++ acc}
+      end)
+
+    diagnostics =
+      Enum.reduce(checked, diagnostics, fn
+        {:valid, id, path, _entry_diagnostics}, acc ->
+          if Map.get(consumed_counts, id, 0) == 1 do
+            acc
+          else
+            add(
+              acc,
+              error_at(
+                "componentization_plan.node_disposition.unused",
+                "a valid disposition was not consumed exactly once",
+                path
+              )
+            )
+          end
+
+        _checked, acc ->
+          acc
+      end)
+
+    {consumed_node_ids, diagnostics}
+  end
+
+  defp validate_one_disposition(
+         disposition,
+         index,
+         indexes,
+         authority,
+         duplicate_counts,
+         list_intrinsic_invalid?
+       ) do
+    path = "node_dispositions[#{index}]"
+    id = disposition_field(disposition, :design_node_id)
+
+    intrinsic_valid? =
+      NodeDisposition.validate(disposition) == :ok and not list_intrinsic_invalid?
+
+    duplicate? = is_binary(id) and Map.get(duplicate_counts, id, 0) > 1
+
+    outcome_valid? =
+      disposition_field(disposition, :disposition) == :exclude_source_runtime_carrier
+
+    diagnostics = []
+
+    diagnostics =
+      if intrinsic_valid? do
+        diagnostics
+      else
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.invalid",
+            "NodeDisposition failed its intrinsic closed-record validation",
+            path
+          )
+        )
+      end
+
+    diagnostics =
+      if duplicate? do
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.duplicate",
+            "a design node may be consumed by only one NodeDisposition",
+            path
+          )
+        )
+      else
+        diagnostics
+      end
+
+    diagnostics =
+      if outcome_valid? do
+        diagnostics
+      else
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.outcome_unsupported",
+            "NodeDisposition outcome is not supported",
+            path <> ".disposition"
+          )
+        )
+      end
+
+    {target, target_exists?, target_in_boundary?, target_semantic_valid?, diagnostics} =
+      case Map.fetch(indexes.nodes_by_id, id) do
+        :error ->
+          {nil, false, false, false,
+           add(
+             diagnostics,
+             error_at(
+               "componentization_plan.node_disposition.target_missing",
+               "disposition design_node_id does not resolve to a DesignNode",
+               path <> ".design_node_id"
+             )
+           )}
+
+        {:ok, node} ->
+          in_boundary? = MapSet.member?(indexes.boundary_ids, id)
+
+          semantic_valid? =
+            node.semantic_type in ["raw", "unsupported", "unknown"] and node.children == []
+
+          diagnostics =
+            if in_boundary? do
+              diagnostics
+            else
+              add(
+                diagnostics,
+                error_at(
+                  "componentization_plan.node_disposition.target_outside_boundary",
+                  "disposition target is outside the selected boundary",
+                  path <> ".design_node_id"
+                )
+              )
+            end
+
+          diagnostics =
+            if semantic_valid? do
+              diagnostics
+            else
+              add(
+                diagnostics,
+                error_at(
+                  "componentization_plan.node_disposition.target_semantic_incompatible",
+                  "disposition target must be an unsupported leaf node",
+                  path <> ".design_node_id"
+                )
+              )
+            end
+
+          {node, true, in_boundary?, semantic_valid?, diagnostics}
+      end
+
+    source_valid? = source_identity_matches?(disposition, target)
+
+    diagnostics =
+      if source_valid? do
+        diagnostics
+      else
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.source_identity_mismatch",
+            "disposition source identity does not match the current target SourceTrace",
+            path
+          )
+        )
+      end
+
+    authority_valid? = authority != :missing and authority.authority_status == :valid
+
+    authority_fields_match? =
+      authority_valid? and
+        disposition_field(disposition, :behavior_contract_digest) ==
+          authority.behavior_contract_digest and
+        disposition_field(disposition, :behavior_review_id) == authority.behavior_review_id
+
+    diagnostics =
+      if authority_valid? and not authority_fields_match? do
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.behavior_authority_mismatch",
+            "disposition digest or selected review ID differs from exact Behavior authority",
+            path
+          )
+        )
+      else
+        diagnostics
+      end
+
+    binding_valid? =
+      if authority == :missing do
+        false
+      else
+        Map.get(authority.binding_counts, disposition_field(disposition, :behavior_binding_id), 0) ==
+          1
+      end
+
+    diagnostics =
+      if authority != :missing and not binding_valid? do
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.behavior_binding_mismatch",
+            "behavior_binding_id must identify exactly one binding in the supplied contract",
+            path <> ".behavior_binding_id"
+          )
+        )
+      else
+        diagnostics
+      end
+
+    reference_roles =
+      if authority == :missing,
+        do: MapSet.new(),
+        else: Map.get(authority.reference_index, id, MapSet.new())
+
+    reference_conflict? = MapSet.size(reference_roles) > 0
+
+    diagnostics =
+      if reference_conflict? do
+        add(
+          diagnostics,
+          error_at(
+            "componentization_plan.node_disposition.behavior_reference_conflict",
+            "Behavior or IR references target the disposed node",
+            path <> ".design_node_id"
+          )
+        )
+      else
+        diagnostics
+      end
+
+    valid? =
+      intrinsic_valid? and not duplicate? and outcome_valid? and target_exists? and
+        target_in_boundary? and target_semantic_valid? and source_valid? and authority_valid? and
+        authority_fields_match? and binding_valid? and not reference_conflict?
+
+    status = if valid?, do: :valid, else: :invalid
+    {status, id, path, diagnostics}
+  end
+
+  defp source_identity_matches?(disposition, %DesignNode{source_trace: trace})
+       when is_map(trace) do
+    source_type = Map.get(trace, :source_type)
+    source_id = Map.get(trace, :source_id)
+
+    nonempty_string?(source_type) and nonempty_string?(source_id) and
+      disposition_field(disposition, :source_type) == source_type and
+      disposition_field(disposition, :source_id) == source_id
+  end
+
+  defp source_identity_matches?(_disposition, _target), do: false
+
+  defp disposition_field(%NodeDisposition{} = disposition, field), do: Map.get(disposition, field)
+
+  defp disposition_field(disposition, field) when is_map(disposition),
+    do: Map.get(disposition, field)
+
+  defp disposition_field(_disposition, _field), do: nil
+
+  defp disposition_target_counts(dispositions) do
+    Enum.reduce(dispositions, %{}, fn disposition, counts ->
+      case disposition_field(disposition, :design_node_id) do
+        id when is_binary(id) -> Map.update(counts, id, 1, &(&1 + 1))
+        _id -> counts
+      end
+    end)
+  end
+
+  defp proper_list?([]), do: true
+  defp proper_list?([_head | tail]), do: proper_list?(tail)
+  defp proper_list?(_tail), do: false
+
+  defp disposition_list_intrinsic_failure?(%Diagnostic{code: code}) when is_binary(code) do
+    String.ends_with?(code, [
+      ".design_node_id.order_invalid",
+      ".version_incompatible",
+      ".list.invalid"
+    ])
+  end
+
+  defp disposition_list_intrinsic_failure?(_diagnostic), do: false
+
+  defp nonempty_string?(value),
+    do: is_binary(value) and byte_size(value) > 0 and String.valid?(value)
 
   defp build_indexes(plan, contract, document) do
     slot_targets =
@@ -1403,16 +2096,20 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end)
   end
 
-  defp validate_unsupported_nodes(indexes, diagnostics) do
+  defp validate_unsupported_nodes(indexes, consumed_node_ids, diagnostics) do
     Enum.reduce(indexes.unsupported_node_ids, diagnostics, fn id, acc ->
-      add(
-        acc,
-        error_at(
-          "componentization_plan.unsupported_node",
-          "unsupported DesignNode semantic_type blocks plan validation",
-          "nodes[#{id}]"
+      if MapSet.member?(consumed_node_ids, id) do
+        acc
+      else
+        add(
+          acc,
+          error_at(
+            "componentization_plan.unsupported_node",
+            "unsupported DesignNode semantic_type blocks plan validation",
+            "nodes[#{id}]"
+          )
         )
-      )
+      end
     end)
   end
 
@@ -1459,7 +2156,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  defp validate_native_generation(plan, contract, indexes, diagnostics) do
+  defp validate_native_generation(plan, contract, indexes, consumed_node_ids, diagnostics) do
     {roles, diagnostics} =
       Enum.reduce(contract.binding_projections, {%{}, diagnostics}, fn projection, {roles, acc} ->
         node = Map.get(indexes.nodes_by_id, projection.target_node_id)
@@ -1497,28 +2194,32 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       node = Map.fetch!(indexes.nodes_by_id, id)
       node_roles = Map.get(roles, id, %{})
 
-      cond do
-        node.semantic_type == "icon" ->
-          native_error(acc, "icon_unsupported", "icons have no first-wave native renderer", id)
+      if MapSet.member?(consumed_node_ids, id) do
+        acc
+      else
+        cond do
+          node.semantic_type == "icon" ->
+            native_error(acc, "icon_unsupported", "icons have no first-wave native renderer", id)
 
-        id == plan.boundary_node_id and Map.has_key?(node_roles, :subtree_slot) ->
-          native_error(
-            acc,
-            "boundary_subtree_slot",
-            "slot replacement would remove the component root",
-            id
-          )
+          id == plan.boundary_node_id and Map.has_key?(node_roles, :subtree_slot) ->
+            native_error(
+              acc,
+              "boundary_subtree_slot",
+              "slot replacement would remove the component root",
+              id
+            )
 
-        Map.has_key?(indexes.slot_owners, id) and
-            not (node.semantic_type == "heading" and Map.has_key?(node.attributes, "navigation")) ->
-          acc
+          Map.has_key?(indexes.slot_owners, id) and
+              not (node.semantic_type == "heading" and Map.has_key?(node.attributes, "navigation")) ->
+            acc
 
-        true ->
-          acc
-          |> validate_native_tag(node, node_roles, indexes)
-          |> validate_native_node_surface(node)
-          |> validate_native_boundary_image(node, node_roles, plan, indexes)
-          |> validate_native_navigation(node, node_roles, Map.has_key?(indexes.slot_owners, id))
+          true ->
+            acc
+            |> validate_native_tag(node, node_roles, indexes)
+            |> validate_native_node_surface(node)
+            |> validate_native_boundary_image(node, node_roles, plan, indexes)
+            |> validate_native_navigation(node, node_roles, Map.has_key?(indexes.slot_owners, id))
+        end
       end
     end)
   end

@@ -55,6 +55,29 @@ defmodule LiveFrames.ComponentizationPlan do
   def validate_references(plan, component_contract, design_document),
     do: ReferenceValidation.validate(plan, component_contract, design_document)
 
+  @spec validate_references_with_behavior_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_references_with_behavior_authority(
+        plan,
+        component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ),
+      do:
+        ReferenceValidation.validate_with_behavior_authority(
+          plan,
+          component_contract,
+          design_document,
+          behavior_contract,
+          selected_behavior_review_result
+        )
+
   @spec validate_for_generation(term(), term(), term()) :: :ok | {:error, [Diagnostic.t()]}
   def validate_for_generation(plan, component_contract, design_document),
     do: ReferenceValidation.validate_for_generation(plan, component_contract, design_document)
@@ -68,6 +91,52 @@ defmodule LiveFrames.ComponentizationPlan do
         component_contract,
         design_document
       )
+
+  @spec validate_generation_prerequisites_with_behavior_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites_with_behavior_authority(
+        plan,
+        component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ),
+      do:
+        ReferenceValidation.validate_generation_prerequisites_with_behavior_authority(
+          plan,
+          component_contract,
+          design_document,
+          behavior_contract,
+          selected_behavior_review_result
+        )
+
+  @spec validate_for_generation_with_behavior_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_for_generation_with_behavior_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result
+      ),
+      do:
+        ReferenceValidation.validate_for_generation_with_behavior_authority(
+          plan,
+          approved_component_contract,
+          design_document,
+          behavior_contract,
+          selected_behavior_review_result
+        )
 
   @spec design_document_sha256(term()) :: {:ok, String.t()} | {:error, [Diagnostic.t()]}
   def design_document_sha256(design_document) do
