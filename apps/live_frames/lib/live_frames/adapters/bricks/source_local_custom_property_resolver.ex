@@ -257,21 +257,51 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   # each reference may hash its path for up to H ancestor lookups and scan one prefix.
   defp resolve_target(local_name, target_path, index, viewport_scope) do
     reversed_path = Enum.reverse(target_path)
+    trie = Map.get(index.tries_by_name, local_name, empty_path_trie())
 
-    case selected_relation(index.by_name_and_path, local_name, reversed_path, viewport_scope) do
+    case viewport_scope do
+      :base ->
+        resolve_base_relation(local_name, target_path, reversed_path, trie, index)
+
+      {:responsive_source_key, _source_key} = responsive_scope ->
+        responsive_scope_key = {responsive_scope, nil}
+
+        case selected_relation_for_scope(
+               index.by_name_and_path,
+               local_name,
+               reversed_path,
+               responsive_scope_key
+             ) do
+          {:found, _candidate_path, _scope_selections} ->
+            {:error, :unsupported_scope}
+
+          :none ->
+            if farther_ancestor_exists_in_scope?(trie, target_path, responsive_scope_key) do
+              {:error, :resource_limit_exceeded}
+            else
+              resolve_base_relation(local_name, target_path, reversed_path, trie, index)
+            end
+        end
+    end
+  end
+
+  defp resolve_base_relation(local_name, target_path, reversed_path, trie, index) do
+    case selected_relation_for_scope(
+           index.by_name_and_path,
+           local_name,
+           reversed_path,
+           {:base, nil}
+         ) do
       {:found, candidate_path, scope_selections} ->
         resolve_scope_selection(
           scope_selections,
           local_name,
           candidate_path,
-          viewport_scope,
           index.dependency_states
         )
 
       :none ->
-        trie = Map.get(index.tries_by_name, local_name, empty_path_trie())
-
-        if farther_ancestor_exists?(trie, target_path, viewport_scope) do
+        if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
           {:error, :resource_limit_exceeded}
         else
           {:error, :no_local_definition}
@@ -279,54 +309,60 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end
   end
 
-  defp selected_relation(index, local_name, reversed_path, viewport_scope) do
+  defp selected_relation_for_scope(index, local_name, reversed_path, scope_key) do
     case Map.fetch(index, {local_name, reversed_path}) do
       {:ok, selections} ->
-        if scope_candidate?(selections, viewport_scope) do
+        if Map.has_key?(selections, scope_key) do
           {:found, reversed_path, selections}
         else
-          nearest_relation(index, local_name, reversed_path, viewport_scope)
+          nearest_relation_for_scope(index, local_name, reversed_path, scope_key)
         end
 
       :error ->
-        nearest_relation(index, local_name, reversed_path, viewport_scope)
+        nearest_relation_for_scope(index, local_name, reversed_path, scope_key)
     end
   end
 
-  defp nearest_relation(index, local_name, reversed_path, viewport_scope) do
-    case nearest_ancestor(index, local_name, reversed_path, viewport_scope, 1) do
+  defp nearest_relation_for_scope(index, local_name, reversed_path, scope_key) do
+    case nearest_ancestor_for_scope(index, local_name, reversed_path, scope_key, 1) do
       {:found, candidate_path, selections} -> {:found, candidate_path, selections}
       :none -> :none
     end
   end
 
-  defp nearest_ancestor(_index, _local_name, _reversed_path, _viewport_scope, distance)
+  defp nearest_ancestor_for_scope(_index, _local_name, _reversed_path, _scope_key, distance)
        when distance > @max_ancestry_hops,
        do: :none
 
-  defp nearest_ancestor(_index, _local_name, [], _viewport_scope, _distance), do: :none
+  defp nearest_ancestor_for_scope(_index, _local_name, [], _scope_key, _distance), do: :none
 
-  defp nearest_ancestor(
+  defp nearest_ancestor_for_scope(
          index,
          local_name,
          [_target_component | reversed_ancestor],
-         viewport_scope,
+         scope_key,
          distance
        ) do
     case Map.fetch(index, {local_name, reversed_ancestor}) do
       {:ok, selections} ->
-        if scope_candidate?(selections, viewport_scope) do
+        if Map.has_key?(selections, scope_key) do
           {:found, reversed_ancestor, selections}
         else
-          nearest_ancestor(index, local_name, reversed_ancestor, viewport_scope, distance + 1)
+          nearest_ancestor_for_scope(
+            index,
+            local_name,
+            reversed_ancestor,
+            scope_key,
+            distance + 1
+          )
         end
 
       :error ->
-        nearest_ancestor(index, local_name, reversed_ancestor, viewport_scope, distance + 1)
+        nearest_ancestor_for_scope(index, local_name, reversed_ancestor, scope_key, distance + 1)
     end
   end
 
-  defp farther_ancestor_exists?(same_name_trie, target_path, viewport_scope) do
+  defp farther_ancestor_exists_in_scope?(same_name_trie, target_path, scope_key) do
     max_candidate_depth = length(target_path) - @max_ancestry_hops - 1
 
     if max_candidate_depth < 0 do
@@ -337,14 +373,14 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
         target_path,
         0,
         max_candidate_depth,
-        viewport_scope
+        scope_key
       )
     end
   end
 
-  defp has_definition_in_prefix?(trie, path, depth, max_depth, viewport_scope) do
+  defp has_definition_in_prefix?(trie, path, depth, max_depth, scope_key) do
     cond do
-      scope_candidate?(trie.scopes, viewport_scope) ->
+      Map.has_key?(trie.scopes, scope_key) ->
         true
 
       depth == max_depth ->
@@ -355,7 +391,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
           [component | rest] ->
             case Map.fetch(trie.children, component) do
               {:ok, child} ->
-                has_definition_in_prefix?(child, rest, depth + 1, max_depth, viewport_scope)
+                has_definition_in_prefix?(child, rest, depth + 1, max_depth, scope_key)
 
               :error ->
                 false
@@ -367,48 +403,29 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end
   end
 
-  defp scope_candidate?(scope_selections, :base),
-    do: Map.has_key?(scope_selections, {:base, nil})
-
-  defp scope_candidate?(scope_selections, {:responsive_source_key, source_key}) do
-    Map.has_key?(scope_selections, {:base, nil}) or
-      Map.has_key?(scope_selections, {{:responsive_source_key, source_key}, nil})
-  end
-
   defp resolve_scope_selection(
          scope_selections,
          local_name,
          reversed_path,
-         viewport_scope,
          dependency_states
        ) do
-    responsive_key = {{:responsive_source_key, responsive_source_key(viewport_scope)}, nil}
+    case Map.fetch(scope_selections, {:base, nil}) do
+      :error ->
+        {:error, :no_local_definition}
 
-    if match?({:responsive_source_key, _}, viewport_scope) and
-         Map.has_key?(scope_selections, responsive_key) do
-      {:error, :unsupported_scope}
-    else
-      case Map.fetch(scope_selections, {:base, nil}) do
-        :error ->
-          {:error, :no_local_definition}
+      {:ok, {:error, _state} = error} ->
+        error
 
-        {:ok, {:error, _state} = error} ->
-          error
+      {:ok, {:ok, terminal}} ->
+        dependency_state = Map.get(dependency_states, {local_name, reversed_path, {:base, nil}})
 
-        {:ok, {:ok, terminal}} ->
-          dependency_state = Map.get(dependency_states, {local_name, reversed_path, {:base, nil}})
-
-          if dependency_state do
-            {:error, dependency_state}
-          else
-            {:ok, terminal}
-          end
-      end
+        if dependency_state do
+          {:error, dependency_state}
+        else
+          {:ok, terminal}
+        end
     end
   end
-
-  defp responsive_source_key({:responsive_source_key, source_key}), do: source_key
-  defp responsive_source_key(_viewport_scope), do: nil
 
   defp supported_viewport_scope?(:base), do: true
   defp supported_viewport_scope?({:responsive_source_key, _source_key}), do: true

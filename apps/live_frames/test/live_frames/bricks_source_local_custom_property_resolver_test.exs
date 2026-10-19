@@ -377,6 +377,20 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              ])
   end
 
+  test "nearest responsive ancestor takes precedence over a direct base definition" do
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+
+    definitions = [
+      definition("--local-name", "12px", [1, 2]),
+      definition("--local-name", "18px", [1], viewport_scope: responsive_scope)
+    ]
+
+    assert {:ok, [{:error, :unsupported_scope}]} =
+             resolve(definitions, [
+               reference("--local-name", [1, 2], viewport_scope: responsive_scope)
+             ])
+  end
+
   test "rejects state-scoped lookups and responsive-only resolution" do
     assert {:ok, [{:error, :unsupported_scope}]} =
              resolve(
