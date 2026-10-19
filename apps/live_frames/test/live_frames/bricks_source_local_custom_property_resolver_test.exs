@@ -482,6 +482,12 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
                "--local-name",
                "var(--local-name)"
              )
+
+    assert {:error, :unsupported_nested_reference} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(color)"
+             )
   end
 
   test "classifies fallback and downstream references without substitution" do

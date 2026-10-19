@@ -611,16 +611,14 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   end
 
   defp isolated_definition_compiler_input_failure(local_name, names, fallback?) do
-    valid_names = Enum.reject(names, &is_nil/1)
-
     cond do
       fallback? ->
         :unsupported_fallback
 
-      Enum.any?(valid_names, &(&1 == local_name)) ->
+      Enum.any?(names, &(&1 == local_name)) ->
         :self_reference
 
-      valid_names != [] ->
+      names != [] ->
         :unsupported_nested_reference
 
       true ->
@@ -635,19 +633,17 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          cyclic_definitions,
          cycle_key
        ) do
-    valid_names = Enum.reject(names, &is_nil/1)
-
     cond do
       fallback? ->
         :unsupported_fallback
 
-      Enum.any?(valid_names, &(&1 == local_name)) ->
+      Enum.any?(names, &(&1 == local_name)) ->
         :self_reference
 
       MapSet.member?(cyclic_definitions, cycle_key) ->
         :cycle
 
-      valid_names != [] ->
+      names != [] ->
         :unsupported_nested_reference
 
       true ->

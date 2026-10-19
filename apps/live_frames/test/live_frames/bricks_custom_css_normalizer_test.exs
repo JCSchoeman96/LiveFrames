@@ -518,6 +518,21 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert result.residuals_by_source_id[@owner] == []
   end
 
+  test "a definition with an invalid downstream var dependency remains a whole-rule residual" do
+    css = ".owner { --local-name: var(color); }"
+    result = run(css)
+
+    assert result.styles_by_source_id == %{}
+    assert result.responsive_by_source_id == %{}
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
   test "a definition with an unsupported terminal dependency remains a whole-rule residual" do
     css = ".owner { --theme-token: var(--external-space); }"
     result = run(css)
