@@ -15,9 +15,21 @@
 ## Global Constraints
 
 - Resolve direct `var(--name)` only. Do not expand selector grammar or send raw selector text to the resolver.
-- A local-lane failure never falls back to external authority. Do not change Design IR, schema, or generator behavior.
-- The implementation boundary is exactly four production/test files. Keep limits at 65,536 CSS bytes, 256 definitions, 1,024 references, 64 relative ancestry hops, and 4,096 terminal bytes; substitution depth is one and dependency edges are capped at 1,024.
+- A local-lane failure never falls back to external authority. Do not change Design IR schemas, serializers, or generator behavior; use the existing IR values and override types.
+- The implementation boundary is exactly six production/test files. Keep limits at 65,536 CSS bytes, 256 definitions, 1,024 references, 64 relative ancestry hops, and 4,096 terminal bytes; substitution depth is one and dependency edges are capped at 1,024.
+- Forward only selected responsive custom-CSS provenance from `DependencyExtractor` through `DesignIRNormalizer` to `CustomCssNormalizer`. Responsive source scope is opaque and exact; do not search shadowed layers, infer breakpoints, or compose it with parser media intervals.
 - Observe a failing TDD assertion before production code. Private Romeo source must not enter repository tests.
+
+```text
+IMPLEMENTATION_FILE_COUNT=6
+CUSTOM_CSS_PARSER_CHANGE_REQUIRED=NO
+STYLE_PRECEDENCE_CHANGE_REQUIRED=NO
+DEPENDENCY_EXTRACTOR_CHANGE_REQUIRED=NO
+VARIABLE_AUTHORITY_CHANGE_REQUIRED=NO
+CSS_DECLARATION_CHANGE_REQUIRED=NO
+DESIGN_IR_SCHEMA_CHANGE_REQUIRED=NO
+NATIVE_GENERATOR_CHANGE_REQUIRED=NO
+```
 
 ## Authority and preflight
 
@@ -57,14 +69,16 @@ The observed canonical source has confirmed-required and unknown findings. Apply
 
 ## File structure
 
-The later implementation PR may change exactly these four files:
+The later implementation PR may change exactly these six files:
 
 - Create `apps/live_frames/lib/live_frames/adapters/bricks/source_local_custom_property_resolver.ex`. Own local-name validation, bounded definition indexing, scope selection, duplicate handling, dependency classification, and closed resolver states.
 - Create `apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`. Cover resolver behavior with synthetic records.
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex`. Own CSS byte limits, selector identity, observed local names, eligible record construction, resolver batching, revalidation, and residual atomicity.
 - Modify `apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Cover local definition consumption, ordinary style output, external routing, rule atomicity, and revalidation.
+- Modify `apps/live_frames/lib/live_frames/adapters/bricks/design_ir_normalizer.ex`. Forward the already selected base and responsive custom-CSS provenance records to `CustomCssNormalizer`; do not re-read settings or select layers.
+- Modify `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`. Cover responsive forwarding through the public Design IR normalization pipeline using synthetic data.
 
-Do not modify `custom_css_parser.ex`, `style_precedence.ex`, `variable_authority.ex`, `css_declaration.ex`, Design IR modules, `StyleValue`, serializers, `NativeGenerator`, conversion matrices, dependency files, assets, or private source material. Stop with `STOP=PLANNED_IMPLEMENTATION_BOUNDARY_EXPANDED` if any of those changes appears necessary.
+Do not modify `custom_css_parser.ex`, `style_precedence.ex`, `dependency_extractor.ex`, `variable_authority.ex`, `css_declaration.ex`, Design IR schemas or `StyleValue`, serializers, `NativeGenerator`, conversion matrices, dependency files, assets, or private source material. `DesignIRNormalizer` is the one permitted adapter-layer exception for forwarding already selected sources. Stop with `STOP=PLANNED_IMPLEMENTATION_BOUNDARY_EXPANDED` if any other file change appears necessary.
 
 ## Frozen resolver contract
 
@@ -121,6 +135,8 @@ record_kind
 terminal_text_if_definition (definition records only)
 ```
 
+Each owner input carries `source_id`, `value`, the exact selected `provenance` map, `source_key`, and `source_viewport_scope`. The record's `viewport_scope` comes from that owner scope. Keep the scope separate from effective provenance identity and do not reconstruct it from layer settings.
+
 `record_kind` is `:definition` or `:reference`. `source_order` is `{source_index, frame.source_order}` and exists only for stable diagnostics. It never chooses a winning definition. The exact effective provenance identity is the tuple frozen above. Do not include responsive source keys or viewport keys in this identity.
 
 Pass the existing `:authority_index` through required `opts` only for the presence-only external-name collision check. The resolver must discard candidate paths and values after checking whether an exact-name candidate exists.
@@ -135,6 +151,40 @@ Each compound retains its parsed marker and has its classes sorted and
 deduplicated. Preserve the order of descendant compounds.
 
 Preserve descendant order. Sort classes only within each parsed compound. Exclude raw selector text. Do not hash, serialize, expose, or send raw selectors to the resolver. The resolver compares this term for equality only.
+
+## Selected source forwarding and viewport scope
+
+`StylePrecedence` owns effective selection. `DependencyExtractor` already retains its selected custom-CSS provenance as `context.dependencies.custom_css_provenance[element.id]`; `DesignIRNormalizer.generic_custom_css_owners/1` must forward that selected data to `CustomCssNormalizer`. It must include the selected base record and every entry in the selected responsive map, preserve each provenance record exactly, and never read `provenance.layer_settings`, rerun precedence, or search shadowed layers.
+
+Freeze each forwarded owner record's source key and owner-level source viewport scope as:
+
+```text
+selected base:
+  source_key="_cssCustom"
+  source_viewport_scope=:base
+
+selected responsive entry:
+  source_key=<exact key in custom_css_provenance.responsive>
+  source_viewport_scope={:responsive_source_key, source_key}
+```
+
+The responsive key and scope are opaque. `CustomCssNormalizer` consumes the exact scope, and a responsive source without an `@media` wrapper remains responsive. Do not infer widths from names, compare source keys with media intervals, combine responsive keys with media intervals, or create a new breakpoint. If a selected responsive-source owner also has a parser-level media boundary and local resolution would require composing those scopes, fail the affected rule as `UNSUPPORTED_SCOPE` and retain it as residual.
+
+When placing normalized responsive styles in the IR, correlate the forwarded owner to the already selected responsive output record by exact source key and preserve that record's existing source name and min/max values. This is association with existing `StylePrecedence` output, not breakpoint inference. If no exact responsive output record is available, fail closed as `UNSUPPORTED_SCOPE`.
+
+```text
+RESPONSIVE_SELECTED_SOURCE_OWNER=StylePrecedence
+RESPONSIVE_SELECTED_SOURCE_FORWARDER=DesignIRNormalizer
+RESPONSIVE_SELECTED_SOURCE_CONSUMER=CustomCssNormalizer
+SELECTED_BASE_FORWARDING=YES
+SELECTED_RESPONSIVE_FORWARDING=YES
+RESPONSIVE_SHADOWED_LAYER_SEARCH=NO
+RESPONSIVE_SOURCE_SCOPE=OPAQUE_EXACT
+NAMED_BREAKPOINT_INFERENCE=NO
+RESPONSIVE_SOURCE_SCOPE_COMPARISON=EXACT_ONLY
+RESPONSIVE_SOURCE_AND_MEDIA_COMPOSITION=NO
+END_TO_END_RESPONSIVE_FORWARDING_TEST_PLANNED=YES
+```
 
 ## Resolution rules
 
@@ -161,6 +211,7 @@ Preserve descendant order. Sort classes only within each parsed compound. Exclud
 
 - Base definition to base reference is allowed within exact owner and provenance.
 - Base definition to responsive reference is allowed only within exact owner and provenance at the same target or nearest proven ancestor.
+- A selected responsive-source owner remains in its exact `{:responsive_source_key, source_key}` scope even when its CSS has no `@media` wrapper. If local resolution would require combining that scope with a parser-level media interval, fail `UNSUPPORTED_SCOPE`.
 - State-scoped lookup is unsupported.
 - Responsive definitions do not resolve in this slice. For a responsive reference, choose the selected relation using direct target first, otherwise the nearest proven ancestor, considering eligible definitions at either base or responsive scope. Then inspect that relation for an eligible responsive definition in the same exact responsive viewport scope. If one exists, fail `UNSUPPORTED_SCOPE` before using any base definition at that relation; do not silently fall back. This applies to both a same-target responsive definition and a nearest-ancestor responsive definition.
 - Responsive-to-responsive, responsive-to-base, responsive-to-state, base-to-state, and state-to-state transitions fail closed. Do not compare media ranges, infer named breakpoints, or change media boundaries.
@@ -289,12 +340,15 @@ Every resolver test supplies explicit synthetic batch options: one expected `own
 **Files:**
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex`.
 - Modify `apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`.
+- Modify `apps/live_frames/lib/live_frames/adapters/bricks/design_ir_normalizer.ex`.
+- Modify `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`.
 
-**Interface:** Keep the existing `CustomCssNormalizer.normalize/5` entry point, parser, selector grammar, `StylePrecedence`, `VariableAuthority`, `CSSDeclaration`, Design IR, and output types unchanged. Call the resolver once per owner and exact provenance batch and zip results to private `{rule_id, target_source_id, selector_identity, property}` metadata.
+**Interface:** Keep the existing `CustomCssNormalizer.normalize/5` entry point, parser, selector grammar, `StylePrecedence`, `DependencyExtractor`, `VariableAuthority`, `CSSDeclaration`, Design IR schema, and output types unchanged. `DesignIRNormalizer` forwards selected source owner records; `CustomCssNormalizer` consumes their exact owner-level source viewport scopes. Call the resolver once per owner and exact provenance batch and zip results to private `{rule_id, target_source_id, selector_identity, property}` metadata.
 
-- [ ] **Step 1: Add integration tests and observe RED.** Add synthetic tests before production changes:
+- [ ] **Step 1: Add both integration tests and observe RED.** Add synthetic tests before production changes:
   - `test "resolves a direct local reference to an ordinary literal style"`: local definition plus direct consumer yields `%StyleValue{kind: :literal, value: "12px"}`; no custom-property style or custom-property definition remains in output.
   - `test "resolves a base definition for a responsive consumer"`: the ordinary resolved value appears in the existing responsive override.
+  - In `bricks_design_ir_test.exs`, add `test "forwards only StylePrecedence-selected responsive custom CSS through Design IR"` using public `Bricks.to_ir/2` with synthetic source data. Give two class references competing `_cssCustom:mobile_portrait` entries so `StylePrecedence` selects the later entry; give that selected class a base `--local-size: 12px` definition and responsive `.owner { width: var(--local-size); }`, while the shadowed responsive entry contains an unsupported selector that would leave a diagnostic if forwarded. Assert the public IR has no base `width`, has responsive `width: 12px` under the existing `mobile_portrait` source identity, and its `StyleValue.source_trace.source_path` identifies the selected class reference and exact `_cssCustom:mobile_portrait` key. Assert no diagnostic points to the shadowed class reference and that the existing override keeps nil min/max values. This one pipeline test must fail if the selected responsive owner is omitted, treated as base, loses its exact provenance, or is reconstructed from a shadowed layer; add no test-only production hook.
   - `test "resource-limited resolver batch keeps its entire owner provenance scope residual"`: generate more than 1,024 eligible direct references within the CSS byte limit; on top-level `{:error, :resource_limit_exceeded}`, emit no normalized output from the affected owner/provenance batch, preserve the affected source as residual, expose the state only as stable diagnostic metadata, and route no local reference to `VariableAuthority`.
   - `test "unsupported local definition blocks external VariableAuthority fallback"`: an unsupported-selector rule containing both a local definition and an ordinary declaration cannot emit either declaration; with a populated external authority for the exact name, the consumer has no `token_ref`, retains `"unresolved_value"`, and has no normalized property style.
   - `test "keeps external VariableAuthority resolution when no local definition exists"`: a direct reference with no exact local definition follows the existing external path and yields its existing token reference.
@@ -306,23 +360,25 @@ Every resolver test supplies explicit synthetic batch options: one expected `own
   - `test "rejects effective CSS above 65536 bytes before parsing"`: the size-limit diagnostic is recorded before parser output can be consumed, no style is emitted, and source text remains residual under the existing residual reason contract.
   - `test "canonicalizes class order only inside a selector compound"`: `.owner.a.b` and `.owner.b.a` definitions have equal internal identity and identical terminals coalesce; changing descendant compound order keeps identities distinct.
   - `test "does not change residual identity for local resolution failures"`: reason and raw source inputs match the pre-existing unresolved residual contract.
-- [ ] **Step 2: Run the normalizer test file and observe RED.** Run `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Expected: new local resolution assertions fail against the current external-only direct-variable path; existing normalizer assertions remain green.
-- [ ] **Step 3: Add selector identity and bounded record collection.** Preserve the accepted parsed selector group. Canonicalize class order and duplicates inside each compound, preserve descendant order, and retain parsed marker and condition. Keep raw selector text out of resolver records. Derive exact provenance from the existing selected owner provenance fields. Check the 65,536-byte limit before `CustomCssParser.parse/1`.
-- [ ] **Step 4: Collect observed and eligible local definitions separately.** Collect exact local definition names from safely parsed selected CSS before selector eligibility can discard a definition. Create definition records only after the existing selector matcher proves target and path inside the current owner subtree. Create reference records only for the existing exact direct `var(--name)` form. Retain normalizer-private correlation metadata outside the resolver. Count the resulting post-selector records against the 256 definition and 1,024 reference limits for the owner/provenance batch.
-- [ ] **Step 5: Resolve once, revalidate, and preserve atomicity.** Send one definition/reference batch for each owner and exact provenance identity, including the already selected base and responsive records for that identity. Use the external authority only for collision presence on the local lane. After a successful terminal, run the existing declaration check and value normalization with source-resolver origin. A local-lane failure never calls the external substitution path. If `resolve/3` returns `{:error, :resource_limit_exceeded}`, emit no normalized output from the affected owner/provenance batch; preserve its affected source as residual; expose `RESOURCE_LIMIT_EXCEEDED` only as stable diagnostic state/metadata; do not consume the first permitted records partially or route any local reference to `VariableAuthority`. Keep the existing canonical residual identity. Consume definition declarations as compiler inputs only. If any target or declaration fails, discard all normalized output for that selector rule and retain the rule with its existing `unresolved_value` residual identity.
-- [ ] **Step 6: Run the normalizer test file and observe GREEN.** Run `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Expected: all new cases and existing selector, responsive, residual, and state tests pass.
-- [ ] **Step 7: Commit Task 3.** Run `git diff --check`, stage only the normalizer and its existing test file, then create one signed commit: `feat: integrate local custom property resolution`.
+- [ ] **Step 2: Run both focused files and observe RED.** Run `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs` and `mix test apps/live_frames/test/live_frames/bricks_design_ir_test.exs`. Expected: local resolution assertions fail in the normalizer suite, and the public pipeline test fails because the selected responsive provenance is not forwarded to `CustomCssNormalizer`; existing assertions remain green. Do not modify production code before both failures are observed.
+- [ ] **Step 3: Forward selected CSS owners in DesignIRNormalizer.** Extend `generic_custom_css_owners/1` to emit the selected base record and every entry from `context.dependencies.custom_css_provenance[element.id][:responsive]`. Preserve each `value` and exact `provenance` map. Add `source_key` and `source_viewport_scope` as frozen above. For responsive IR placement, correlate the exact selected source key to its existing responsive output record and carry that record's existing source name/min/max metadata; do not infer them. Do not access `layer_settings`, rerun `StylePrecedence`, inspect raw settings for CSS, or search shadowed layers. Keep `StylePrecedence` and `DependencyExtractor` unchanged.
+- [ ] **Step 4: Add selector identity and bounded record collection.** In `CustomCssNormalizer`, preserve the accepted parsed selector group. Canonicalize class order and duplicates inside each compound, preserve descendant order, and retain parsed marker and condition. Keep raw selector text out of resolver records. Derive exact provenance from the forwarded owner record. Check the 65,536-byte limit before `CustomCssParser.parse/1`. Carry `source_viewport_scope` through every parsed frame; a responsive source with no parser `@media` remains responsive, and a responsive source plus parser media may not be composed for local resolution.
+- [ ] **Step 5: Collect observed and eligible local definitions separately.** Collect exact local definition names from safely parsed selected CSS before selector eligibility can discard a definition. Create definition records only after the existing selector matcher proves target and path inside the current owner subtree. Create reference records only for the existing exact direct `var(--name)` form. Retain normalizer-private correlation metadata outside the resolver. Count the resulting post-selector records against the 256 definition and 1,024 reference limits for each owner/provenance batch.
+- [ ] **Step 6: Resolve once, revalidate, and preserve atomicity.** Send one definition/reference batch for each owner and exact provenance identity, including selected base and responsive records only when their provenance identities match. Use the external authority only for collision presence on the local lane. After a successful terminal, run the existing declaration check and value normalization with source-resolver origin. A local-lane failure never calls the external substitution path. If `resolve/3` returns `{:error, :resource_limit_exceeded}`, emit no normalized output from the affected owner/provenance batch; preserve its affected source as residual; expose `RESOURCE_LIMIT_EXCEEDED` only as stable diagnostic state/metadata; do not consume the first permitted records partially or route any local reference to `VariableAuthority`. Keep the existing canonical residual identity. Consume definition declarations as compiler inputs only. If any target or declaration fails, discard all normalized output for that selector rule and retain the rule with its existing `unresolved_value` residual identity.
+- [ ] **Step 7: Run both focused files and observe GREEN.** Rerun `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs` and `mix test apps/live_frames/test/live_frames/bricks_design_ir_test.exs`. Expected: both pass, including the public responsive forwarding test and existing selector, responsive, residual, and state assertions.
+- [ ] **Step 8: Commit Task 3.** Run `git diff --check`, stage only the two normalizer modules and their two focused test files, then create one signed commit: `feat: integrate local custom property resolution`.
 
 ## Task 4: regression, repository gates, and implementation PR
 
 **Files:**
-- No production or test file beyond the four files listed above.
-- Review the exact four-file implementation diff before opening the implementation PR.
+- No production or test file beyond the six files listed above.
+- Review the exact six-file implementation diff before opening the implementation PR.
 
-- [ ] **Step 1: Run both focused suites.** Run:
+- [ ] **Step 1: Run all three focused suites.** Run:
   - `mix test apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`
   - `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`
-  Expected: both pass.
+  - `mix test apps/live_frames/test/live_frames/bricks_design_ir_test.exs`
+  Expected: all three pass, including the public responsive provenance-forwarding path.
 - [ ] **Step 2: Run repository gates.** Run `mix deps.get`, `mix format --check-formatted`, `mix compile --warnings-as-errors`, `mix assets.build`, `mix test`, `mix deps.unlock --check-unused`, and `git diff --check`. Also run:
 
   ```sh
@@ -332,7 +388,7 @@ Every resolver test supplies explicit synthetic batch options: one expected `own
   ```
 
   Expected: every command exits successfully, generated styling artifacts remain unchanged, and no gate is hidden or weakened. Report skipped commands with their reason. Do not run a Romeo canonical rerun.
-- [ ] **Step 3: Review scope and history.** Confirm the implementation diff contains exactly the four allowed implementation/test files, no private source data, no dependency changes, and signed commits. Confirm the current `main` has no material conflict in the resolver authority or those four files. Stop on a full-suite failure, unexpected file, private-source publication risk, or material conflict.
+- [ ] **Step 3: Review scope and history.** Confirm the implementation diff contains exactly the six allowed implementation/test files, no private source data, no dependency changes, and signed commits. Confirm the current `main` has no material conflict in the resolver authority or those six files. Stop on a full-suite failure, unexpected file, private-source publication risk, or material conflict.
 - [ ] **Step 4: Open the implementation PR without merging.** Include the exact head SHA, tree, focused results, all repository gate results, branch, commit signatures, and CI evidence. Register the PR with the current T3 thread immediately after creation. Do not merge it and do not run the private Romeo canonical rerun.
 
 ## Review focus
@@ -347,10 +403,18 @@ The reviewer should verify these five high-risk cases directly:
 
 Also verify that definitions never enter IR or generated CSS, the external path remains available only when no exact local definition was observed, source order never selects a winner, ancestry uses structural path components, and residual identity stays stable.
 
+The public Design IR pipeline test must also prove that selected responsive source CSS reaches the custom CSS normalizer without becoming base CSS, keeps the selected source trace, excludes shadowed sources, and introduces no numeric breakpoint.
+
 ## Stops and next gates
 
 ```text
 STOP=MAIN_MOVED_WITH_MATERIAL_LOCAL_RESOLVER_CONFLICT
+STOP=AUTHORITY_CHANGED
+STOP=RESPONSIVE_SELECTED_PROVENANCE_UNAVAILABLE
+STOP=RESPONSIVE_FORWARDING_REQUIRES_STYLE_PRECEDENCE_CHANGE
+STOP=RESPONSIVE_FORWARDING_REQUIRES_DEPENDENCY_EXTRACTOR_CHANGE
+STOP=RESPONSIVE_FORWARDING_REQUIRES_BREAKPOINT_INFERENCE
+STOP=RESPONSIVE_FORWARDING_NOT_TESTABLE_THROUGH_PUBLIC_PIPELINE
 STOP=PLAN_SCOPE_EXPANDED
 STOP=IMPLEMENTATION_FILE_CHANGED
 STOP=TEST_FILE_CHANGED
@@ -358,13 +422,13 @@ STOP=IMPLEMENTATION_STARTED
 STOP=RESOURCE_BOUND_WEAKENED
 STOP=BATCH_IDENTITY_REMAINS_INFERRED
 STOP=RESPONSIVE_BASE_FALLBACK_REMAINS_AMBIGUOUS
-STOP=AUTHORITY_CHANGED
 STOP=PLANNED_IMPLEMENTATION_BOUNDARY_EXPANDED
 STOP=POST_MERGE_EXACT_SHA_CI_NOT_SUCCESS
 STOP=CUSTOM_CSS_PARSER_CHANGE_REQUIRED
+STOP=DEPENDENCY_EXTRACTOR_CHANGE_REQUIRED
 STOP=STYLE_PRECEDENCE_CHANGE_REQUIRED
 STOP=VARIABLE_AUTHORITY_CHANGE_REQUIRED
-STOP=DESIGN_IR_CHANGE_REQUIRED
+STOP=DESIGN_IR_SCHEMA_CHANGE_REQUIRED
 STOP=NATIVE_GENERATOR_CHANGE_REQUIRED
 STOP=SELECTOR_GRAMMAR_EXPANSION_REQUIRED
 STOP=GENERAL_CASCADE_ENGINE_REQUIRED
@@ -380,7 +444,13 @@ STOP=PRIVATE_SOURCE_PUBLICATION_RISK
 The `POST_MERGE_EXACT_SHA_CI_NOT_SUCCESS` stop is inactive because run `39202214865` is successful on `3dd020cd3d5922ab38ede7c70ce8c5b4a4c7963d`. Reapply that stop if the recorded exact-SHA result is not successful when implementation preflight runs. `IMPLEMENTATION_EXECUTION_AUTHORIZED` remains `NO` until independent review of this plan and explicit authorization. After the implementation PR is accepted and merged, use a separate gate to authorize any Romeo canonical rerun.
 
 ```text
-IMPLEMENTATION_FILE_COUNT=4
+IMPLEMENTATION_FILE_COUNT=6
+DESIGN_IR_NORMALIZER_INCLUDED=YES
+BRICKS_DESIGN_IR_TEST_INCLUDED=YES
+PREVIOUS_RESOURCE_CONTRACT_CHANGED=NO
+PREVIOUS_BATCH_IDENTITY_CHANGED=NO
+PREVIOUS_RESPONSIVE_SHADOW_RULE_CHANGED=NO
+PREVIOUS_ANCESTRY_RULE_CHANGED=NO
 IMPLEMENTATION_PLAN_AUTHORIZED=YES
 IMPLEMENTATION_EXECUTION_AUTHORIZED=NO
 NEXT_GATE=INDEPENDENT_REVIEW_CSS_LOCAL_CUSTOM_PROPERTY_RESOLVER_IMPLEMENTATION_PLAN
