@@ -82,6 +82,23 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     }
   end
 
+  defp responsive_custom_css_override(source_key, opts \\ []) do
+    %ResponsiveOverride{
+      breakpoint_id: Keyword.get(opts, :breakpoint_id, "authority-breakpoint-id"),
+      source_name: Keyword.get(opts, :source_name, "authority-source-name"),
+      min_width: Keyword.get(opts, :min_width, 321.0),
+      max_width: Keyword.get(opts, :max_width, 654.0),
+      resolution_status: Keyword.get(opts, :resolution_status, :unresolved),
+      styles: %{
+        "custom-css" =>
+          StyleValue.complex_css(
+            %{"type" => "custom_css", "source_key" => source_key},
+            metadata: %{"source_key" => source_key}
+          )
+      }
+    }
+  end
+
   defp run(css, opts \\ []) do
     source_owner = owner(css, opts)
 
@@ -122,7 +139,10 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
           responsive: Keyword.get(opts, :owner_responsive, %{})
         ),
       @child =>
-        node(@child, Keyword.get(opts, :child_classes, ["child"]), [1, 1], parent_id: @owner)
+        node(@child, Keyword.get(opts, :child_classes, ["child"]), [1, 1],
+          parent_id: @owner,
+          responsive: Keyword.get(opts, :child_responsive, %{})
+        )
     }
 
     CustomCssNormalizer.normalize(
@@ -485,6 +505,80 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert result.residuals_by_source_id[@owner] == []
   end
 
+  test "mixed-case var spelling stays outside the direct local-variable lane" do
+    css = ".owner { --local-space: 12px; color: VaR(--local-space); }"
+    result = run(css)
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "color")
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "parser media definitions cannot satisfy base references" do
+    media_definition_rule = ".owner { --local-space: 12px; }"
+    consumer_rule = ".owner { color: var(--local-space); }"
+
+    result =
+      run("@media (min-width: 767px) { " <> media_definition_rule <> " }\n" <> consumer_rule)
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "color")
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unsupported_scope" and
+               residual["source_text"] == media_definition_rule
+           end)
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["source_text"] == consumer_rule
+           end)
+  end
+
+  test "base definitions remain available to parser media references" do
+    result =
+      run(
+        ".owner { --local-space: 12px; }\n" <>
+          "@media (min-width: 767px) { .owner { color: var(--local-space); } }"
+      )
+
+    assert %StyleValue{kind: :literal, value: "12px"} =
+             result.responsive_by_source_id[@owner]["custom_min_767"].styles["color"]
+  end
+
+  test "state-scoped definition rules remain residual and do not satisfy base references" do
+    definition_rule = ".owner:hover { --local-space: 12px; }"
+
+    result =
+      run(definition_rule <> "\n.owner { color: var(--local-space); }")
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "color")
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unsupported_scope" and
+               residual["source_text"] == definition_rule
+           end)
+  end
+
+  test "responsive source definition-only rules remain unsupported residuals" do
+    source_key = "_cssCustom:mobile_portrait"
+    definition_rule = ".owner { --local-space: 12px; }"
+
+    result =
+      run_sources(
+        [{definition_rule, source_key, {:responsive_source_key, source_key}}],
+        owner_responsive: %{
+          "mobile_portrait" => responsive_custom_css_override(source_key)
+        }
+      )
+
+    refute Map.has_key?(result.responsive_by_source_id, @owner)
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unsupported_scope" and
+               residual["source_text"] == definition_rule
+           end)
+  end
+
   test "uses external authority when no local definition is observed" do
     authority_index = variable_authority("--external-space", "spacing.content_gap")
 
@@ -544,7 +638,7 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
 
     assert Enum.any?(
              result.residuals_by_source_id[@owner],
-             &(&1["reason"] == "unresolved_value")
+             &(&1["reason"] == "unsupported_scope")
            )
   end
 
@@ -570,32 +664,171 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     source_key = "_cssCustom:mobile_portrait"
 
     result =
-      run_sources([
-        {".owner { --local-space: 12px; }", "_cssCustom", :base,
-         %{"_cssCustom" => "base-owner-settings"}},
-        {".owner .child { color: var(--local-space); }", source_key,
-         {:responsive_source_key, source_key}, %{source_key => "responsive-owner-settings"}}
-      ])
+      run_sources(
+        [
+          {".owner { --local-space: 12px; }", "_cssCustom", :base,
+           %{"_cssCustom" => "base-owner-settings"}},
+          {".owner .child { color: var(--local-space); }", source_key,
+           {:responsive_source_key, source_key}, %{source_key => "responsive-owner-settings"}}
+        ],
+        owner_responsive: %{"mobile_portrait" => responsive_custom_css_override(source_key)}
+      )
 
     assert %StyleValue{kind: :literal, value: "12px"} =
-             result.responsive_by_source_id[@child][source_key].styles["color"]
+             result.responsive_by_source_id[@child]["mobile_portrait"].styles["color"]
   end
 
   test "an unwrapped responsive source remains responsive and keeps its exact source key" do
     source_key = "_cssCustom:mobile_landscape"
 
     result =
-      run_sources([
-        {".owner { color: teal; }", source_key, {:responsive_source_key, source_key}}
-      ])
+      run_sources(
+        [
+          {".owner { color: teal; }", source_key, {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{
+          "mobile_landscape" =>
+            responsive_custom_css_override(source_key,
+              min_width: nil,
+              max_width: nil,
+              resolution_status: :unresolved
+            )
+        }
+      )
 
     assert result.styles_by_source_id == %{}
 
     assert %ResponsiveOverride{min_width: nil, max_width: nil} =
-             result.responsive_by_source_id[@owner][source_key]
+             result.responsive_by_source_id[@owner]["mobile_landscape"]
 
     assert %StyleValue{kind: :literal, value: "teal"} =
-             result.responsive_by_source_id[@owner][source_key].styles["color"]
+             result.responsive_by_source_id[@owner]["mobile_landscape"].styles["color"]
+  end
+
+  test "descendant responsive styles use the custom CSS owner's exact authority record" do
+    source_key = "_cssCustom:mobile_portrait"
+    authority = responsive_custom_css_override(source_key)
+
+    result =
+      run_sources(
+        [
+          {".owner .child { color: teal; }", source_key, {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{"mobile_portrait" => authority}
+      )
+
+    assert Map.keys(result.responsive_by_source_id[@child]) == ["mobile_portrait"]
+
+    assert %ResponsiveOverride{
+             breakpoint_id: "authority-breakpoint-id",
+             source_name: "authority-source-name",
+             min_width: 321.0,
+             max_width: 654.0,
+             resolution_status: :unresolved,
+             styles: %{"color" => %StyleValue{kind: :literal, value: "teal"}}
+           } = result.responsive_by_source_id[@child]["mobile_portrait"]
+  end
+
+  test "descendant responsive styles merge with a nonconflicting target override" do
+    source_key = "_cssCustom:mobile_portrait"
+
+    existing_target = %ResponsiveOverride{
+      breakpoint_id: "target-breakpoint-id",
+      source_name: "target-source-name",
+      min_width: 100.0,
+      max_width: 200.0,
+      resolution_status: :resolved,
+      styles: %{"font-weight" => StyleValue.literal("bold")}
+    }
+
+    result =
+      run_sources(
+        [
+          {".owner .child { color: teal; }", source_key, {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{
+          "mobile_portrait" => responsive_custom_css_override(source_key)
+        },
+        child_responsive: %{"mobile_portrait" => existing_target}
+      )
+
+    assert %ResponsiveOverride{
+             breakpoint_id: "authority-breakpoint-id",
+             source_name: "authority-source-name",
+             min_width: 321.0,
+             max_width: 654.0,
+             styles: %{
+               "font-weight" => %StyleValue{value: "bold"},
+               "color" => %StyleValue{value: "teal"}
+             }
+           } = result.responsive_by_source_id[@child]["mobile_portrait"]
+  end
+
+  test "descendant responsive styles fail closed when target properties conflict" do
+    source_key = "_cssCustom:mobile_portrait"
+
+    conflicting_target = %ResponsiveOverride{
+      breakpoint_id: "target-breakpoint-id",
+      source_name: "target-source-name",
+      min_width: 100.0,
+      max_width: 200.0,
+      resolution_status: :resolved,
+      styles: %{"color" => StyleValue.literal("blue")}
+    }
+
+    result =
+      run_sources(
+        [
+          {".owner .child { color: teal; }", source_key, {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{
+          "mobile_portrait" => responsive_custom_css_override(source_key)
+        },
+        child_responsive: %{"mobile_portrait" => conflicting_target}
+      )
+
+    refute Map.has_key?(result.responsive_by_source_id, @child)
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "responsive_collision" and
+               residual["source_text"] == ".owner .child { color: teal; }"
+           end)
+  end
+
+  test "responsive candidates remain residual without an exact owner authority record" do
+    source_key = "_cssCustom:mobile_portrait"
+    css = ".owner .child { color: teal; }"
+
+    result =
+      run_sources([
+        {css, source_key, {:responsive_source_key, source_key}}
+      ])
+
+    refute Map.has_key?(result.responsive_by_source_id, @child)
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unsupported_scope" and residual["source_text"] == css
+           end)
+  end
+
+  test "responsive candidates do not match an owner authority with a different source key" do
+    source_key = "_cssCustom:mobile_portrait"
+
+    result =
+      run_sources(
+        [
+          {".owner .child { color: teal; }", source_key, {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{
+          "mobile_portrait" => responsive_custom_css_override("_cssCustom:mobile_landscape")
+        }
+      )
+
+    refute Map.has_key?(result.responsive_by_source_id, @child)
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unsupported_scope"
+           end)
   end
 
   test "a responsive source wrapper and parser media scope stay residual" do

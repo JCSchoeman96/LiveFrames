@@ -364,7 +364,7 @@ defmodule LiveFrames.BricksDesignIRTest do
             "name" => "owner",
             "settings" => %{
               "_cssCustom" => ".owner { --local-space: 12px; }",
-              source_key => ".owner { color: var(--local-space); }"
+              source_key => ".owner .child { color: var(--local-space); }"
             }
           },
           %{"id" => "class-child", "name" => "child", "settings" => %{}}
@@ -372,18 +372,24 @@ defmodule LiveFrames.BricksDesignIRTest do
       )
 
     owner = hd(document.root_nodes)
+    child = node_by_source_id(document, "child")
 
     selected_source_path =
       "components[0].elements[0].class_refs[1].settings." <> source_key
 
     assert %LiveFrames.IR.ResponsiveOverride{
+             breakpoint_id: "mobile_portrait",
+             source_name: "mobile_portrait",
              min_width: nil,
              max_width: nil,
+             resolution_status: :unresolved,
              source_trace: %{source_name: ^source_key, source_path: ^selected_source_path},
              styles: %{"color" => %StyleValue{kind: :literal, value: "12px"}}
-           } = owner.responsive["mobile_portrait"]
+           } = child.responsive["mobile_portrait"]
 
-    refute Map.has_key?(owner.responsive["mobile_portrait"].styles, "custom-css")
+    refute Map.has_key?(child.responsive, source_key)
+
+    refute Map.has_key?(owner.responsive, source_key)
     refute Map.has_key?(owner.styles, "--local-space")
 
     refute Enum.any?(document.diagnostics, fn diagnostic ->

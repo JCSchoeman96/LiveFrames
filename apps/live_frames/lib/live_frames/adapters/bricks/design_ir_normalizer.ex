@@ -465,25 +465,35 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         Map.get(result.responsive_custom_css_by_source_id, source_id, %{}),
         responsive,
         fn {source_key, style}, responsive ->
-          breakpoint = responsive_breakpoint_for_source(node.responsive, source_key) || source_key
+          case responsive_custom_css_authority(node.responsive, source_key) do
+            {breakpoint, authority} ->
+              existing = Map.get(responsive, breakpoint)
 
-          case Map.get(responsive, breakpoint) do
-            %ResponsiveOverride{} = override ->
-              Map.put(responsive, breakpoint, %{
-                override
-                | styles: Map.put(override.styles, "custom-css", style)
-              })
+              existing_styles =
+                case existing do
+                  %ResponsiveOverride{styles: styles} -> styles
+                  _missing_override -> Map.delete(authority.styles, "custom-css")
+                end
+
+              source_trace =
+                case existing do
+                  %ResponsiveOverride{source_trace: source_trace} when not is_nil(source_trace) ->
+                    source_trace
+
+                  _missing_override ->
+                    style.source_trace
+                end
+
+              override = %{
+                authority
+                | styles: Map.put(existing_styles, "custom-css", style),
+                  source_trace: source_trace
+              }
+
+              Map.put(responsive, breakpoint, override)
 
             nil ->
-              Map.put(responsive, breakpoint, %ResponsiveOverride{
-                breakpoint_id: breakpoint,
-                source_name: breakpoint,
-                min_width: nil,
-                max_width: nil,
-                resolution_status: :unresolved,
-                styles: %{"custom-css" => style},
-                source_trace: style.source_trace
-              })
+              responsive
           end
         end
       )
@@ -517,10 +527,17 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp responsive_breakpoint_for_source(responsive, source_key) do
-    Enum.find_value(responsive, fn {breakpoint, %ResponsiveOverride{styles: styles}} ->
+    case responsive_custom_css_authority(responsive, source_key) do
+      {breakpoint, _override} -> breakpoint
+      nil -> nil
+    end
+  end
+
+  defp responsive_custom_css_authority(responsive, source_key) do
+    Enum.find_value(responsive, fn {breakpoint, %ResponsiveOverride{styles: styles} = override} ->
       case Map.get(styles, "custom-css") do
         %StyleValue{metadata: metadata} when is_map(metadata) ->
-          if Map.get(metadata, "source_key") == source_key, do: breakpoint
+          if Map.get(metadata, "source_key") == source_key, do: {breakpoint, override}
 
         _style ->
           nil

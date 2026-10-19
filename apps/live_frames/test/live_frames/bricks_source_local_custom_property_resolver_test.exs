@@ -9,6 +9,10 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
   @effective_provenance_identity {"owner", :global_class, "class-a", :local, ["auth-a"], 0}
 
   defp definition(local_name, terminal_text, target_path, opts \\ []) do
+    opts = Map.new(opts)
+    frame_source_order = Map.get(opts, :source_order, 0)
+    opts = opts |> Map.delete(:source_order) |> Map.put(:source_order, {0, frame_source_order})
+
     Map.merge(
       %{
         owner_source_id: @owner_source_id,
@@ -18,12 +22,12 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
         selector_identity: :selector_a,
         viewport_scope: :base,
         state_scope: nil,
-        source_order: 0,
+        source_order: {0, 0},
         local_name: local_name,
         record_kind: :definition,
-        terminal_text: terminal_text
+        terminal_text_if_definition: terminal_text
       },
-      Map.new(opts)
+      opts
     )
   end
 
@@ -37,7 +41,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
         selector_identity: :selector_reference,
         viewport_scope: :base,
         state_scope: nil,
-        source_order: 0,
+        source_order: {0, 0},
         local_name: local_name,
         record_kind: :reference
       },
@@ -434,6 +438,17 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
     authority_index = %VariableAuthority{
       by_variable: %{"--local-name" => %{"secret-token-path" => [%{"source" => "external"}]}}
     }
+
+    assert {:ok, [{:error, :external_authority_collision}]} =
+             resolve(
+               [definition("--local-name", "12px", [1])],
+               [reference("--local-name", [1])],
+               authority_index: authority_index
+             )
+  end
+
+  test "checks external collision by exact-name presence without resolving candidates" do
+    authority_index = %VariableAuthority{by_variable: %{"--local-name" => %{}}}
 
     assert {:ok, [{:error, :external_authority_collision}]} =
              resolve(

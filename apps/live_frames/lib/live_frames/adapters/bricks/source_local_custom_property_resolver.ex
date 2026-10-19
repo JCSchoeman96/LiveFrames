@@ -115,8 +115,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       end)
 
     selected_by_path_scope =
-      Map.new(definitions_by_path, fn {key, definitions} ->
-        {key, select_definition(definitions)}
+      Map.new(definitions_by_path, fn {{_local_name, _reversed_path, scope} = key, definitions} ->
+        {key, select_definition(definitions, scope)}
       end)
 
     selected_by_path =
@@ -152,7 +152,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     Enum.reduce_while(records, {:ok, 0, MapSet.new()}, fn record, {:ok, edge_count, seen} ->
       local_name = Map.get(record, :local_name)
       target_path = Map.get(record, :target_path)
-      terminal = Map.get(record, :terminal_text)
+      terminal = Map.get(record, :terminal_text_if_definition)
 
       if eligible_definition?(
            record,
@@ -160,7 +160,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
            target_path,
            owner_source_id,
            provenance_identity
-         ) and is_binary(terminal) and byte_size(terminal) <= @max_terminal_bytes do
+         ) and Map.get(record, :viewport_scope) == :base and is_binary(terminal) and
+           byte_size(terminal) <= @max_terminal_bytes do
         coalescing_key =
           {local_name, target_path, Map.get(record, :viewport_scope),
            Map.get(record, :state_scope), Map.get(record, :selector_identity), terminal}
@@ -205,8 +206,14 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp eligible_definition?(record, local_name, target_path, owner_source_id, provenance_identity) do
     is_map(record) and record_kind(record) == :definition and valid_local_name?(local_name) and
       is_list(target_path) and
+      is_nil(Map.get(record, :parser_media_scope)) and is_nil(Map.get(record, :state_scope)) and
+      supported_definition_viewport_scope?(Map.get(record, :viewport_scope)) and
       trusted_scope?(record, owner_source_id, provenance_identity)
   end
+
+  defp supported_definition_viewport_scope?(:base), do: true
+  defp supported_definition_viewport_scope?({:responsive_source_key, _source_key}), do: true
+  defp supported_definition_viewport_scope?(_viewport_scope), do: false
 
   defp resolve_reference(
          reference,
@@ -478,10 +485,9 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp supported_viewport_scope?({:responsive_source_key, _source_key}), do: true
   defp supported_viewport_scope?(_viewport_scope), do: false
 
-  defp external_candidate?(%VariableAuthority{} = authority_index, local_name) do
-    %{state: state} = VariableAuthority.resolve(authority_index, local_name)
-    state != :no_authority
-  end
+  defp external_candidate?(%VariableAuthority{by_variable: by_variable}, local_name)
+       when is_map(by_variable),
+       do: Map.has_key?(by_variable, local_name)
 
   defp external_candidate?(_authority_index, _local_name), do: true
 
@@ -876,7 +882,10 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     |> MapSet.put(cycle_target)
   end
 
-  defp select_definition(definitions) do
+  defp select_definition(_definitions, {{:responsive_source_key, _source_key}, nil}),
+    do: {:error, :unsupported_scope}
+
+  defp select_definition(definitions, _scope) do
     selector_identities = definitions |> Enum.map(&Map.get(&1, :selector_identity)) |> Enum.uniq()
 
     cond do
@@ -884,7 +893,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
         {:error, :ambiguous_definition}
 
       true ->
-        terminal_texts = Enum.map(definitions, &Map.get(&1, :terminal_text))
+        terminal_texts = Enum.map(definitions, &Map.get(&1, :terminal_text_if_definition))
 
         cond do
           not Enum.all?(terminal_texts, &is_binary/1) ->

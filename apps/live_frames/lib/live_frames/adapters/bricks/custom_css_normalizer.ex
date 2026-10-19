@@ -18,7 +18,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   )
 
   @grid_gap_multiply_expression ~r/^calc\s*\(\s*var\s*\(\s*--grid-gap\s*\)\s*\*\s*(\d+(?:\.\d+)?|\.\d+)\s*\)$/i
-  @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/i
+  @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/
   @unsafe_value_fragments ["url(", "expression(", "javascript:", "behavior:", "-moz-binding"]
   @max_effective_layer_css_bytes 65_536
 
@@ -220,6 +220,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         responsive_candidates,
         residuals,
         scope_nodes,
+        owner_node,
+        source_id,
         opts
       )
 
@@ -528,19 +530,27 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          terminal_text,
          provenance_identity
        ) do
-    %{
+    record = %{
       owner_source_id: Map.get(frame.provenance, :source_id),
       effective_provenance_identity: provenance_identity,
       target_source_id: target.source_id,
       target_path: target.path,
       selector_identity: selection.selector_identity,
       viewport_scope: frame.viewport_scope,
+      parser_media_scope:
+        if(is_nil(frame.min_width) and is_nil(frame.max_width),
+          do: nil,
+          else: {frame.min_width, frame.max_width}
+        ),
       state_scope: selection.condition,
-      source_order: frame.source_order,
+      source_order: {frame.source_index, frame.source_order},
       local_name: local_name,
-      record_kind: kind,
-      terminal_text: terminal_text
+      record_kind: kind
     }
+
+    if kind == :definition,
+      do: Map.put(record, :terminal_text_if_definition, terminal_text),
+      else: record
   end
 
   defp resolve_local_batches(
@@ -646,6 +656,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
           not valid_viewport_scope?(frame.viewport_scope) ->
             {:residual, residual_for(frame, "unsupported_scope")}
 
+          unsupported_local_definition_scope?(frame, selections) ->
+            {:residual, residual_for(frame, "unsupported_scope")}
+
           is_responsive_source_scope?(frame.viewport_scope) and not is_nil(viewport) ->
             {:residual, residual_for(frame, "unsupported_scope")}
 
@@ -665,6 +678,16 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
             )
         end
     end
+  end
+
+  defp unsupported_local_definition_scope?(frame, selections) do
+    has_local_definition? =
+      Enum.any?(frame.declarations, fn {property, _value} -> local_definition_name?(property) end)
+
+    has_local_definition? and
+      (is_responsive_source_scope?(frame.viewport_scope) or
+         not is_nil(frame.min_width) or not is_nil(frame.max_width) or
+         Enum.any?(selections, &(not is_nil(&1.condition))))
   end
 
   defp normalize_frame_targets(
@@ -1243,11 +1266,11 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     end
   end
 
-  defp responsive_candidate_key(candidate, node) do
+  defp responsive_candidate_key(candidate, owner_node) do
     if is_responsive_source_scope?(candidate.viewport_scope) do
-      case matching_source_custom_css_override(node, candidate.source_key) do
+      case matching_source_custom_css_override(owner_node, candidate.source_key) do
         {key, _override} -> key
-        nil -> candidate.source_key
+        nil -> nil
       end
     else
       responsive_key(candidate.viewport)
@@ -1318,30 +1341,32 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
      residuals}
   end
 
-  defp preflight_responsive(candidates, residuals, scope_nodes, opts) do
+  defp preflight_responsive(candidates, residuals, scope_nodes, owner_node, owner_source_id, opts) do
     key_collisions =
       Enum.flat_map(candidates, fn candidate ->
         node = Map.fetch!(scope_nodes, candidate.target_source_id)
-        key = responsive_candidate_key(candidate, node)
-        source_override = matching_source_custom_css_override(node, candidate.source_key)
+        source_scoped? = is_responsive_source_scope?(candidate.viewport_scope)
+        owner_authority = matching_source_custom_css_override(owner_node, candidate.source_key)
+        target_source_override = matching_source_custom_css_override(node, candidate.source_key)
+        key = responsive_candidate_key(candidate, owner_node)
+        target_override = if is_binary(key), do: Map.get(Map.get(node, :responsive, %{}), key)
 
         existing_key? =
-          Map.has_key?(Map.get(node, :responsive, %{}), key) and
-            is_nil(source_override)
+          not source_scoped? and Map.has_key?(Map.get(node, :responsive, %{}), key) and
+            is_nil(target_source_override)
 
         existing_property_collision? =
-          if is_responsive_source_scope?(candidate.viewport_scope) do
-            case source_override do
-              {_key, override} ->
-                existing_styles = Map.delete(Map.get(override, :styles, %{}), "custom-css")
+          if source_scoped? do
+            existing_styles = Map.get(target_override || %{}, :styles, %{})
 
-                Enum.any?(candidate.declarations, fn {property, _tagged} ->
-                  Map.has_key?(existing_styles, property)
-                end)
+            existing_styles =
+              if node.source_id == owner_source_id,
+                do: Map.delete(existing_styles, "custom-css"),
+                else: existing_styles
 
-              nil ->
-                false
-            end
+            Enum.any?(candidate.declarations, fn {property, _tagged} ->
+              Map.has_key?(existing_styles, property)
+            end)
           else
             Enum.any?(Map.get(node, :responsive, %{}), fn {_existing_key, override} ->
               override_interval = %{
@@ -1357,14 +1382,22 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
           end
 
         custom_key? =
-          opts
-          |> Keyword.get(:existing_custom_responsive_keys, %{})
-          |> Map.get(candidate.target_source_id, MapSet.new())
-          |> MapSet.member?(key)
+          is_binary(key) and
+            opts
+            |> Keyword.get(:existing_custom_responsive_keys, %{})
+            |> Map.get(candidate.target_source_id, MapSet.new())
+            |> MapSet.member?(key)
 
-        if existing_key? or existing_property_collision? or custom_key?,
-          do: [{candidate.rule_id, "responsive_collision"}],
-          else: []
+        cond do
+          source_scoped? and is_nil(owner_authority) ->
+            [{candidate.rule_id, "unsupported_scope"}]
+
+          existing_key? or existing_property_collision? or custom_key? ->
+            [{candidate.rule_id, "responsive_collision"}]
+
+          true ->
+            []
+        end
       end)
 
     overlap_conflicts = candidate_conflicts(candidates, :inclusive_overlap)
@@ -1503,7 +1536,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     |> Enum.sort_by(&{&1.source_index, &1.source_order, &1.target_path})
     |> Enum.reduce(result, fn candidate, result ->
       node = Map.fetch!(scope_nodes, candidate.target_source_id)
-      key = responsive_candidate_key(candidate, node)
+      key = responsive_candidate_key(candidate, owner_node)
       trace = declaration_trace(owner_node, candidate, owner_source_id)
 
       styles =
@@ -1512,28 +1545,15 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         end)
 
       override =
-        case matching_source_custom_css_override(node, candidate.source_key) do
-          {^key, existing} ->
-            %{
-              existing
-              | resolution_status:
-                  if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
-                styles:
-                  Map.merge(Map.delete(Map.get(existing, :styles, %{}), "custom-css"), styles),
-                source_trace: trace
-            }
-
-          _no_source_override ->
-            %ResponsiveOverride{
-              breakpoint_id: key,
-              source_name: key,
-              min_width: candidate.viewport && candidate.viewport.min_width,
-              max_width: candidate.viewport && candidate.viewport.max_width,
-              resolution_status: if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
-              styles: styles,
-              source_trace: trace
-            }
-        end
+        responsive_output_override(
+          candidate,
+          node,
+          owner_node,
+          owner_source_id,
+          key,
+          styles,
+          trace
+        )
 
       Map.update!(result, :responsive_by_source_id, fn by_source ->
         Map.update(by_source, node.source_id, %{key => override}, fn current ->
@@ -1541,6 +1561,62 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         end)
       end)
     end)
+  end
+
+  defp responsive_output_override(
+         %{viewport_scope: {:responsive_source_key, source_key}},
+         target_node,
+         owner_node,
+         owner_source_id,
+         key,
+         styles,
+         trace
+       ) do
+    {_authority_key, authority} = matching_source_custom_css_override(owner_node, source_key)
+
+    existing_styles =
+      case Map.get(Map.get(target_node, :responsive, %{}), key) do
+        %ResponsiveOverride{styles: existing_styles} -> existing_styles
+        _missing_target_override -> %{}
+      end
+
+    existing_styles =
+      if target_node.source_id == owner_source_id,
+        do: Map.delete(existing_styles, "custom-css"),
+        else: existing_styles
+
+    %{authority | styles: Map.merge(existing_styles, styles), source_trace: trace}
+  end
+
+  defp responsive_output_override(
+         candidate,
+         target_node,
+         _owner_node,
+         _owner_source_id,
+         key,
+         styles,
+         trace
+       ) do
+    case matching_source_custom_css_override(target_node, candidate.source_key) do
+      {^key, existing} ->
+        %{
+          existing
+          | resolution_status: if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
+            styles: Map.merge(Map.delete(Map.get(existing, :styles, %{}), "custom-css"), styles),
+            source_trace: trace
+        }
+
+      _no_source_override ->
+        %ResponsiveOverride{
+          breakpoint_id: key,
+          source_name: key,
+          min_width: candidate.viewport && candidate.viewport.min_width,
+          max_width: candidate.viewport && candidate.viewport.max_width,
+          resolution_status: if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
+          styles: styles,
+          source_trace: trace
+        }
+    end
   end
 
   defp merge_override(existing, incoming),
