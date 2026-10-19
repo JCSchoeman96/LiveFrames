@@ -7,6 +7,7 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
   alias LiveFrames.Behavior.Binding.ControlledTarget
   alias LiveFrames.Behavior.Binding.FocusPolicy
   alias LiveFrames.Behavior.Binding.Trigger
+  alias LiveFrames.Behavior.Contract
   alias LiveFrames.Behavior.Diagnostic
   alias LiveFrames.Behavior.ReviewResult
   alias LiveFrames.Behavior.Serializer
@@ -15,7 +16,7 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
   alias LiveFrames.ComponentizationProposer
   alias LiveFrames.ComponentizationProposer.Diagnostic, as: ProposerDiagnostic
   alias LiveFrames.ComponentizationProposer.SemanticInput
-  alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR.{DesignDocument, DesignNode, Interaction}
   alias LiveFrames.IR.Identity
   alias LiveFrames.Responsive.DesignDocumentResolver
 
@@ -43,6 +44,41 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
     :diagnostics
   ]
 
+  @reference_roles [
+    :binding_owner,
+    :controlled_target,
+    :trigger_origin,
+    :focus_reference,
+    :ir_interaction_ref,
+    :ir_interaction_target
+  ]
+
+  @spec reference_index(DesignDocument.t(), Contract.t()) ::
+          {:ok, %{optional(String.t()) => MapSet.t(atom())}}
+          | {:error, [Diagnostic.t()]}
+  def reference_index(
+        %DesignDocument{} = design_document,
+        %Contract{} = behavior_contract
+      ) do
+    with :ok <- Validation.validate_structure(design_document, behavior_contract) do
+      index =
+        design_document.root_nodes
+        |> index_interaction_refs(%{})
+        |> index_interaction_targets(design_document.interactions)
+        |> index_behavior_references(behavior_contract.bindings)
+
+      {:ok, index}
+    else
+      {:error, diagnostics} -> {:error, diagnostics}
+    end
+  rescue
+    _error ->
+      {:error, [reference_index_diagnostic()]}
+  end
+
+  def reference_index(_design_document, _behavior_contract),
+    do: {:error, [reference_index_diagnostic()]}
+
   @spec authority_context(term(), term(), term()) ::
           {:ok, BehaviorAuthorityContext.t()}
           | {:error, {:prerequisite, atom(), list()}}
@@ -68,6 +104,90 @@ defmodule LiveFrames.Behavior.ComponentizationDecision do
          behavior_review_result_id: behavior_review_result_id
        }}
     end
+  end
+
+  defp index_interaction_refs(nodes, index) do
+    nodes
+    |> Enum.reduce([], &[&1 | &2])
+    |> index_interaction_ref_stack(index)
+  end
+
+  defp index_interaction_ref_stack([], index), do: index
+
+  defp index_interaction_ref_stack(
+         [
+           %DesignNode{node_id: node_id, interaction_refs: interaction_refs, children: children}
+           | rest
+         ],
+         index
+       ) do
+    index =
+      if interaction_refs == [] do
+        index
+      else
+        add_reference(index, node_id, :ir_interaction_ref)
+      end
+
+    next = Enum.reduce(children, rest, &[&1 | &2])
+    index_interaction_ref_stack(next, index)
+  end
+
+  defp index_interaction_targets(index, interactions) do
+    Enum.reduce(interactions, index, fn
+      {_interaction_id, %Interaction{target_node_ids: target_node_ids}}, index ->
+        Enum.reduce(target_node_ids, index, &add_reference(&2, &1, :ir_interaction_target))
+    end)
+  end
+
+  defp index_behavior_references(index, bindings) do
+    Enum.reduce(bindings, index, fn %Binding{} = binding, index ->
+      index = add_reference(index, binding.owner_node_id, :binding_owner)
+
+      index =
+        Enum.reduce(binding.controlled_targets, index, fn %ControlledTarget{node_id: node_id},
+                                                          index ->
+          add_reference(index, node_id, :controlled_target)
+        end)
+
+      index =
+        Enum.reduce(binding.triggers, index, fn
+          %Trigger{origin_node_id: nil}, index ->
+            index
+
+          %Trigger{origin_node_id: node_id}, index ->
+            add_reference(index, node_id, :trigger_origin)
+        end)
+
+      case binding.focus_policy do
+        %FocusPolicy{} = focus_policy ->
+          [
+            focus_policy.initial_target_node_id,
+            focus_policy.scope_node_id,
+            focus_policy.restoration_target_node_id,
+            focus_policy.restoration_fallback_node_id
+          ]
+          |> Enum.reject(&is_nil/1)
+          |> Enum.reduce(index, &add_reference(&2, &1, :focus_reference))
+
+        _focus_policy ->
+          index
+      end
+    end)
+  end
+
+  defp add_reference(index, node_id, role) when is_binary(node_id) and role in @reference_roles do
+    Map.update(index, node_id, MapSet.new([role]), &MapSet.put(&1, role))
+  end
+
+  defp add_reference(index, _node_id, _role), do: index
+
+  defp reference_index_diagnostic do
+    %Diagnostic{
+      code: "behavior.design_document.invalid",
+      severity: "error",
+      category: "structure",
+      message: "DesignDocument and BehaviorContract cannot form a reference index"
+    }
   end
 
   @spec propose(term(), term(), term(), term()) ::

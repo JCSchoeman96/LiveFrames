@@ -13,11 +13,16 @@ defmodule LiveFrames.ComponentizationProposer.Construction do
   }
 
   alias LiveFrames.ComponentizationPlan
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationProposer.Diagnostic, as: ProposerDiagnostic
   alias LiveFrames.ComponentizationProposer.SemanticInput
   alias LiveFrames.ComponentizationProposer.SemanticInput.BindingAssignmentDecision
+  alias LiveFrames.ComponentizationProposer.SemanticInput.SourceNodeDispositionDecision
+  alias LiveFrames.Behavior.{Binding, ComponentizationDecision, Contract}
+  alias LiveFrames.BehaviorAuthorityContext
   alias LiveFrames.IR.{CollectionBinding, DesignDocument, ValueBinding}
+  alias LiveFrames.IR.{DesignNode, SourceTrace}
 
   @construction_code "componentization_proposer.construction.failed"
 
@@ -33,15 +38,7 @@ defmodule LiveFrames.ComponentizationProposer.Construction do
           {:ok, ComponentContract.t(), ComponentizationPlan.t()}
           | {:error, [ProposerDiagnostic.t()]}
   def build(%DesignDocument{} = design_document, %SemanticInput{} = input) do
-    with {:ok, contract} <- build_contract(design_document, input),
-         {:ok, fingerprint} <- fingerprint(design_document),
-         {:ok, plan} <- build_plan(input, contract, fingerprint),
-         :ok <- validate_contract(contract),
-         :ok <- validate_plan(plan) do
-      {:ok, contract, plan}
-    else
-      {:error, diagnostics} -> {:error, diagnostics}
-    end
+    build_pair(design_document, input, [])
   rescue
     error ->
       {:error, [construction_diagnostic("construction", Exception.message(error))]}
@@ -49,6 +46,349 @@ defmodule LiveFrames.ComponentizationProposer.Construction do
 
   def build(_design_document, _input),
     do: {:error, [construction_diagnostic("construction", "construction inputs are malformed")]}
+
+  @doc false
+  @spec build(DesignDocument.t(), SemanticInput.t(), BehaviorAuthorityContext.t()) ::
+          {:ok, ComponentContract.t(), ComponentizationPlan.t()}
+          | {:error, [ProposerDiagnostic.t()]}
+  def build(
+        %DesignDocument{} = design_document,
+        %SemanticInput{} = input,
+        %BehaviorAuthorityContext{} = context
+      ) do
+    with {:ok, node_index} <- index_document(design_document),
+         {:ok, binding_index} <- index_behavior_bindings(context),
+         :ok <- validate_binding_selections(input.source_node_dispositions, binding_index),
+         {:ok, prepared_node_dispositions} <-
+           prepare_node_dispositions(
+             input.source_node_dispositions,
+             input.boundary.boundary_node_id,
+             node_index
+           ),
+         {:ok, validated_context} <- revalidate_context(design_document, context),
+         {:ok, reference_index} <-
+           behavior_reference_index(design_document, validated_context.behavior_contract),
+         {:ok, node_dispositions} <-
+           build_node_dispositions(
+             prepared_node_dispositions,
+             reference_index,
+             validated_context
+           ) do
+      build_pair(design_document, input, node_dispositions)
+    else
+      {:error, diagnostics} -> {:error, diagnostics}
+    end
+  rescue
+    _error ->
+      {:error, [node_disposition_diagnostic("invalid", nil)]}
+  end
+
+  def build(_design_document, _input, _context),
+    do: {:error, [node_disposition_diagnostic("behavior_authority_mismatch", nil)]}
+
+  defp build_pair(design_document, input, node_dispositions) do
+    with {:ok, contract} <- build_contract(design_document, input),
+         {:ok, fingerprint} <- fingerprint(design_document),
+         {:ok, plan} <- build_plan(input, contract, fingerprint, node_dispositions),
+         :ok <- validate_contract(contract),
+         :ok <- validate_plan(plan) do
+      {:ok, contract, plan}
+    else
+      {:error, diagnostics} -> {:error, diagnostics}
+    end
+  end
+
+  defp index_document(%DesignDocument{root_nodes: root_nodes}) when is_list(root_nodes),
+    do: index_document_nodes(root_nodes, %{})
+
+  defp index_document(_design_document),
+    do: {:error, [node_disposition_diagnostic("invalid", nil)]}
+
+  defp index_document_nodes([], index), do: {:ok, index}
+
+  defp index_document_nodes(
+         [%DesignNode{node_id: node_id, children: children} = node | rest],
+         index
+       )
+       when is_binary(node_id) and node_id != "" and is_list(children) do
+    if Map.has_key?(index, node_id) do
+      {:error, [node_disposition_diagnostic("invalid", node_id)]}
+    else
+      stack = Enum.reduce(children, rest, &[&1 | &2])
+      index_document_nodes(stack, Map.put(index, node_id, node))
+    end
+  end
+
+  defp index_document_nodes(_nodes, _index),
+    do: {:error, [node_disposition_diagnostic("invalid", nil)]}
+
+  defp index_behavior_bindings(%BehaviorAuthorityContext{
+         behavior_contract: %Contract{bindings: bindings}
+       })
+       when is_list(bindings) do
+    Enum.reduce_while(bindings, {:ok, %{}}, fn
+      %Binding{binding_id: binding_id}, {:ok, index}
+      when is_binary(binding_id) and binding_id != "" ->
+        {:cont, {:ok, Map.update(index, binding_id, 1, &(&1 + 1))}}
+
+      _binding, _index ->
+        {:halt, {:error, [behavior_authority_mismatch_diagnostic()]}}
+    end)
+  end
+
+  defp index_behavior_bindings(_context),
+    do: {:error, [behavior_authority_mismatch_diagnostic()]}
+
+  defp validate_binding_selections(decisions, binding_index) when is_list(decisions) do
+    diagnostics =
+      Enum.reduce(decisions, [], fn
+        %SourceNodeDispositionDecision{
+          design_node_id: node_id,
+          behavior_binding_id: binding_id
+        },
+        diagnostics ->
+          if Map.get(binding_index, binding_id, 0) == 1 do
+            diagnostics
+          else
+            [node_disposition_diagnostic("behavior_binding_mismatch", node_id) | diagnostics]
+          end
+
+        _decision, diagnostics ->
+          [node_disposition_diagnostic("invalid", nil) | diagnostics]
+      end)
+
+    case canonical_disposition_diagnostics(diagnostics) do
+      [] -> :ok
+      diagnostics -> {:error, diagnostics}
+    end
+  end
+
+  defp validate_binding_selections(_decisions, _binding_index),
+    do: {:error, [node_disposition_diagnostic("invalid", nil)]}
+
+  defp revalidate_context(design_document, %BehaviorAuthorityContext{} = context) do
+    case ComponentizationDecision.authority_context(
+           design_document,
+           context.behavior_contract,
+           context.selected_behavior_review_result
+         ) do
+      {:ok, ^context} ->
+        {:ok, context}
+
+      _result ->
+        {:error, [behavior_authority_mismatch_diagnostic()]}
+    end
+  end
+
+  defp behavior_reference_index(design_document, behavior_contract) do
+    case ComponentizationDecision.reference_index(design_document, behavior_contract) do
+      {:ok, reference_index} ->
+        {:ok, reference_index}
+
+      {:error, _diagnostics} ->
+        {:error, [behavior_authority_mismatch_diagnostic()]}
+    end
+  end
+
+  defp prepare_node_dispositions(decisions, boundary_node_id, node_index)
+       when is_list(decisions) do
+    boundary_nodes = boundary_node_ids(boundary_node_id, node_index)
+
+    {prepared, diagnostics} =
+      Enum.reduce(decisions, {[], []}, fn decision, {prepared, diagnostics} ->
+        case prepare_node_disposition(decision, boundary_nodes, node_index) do
+          {:ok, entry} -> {[entry | prepared], diagnostics}
+          {:error, diagnostic} -> {prepared, [diagnostic | diagnostics]}
+        end
+      end)
+
+    case canonical_disposition_diagnostics(diagnostics) do
+      [] ->
+        {:ok, Enum.sort_by(prepared, fn {decision, _target} -> decision.design_node_id end)}
+
+      diagnostics ->
+        {:error, diagnostics}
+    end
+  end
+
+  defp prepare_node_dispositions(_decisions, _boundary, _node_index),
+    do: {:error, [node_disposition_diagnostic("invalid", nil)]}
+
+  defp prepare_node_disposition(
+         %SourceNodeDispositionDecision{} = decision,
+         boundary_nodes,
+         node_index
+       ) do
+    with :ok <- validate_disposition_decision(decision),
+         {:ok, target} <- fetch_target(decision.design_node_id, node_index),
+         :ok <- validate_target_boundary(target.node_id, boundary_nodes),
+         :ok <- validate_target_shape(target),
+         :ok <- validate_source_trace(target) do
+      {:ok, {decision, target}}
+    end
+  end
+
+  defp prepare_node_disposition(
+         _decision,
+         _boundary_nodes,
+         _node_index
+       ),
+       do: {:error, node_disposition_diagnostic("invalid", nil)}
+
+  defp build_node_dispositions(prepared, reference_index, context) do
+    {records, diagnostics} =
+      Enum.reduce(prepared, {[], []}, fn {decision, target}, {records, diagnostics} ->
+        case validate_reference_conflict(target.node_id, reference_index) do
+          :ok ->
+            trace = target.source_trace
+
+            record = %NodeDisposition{
+              design_node_id: decision.design_node_id,
+              disposition: decision.outcome,
+              source_type: trace.source_type,
+              source_id: trace.source_id,
+              behavior_binding_id: decision.behavior_binding_id,
+              behavior_contract_digest: context.behavior_contract_digest,
+              behavior_review_id: context.behavior_review_result_id,
+              evidence_refs: Enum.sort(decision.evidence_refs)
+            }
+
+            {[record | records], diagnostics}
+
+          {:error, diagnostic} ->
+            {records, [diagnostic | diagnostics]}
+        end
+      end)
+
+    case canonical_disposition_diagnostics(diagnostics) do
+      [] -> {:ok, Enum.sort_by(records, & &1.design_node_id)}
+      diagnostics -> {:error, diagnostics}
+    end
+  end
+
+  defp validate_disposition_decision(%SourceNodeDispositionDecision{
+         design_node_id: node_id,
+         outcome: :exclude_source_runtime_carrier,
+         behavior_binding_id: binding_id,
+         evidence_refs: evidence_refs
+       }) do
+    if valid_non_empty_string?(node_id) and valid_non_empty_string?(binding_id) and
+         valid_evidence_refs?(evidence_refs) do
+      :ok
+    else
+      {:error, node_disposition_diagnostic("invalid", node_id)}
+    end
+  end
+
+  defp validate_disposition_decision(%SourceNodeDispositionDecision{design_node_id: node_id}),
+    do: {:error, node_disposition_diagnostic("invalid", node_id)}
+
+  defp fetch_target(node_id, node_index) when is_binary(node_id) do
+    case Map.fetch(node_index, node_id) do
+      {:ok, target} -> {:ok, target}
+      :error -> {:error, node_disposition_diagnostic("target_missing", node_id)}
+    end
+  end
+
+  defp fetch_target(node_id, _node_index),
+    do: {:error, node_disposition_diagnostic("target_missing", node_id)}
+
+  defp validate_target_boundary(node_id, boundary_nodes) do
+    if MapSet.member?(boundary_nodes, node_id) do
+      :ok
+    else
+      {:error, node_disposition_diagnostic("target_outside_boundary", node_id)}
+    end
+  end
+
+  defp validate_target_shape(%DesignNode{
+         node_id: node_id,
+         semantic_type: semantic_type,
+         children: children
+       }) do
+    if semantic_type in ["raw", "unsupported", "unknown"] and children == [] do
+      :ok
+    else
+      {:error, node_disposition_diagnostic("target_semantic_incompatible", node_id)}
+    end
+  end
+
+  defp validate_source_trace(%DesignNode{
+         node_id: node_id,
+         source_trace: %SourceTrace{source_type: source_type, source_id: source_id}
+       }) do
+    if valid_non_empty_string?(source_type) and valid_non_empty_string?(source_id) do
+      :ok
+    else
+      {:error, node_disposition_diagnostic("source_identity_mismatch", node_id)}
+    end
+  end
+
+  defp validate_source_trace(%DesignNode{node_id: node_id}),
+    do: {:error, node_disposition_diagnostic("source_identity_mismatch", node_id)}
+
+  defp validate_reference_conflict(node_id, reference_index) do
+    case Map.get(reference_index, node_id) do
+      %MapSet{} = roles ->
+        if MapSet.size(roles) > 0 do
+          {:error, node_disposition_diagnostic("behavior_reference_conflict", node_id)}
+        else
+          :ok
+        end
+
+      _roles ->
+        :ok
+    end
+  end
+
+  defp boundary_node_ids(boundary_node_id, node_index),
+    do: boundary_node_ids([boundary_node_id], node_index, MapSet.new())
+
+  defp boundary_node_ids([], _node_index, node_ids), do: node_ids
+
+  defp boundary_node_ids([node_id | rest], node_index, node_ids) do
+    if MapSet.member?(node_ids, node_id) do
+      boundary_node_ids(rest, node_index, node_ids)
+    else
+      case Map.get(node_index, node_id) do
+        %DesignNode{children: children} ->
+          child_ids = Enum.map(children, & &1.node_id)
+          next = Enum.reduce(child_ids, rest, &[&1 | &2])
+          boundary_node_ids(next, node_index, MapSet.put(node_ids, node_id))
+
+        _missing_boundary ->
+          boundary_node_ids(rest, node_index, node_ids)
+      end
+    end
+  end
+
+  defp valid_evidence_refs?(refs) when is_list(refs) and refs != [] do
+    Enum.all?(refs, &valid_non_empty_string?/1) and
+      length(refs) == MapSet.size(MapSet.new(refs))
+  end
+
+  defp valid_evidence_refs?(_refs), do: false
+
+  defp valid_non_empty_string?(value),
+    do: is_binary(value) and byte_size(value) > 0 and String.valid?(value)
+
+  defp behavior_authority_mismatch_diagnostic do
+    node_disposition_diagnostic("behavior_authority_mismatch", nil)
+  end
+
+  defp node_disposition_diagnostic(suffix, node_id) do
+    %ProposerDiagnostic{
+      code: "componentization_plan.node_disposition." <> suffix,
+      severity: :error,
+      path:
+        if(is_binary(node_id), do: "node_dispositions[#{node_id}]", else: "node_dispositions"),
+      message: "node disposition failed the #{suffix} guard"
+    }
+  end
+
+  defp canonical_disposition_diagnostics(diagnostics) do
+    Enum.sort_by(diagnostics, &{&1.code || "", &1.path || "", &1.message || ""})
+  end
 
   defp validate_contract(contract) do
     case ComponentContract.validate(contract) do
@@ -283,7 +623,7 @@ defmodule LiveFrames.ComponentizationProposer.Construction do
     )
   end
 
-  defp build_plan(input, contract, fingerprint) do
+  defp build_plan(input, contract, fingerprint, node_dispositions) do
     plan = %ComponentizationPlan{
       plan_format_version: ComponentizationPlan.current_format_version(),
       contract_id: contract.contract_id,
@@ -293,6 +633,7 @@ defmodule LiveFrames.ComponentizationProposer.Construction do
         input.render_placements
         |> Enum.map(&render_projection/1)
         |> Enum.sort_by(&render_projection_sort_key/1),
+      node_dispositions: node_dispositions,
       diagnostics: [],
       provenance: %{}
     }
