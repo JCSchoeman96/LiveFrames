@@ -207,6 +207,19 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              resolve(definitions, references ++ [reference("--local-name", [1])])
   end
 
+  test "resolves the maximum candidate group across the maximum reference batch" do
+    definitions =
+      for source_order <- 1..256 do
+        definition("--local-name", "12px", [1], source_order: source_order)
+      end
+
+    references = for _index <- 1..1024, do: reference("--local-name", [1])
+
+    assert {:ok, results} = resolve(definitions, references)
+    assert length(results) == 1024
+    assert Enum.all?(results, &(&1 == {:ok, "12px"}))
+  end
+
   test "rejects terminal text above 4096 bytes" do
     terminal_at_limit = String.duplicate("x", 4096)
     definition_record = definition("--local-name", String.duplicate("x", 4097), [1])
@@ -218,6 +231,16 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
     assert {:ok, [{:error, :resource_limit_exceeded}]} =
              resolve([definition_record], [reference("--local-name", [1])])
+  end
+
+  test "rejects an oversized terminal before comparing duplicate candidates" do
+    definitions = [
+      definition("--local-name", String.duplicate("x", 4097), [1]),
+      definition("--local-name", "12px", [1])
+    ]
+
+    assert {:ok, [{:error, :resource_limit_exceeded}]} =
+             resolve(definitions, [reference("--local-name", [1])])
   end
 
   test "limits relative ancestry distance rather than absolute path length" do

@@ -63,52 +63,58 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   end
 
   defp build_definition_index(records, owner_source_id, provenance_identity) do
-    Enum.reduce(records, {%{}, %{}}, fn record, {by_name_and_path, tries_by_name} ->
-      local_name = Map.get(record, :local_name)
-      target_path = Map.get(record, :target_path)
+    {definitions_by_path, tries_by_name} =
+      Enum.reduce(records, {%{}, %{}}, fn record, {definitions_by_path, tries_by_name} ->
+        local_name = Map.get(record, :local_name)
+        target_path = Map.get(record, :target_path)
 
-      if eligible_definition?(
-           record,
-           local_name,
-           target_path,
-           owner_source_id,
-           provenance_identity
-         ) do
-        indexed_record = %{record: record, target_path: target_path}
-        reversed_path = Enum.reverse(target_path)
+        if eligible_definition?(
+             record,
+             local_name,
+             target_path,
+             owner_source_id,
+             provenance_identity
+           ) do
+          reversed_path = Enum.reverse(target_path)
 
-        {
-          Map.update(
-            by_name_and_path,
-            {local_name, reversed_path},
-            [record],
-            &[record | &1]
-          ),
-          Map.update(
-            tries_by_name,
-            local_name,
-            insert_path(empty_path_trie(), target_path, indexed_record),
-            &insert_path(&1, target_path, indexed_record)
-          )
-        }
-      else
-        {by_name_and_path, tries_by_name}
-      end
-    end)
+          {
+            Map.update(
+              definitions_by_path,
+              {local_name, reversed_path},
+              [record],
+              &[record | &1]
+            ),
+            Map.update(
+              tries_by_name,
+              local_name,
+              insert_path(empty_path_trie(), target_path),
+              &insert_path(&1, target_path)
+            )
+          }
+        else
+          {definitions_by_path, tries_by_name}
+        end
+      end)
+
+    selected_by_path =
+      Map.new(definitions_by_path, fn {key, definitions} ->
+        {key, select_definition(definitions)}
+      end)
+
+    {selected_by_path, tries_by_name}
   end
 
-  defp empty_path_trie, do: %{children: %{}, definitions: []}
+  defp empty_path_trie, do: %{children: %{}, has_definition: false}
 
-  defp insert_path(trie, [], definition),
-    do: %{trie | definitions: [definition | trie.definitions]}
+  defp insert_path(trie, []), do: %{trie | has_definition: true}
 
-  defp insert_path(trie, [component | rest], definition) do
+  defp insert_path(trie, [component | rest]) do
     child = Map.get(trie.children, component, empty_path_trie())
 
     Map.put(
       trie,
       :children,
-      Map.put(trie.children, component, insert_path(child, rest, definition))
+      Map.put(trie.children, component, insert_path(child, rest))
     )
   end
 
@@ -157,11 +163,11 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp resolve_target(local_name, target_path, by_name_and_path, same_name_trie) do
     reversed_path = Enum.reverse(target_path)
 
-    case Map.get(by_name_and_path, {local_name, reversed_path}, []) do
-      [] ->
+    case Map.fetch(by_name_and_path, {local_name, reversed_path}) do
+      :error ->
         case nearest_ancestor(by_name_and_path, local_name, reversed_path, 1) do
-          {:found, definitions} ->
-            select_definition(definitions)
+          {:found, selected_definition} ->
+            selected_definition
 
           :none ->
             if farther_ancestor_exists?(same_name_trie, target_path) do
@@ -171,8 +177,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             end
         end
 
-      definitions ->
-        select_definition(definitions)
+      {:ok, selected_definition} ->
+        selected_definition
     end
   end
 
@@ -183,15 +189,15 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp nearest_ancestor(_index, _local_name, [], _distance), do: :none
 
   defp nearest_ancestor(index, local_name, [_target_component | reversed_ancestor], distance) do
-    case Map.get(index, {local_name, reversed_ancestor}, []) do
-      [] when distance <= @max_ancestry_hops ->
+    case Map.fetch(index, {local_name, reversed_ancestor}) do
+      :error when distance <= @max_ancestry_hops ->
         nearest_ancestor(index, local_name, reversed_ancestor, distance + 1)
 
-      [] ->
+      :error ->
         :none
 
-      definitions ->
-        {:found, definitions}
+      {:ok, selected_definition} ->
+        {:found, selected_definition}
     end
   end
 
@@ -205,8 +211,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end
   end
 
-  defp has_definition_in_prefix?(%{definitions: [_definition | _]}, _path, _depth, _max_depth),
-    do: true
+  defp has_definition_in_prefix?(%{has_definition: true}, _path, _depth, _max_depth), do: true
 
   defp has_definition_in_prefix?(_trie, _path, depth, max_depth) when depth == max_depth,
     do: false
@@ -234,11 +239,11 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
           not Enum.all?(terminal_texts, &is_binary/1) ->
             {:error, :unsupported_terminal_value}
 
+          Enum.any?(terminal_texts, &(byte_size(&1) > @max_terminal_bytes)) ->
+            {:error, :resource_limit_exceeded}
+
           not Enum.all?(terminal_texts, &(&1 === hd(terminal_texts))) ->
             {:error, :conflicting_source_order}
-
-          byte_size(hd(terminal_texts)) > @max_terminal_bytes ->
-            {:error, :resource_limit_exceeded}
 
           true ->
             {:ok, hd(terminal_texts)}
