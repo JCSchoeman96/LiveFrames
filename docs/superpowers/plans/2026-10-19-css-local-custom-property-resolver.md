@@ -6,9 +6,18 @@
 
 **Architecture:** `CustomCssNormalizer` will pass already parsed, selector-resolved records and exact `StylePrecedence` provenance to a batch `SourceLocalCustomPropertyResolver`. The resolver returns terminal source text or a closed failure state. The normalizer will run successful text through the existing declaration and value checks, while keeping definitions internal and preserving residual behavior.
 
+**Spec:** `docs/development/css_local_custom_property_resolution_authority.md`
+
 **Tech Stack:** Elixir umbrella application, Mix, ExUnit, `CustomCssParser`, `CustomCssNormalizer`, `StylePrecedence` provenance, `CSSDeclaration`, `VariableAuthority`, and existing Design IR style values.
 
 ---
+
+## Global Constraints
+
+- Resolve direct `var(--name)` only. Do not expand selector grammar or send raw selector text to the resolver.
+- A local-lane failure never falls back to external authority. Do not change Design IR, schema, or generator behavior.
+- The implementation boundary is exactly four production/test files. Keep limits at 65,536 CSS bytes, 256 definitions, 1,024 references, 64 relative ancestry hops, and 4,096 terminal bytes; substitution depth is one and dependency edges are capped at 1,024.
+- Observe a failing TDD assertion before production code. Private Romeo source must not enter repository tests.
 
 ## Authority and preflight
 
@@ -63,9 +72,31 @@ Use one batch call:
 
 ```elixir
 SourceLocalCustomPropertyResolver.resolve(definition_records, reference_records, opts)
-# => {:ok, ordered_results}
-# ordered_results has one entry for each reference, in reference input order
+# => {:ok, ordered_results} | {:error, batch_failure_state}
+# valid batches return one entry per reference, in reference input order
 # each entry is {:ok, terminal_text} or {:error, resolver_state_atom}
+```
+
+The required `opts` are `owner_source_id`, the exact trusted owner source ID; `effective_provenance_identity`, the exact trusted provenance tuple; and `authority_index`, used only for presence checks. `CustomCssNormalizer` supplies the trusted batch identity. Never infer it from a first record, record order, or record contents, and never group multiple owners or provenance identities inside one resolver call.
+
+Freeze the provenance identity as this tuple, preserving `authority_ids` exactly as supplied by `StylePrecedence`:
+
+```elixir
+{source_id, origin, class_id, resolution_source, authority_ids, class_reference_index}
+```
+
+Before candidate lookup, require every definition and reference record to match the trusted owner and provenance scope. A supplied foreign-owner record fails closed as `CROSS_OWNER_REFERENCE`; do not create another batch for it or infer a different scope.
+
+For a valid batch, return exactly one result per reference, preserving reference input order. Do not return an `ordered_results` value for an invalid oversized batch. Preflight counts must stop as soon as they observe `LIMIT + 1`; never scan arbitrary excess input to compute its total.
+
+```text
+BATCH_RESOURCE_FAILURE=TOP_LEVEL_ERROR
+PARTIAL_BATCH_PROCESSING=NO
+OVER_LIMIT_RESULT_AMPLIFICATION=NO
+BATCH_IDENTITY_OWNER=CustomCssNormalizer
+BATCH_IDENTITY_INFERRED_FROM_RECORDS=NO
+MULTI_OWNER_RESOLVER_CALL=NO
+MULTI_PROVENANCE_RESOLVER_CALL=NO
 ```
 
 Do not expose the index, add public reference IDs, create a stateful API, or create a general CSS-variable service. Keep normalizer-only correlation metadata outside resolver records:
@@ -90,9 +121,9 @@ record_kind
 terminal_text_if_definition (definition records only)
 ```
 
-`record_kind` is `:definition` or `:reference`. `source_order` is `{source_index, frame.source_order}` and exists only for stable diagnostics. It never chooses a winning definition. The exact effective provenance identity contains, in this order, `source_id`, `origin`, `class_id`, `resolution_source`, `authority_ids`, and `class_reference_index`. Preserve `authority_ids` exactly as `StylePrecedence` supplied them. Do not include responsive source keys or viewport keys in this identity.
+`record_kind` is `:definition` or `:reference`. `source_order` is `{source_index, frame.source_order}` and exists only for stable diagnostics. It never chooses a winning definition. The exact effective provenance identity is the tuple frozen above. Do not include responsive source keys or viewport keys in this identity.
 
-Pass the existing `:authority_index` through `opts` only for the presence-only external-name collision check. The resolver must discard candidate paths and values after checking whether an exact-name candidate exists.
+Pass the existing `:authority_index` through required `opts` only for the presence-only external-name collision check. The resolver must discard candidate paths and values after checking whether an exact-name candidate exists.
 
 `CustomCssNormalizer` owns selector parsing and target matching. It creates an opaque, non-serialized parsed identity equivalent to:
 
@@ -119,10 +150,10 @@ Preserve descendant order. Sort classes only within each parsed compound. Exclud
 
 ### Owner, provenance, target, and duplicate scope
 
-- Batch one owner and one exact effective provenance identity. Include only the already selected base records and selected responsive records for that identity. Keep each record's viewport scope separate so responsive references can use an eligible base definition. Do not search shadowed layers, other owners, other components, or global classes.
-- Require exact owner and effective provenance equality. Foreign owner data fails closed.
+- Batch exactly one `owner_source_id` and one `effective_provenance_identity`, both supplied by `CustomCssNormalizer` in required `opts`. Include only the already selected base records and selected responsive records for that identity. Keep each record's viewport scope separate so responsive references can use an eligible base definition. Do not search shadowed layers, other owners, other components, or global classes.
+- Require exact owner and effective provenance equality before candidate lookup. A supplied foreign-owner record fails closed as `CROSS_OWNER_REFERENCE`; never group it into an additional batch.
 - Direct target definitions always take priority over ancestors. Otherwise, consider only the nearest proven ancestor, where `definition.target_path` is a strict structural component prefix of `reference.target_path` inside the same owner and provenance.
-- A sibling is never an ancestor. Paths are structural lists, not text prefixes. Stop after 64 ancestry hops/components and fail closed if the relationship cannot be proved.
+- A sibling is never an ancestor. Paths are structural lists, not text prefixes. `MAX_OWNER_ANCESTRY_HOPS=64` measures the relative structural distance from a reference target to a candidate definition target within the current owner subtree, not absolute path length from a component or document root. Distance 64 is allowed; distance 65 returns `RESOURCE_LIMIT_EXCEEDED`. For example, paths of lengths 100 and 101 with a parent-child relation have distance 1 and are allowed.
 - At the selected target, one selector identity with one definition selects it. Multiple definitions with that identity and byte-identical terminal text coalesce. Different terminal text with one identity returns `CONFLICTING_SOURCE_ORDER`. More than one identity returns `AMBIGUOUS_DEFINITION`, even if terminal text matches.
 - Source order stabilizes diagnostics only. Never use it as cascade precedence.
 
@@ -131,7 +162,7 @@ Preserve descendant order. Sort classes only within each parsed compound. Exclud
 - Base definition to base reference is allowed within exact owner and provenance.
 - Base definition to responsive reference is allowed only within exact owner and provenance at the same target or nearest proven ancestor.
 - State-scoped lookup is unsupported.
-- Responsive definitions do not resolve in this slice. If an exact responsive definition exists in the same responsive scope, fail `UNSUPPORTED_SCOPE`; do not silently fall back to base.
+- Responsive definitions do not resolve in this slice. For a responsive reference, choose the selected relation using direct target first, otherwise the nearest proven ancestor, considering eligible definitions at either base or responsive scope. Then inspect that relation for an eligible responsive definition in the same exact responsive viewport scope. If one exists, fail `UNSUPPORTED_SCOPE` before using any base definition at that relation; do not silently fall back. This applies to both a same-target responsive definition and a nearest-ancestor responsive definition.
 - Responsive-to-responsive, responsive-to-base, responsive-to-state, base-to-state, and state-to-state transitions fail closed. Do not compare media ranges, infer named breakpoints, or change media boundaries.
 
 ### Dependency and terminal handling
@@ -154,7 +185,7 @@ MAX_LOCAL_SUBSTITUTION_DEPTH=1
 MAX_DEPENDENCY_EDGES=1024
 ```
 
-Check the CSS byte limit in `CustomCssNormalizer` before calling `CustomCssParser.parse/1`. Apply definition and reference counts to the post-selector records passed into each owner/provenance resolver call, across its selected base and responsive records. Return `RESOURCE_LIMIT_EXCEEDED`; never truncate or continue partially. Build one index per owner/provenance group. Target complexity is `O(D + R * H)` where `D <= 256`, `R <= 1024`, and `H <= 64`. Do not rescan the full source for each reference.
+Check the CSS byte limit in `CustomCssNormalizer` before calling `CustomCssParser.parse/1`. Apply definition and reference counts to the post-selector records passed into each single-owner/single-provenance resolver call, across its selected base and responsive records. More than 256 definitions or more than 1,024 references returns top-level `{:error, :resource_limit_exceeded}`. Count only through `LIMIT + 1`; never truncate, partially process, or allocate one error result per excess reference. Build one index per owner/provenance call. Target complexity is `O(D + R * H)` where `D <= 256`, `R <= 1024`, and `H <= 64`. Do not rescan the full source for each reference.
 
 ### Closed failure states
 
@@ -206,23 +237,26 @@ Do not modify the parser or selector grammar. An unsupported-selector definition
 - Create `apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`.
 - Create `apps/live_frames/lib/live_frames/adapters/bricks/source_local_custom_property_resolver.ex`.
 
-**Interface:** Implement only `resolve/3` with ordered one-result-per-reference output. Records use the frozen fields above. This task covers validation, grouping by owner/provenance/name/scope, direct target and nearest-ancestor selection, duplicate behavior, and bounds.
+**Interface:** Implement only `resolve/3` with required `owner_source_id`, `effective_provenance_identity`, and `authority_index` options. Valid batches return ordered one-result-per-reference output; a definition or reference hard-limit failure returns top-level `{:error, :resource_limit_exceeded}` with no partial results. Records use the frozen fields above. This task covers validation, exact trusted owner/provenance checks, direct target and nearest-ancestor selection, duplicate behavior, and bounds.
+
+Every resolver test supplies explicit synthetic batch options: one expected `owner_source_id`, its exact provenance tuple as `effective_provenance_identity`, and an `authority_index` (empty when no external candidate is needed).
 
 - [ ] **Step 1: Add synthetic failing resolver tests.** Add these ExUnit tests before production code:
-  - `test "validates exact local names with the existing property boundary"`: a valid one-reference call returns `{:ok, [{:ok, terminal}]}`; a non-custom property or a value rejected by `CSSDeclaration.safe_property?/1` returns `{:ok, [{:error, :invalid_local_name}]}`.
-  - `test "isolates definitions by exact effective provenance"`: a definition from a different class reference, authority ID order, or other provenance field never supplies the reference; the one-reference result is `{:ok, [{:error, :no_local_definition}]}`.
-  - `test "rejects foreign owner records supplied to one owner batch"`: a mixed-owner one-reference call returns `{:ok, [{:error, :cross_owner_reference}]}` and never selects the foreign record.
+  - `test "validates exact local names with the existing property boundary"`: the valid name `"--local-name"` is accepted; safe ordinary property `"color"` without the `--` prefix and a malformed name rejected by `CSSDeclaration.safe_property?/1` each return `{:ok, [{:error, :invalid_local_name}]}`. Do not test a value with `safe_property?/1` or duplicate its name regex.
+  - `test "isolates definitions by exact effective provenance"`: pass `owner_source_id`, the exact six-field `effective_provenance_identity` tuple, and `authority_index` in opts; a definition from a different class reference, authority ID order, or other provenance field never supplies the reference; the one-reference result is `{:ok, [{:error, :no_local_definition}]}`.
+  - `test "rejects foreign owner records supplied to one owner batch"`: pass the expected owner and provenance explicitly in opts; a mixed-owner one-reference call returns `{:ok, [{:error, :cross_owner_reference}]}` and never selects the foreign record or creates another batch.
   - `test "prefers a direct target definition over every ancestor"`: the direct terminal is returned even when an ancestor has a different terminal.
   - `test "selects only the nearest proven ancestor"`: nearest ancestor terminal wins; a sibling and a farther ancestor do not compete.
   - `test "coalesces byte-identical definitions with one selector identity"`: identical same-identity terminals return one success.
   - `test "rejects conflicting same-identity definitions without source-order selection"`: differing terminals produce the per-reference result `{:error, :conflicting_source_order}` regardless of input order.
   - `test "keeps different selector identities ambiguous when terminals match"`: two identities with equal terminal text produce `{:error, :ambiguous_definition}` for that reference.
   - `test "preserves reference result order and cardinality"`: result entries zip one-for-one with references in their input order.
-  - `test "rejects definition and reference counts above their owner-layer bounds"`: with at least one reference, 257 definitions produce a per-reference `:resource_limit_exceeded`; with 1,025 references, every result is `:resource_limit_exceeded` and the output still has 1,025 ordered entries.
+  - `test "allows exactly 256 definitions and rejects 257 at batch level"`: exactly 256 definition records return a valid `{:ok, ordered_results}` batch; 257 definition records return top-level `{:error, :resource_limit_exceeded}` with no `ordered_results`.
+  - `test "allows exactly 1024 references and rejects 1025 at batch level"`: 1,024 references return 1,024 ordered results; 1,025 references return top-level `{:error, :resource_limit_exceeded}`, with no partial results or error result per reference.
   - `test "rejects terminal text above 4096 bytes"`: a 4,097-byte terminal produces `{:error, :resource_limit_exceeded}` for its reference.
-  - `test "rejects ancestry paths beyond 64 components or hops"`: a relation requiring a 65th structural component returns `:resource_limit_exceeded` for the reference.
+  - `test "limits relative ancestry distance rather than absolute path length"`: definition/reference paths of lengths 100 and 101 at distance 1 resolve; relative distance 64 resolves; relative distance 65 returns `:resource_limit_exceeded` for the reference.
 - [ ] **Step 2: Run the resolver test file and observe RED.** Run `mix test apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`. Expected: the new assertions fail because `SourceLocalCustomPropertyResolver.resolve/3` is not implemented. Do not add production code before observing this failure.
-- [ ] **Step 3: Implement the minimum resolver core.** Add the batch function and private bounded index. Validate with `CSSDeclaration.safe_property?/1` plus the `--` prefix. Match owner and provenance exactly; compare selector identity only for equality; prefer direct target then nearest structural ancestor; enforce the limits and duplicate rules. Keep `source_order` out of winner selection.
+- [ ] **Step 3: Implement the minimum resolver core.** Add the batch function and private bounded index. Require the trusted owner/provenance and authority options; do not infer batch identity from records. Preflight definition/reference counts and stop at `LIMIT + 1`, returning top-level `{:error, :resource_limit_exceeded}` without partial processing. Validate names with `CSSDeclaration.safe_property?/1` plus the `--` prefix. Match owner and provenance exactly; compare selector identity only for equality; prefer direct target then nearest structural ancestor; measure the 64-hop bound as relative structural distance; enforce duplicate rules. Keep `source_order` out of winner selection.
 - [ ] **Step 4: Run resolver tests and observe GREEN.** Run `mix test apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`. Expected: every Task 1 assertion passes and results remain ordered and bounded.
 - [ ] **Step 5: Commit Task 1.** Run `git diff --check`, stage only the resolver and resolver test, then create one signed commit: `feat: add bounded local custom property resolver`.
 
@@ -232,11 +266,12 @@ Do not modify the parser or selector grammar. An unsupported-selector definition
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/source_local_custom_property_resolver.ex`.
 - Modify `apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`.
 
-**Interface:** Keep `resolve/3` and record fields unchanged. Add only bounded responsive/state classification, presence-only external authority collision detection, dependency classification, and closed failure results.
+**Interface:** Keep `resolve/3`, its required trusted batch options, and record fields unchanged. Add only bounded responsive/state classification, presence-only external authority collision detection, dependency classification, and closed failure results.
 
 - [ ] **Step 1: Add synthetic failing scope and dependency tests.** Add these tests before modifying the resolver:
   - `test "allows a base definition for a responsive reference in exact owner provenance"`: same-target and nearest-ancestor one-reference calls return `{:ok, [{:ok, terminal}]}`.
-  - `test "rejects an exact responsive definition instead of falling back to base"`: an exact responsive definition produces `{:error, :unsupported_scope}` for its reference even when a base definition could match.
+  - `test "same-target responsive definition blocks base fallback"`: an eligible responsive definition at the selected same-target relation produces `{:ok, [{:error, :unsupported_scope}]}` even when a base definition could match.
+  - `test "responsive ancestor shadowing blocks base fallback"`: an eligible responsive definition at the selected nearest-ancestor relation produces `{:ok, [{:error, :unsupported_scope}]}` even when a base definition could match.
   - `test "rejects state-scoped references and responsive definitions"`: each unsupported scope transition produces a per-reference `:unsupported_scope` result.
   - `test "rejects sibling and unproven ancestry"`: sibling paths return `:no_local_definition`; a path that is not a strict structural prefix never resolves.
   - `test "rejects an external authority collision without reading its token value"`: a local definition plus any exact-name `VariableAuthority` candidate produces `:external_authority_collision` for its reference.
@@ -245,7 +280,7 @@ Do not modify the parser or selector grammar. An unsupported-selector definition
   - `test "rejects dependency graphs above 1024 edges"`: a synthetic graph with 1,025 dependency edges produces `{:error, :resource_limit_exceeded}` for the affected reference.
   - `test "returns no local definition for an ordinary miss"`: an absent exact name produces `{:ok, [{:error, :no_local_definition}]}`.
 - [ ] **Step 2: Run resolver tests and observe RED.** Run `mix test apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`. Expected: the new tests fail on missing scope and dependency classification while Task 1 tests remain green.
-- [ ] **Step 3: Implement bounded classification only.** Add no recursive substitution. Check state and responsive scope first. Keep exact responsive definitions from enabling base fallback. Inspect `VariableAuthority.resolve/2` only for candidate presence, then discard its candidate data. Detect self edges and cycles with a bounded graph of at most 256 definitions and 1,024 edges. Reject fallback and all other downstream dependencies with their exact states.
+- [ ] **Step 3: Implement bounded classification only.** Add no recursive substitution. For a responsive reference, first select the direct-target or nearest-ancestor relation, then inspect that relation for an eligible responsive definition in the exact responsive viewport scope. If one exists, fail `UNSUPPORTED_SCOPE` before considering a base definition. Do not resolve responsive definitions or compare media ranges. Reject state transitions. Inspect `VariableAuthority.resolve/2` only for candidate presence, then discard its candidate data. Detect self edges and cycles with a bounded graph of at most 256 definitions and 1,024 edges. Reject fallback and all other downstream dependencies with their exact states.
 - [ ] **Step 4: Run resolver tests and observe GREEN.** Run `mix test apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`. Expected: Task 1 and Task 2 tests pass; no terminal is expanded recursively.
 - [ ] **Step 5: Commit Task 2.** Run `git diff --check`, stage only the resolver and resolver test, then create one signed commit: `feat: enforce local resolver scope and dependency limits`.
 
@@ -260,6 +295,7 @@ Do not modify the parser or selector grammar. An unsupported-selector definition
 - [ ] **Step 1: Add integration tests and observe RED.** Add synthetic tests before production changes:
   - `test "resolves a direct local reference to an ordinary literal style"`: local definition plus direct consumer yields `%StyleValue{kind: :literal, value: "12px"}`; no custom-property style or custom-property definition remains in output.
   - `test "resolves a base definition for a responsive consumer"`: the ordinary resolved value appears in the existing responsive override.
+  - `test "resource-limited resolver batch keeps its entire owner provenance scope residual"`: generate more than 1,024 eligible direct references within the CSS byte limit; on top-level `{:error, :resource_limit_exceeded}`, emit no normalized output from the affected owner/provenance batch, preserve the affected source as residual, expose the state only as stable diagnostic metadata, and route no local reference to `VariableAuthority`.
   - `test "unsupported local definition blocks external VariableAuthority fallback"`: an unsupported-selector rule containing both a local definition and an ordinary declaration cannot emit either declaration; with a populated external authority for the exact name, the consumer has no `token_ref`, retains `"unresolved_value"`, and has no normalized property style.
   - `test "keeps external VariableAuthority resolution when no local definition exists"`: a direct reference with no exact local definition follows the existing external path and yields its existing token reference.
   - `test "different selector identities remain ambiguous for equal local terminals"`: a direct consumer remains unresolved when two selector identities target the same definition node with equal values.
@@ -273,7 +309,7 @@ Do not modify the parser or selector grammar. An unsupported-selector definition
 - [ ] **Step 2: Run the normalizer test file and observe RED.** Run `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Expected: new local resolution assertions fail against the current external-only direct-variable path; existing normalizer assertions remain green.
 - [ ] **Step 3: Add selector identity and bounded record collection.** Preserve the accepted parsed selector group. Canonicalize class order and duplicates inside each compound, preserve descendant order, and retain parsed marker and condition. Keep raw selector text out of resolver records. Derive exact provenance from the existing selected owner provenance fields. Check the 65,536-byte limit before `CustomCssParser.parse/1`.
 - [ ] **Step 4: Collect observed and eligible local definitions separately.** Collect exact local definition names from safely parsed selected CSS before selector eligibility can discard a definition. Create definition records only after the existing selector matcher proves target and path inside the current owner subtree. Create reference records only for the existing exact direct `var(--name)` form. Retain normalizer-private correlation metadata outside the resolver. Count the resulting post-selector records against the 256 definition and 1,024 reference limits for the owner/provenance batch.
-- [ ] **Step 5: Resolve once, revalidate, and preserve atomicity.** Send one definition/reference batch for each owner and exact provenance identity, including the already selected base and responsive records for that identity. Use the external authority only for collision presence on the local lane. After a successful terminal, run the existing declaration check and value normalization with source-resolver origin. A local-lane failure never calls the external substitution path. Consume definition declarations as compiler inputs only. If any target or declaration fails, discard all normalized output for that selector rule and retain the rule with its existing `unresolved_value` residual identity.
+- [ ] **Step 5: Resolve once, revalidate, and preserve atomicity.** Send one definition/reference batch for each owner and exact provenance identity, including the already selected base and responsive records for that identity. Use the external authority only for collision presence on the local lane. After a successful terminal, run the existing declaration check and value normalization with source-resolver origin. A local-lane failure never calls the external substitution path. If `resolve/3` returns `{:error, :resource_limit_exceeded}`, emit no normalized output from the affected owner/provenance batch; preserve its affected source as residual; expose `RESOURCE_LIMIT_EXCEEDED` only as stable diagnostic state/metadata; do not consume the first permitted records partially or route any local reference to `VariableAuthority`. Keep the existing canonical residual identity. Consume definition declarations as compiler inputs only. If any target or declaration fails, discard all normalized output for that selector rule and retain the rule with its existing `unresolved_value` residual identity.
 - [ ] **Step 6: Run the normalizer test file and observe GREEN.** Run `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Expected: all new cases and existing selector, responsive, residual, and state tests pass.
 - [ ] **Step 7: Commit Task 3.** Run `git diff --check`, stage only the normalizer and its existing test file, then create one signed commit: `feat: integrate local custom property resolution`.
 
@@ -315,6 +351,13 @@ Also verify that definitions never enter IR or generated CSS, the external path 
 
 ```text
 STOP=MAIN_MOVED_WITH_MATERIAL_LOCAL_RESOLVER_CONFLICT
+STOP=PLAN_SCOPE_EXPANDED
+STOP=IMPLEMENTATION_FILE_CHANGED
+STOP=TEST_FILE_CHANGED
+STOP=IMPLEMENTATION_STARTED
+STOP=RESOURCE_BOUND_WEAKENED
+STOP=BATCH_IDENTITY_REMAINS_INFERRED
+STOP=RESPONSIVE_BASE_FALLBACK_REMAINS_AMBIGUOUS
 STOP=AUTHORITY_CHANGED
 STOP=PLANNED_IMPLEMENTATION_BOUNDARY_EXPANDED
 STOP=POST_MERGE_EXACT_SHA_CI_NOT_SUCCESS
