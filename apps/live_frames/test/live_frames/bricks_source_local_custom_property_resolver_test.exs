@@ -3,6 +3,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
   alias LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver
   alias LiveFrames.Fidelity.CSSDeclaration
+  alias LiveFrames.Tokens.VariableAuthority
 
   @owner_source_id "owner"
   @effective_provenance_identity {"owner", :global_class, "class-a", :local, ["auth-a"], 0}
@@ -51,7 +52,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
     [
       owner_source_id: owner_source_id,
       effective_provenance_identity: effective_provenance_identity,
-      authority_index: %{}
+      authority_index: %VariableAuthority{}
     ]
   end
 
@@ -281,5 +282,163 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
                [definition("--local-name", "depth-65", depth_65_ancestor)],
                [reference("--local-name", depth_64_descendant)]
              )
+  end
+
+  test "allows base definitions for responsive references at the target or nearest ancestor" do
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+
+    cases = [
+      {[1, 2], [1, 2]},
+      {[1], [1, 2]}
+    ]
+
+    for {definition_path, reference_path} <- cases do
+      assert {:ok, [{:ok, "12px"}]} =
+               resolve(
+                 [definition("--local-name", "12px", definition_path)],
+                 [reference("--local-name", reference_path, viewport_scope: responsive_scope)]
+               )
+    end
+  end
+
+  test "same-target responsive definition blocks base fallback" do
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+
+    definitions = [
+      definition("--local-name", "12px", [1]),
+      definition("--local-name", "var(--nested-name)", [1], viewport_scope: responsive_scope)
+    ]
+
+    assert {:ok, [{:error, :unsupported_scope}]} =
+             resolve(definitions, [
+               reference("--local-name", [1], viewport_scope: responsive_scope)
+             ])
+  end
+
+  test "nearest responsive ancestor blocks base fallback" do
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+
+    definitions = [
+      definition("--local-name", "12px", [1]),
+      definition("--local-name", "var(--nested-name)", [1], viewport_scope: responsive_scope)
+    ]
+
+    assert {:ok, [{:error, :unsupported_scope}]} =
+             resolve(definitions, [
+               reference("--local-name", [1, 2], viewport_scope: responsive_scope)
+             ])
+  end
+
+  test "rejects state-scoped lookups and responsive-only resolution" do
+    assert {:ok, [{:error, :unsupported_scope}]} =
+             resolve(
+               [definition("--local-name", "12px", [1])],
+               [reference("--local-name", [1], state_scope: :hover)]
+             )
+
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+
+    assert {:ok, [{:error, :unsupported_scope}]} =
+             resolve(
+               [definition("--local-name", "12px", [1], viewport_scope: responsive_scope)],
+               [reference("--local-name", [1], viewport_scope: responsive_scope)]
+             )
+  end
+
+  test "does not resolve sibling paths or other responsive source keys" do
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve(
+               [definition("--local-name", "12px", [1, 2])],
+               [reference("--local-name", [1, 3])]
+             )
+
+    assert {:ok, [{:ok, "12px"}]} =
+             resolve(
+               [
+                 definition("--local-name", "12px", [1]),
+                 definition("--local-name", "var(--other)", [1],
+                   viewport_scope: {:responsive_source_key, "other-source"}
+                 )
+               ],
+               [
+                 reference("--local-name", [1],
+                   viewport_scope: {:responsive_source_key, "tablet-source"}
+                 )
+               ]
+             )
+  end
+
+  test "rejects an external authority collision without substituting its candidate" do
+    authority_index = %VariableAuthority{
+      by_variable: %{"--local-name" => %{"secret-token-path" => [%{"source" => "external"}]}}
+    }
+
+    assert {:ok, [{:error, :external_authority_collision}]} =
+             resolve(
+               [definition("--local-name", "12px", [1])],
+               [reference("--local-name", [1])],
+               authority_index: authority_index
+             )
+  end
+
+  test "classifies fallback and downstream references without substitution" do
+    assert {:ok, [{:error, :unsupported_fallback}]} =
+             resolve(
+               [definition("--local-name", "var(--nested-name, 4px)", [1])],
+               [reference("--local-name", [1])]
+             )
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve(
+               [definition("--local-name", "var(--nested-name)", [1])],
+               [reference("--local-name", [1])]
+             )
+  end
+
+  test "classifies self references and bounded multi-definition cycles" do
+    assert {:ok, [{:error, :self_reference}]} =
+             resolve(
+               [definition("--local-name", "var(--local-name)", [1])],
+               [reference("--local-name", [1])]
+             )
+
+    cycle_definitions = [
+      definition("--first", "var(--second)", [1]),
+      definition("--second", "var(--first)", [1])
+    ]
+
+    assert {:ok, [{:error, :cycle}]} =
+             resolve(cycle_definitions, [reference("--first", [1])])
+  end
+
+  test "rejects dependency graphs above 1024 edges at batch level" do
+    definitions =
+      for index <- 1..3 do
+        dependencies = Enum.map_join(1..350, " ", fn _ -> "var(--x)" end)
+        definition("--source-#{index}", dependencies, [index])
+      end
+
+    assert {:error, :resource_limit_exceeded} =
+             resolve(definitions, [reference("--source-1", [1])])
+  end
+
+  test "allows exactly 1024 dependency edges" do
+    edge_counts = [341, 341, 342]
+
+    definitions =
+      edge_counts
+      |> Enum.with_index(1)
+      |> Enum.map(fn {edge_count, index} ->
+        dependencies = Enum.map_join(1..edge_count, " ", fn _ -> "var(--x)" end)
+        definition("--source-#{index}", dependencies, [index])
+      end)
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve(definitions, [reference("--source-1", [1])])
+  end
+
+  test "returns no local definition for an ordinary miss" do
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve([], [reference("--missing", [1])])
   end
 end
