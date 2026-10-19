@@ -458,6 +458,38 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              )
   end
 
+  test "classifies definition compiler-input terminals with the shared dependency scanner" do
+    assert :ok =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "12px"
+             )
+
+    assert {:error, :unsupported_nested_reference} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(--nested-name)"
+             )
+
+    assert {:error, :unsupported_fallback} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(--nested-name, 4px)"
+             )
+
+    assert {:error, :self_reference} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(--local-name)"
+             )
+
+    assert {:error, :unsupported_nested_reference} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(color)"
+             )
+  end
+
   test "classifies fallback and downstream references without substitution" do
     assert {:ok, [{:error, :unsupported_fallback}]} =
              resolve(

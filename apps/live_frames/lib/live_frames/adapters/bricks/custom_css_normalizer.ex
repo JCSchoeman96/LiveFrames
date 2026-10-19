@@ -787,6 +787,15 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp direct_variable_name(_value), do: nil
 
+  defp consumable_local_definition_compiler_input?(frame, selection, property, value)
+       when is_binary(property) and is_binary(value) do
+    resolver_definition_scope?(frame, selection) and
+      SourceLocalCustomPropertyResolver.definition_compiler_input_state(property, value) == :ok
+  end
+
+  defp consumable_local_definition_compiler_input?(_frame, _selection, _property, _value),
+    do: false
+
   defp frame_rule_id(frame), do: {frame.source_index, frame.source_order}
 
   defp residual_for(frame, reason) do
@@ -1155,8 +1164,12 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.reduce_while({:ok, %{}}, fn {property, value}, {:ok, normalized} ->
       cond do
-        local_definition_name?(property) ->
+        local_definition_name?(property) and
+            consumable_local_definition_compiler_input?(frame, selection, property, value) ->
           {:cont, {:ok, normalized}}
+
+        local_definition_name?(property) ->
+          {:halt, {:error, "unresolved_value"}}
 
         true ->
           case normalize_target_declaration(

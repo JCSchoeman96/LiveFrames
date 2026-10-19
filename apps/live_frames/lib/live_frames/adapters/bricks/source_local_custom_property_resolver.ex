@@ -58,6 +58,32 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   def resolve(_definition_records, _reference_records, _opts),
     do: {:error, :resource_limit_exceeded}
 
+  @doc false
+  @spec definition_compiler_input_state(String.t(), String.t(), keyword()) ::
+          :ok | {:error, atom()}
+  def definition_compiler_input_state(local_name, terminal_text, _opts \\ [])
+      when is_binary(local_name) and is_binary(terminal_text) do
+    cond do
+      not valid_local_name?(local_name) ->
+        {:error, :invalid_local_name}
+
+      byte_size(terminal_text) > @max_terminal_bytes ->
+        {:error, :resource_limit_exceeded}
+
+      true ->
+        case dependency_calls(terminal_text, @max_dependency_edges + 1) do
+          :limit ->
+            {:error, :resource_limit_exceeded}
+
+          {:ok, names, fallback?} ->
+            case isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+              nil -> :ok
+              failure -> {:error, failure}
+            end
+        end
+    end
+  end
+
   defp within_limit?(records, limit), do: within_limit?(records, limit, 0)
 
   defp within_limit?(_records, limit, count) when count > limit, do: false
@@ -533,22 +559,13 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             {{local_name, reversed_path, {:base, nil}} = key,
              %{names: names, fallback?: fallback?}} ->
               state =
-                cond do
-                  fallback? ->
-                    :unsupported_fallback
-
-                  Enum.any?(names, &(&1 == local_name)) ->
-                    :self_reference
-
-                  MapSet.member?(cyclic_definitions, {local_name, reversed_path}) ->
-                    :cycle
-
-                  names != [] ->
-                    :unsupported_nested_reference
-
-                  true ->
-                    nil
-                end
+                batch_definition_dependency_failure(
+                  local_name,
+                  names,
+                  fallback?,
+                  cyclic_definitions,
+                  {local_name, reversed_path}
+                )
 
               {key, state}
 
@@ -591,6 +608,47 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       {_key, _selection}, accumulator ->
         {:cont, accumulator}
     end)
+  end
+
+  defp isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+    cond do
+      fallback? ->
+        :unsupported_fallback
+
+      Enum.any?(names, &(&1 == local_name)) ->
+        :self_reference
+
+      names != [] ->
+        :unsupported_nested_reference
+
+      true ->
+        nil
+    end
+  end
+
+  defp batch_definition_dependency_failure(
+         local_name,
+         names,
+         fallback?,
+         cyclic_definitions,
+         cycle_key
+       ) do
+    cond do
+      fallback? ->
+        :unsupported_fallback
+
+      Enum.any?(names, &(&1 == local_name)) ->
+        :self_reference
+
+      MapSet.member?(cyclic_definitions, cycle_key) ->
+        :cycle
+
+      names != [] ->
+        :unsupported_nested_reference
+
+      true ->
+        nil
+    end
   end
 
   defp dependency_calls(text, max_calls) do

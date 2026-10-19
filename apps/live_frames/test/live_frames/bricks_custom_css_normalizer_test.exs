@@ -518,6 +518,54 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert result.residuals_by_source_id[@owner] == []
   end
 
+  test "a definition with an invalid downstream var dependency remains a whole-rule residual" do
+    css = ".owner { --local-name: var(color); }"
+    result = run(css)
+
+    assert result.styles_by_source_id == %{}
+    assert result.responsive_by_source_id == %{}
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "a definition with an unsupported terminal dependency remains a whole-rule residual" do
+    css = ".owner { --theme-token: var(--external-space); }"
+    result = run(css)
+
+    assert result.styles_by_source_id == %{}
+    assert result.responsive_by_source_id == %{}
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "resolving a direct local consumer does not drop a failed definition rule" do
+    css =
+      ".owner { --theme-token: var(--external-space); }\n" <>
+        ".owner { --local-space: 12px; width: var(--local-space); }"
+
+    result = run(css)
+
+    assert %StyleValue{kind: :literal, value: "12px"} =
+             result.styles_by_source_id[@owner]["width"]
+
+    refute Map.has_key?(result.styles_by_source_id[@owner], "--local-space")
+
+    assert Enum.any?(result.residuals_by_source_id[@owner], fn residual ->
+             residual["reason"] == "unresolved_value" and
+               residual["source_text"] =~ "--theme-token"
+           end)
+  end
+
   test "mixed-case var spelling stays outside the direct local-variable lane" do
     css = ".owner { --local-space: 12px; color: VaR(--local-space); }"
     result = run(css)
