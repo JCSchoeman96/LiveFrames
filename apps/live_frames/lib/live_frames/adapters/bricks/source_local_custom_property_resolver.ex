@@ -160,6 +160,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp resolve_reference(_reference, _index, _owner_source_id, _provenance_identity),
     do: {:error, :cross_owner_reference}
 
+  # Absolute path depth is uncapped. Path complexity counts structural components:
+  # each reference may hash its path for up to H ancestor lookups and scan one prefix.
   defp resolve_target(local_name, target_path, by_name_and_path, same_name_trie) do
     reversed_path = Enum.reverse(target_path)
 

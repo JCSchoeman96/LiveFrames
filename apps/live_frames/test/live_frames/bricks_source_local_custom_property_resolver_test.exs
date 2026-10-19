@@ -220,6 +220,18 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
     assert Enum.all?(results, &(&1 == {:ok, "12px"}))
   end
 
+  test "allows long absolute paths while enforcing relative ancestry distance" do
+    target_path = Enum.to_list(1..2_000)
+    depth_64_ancestor = Enum.take(target_path, 2_000 - 64)
+    definitions = [definition("--local-name", "12px", depth_64_ancestor)]
+    references = for _index <- 1..1_024, do: reference("--local-name", target_path)
+
+    assert {:ok, results} = resolve(definitions, references)
+
+    assert length(results) == 1_024
+    assert Enum.all?(results, &(&1 == {:ok, "12px"}))
+  end
+
   test "rejects terminal text above 4096 bytes" do
     terminal_at_limit = String.duplicate("x", 4096)
     definition_record = definition("--local-name", String.duplicate("x", 4097), [1])
