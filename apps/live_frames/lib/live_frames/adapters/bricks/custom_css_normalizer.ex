@@ -3,6 +3,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   alias LiveFrames.Adapters.Bricks.CustomCssParser
   alias LiveFrames.Adapters.Bricks.Diagnostic
+  alias LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver
   alias LiveFrames.Adapters.Bricks.TransientStyleState
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.IR.ResponsiveOverride
@@ -17,14 +18,16 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   )
 
   @grid_gap_multiply_expression ~r/^calc\s*\(\s*var\s*\(\s*--grid-gap\s*\)\s*\*\s*(\d+(?:\.\d+)?|\.\d+)\s*\)$/i
-  @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/
+  @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/i
   @unsafe_value_fragments ["url(", "expression(", "javascript:", "behavior:", "-moz-binding"]
+  @max_effective_layer_css_bytes 65_536
 
   @type owner :: %{
           required(:source_id) => String.t(),
           required(:value) => String.t(),
           required(:provenance) => map(),
-          optional(:source_key) => String.t()
+          optional(:source_key) => String.t(),
+          optional(:viewport_scope) => :base | {:responsive_source_key, String.t()}
         }
 
   @type node_context :: %{
@@ -92,6 +95,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       responsive_by_source_id: %{},
       custom_css_by_source_id: %{},
       residuals_by_source_id: %{},
+      responsive_custom_css_by_source_id: %{},
+      responsive_source_keys_by_source_id: %{},
       diagnostics: []
     }
   end
@@ -108,7 +113,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     scope_ids = owner_scope(source_id, children_by_source_id)
     scope_nodes = Map.take(nodes, MapSet.to_list(scope_ids))
 
-    {frames, rejects, owner_sources} = collect_frames(source_owners, source_id)
+    {frames, rejects, processed_owners} = collect_frames(source_owners, source_id)
 
     if frames == [] and map_size(rejects) == 0 do
       result
@@ -116,12 +121,12 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       normalize_owner_frames(
         source_id,
         source_owners,
-        owner_sources,
         owner_node,
         scope_nodes,
         scope_ids,
         frames,
         rejects,
+        processed_owners,
         result,
         opts
       )
@@ -131,30 +136,74 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   defp normalize_owner_frames(
          source_id,
          source_owners,
-         owner_sources,
          owner_node,
          scope_nodes,
          scope_ids,
          frames,
          rejects,
+         processed_owners,
          result,
          opts
        ) do
+    {selector_selections, observed_local_names, definitions_by_provenance,
+     references_by_provenance} =
+      analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts)
+
+    {local_resolutions, resource_limited_provenances} =
+      resolve_local_batches(
+        source_id,
+        observed_local_names,
+        definitions_by_provenance,
+        references_by_provenance,
+        opts
+      )
+
+    residuals =
+      resource_failure_residuals(processed_owners, resource_limited_provenances, rejects)
+
     {base_candidates, responsive_candidates, state_candidates, residuals} =
-      Enum.reduce(frames, {[], [], [], rejects}, fn frame_entry,
-                                                    {base, responsive, states, residuals} ->
-        case normalize_frame(frame_entry, owner_node, scope_nodes, scope_ids, opts) do
+      Enum.reduce(frames, {[], [], [], residuals}, fn frame_entry,
+                                                      {base, responsive, states, residuals} ->
+        provenance_identity = effective_provenance_identity(frame_entry.provenance)
+
+        normalized_frame =
+          if MapSet.member?(resource_limited_provenances, provenance_identity) do
+            :skip
+          else
+            normalize_frame(
+              frame_entry,
+              owner_node,
+              opts,
+              selector_selections,
+              observed_local_names,
+              local_resolutions
+            )
+          end
+
+        case normalized_frame do
           {:ok, candidates} ->
             {
-              base ++ Enum.filter(candidates, &(is_nil(&1.viewport) and is_nil(&1.condition))),
+              base ++
+                Enum.filter(
+                  candidates,
+                  &(is_nil(&1.viewport) and not is_responsive_source_scope?(&1.viewport_scope) and
+                      is_nil(&1.condition))
+                ),
               responsive ++
-                Enum.filter(candidates, &(not is_nil(&1.viewport) and is_nil(&1.condition))),
+                Enum.filter(
+                  candidates,
+                  &((not is_nil(&1.viewport) or is_responsive_source_scope?(&1.viewport_scope)) and
+                      is_nil(&1.condition))
+                ),
               states ++ Enum.filter(candidates, & &1.condition),
               residuals
             }
 
           {:residual, residual} ->
             {base, responsive, states, Map.put(residuals, residual.rule_id, residual)}
+
+          :skip ->
+            {base, responsive, states, residuals}
         end
       end)
 
@@ -187,31 +236,65 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     result =
       add_responsive_styles(result, responsive_candidates, scope_nodes, source_id, owner_node)
 
+    result =
+      add_responsive_source_results(
+        result,
+        source_id,
+        processed_owners,
+        residuals,
+        source_owners,
+        owner_node
+      )
+
     residual_list =
       residuals
       |> Map.values()
       |> Enum.sort_by(&{&1.source_index, &1.source_order})
       |> Enum.map(&%{"reason" => &1.reason, "source_text" => &1.source_text})
 
+    base_source_owners =
+      Enum.filter(source_owners, &(Map.get(&1, :viewport_scope, :base) == :base))
+
+    base_residual_list =
+      residuals
+      |> Map.values()
+      |> Enum.filter(fn residual ->
+        owner = Enum.at(source_owners, residual.source_index)
+        is_map(owner) and Map.get(owner, :viewport_scope, :base) == :base
+      end)
+      |> Enum.sort_by(&{&1.source_index, &1.source_order})
+      |> Enum.map(&%{"reason" => &1.reason, "source_text" => &1.source_text})
+
     state_rules = build_state_rules(state_candidates)
-    source_key = source_owners |> List.first() |> Map.get(:source_key, "_cssCustom")
+
+    source_key =
+      case List.first(base_source_owners) do
+        nil -> "_cssCustom"
+        owner -> Map.get(owner, :source_key, "_cssCustom")
+      end
+
+    base_source_expression = Enum.map_join(base_source_owners, "\n", & &1.value)
 
     custom_css_value =
       cond do
         state_rules != [] ->
           StyleValue.complex_css(
-            %{"type" => "state_rules", "rules" => state_rules, "residual" => residual_list},
-            source_expression: Enum.map_join(owner_sources, "\n", & &1.value),
-            source_trace: custom_css_trace(owner_node, source_id, source_owners),
+            %{
+              "type" => "state_rules",
+              "rules" => state_rules,
+              "residual" => base_residual_list
+            },
+            source_expression: base_source_expression,
+            source_trace: custom_css_trace(owner_node, source_id, base_source_owners),
             metadata: %{"source_key" => source_key}
           )
 
-        residual_list != [] ->
+        base_residual_list != [] ->
           residual_rules =
             if base_candidates == [] and responsive_candidates == [] do
-              Enum.map(source_owners, &Map.get(&1, :value))
+              Enum.map(base_source_owners, &Map.get(&1, :value))
             else
-              Enum.map(residual_list, & &1["source_text"])
+              Enum.map(base_residual_list, & &1["source_text"])
             end
 
           StyleValue.complex_css(
@@ -221,8 +304,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
               "source_key" => source_key,
               "rules" => residual_rules
             },
-            source_expression: Enum.map_join(owner_sources, "\n", & &1.value),
-            source_trace: custom_css_trace(owner_node, source_id, source_owners),
+            source_expression: base_source_expression,
+            source_trace: custom_css_trace(owner_node, source_id, base_source_owners),
             metadata: %{"source_key" => source_key}
           )
 
@@ -242,31 +325,45 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   defp collect_frames(source_owners, source_id) do
     source_owners
     |> Enum.with_index()
-    |> Enum.reduce({[], %{}, []}, fn {owner, source_index}, {frames, rejects, accepted_owners} ->
+    |> Enum.reduce({[], %{}, []}, fn {owner, source_index}, {frames, rejects, processed_owners} ->
       source_text = Map.get(owner, :value)
       provenance = Map.get(owner, :provenance)
 
       if valid_effective_provenance?(source_id, provenance) and is_binary(source_text) and
            String.valid?(source_text) do
-        parsed = CustomCssParser.parse(source_text)
+        if byte_size(source_text) > @max_effective_layer_css_bytes do
+          residual = %{
+            rule_id: {source_index, 0},
+            source_index: source_index,
+            source_order: 0,
+            reason: "resource_limit_exceeded",
+            source_text: source_text
+          }
 
-        source_frames =
-          Enum.map(parsed.frames, fn frame ->
-            Map.merge(frame, %{
-              source_index: source_index,
-              source_key: Map.get(owner, :source_key, "_cssCustom"),
-              provenance: provenance,
-              aliases: TransientStyleState.resolve_aliases(source_text, provenance)
-            })
-          end)
+          {frames, Map.put(rejects, residual.rule_id, residual),
+           processed_owners ++ [{source_index, owner}]}
+        else
+          parsed = CustomCssParser.parse(source_text)
 
-        source_rejects =
-          Enum.reduce(parsed.rejects, rejects, fn reject, rejects ->
-            residual = parser_residual(reject, source_index)
-            Map.put(rejects, residual.rule_id, residual)
-          end)
+          source_frames =
+            Enum.map(parsed.frames, fn frame ->
+              Map.merge(frame, %{
+                source_index: source_index,
+                source_key: Map.get(owner, :source_key, "_cssCustom"),
+                provenance: provenance,
+                viewport_scope: Map.get(owner, :viewport_scope, :base),
+                aliases: TransientStyleState.resolve_aliases(source_text, provenance)
+              })
+            end)
 
-        {frames ++ source_frames, source_rejects, accepted_owners ++ [owner]}
+          source_rejects =
+            Enum.reduce(parsed.rejects, rejects, fn reject, rejects ->
+              residual = parser_residual(reject, source_index)
+              Map.put(rejects, residual.rule_id, residual)
+            end)
+
+          {frames ++ source_frames, source_rejects, processed_owners ++ [{source_index, owner}]}
+        end
       else
         residual = %{
           rule_id: {source_index, 0},
@@ -276,7 +373,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
           source_text: if(is_binary(source_text), do: source_text, else: "")
         }
 
-        {frames, Map.put(rejects, residual.rule_id, residual), accepted_owners}
+        {frames, Map.put(rejects, residual.rule_id, residual), processed_owners}
       end
     end)
   end
@@ -308,27 +405,299 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp valid_effective_provenance?(_source_id, _provenance), do: false
 
-  defp normalize_frame(frame, owner_node, scope_nodes, scope_ids, opts) do
+  defp analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts) do
+    Enum.reduce(frames, {%{}, %{}, %{}, %{}}, fn frame,
+                                                 {selections_by_rule, observed, definitions,
+                                                  references} ->
+      provenance_identity = effective_provenance_identity(frame.provenance)
+
+      local_names =
+        frame.declarations
+        |> Map.keys()
+        |> Enum.filter(&local_definition_name?/1)
+
+      observed =
+        if local_names == [] do
+          observed
+        else
+          Map.update(observed, provenance_identity, MapSet.new(local_names), fn names ->
+            Enum.reduce(local_names, names, &MapSet.put(&2, &1))
+          end)
+        end
+
+      selection_result =
+        resolve_selector(
+          frame.selector,
+          frame.aliases,
+          owner_node,
+          scope_nodes,
+          scope_ids,
+          Keyword.get(opts, :all_source_classes, MapSet.new())
+        )
+
+      selections_by_rule = Map.put(selections_by_rule, frame_rule_id(frame), selection_result)
+
+      case selection_result do
+        {:ok, selections} ->
+          Enum.reduce(selections, {selections_by_rule, observed, definitions, references}, fn
+            selection, {selections_by_rule, observed, definitions, references} ->
+              Enum.reduce(
+                selection.targets,
+                {selections_by_rule, observed, definitions, references},
+                fn
+                  target, {selections_by_rule, observed, definitions, references} ->
+                    Enum.reduce(
+                      frame.declarations,
+                      {selections_by_rule, observed, definitions, references},
+                      fn
+                        {property, value},
+                        {selections_by_rule, observed, definitions, references} ->
+                          cond do
+                            local_definition_name?(property) ->
+                              record =
+                                local_record(
+                                  :definition,
+                                  frame,
+                                  selection,
+                                  target,
+                                  property,
+                                  value,
+                                  provenance_identity
+                                )
+
+                              definitions =
+                                Map.update(
+                                  definitions,
+                                  provenance_identity,
+                                  [record],
+                                  &(&1 ++ [record])
+                                )
+
+                              {selections_by_rule, observed, definitions, references}
+
+                            true ->
+                              case direct_variable_name(value) do
+                                nil ->
+                                  {selections_by_rule, observed, definitions, references}
+
+                                local_name ->
+                                  reference_id =
+                                    {frame_rule_id(frame), target.source_id,
+                                     selection.selector_identity, property}
+
+                                  record =
+                                    local_record(
+                                      :reference,
+                                      frame,
+                                      selection,
+                                      target,
+                                      local_name,
+                                      nil,
+                                      provenance_identity
+                                    )
+
+                                  references =
+                                    Map.update(
+                                      references,
+                                      provenance_identity,
+                                      [{reference_id, record}],
+                                      &(&1 ++ [{reference_id, record}])
+                                    )
+
+                                  {selections_by_rule, observed, definitions, references}
+                              end
+                          end
+                      end
+                    )
+                end
+              )
+          end)
+
+        {:error, _reason} ->
+          {selections_by_rule, observed, definitions, references}
+      end
+    end)
+  end
+
+  defp local_record(
+         kind,
+         frame,
+         selection,
+         target,
+         local_name,
+         terminal_text,
+         provenance_identity
+       ) do
+    %{
+      owner_source_id: Map.get(frame.provenance, :source_id),
+      effective_provenance_identity: provenance_identity,
+      target_source_id: target.source_id,
+      target_path: target.path,
+      selector_identity: selection.selector_identity,
+      viewport_scope: frame.viewport_scope,
+      state_scope: selection.condition,
+      source_order: frame.source_order,
+      local_name: local_name,
+      record_kind: kind,
+      terminal_text: terminal_text
+    }
+  end
+
+  defp resolve_local_batches(
+         owner_source_id,
+         observed_local_names,
+         definitions_by_provenance,
+         references_by_provenance,
+         opts
+       ) do
+    batch_identities =
+      (Map.keys(observed_local_names) ++ Map.keys(definitions_by_provenance))
+      |> Enum.uniq()
+
+    Enum.reduce(batch_identities, {%{}, MapSet.new()}, fn provenance_identity,
+                                                          {resolutions, resource_limited} ->
+      local_names = Map.get(observed_local_names, provenance_identity, MapSet.new())
+      definitions = Map.get(definitions_by_provenance, provenance_identity, [])
+
+      references =
+        references_by_provenance
+        |> Map.get(provenance_identity, [])
+        |> Enum.filter(fn {_reference_id, record} ->
+          MapSet.member?(local_names, Map.get(record, :local_name))
+        end)
+
+      reference_records = Enum.map(references, &elem(&1, 1))
+
+      case SourceLocalCustomPropertyResolver.resolve(definitions, reference_records,
+             owner_source_id: owner_source_id,
+             effective_provenance_identity: provenance_identity,
+             authority_index: Keyword.get(opts, :authority_index, %VariableAuthority{})
+           ) do
+        {:ok, reference_results} ->
+          next_resolutions =
+            Enum.zip(references, reference_results)
+            |> Enum.reduce(resolutions, fn {{reference_id, _record}, resolution}, resolutions ->
+              Map.put(resolutions, {provenance_identity, reference_id}, resolution)
+            end)
+
+          {next_resolutions, resource_limited}
+
+        {:error, :resource_limit_exceeded} ->
+          {resolutions, MapSet.put(resource_limited, provenance_identity)}
+      end
+    end)
+  end
+
+  defp effective_provenance_identity(provenance) do
+    {
+      Map.get(provenance, :source_id),
+      Map.get(provenance, :origin),
+      Map.get(provenance, :class_id),
+      Map.get(provenance, :resolution_source),
+      Map.get(provenance, :authority_ids),
+      Map.get(provenance, :class_reference_index)
+    }
+  end
+
+  defp local_definition_name?(property) when is_binary(property),
+    do: CSSDeclaration.safe_property?(property) and String.starts_with?(property, "--")
+
+  defp local_definition_name?(_property), do: false
+
+  defp direct_variable_name(value) when is_binary(value) do
+    case Regex.run(@direct_variable_expression, String.trim(value)) do
+      [_, local_name] -> local_name
+      _ -> nil
+    end
+  end
+
+  defp direct_variable_name(_value), do: nil
+
+  defp frame_rule_id(frame), do: {frame.source_index, frame.source_order}
+
+  defp residual_for(frame, reason) do
+    %{
+      rule_id: frame_rule_id(frame),
+      source_index: frame.source_index,
+      source_order: frame.source_order,
+      reason: reason,
+      source_text: frame.raw
+    }
+  end
+
+  defp normalize_frame(
+         frame,
+         owner_node,
+         opts,
+         selections_by_rule,
+         observed_local_names,
+         local_resolutions
+       ) do
     rule_id = {frame.source_index, frame.source_order}
-    all_source_classes = Keyword.get(opts, :all_source_classes, MapSet.new())
 
-    with {:ok, selections} <-
-           resolve_selector(
-             frame.selector,
-             frame.aliases,
-             owner_node,
-             scope_nodes,
-             scope_ids,
-             all_source_classes
-           ),
-         {:ok, declarations} <- normalize_declarations(frame.declarations, opts) do
-      viewport = viewport(frame.min_width, frame.max_width)
+    case Map.get(selections_by_rule, rule_id) do
+      {:error, reason} ->
+        {:residual, residual_for(frame, reason)}
 
-      candidates =
-        Enum.flat_map(selections, fn %{targets: targets, condition: condition} ->
-          Enum.map(targets, fn target ->
-            %{
-              rule_id: rule_id,
+      {:ok, selections} ->
+        viewport = viewport(frame.min_width, frame.max_width)
+
+        cond do
+          not valid_viewport_scope?(frame.viewport_scope) ->
+            {:residual, residual_for(frame, "unsupported_scope")}
+
+          is_responsive_source_scope?(frame.viewport_scope) and not is_nil(viewport) ->
+            {:residual, residual_for(frame, "unsupported_scope")}
+
+          is_responsive_source_scope?(frame.viewport_scope) and
+              Enum.any?(selections, &(not is_nil(&1.condition))) ->
+            {:residual, residual_for(frame, "unsupported_scope")}
+
+          true ->
+            normalize_frame_targets(
+              frame,
+              selections,
+              viewport,
+              owner_node,
+              opts,
+              observed_local_names,
+              local_resolutions
+            )
+        end
+    end
+  end
+
+  defp normalize_frame_targets(
+         frame,
+         selections,
+         viewport,
+         owner_node,
+         opts,
+         observed_local_names,
+         local_resolutions
+       ) do
+    provenance_identity = effective_provenance_identity(frame.provenance)
+
+    selections
+    |> Enum.reduce_while({:ok, []}, fn selection, {:ok, candidates} ->
+      Enum.reduce_while(selection.targets, {:ok, candidates}, fn target, {:ok, candidates} ->
+        case normalize_declarations_for_target(
+               frame,
+               selection,
+               target,
+               opts,
+               Map.get(observed_local_names, provenance_identity, MapSet.new()),
+               local_resolutions
+             ) do
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+
+          {:ok, declarations} when map_size(declarations) == 0 ->
+            {:cont, {:ok, candidates}}
+
+          {:ok, declarations} ->
+            candidate = %{
+              rule_id: frame_rule_id(frame),
               source_index: frame.source_index,
               source_order: frame.source_order,
               target_source_id: target.source_id,
@@ -336,26 +705,25 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
               target_path: target.path,
               declarations: declarations,
               viewport: viewport,
-              condition: condition,
+              viewport_scope: frame.viewport_scope,
+              condition: selection.condition,
               source_text: frame.raw,
               source_key: frame.source_key,
               provenance: frame.provenance,
               owner_source_id: owner_node.source_id
             }
-          end)
-        end)
 
-      {:ok, candidates}
-    else
-      {:error, reason} ->
-        {:residual,
-         %{
-           rule_id: rule_id,
-           source_index: frame.source_index,
-           source_order: frame.source_order,
-           reason: reason,
-           source_text: frame.raw
-         }}
+            {:cont, {:ok, candidates ++ [candidate]}}
+        end
+      end)
+      |> case do
+        {:ok, candidates} -> {:cont, {:ok, candidates}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, candidates} -> {:ok, candidates}
+      {:error, reason} -> {:residual, residual_for(frame, reason)}
     end
   end
 
@@ -373,7 +741,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                matching_targets(compounds, condition, owner_node, scope_nodes, scope_ids) do
           selection = %{
             targets: Enum.uniq_by(group_targets, & &1.source_id),
-            condition: condition
+            condition: condition,
+            selector_identity: selector_identity(compounds, condition)
           }
 
           {:cont, {:ok, selections ++ [selection]}}
@@ -392,6 +761,15 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
           error
       end
     end
+  end
+
+  defp selector_identity(compounds, condition) do
+    compounds =
+      Enum.map(compounds, fn compound ->
+        {compound.classes |> Enum.uniq() |> Enum.sort(), compound.marker}
+      end)
+
+    {compounds, condition}
   end
 
   defp parse_selector_group(selector, aliases) do
@@ -574,21 +952,81 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   defp descendant_or_self?(_owner_id, target_id, scope_ids),
     do: MapSet.member?(scope_ids, target_id)
 
-  defp normalize_declarations(declarations, opts)
-       when is_map(declarations) and map_size(declarations) > 0 do
+  defp normalize_declarations_for_target(
+         frame,
+         selection,
+         target,
+         opts,
+         observed_local_names,
+         local_resolutions
+       ) do
+    provenance_identity = effective_provenance_identity(frame.provenance)
+
+    declarations = frame.declarations
+
     declarations
     |> Enum.sort_by(&elem(&1, 0))
     |> Enum.reduce_while({:ok, %{}}, fn {property, value}, {:ok, normalized} ->
-      case normalize_declaration(property, value, opts) do
-        {:ok, tagged} -> {:cont, {:ok, Map.put(normalized, property, tagged)}}
-        {:error, reason} -> {:halt, {:error, reason}}
+      cond do
+        local_definition_name?(property) ->
+          {:cont, {:ok, normalized}}
+
+        true ->
+          case normalize_target_declaration(
+                 frame,
+                 selection,
+                 target,
+                 property,
+                 value,
+                 provenance_identity,
+                 opts,
+                 observed_local_names,
+                 local_resolutions
+               ) do
+            {:ok, tagged} -> {:cont, {:ok, Map.put(normalized, property, tagged)}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
       end
     end)
   end
 
-  defp normalize_declarations(_declarations, _opts), do: {:error, "unsupported_declaration"}
+  defp normalize_target_declaration(
+         frame,
+         selection,
+         target,
+         property,
+         value,
+         provenance_identity,
+         opts,
+         observed_local_names,
+         local_resolutions
+       ) do
+    case direct_variable_name(value) do
+      nil ->
+        normalize_declaration(property, value, opts)
 
-  defp normalize_declaration(property, value, opts)
+      local_name when is_struct(observed_local_names, MapSet) ->
+        if MapSet.member?(observed_local_names, local_name) do
+          reference_id =
+            {frame_rule_id(frame), target.source_id, selection.selector_identity, property}
+
+          case Map.get(local_resolutions, {provenance_identity, reference_id}) do
+            {:ok, terminal_text} ->
+              normalize_declaration(property, terminal_text, opts, :source_resolver)
+
+            _resolution_error ->
+              {:error, "unresolved_value"}
+          end
+        else
+          normalize_declaration(property, value, opts)
+        end
+    end
+  end
+
+  defp normalize_declaration(property, value, opts),
+    do: normalize_declaration(property, value, opts, :ir)
+
+  defp normalize_declaration(property, value, opts, origin)
        when is_binary(property) and is_binary(value) do
     lowered = String.downcase(value)
 
@@ -599,7 +1037,10 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       not CSSDeclaration.safe_property?(property) or property == "custom-css" ->
         {:error, "unsupported_declaration"}
 
-      not match?({:ok, _}, CSSDeclaration.normalize(%{property: property, value: value}, :ir)) ->
+      not match?(
+        {:ok, _},
+        CSSDeclaration.normalize(%{property: property, value: value}, origin)
+      ) ->
         {:error, "unsafe_declaration"}
 
       true ->
@@ -607,7 +1048,118 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     end
   end
 
-  defp normalize_declaration(_property, _value, _opts), do: {:error, "unsupported_declaration"}
+  defp normalize_declaration(_property, _value, _opts, _origin),
+    do: {:error, "unsupported_declaration"}
+
+  defp resource_failure_residuals(processed_owners, resource_limited_provenances, rejects) do
+    failed_owners =
+      Enum.filter(processed_owners, fn {_source_index, owner} ->
+        MapSet.member?(
+          resource_limited_provenances,
+          effective_provenance_identity(Map.get(owner, :provenance))
+        )
+      end)
+
+    failed_source_indexes = MapSet.new(failed_owners, &elem(&1, 0))
+
+    rejects =
+      rejects
+      |> Enum.reject(fn {_rule_id, residual} ->
+        MapSet.member?(failed_source_indexes, residual.source_index)
+      end)
+      |> Map.new()
+
+    Enum.reduce(failed_owners, rejects, fn {source_index, owner}, residuals ->
+      residual = %{
+        rule_id: {source_index, -1},
+        source_index: source_index,
+        source_order: -1,
+        reason: "resource_limit_exceeded",
+        source_text: Map.get(owner, :value)
+      }
+
+      Map.put(residuals, residual.rule_id, residual)
+    end)
+  end
+
+  defp add_responsive_source_results(
+         result,
+         source_id,
+         processed_owners,
+         residuals,
+         source_owners,
+         owner_node
+       ) do
+    responsive_owners =
+      processed_owners
+      |> Enum.filter(fn {_source_index, owner} ->
+        is_responsive_source_scope?(Map.get(owner, :viewport_scope))
+      end)
+      |> Enum.map(&elem(&1, 1))
+
+    source_keys =
+      responsive_owners
+      |> Enum.map(&Map.get(&1, :source_key, "_cssCustom"))
+      |> MapSet.new()
+
+    residual_custom_css =
+      residuals
+      |> Map.values()
+      |> Enum.reduce(%{}, fn residual, by_source_key ->
+        owner = Enum.at(source_owners, residual.source_index)
+
+        if is_map(owner) and is_responsive_source_scope?(Map.get(owner, :viewport_scope)) do
+          source_key = Map.get(owner, :source_key, "_cssCustom")
+
+          Map.update(by_source_key, source_key, [residual.source_text], fn rules ->
+            rules ++ [residual.source_text]
+          end)
+        else
+          by_source_key
+        end
+      end)
+      |> Map.new(fn {source_key, rules} ->
+        owner =
+          Enum.find(source_owners, fn owner ->
+            Map.get(owner, :source_key, "_cssCustom") == source_key and
+              is_responsive_source_scope?(Map.get(owner, :viewport_scope))
+          end)
+
+        {source_key,
+         StyleValue.complex_css(
+           %{
+             "type" => "custom_css",
+             "property" => "custom-css",
+             "source_key" => source_key,
+             "rules" => rules
+           },
+           source_expression: owner.value,
+           source_trace:
+             responsive_custom_css_trace(owner_node, source_key) ||
+               custom_css_trace(owner_node, source_id, [owner]),
+           metadata: %{"source_key" => source_key}
+         )}
+      end)
+
+    result
+    |> Map.update!(:responsive_source_keys_by_source_id, &Map.put(&1, source_id, source_keys))
+    |> Map.update!(
+      :responsive_custom_css_by_source_id,
+      &Map.put(&1, source_id, residual_custom_css)
+    )
+  end
+
+  defp valid_viewport_scope?(:base), do: true
+
+  defp valid_viewport_scope?({:responsive_source_key, source_key}),
+    do: non_empty_string?(source_key)
+
+  defp valid_viewport_scope?(_viewport_scope), do: false
+
+  defp is_responsive_source_scope?({:responsive_source_key, source_key}),
+    do: is_binary(source_key)
+
+  defp is_responsive_source_scope?(_viewport_scope), do: false
 
   defp normalize_declaration_value(property, value, opts) do
     cond do
@@ -691,6 +1243,56 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     end
   end
 
+  defp responsive_candidate_key(candidate, node) do
+    if is_responsive_source_scope?(candidate.viewport_scope) do
+      case matching_source_custom_css_override(node, candidate.source_key) do
+        {key, _override} -> key
+        nil -> candidate.source_key
+      end
+    else
+      responsive_key(candidate.viewport)
+    end
+  end
+
+  defp matching_source_custom_css_override(node, source_key) do
+    node
+    |> Map.get(:responsive, %{})
+    |> Enum.find(fn {_key, override} ->
+      custom_css_source_key(override) == source_key
+    end)
+  end
+
+  defp custom_css_source_key(override) do
+    case Map.get(Map.get(override, :styles, %{}), "custom-css") do
+      %StyleValue{metadata: metadata} -> Map.get(metadata, "source_key")
+      _style -> nil
+    end
+  end
+
+  defp responsive_custom_css_trace(node, source_key) do
+    case matching_source_custom_css_override(node, source_key) do
+      {_key, override} ->
+        case Map.get(Map.get(override, :styles, %{}), "custom-css") do
+          %StyleValue{source_trace: %SourceTrace{} = source_trace} -> source_trace
+          _style -> nil
+        end
+
+      nil ->
+        nil
+    end
+  end
+
+  defp responsive_candidates_overlap?(left, right) do
+    cond do
+      is_responsive_source_scope?(left.viewport_scope) or
+          is_responsive_source_scope?(right.viewport_scope) ->
+        left.viewport_scope == right.viewport_scope
+
+      true ->
+        interval_overlap?(left.viewport, right.viewport)
+    end
+  end
+
   defp preflight_base(base_candidates, responsive_candidates, residuals, scope_nodes) do
     existing_collisions =
       Enum.flat_map(base_candidates, fn candidate ->
@@ -720,22 +1322,39 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     key_collisions =
       Enum.flat_map(candidates, fn candidate ->
         node = Map.fetch!(scope_nodes, candidate.target_source_id)
-        key = responsive_key(candidate.viewport)
+        key = responsive_candidate_key(candidate, node)
+        source_override = matching_source_custom_css_override(node, candidate.source_key)
 
-        existing_key? = Map.has_key?(Map.get(node, :responsive, %{}), key)
+        existing_key? =
+          Map.has_key?(Map.get(node, :responsive, %{}), key) and
+            is_nil(source_override)
 
         existing_property_collision? =
-          Enum.any?(Map.get(node, :responsive, %{}), fn {_existing_key, override} ->
-            override_interval = %{
-              min_width: Map.get(override, :min_width),
-              max_width: Map.get(override, :max_width)
-            }
+          if is_responsive_source_scope?(candidate.viewport_scope) do
+            case source_override do
+              {_key, override} ->
+                existing_styles = Map.delete(Map.get(override, :styles, %{}), "custom-css")
 
-            interval_overlap?(candidate.viewport, override_interval) and
-              Enum.any?(candidate.declarations, fn {property, _tagged} ->
-                Map.has_key?(Map.get(override, :styles, %{}), property)
-              end)
-          end)
+                Enum.any?(candidate.declarations, fn {property, _tagged} ->
+                  Map.has_key?(existing_styles, property)
+                end)
+
+              nil ->
+                false
+            end
+          else
+            Enum.any?(Map.get(node, :responsive, %{}), fn {_existing_key, override} ->
+              override_interval = %{
+                min_width: Map.get(override, :min_width),
+                max_width: Map.get(override, :max_width)
+              }
+
+              interval_overlap?(candidate.viewport, override_interval) and
+                Enum.any?(candidate.declarations, fn {property, _tagged} ->
+                  Map.has_key?(Map.get(override, :styles, %{}), property)
+                end)
+            end)
+          end
 
         custom_key? =
           opts
@@ -794,7 +1413,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       |> Enum.drop(index + 1)
       |> Enum.flat_map(fn right ->
         if left.target_source_id == right.target_source_id and
-             interval_overlap?(left.viewport, right.viewport) do
+             responsive_candidates_overlap?(left, right) do
           Enum.flat_map(left.declarations, fn {property, left_value} ->
             case Map.fetch(right.declarations, property) do
               {:ok, right_value} when left_value != right_value ->
@@ -852,6 +1471,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       duplicate? =
         Enum.any?(deduped, fn prior ->
           prior.target_source_id == candidate.target_source_id and
+            prior.viewport_scope == candidate.viewport_scope and
             prior.viewport == candidate.viewport and
             prior.declarations == candidate.declarations
         end)
@@ -883,7 +1503,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     |> Enum.sort_by(&{&1.source_index, &1.source_order, &1.target_path})
     |> Enum.reduce(result, fn candidate, result ->
       node = Map.fetch!(scope_nodes, candidate.target_source_id)
-      key = responsive_key(candidate.viewport)
+      key = responsive_candidate_key(candidate, node)
       trace = declaration_trace(owner_node, candidate, owner_source_id)
 
       styles =
@@ -891,15 +1511,29 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
           Map.put(styles, property, style_value(tagged, trace, candidate.source_text))
         end)
 
-      override = %ResponsiveOverride{
-        breakpoint_id: key,
-        source_name: key,
-        min_width: candidate.viewport.min_width,
-        max_width: candidate.viewport.max_width,
-        resolution_status: :resolved,
-        styles: styles,
-        source_trace: trace
-      }
+      override =
+        case matching_source_custom_css_override(node, candidate.source_key) do
+          {^key, existing} ->
+            %{
+              existing
+              | resolution_status:
+                  if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
+                styles:
+                  Map.merge(Map.delete(Map.get(existing, :styles, %{}), "custom-css"), styles),
+                source_trace: trace
+            }
+
+          _no_source_override ->
+            %ResponsiveOverride{
+              breakpoint_id: key,
+              source_name: key,
+              min_width: candidate.viewport && candidate.viewport.min_width,
+              max_width: candidate.viewport && candidate.viewport.max_width,
+              resolution_status: if(is_nil(candidate.viewport), do: :unresolved, else: :resolved),
+              styles: styles,
+              source_trace: trace
+            }
+        end
 
       Map.update!(result, :responsive_by_source_id, fn by_source ->
         Map.update(by_source, node.source_id, %{key => override}, fn current ->
@@ -1137,6 +1771,10 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
     residuals
     |> Map.values()
     |> Enum.sort_by(&{&1.source_index, &1.source_order})
+    |> Enum.reject(fn residual ->
+      owner = Enum.at(source_owners, residual.source_index)
+      duplicate_responsive_residual?(owner_node, owner, residual)
+    end)
     |> Enum.map(fn residual ->
       owner = Enum.at(source_owners, residual.source_index)
       provenance = if is_map(owner), do: Map.get(owner, :provenance, %{}), else: %{}
@@ -1153,6 +1791,34 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       )
     end)
   end
+
+  defp duplicate_responsive_residual?(owner_node, owner, residual) when is_map(owner) do
+    case Map.get(owner, :viewport_scope) do
+      {:responsive_source_key, source_key} when is_binary(source_key) ->
+        source_text = Map.get(owner, :value)
+
+        if Map.get(residual, :reason) == "unsupported_selector" and
+             is_binary(source_text) and Map.get(residual, :source_text) == source_text do
+          case matching_source_custom_css_override(owner_node, source_key) do
+            {_breakpoint, override} ->
+              case Map.get(Map.get(override, :styles, %{}), "custom-css") do
+                %StyleValue{source_expression: ^source_text} -> true
+                _style -> false
+              end
+
+            nil ->
+              false
+          end
+        else
+          false
+        end
+
+      _scope ->
+        false
+    end
+  end
+
+  defp duplicate_responsive_residual?(_owner_node, _owner, _residual), do: false
 
   defp add_unresolved_owner(result, source_id, source_owners) do
     residuals =
