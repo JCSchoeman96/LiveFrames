@@ -154,13 +154,26 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     )
   end
 
-  defp normalize_tree(css, nodes, children_by_source_id) do
+  defp normalize_tree(css, nodes, children_by_source_id, opts \\ []) do
     CustomCssNormalizer.normalize(
       [owner(css)],
       nodes,
       children_by_source_id,
-      MapSet.new()
+      MapSet.new(),
+      opts
     )
+  end
+
+  defp wide_tree(target_count) do
+    children = Enum.map(1..target_count, &"child-#{&1}")
+
+    nodes =
+      Enum.reduce(Enum.with_index(children, 2), %{@owner => node(@owner, ["owner"], [1])}, fn
+        {child_id, index}, nodes ->
+          Map.put(nodes, child_id, node(child_id, ["child"], [1, index], parent_id: @owner))
+      end)
+
+    {nodes, %{@owner => children}}
   end
 
   test "relocates a safe conditionless rule to its target node" do
@@ -922,6 +935,70 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
              result.diagnostics,
              &(&1.code == "bricks.custom_css.resource_limit_exceeded")
            )
+  end
+
+  test "reference fan-out stops local record work at the first excess reference" do
+    css =
+      ".owner { --local-space: teal; }\n" <>
+        ".owner .child { color: var(--local-space); }"
+
+    {nodes, children_by_source_id} = wide_tree(4_096)
+    authority_index = variable_authority("--local-space", "spacing.content_gap")
+    reductions_before = elem(Process.info(self(), :reductions), 1)
+
+    result =
+      normalize_tree(css, nodes, children_by_source_id, authority_index: authority_index)
+
+    reductions_after = elem(Process.info(self(), :reductions), 1)
+
+    assert reductions_after - reductions_before < 900_000
+    assert result.styles_by_source_id == %{}
+    assert result.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "resource_limit_exceeded", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+  end
+
+  test "definition fan-out stops local record work at the first excess definition" do
+    css = ".owner .child { --local-space: teal; }"
+    {nodes, children_by_source_id} = wide_tree(4_096)
+    reductions_before = elem(Process.info(self(), :reductions), 1)
+
+    result = normalize_tree(css, nodes, children_by_source_id)
+
+    reductions_after = elem(Process.info(self(), :reductions), 1)
+
+    assert reductions_after - reductions_before < 700_000
+    assert result.styles_by_source_id == %{}
+    assert result.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "resource_limit_exceeded", "source_text" => ^css}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "parser media definitions stay unsupported when selector fan-out exceeds the definition limit" do
+    rule = ".owner .child { --local-space: teal; }"
+    css = "@media (min-width: 767px) { " <> rule <> " }"
+    {nodes, children_by_source_id} = wide_tree(257)
+
+    result = normalize_tree(css, nodes, children_by_source_id)
+
+    assert [%{"reason" => "unsupported_scope", "source_text" => ^rule}] =
+             result.residuals_by_source_id[@owner]
+  end
+
+  test "state definitions stay unsupported when selector fan-out exceeds the definition limit" do
+    rule = ".owner:hover .child { --local-space: teal; }"
+    {nodes, children_by_source_id} = wide_tree(257)
+
+    result = normalize_tree(rule, nodes, children_by_source_id)
+
+    assert [%{"reason" => "unsupported_scope", "source_text" => ^rule}] =
+             result.residuals_by_source_id[@owner]
   end
 
   test "preserves malformed framing as one inert residual" do

@@ -206,7 +206,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp eligible_definition?(record, local_name, target_path, owner_source_id, provenance_identity) do
     is_map(record) and record_kind(record) == :definition and valid_local_name?(local_name) and
       is_list(target_path) and
-      is_nil(Map.get(record, :parser_media_scope)) and is_nil(Map.get(record, :state_scope)) and
+      is_nil(Map.get(record, :state_scope)) and
       supported_definition_viewport_scope?(Map.get(record, :viewport_scope)) and
       trusted_scope?(record, owner_source_id, provenance_identity)
   end

@@ -21,6 +21,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/
   @unsafe_value_fragments ["url(", "expression(", "javascript:", "behavior:", "-moz-binding"]
   @max_effective_layer_css_bytes 65_536
+  @max_local_definitions 256
+  @max_local_references 1_024
 
   @type owner :: %{
           required(:source_id) => String.t(),
@@ -146,17 +148,21 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          opts
        ) do
     {selector_selections, observed_local_names, definitions_by_provenance,
-     references_by_provenance} =
+     references_by_provenance, record_limited_provenances} =
       analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts)
 
-    {local_resolutions, resource_limited_provenances} =
+    {local_resolutions, resolver_limited_provenances} =
       resolve_local_batches(
         source_id,
         observed_local_names,
         definitions_by_provenance,
         references_by_provenance,
-        opts
+        opts,
+        record_limited_provenances
       )
+
+    resource_limited_provenances =
+      MapSet.union(record_limited_provenances, resolver_limited_provenances)
 
     residuals =
       resource_failure_residuals(processed_owners, resource_limited_provenances, rejects)
@@ -408,116 +414,273 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   defp valid_effective_provenance?(_source_id, _provenance), do: false
 
   defp analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts) do
-    Enum.reduce(frames, {%{}, %{}, %{}, %{}}, fn frame,
-                                                 {selections_by_rule, observed, definitions,
-                                                  references} ->
-      provenance_identity = effective_provenance_identity(frame.provenance)
+    observed_local_names = observed_local_definition_names(frames)
 
+    {selections_by_rule, record_batches, resource_limited} =
+      Enum.reduce(frames, {%{}, %{}, MapSet.new()}, fn frame,
+                                                       {selections_by_rule, record_batches,
+                                                        resource_limited} ->
+        provenance_identity = effective_provenance_identity(frame.provenance)
+
+        if MapSet.member?(resource_limited, provenance_identity) do
+          {selections_by_rule, record_batches, resource_limited}
+        else
+          selection_result =
+            resolve_selector(
+              frame.selector,
+              frame.aliases,
+              owner_node,
+              scope_nodes,
+              scope_ids,
+              Keyword.get(opts, :all_source_classes, MapSet.new())
+            )
+
+          case selection_result do
+            {:ok, selections} ->
+              case collect_local_records(
+                     frame,
+                     selections,
+                     provenance_identity,
+                     Map.get(observed_local_names, provenance_identity, MapSet.new()),
+                     record_batches,
+                     resource_limited
+                   ) do
+                {:ok, record_batches, resource_limited} ->
+                  {
+                    Map.put(selections_by_rule, frame_rule_id(frame), selection_result),
+                    record_batches,
+                    resource_limited
+                  }
+
+                {:overflow, record_batches, resource_limited} ->
+                  {selections_by_rule, record_batches, resource_limited}
+              end
+
+            {:error, _reason} ->
+              {
+                Map.put(selections_by_rule, frame_rule_id(frame), selection_result),
+                record_batches,
+                resource_limited
+              }
+          end
+        end
+      end)
+
+    {definitions_by_provenance, references_by_provenance} =
+      finalize_local_record_batches(record_batches)
+
+    {selections_by_rule, observed_local_names, definitions_by_provenance,
+     references_by_provenance, resource_limited}
+  end
+
+  defp observed_local_definition_names(frames) do
+    Enum.reduce(frames, %{}, fn frame, observed ->
       local_names =
         frame.declarations
         |> Map.keys()
         |> Enum.filter(&local_definition_name?/1)
 
-      observed =
-        if local_names == [] do
-          observed
-        else
-          Map.update(observed, provenance_identity, MapSet.new(local_names), fn names ->
-            Enum.reduce(local_names, names, &MapSet.put(&2, &1))
-          end)
-        end
+      if local_names == [] do
+        observed
+      else
+        Map.update(
+          observed,
+          effective_provenance_identity(frame.provenance),
+          MapSet.new(local_names),
+          fn names -> Enum.reduce(local_names, names, &MapSet.put(&2, &1)) end
+        )
+      end
+    end)
+  end
 
-      selection_result =
-        resolve_selector(
-          frame.selector,
-          frame.aliases,
-          owner_node,
-          scope_nodes,
-          scope_ids,
-          Keyword.get(opts, :all_source_classes, MapSet.new())
+  defp collect_local_records(
+         frame,
+         selections,
+         provenance_identity,
+         observed_local_names,
+         record_batches,
+         resource_limited
+       ) do
+    Enum.reduce_while(selections, {:ok, record_batches, resource_limited}, fn selection,
+                                                                              {:ok, batches,
+                                                                               limited} ->
+      case collect_selection_local_records(
+             frame,
+             selection,
+             provenance_identity,
+             observed_local_names,
+             batches,
+             limited
+           ) do
+        {:ok, batches, limited} -> {:cont, {:ok, batches, limited}}
+        {:overflow, batches, limited} -> {:halt, {:overflow, batches, limited}}
+      end
+    end)
+  end
+
+  defp collect_selection_local_records(
+         frame,
+         selection,
+         provenance_identity,
+         observed_local_names,
+         record_batches,
+         resource_limited
+       ) do
+    Enum.reduce_while(selection.targets, {:ok, record_batches, resource_limited}, fn target,
+                                                                                     {:ok,
+                                                                                      batches,
+                                                                                      limited} ->
+      case collect_target_local_records(
+             frame,
+             selection,
+             target,
+             provenance_identity,
+             observed_local_names,
+             batches,
+             limited
+           ) do
+        {:ok, batches, limited} -> {:cont, {:ok, batches, limited}}
+        {:overflow, batches, limited} -> {:halt, {:overflow, batches, limited}}
+      end
+    end)
+  end
+
+  defp collect_target_local_records(
+         frame,
+         selection,
+         target,
+         provenance_identity,
+         observed_local_names,
+         record_batches,
+         resource_limited
+       ) do
+    Enum.reduce_while(frame.declarations, {:ok, record_batches, resource_limited}, fn
+      {property, value}, {:ok, batches, limited} ->
+        cond do
+          local_definition_name?(property) and resolver_definition_scope?(frame, selection) ->
+            append_local_record(
+              :definition,
+              frame,
+              selection,
+              target,
+              property,
+              value,
+              nil,
+              provenance_identity,
+              batches,
+              limited
+            )
+
+          local_definition_name?(property) ->
+            {:ok, batches, limited}
+
+          true ->
+            case direct_variable_name(value) do
+              local_name when is_binary(local_name) ->
+                if MapSet.member?(observed_local_names, local_name) do
+                  reference_id =
+                    {frame_rule_id(frame), target.source_id, selection.selector_identity,
+                     property}
+
+                  append_local_record(
+                    :reference,
+                    frame,
+                    selection,
+                    target,
+                    local_name,
+                    nil,
+                    reference_id,
+                    provenance_identity,
+                    batches,
+                    limited
+                  )
+                else
+                  {:ok, batches, limited}
+                end
+
+              nil ->
+                {:ok, batches, limited}
+            end
+        end
+        |> case do
+          {:ok, batches, limited} -> {:cont, {:ok, batches, limited}}
+          {:overflow, batches, limited} -> {:halt, {:overflow, batches, limited}}
+        end
+    end)
+  end
+
+  defp resolver_definition_scope?(frame, selection) do
+    is_nil(frame.min_width) and is_nil(frame.max_width) and is_nil(selection.condition)
+  end
+
+  defp append_local_record(
+         kind,
+         frame,
+         selection,
+         target,
+         local_name,
+         terminal_text,
+         reference_id,
+         provenance_identity,
+         record_batches,
+         resource_limited
+       ) do
+    batch =
+      Map.get(record_batches, provenance_identity, %{
+        definitions: [],
+        definition_count: 0,
+        references: [],
+        reference_count: 0
+      })
+
+    count_key = if kind == :definition, do: :definition_count, else: :reference_count
+    limit = if kind == :definition, do: @max_local_definitions, else: @max_local_references
+
+    if Map.fetch!(batch, count_key) >= limit do
+      {:overflow, Map.delete(record_batches, provenance_identity),
+       MapSet.put(resource_limited, provenance_identity)}
+    else
+      record =
+        local_record(
+          kind,
+          frame,
+          selection,
+          target,
+          local_name,
+          terminal_text,
+          provenance_identity
         )
 
-      selections_by_rule = Map.put(selections_by_rule, frame_rule_id(frame), selection_result)
+      updated_batch =
+        case kind do
+          :definition ->
+            %{
+              batch
+              | definitions: [record | batch.definitions],
+                definition_count: batch.definition_count + 1
+            }
 
-      case selection_result do
-        {:ok, selections} ->
-          Enum.reduce(selections, {selections_by_rule, observed, definitions, references}, fn
-            selection, {selections_by_rule, observed, definitions, references} ->
-              Enum.reduce(
-                selection.targets,
-                {selections_by_rule, observed, definitions, references},
-                fn
-                  target, {selections_by_rule, observed, definitions, references} ->
-                    Enum.reduce(
-                      frame.declarations,
-                      {selections_by_rule, observed, definitions, references},
-                      fn
-                        {property, value},
-                        {selections_by_rule, observed, definitions, references} ->
-                          cond do
-                            local_definition_name?(property) ->
-                              record =
-                                local_record(
-                                  :definition,
-                                  frame,
-                                  selection,
-                                  target,
-                                  property,
-                                  value,
-                                  provenance_identity
-                                )
+          :reference ->
+            reference = {reference_id, record}
 
-                              definitions =
-                                Map.update(
-                                  definitions,
-                                  provenance_identity,
-                                  [record],
-                                  &(&1 ++ [record])
-                                )
+            %{
+              batch
+              | references: [reference | batch.references],
+                reference_count: batch.reference_count + 1
+            }
+        end
 
-                              {selections_by_rule, observed, definitions, references}
+      {:ok, Map.put(record_batches, provenance_identity, updated_batch), resource_limited}
+    end
+  end
 
-                            true ->
-                              case direct_variable_name(value) do
-                                nil ->
-                                  {selections_by_rule, observed, definitions, references}
-
-                                local_name ->
-                                  reference_id =
-                                    {frame_rule_id(frame), target.source_id,
-                                     selection.selector_identity, property}
-
-                                  record =
-                                    local_record(
-                                      :reference,
-                                      frame,
-                                      selection,
-                                      target,
-                                      local_name,
-                                      nil,
-                                      provenance_identity
-                                    )
-
-                                  references =
-                                    Map.update(
-                                      references,
-                                      provenance_identity,
-                                      [{reference_id, record}],
-                                      &(&1 ++ [{reference_id, record}])
-                                    )
-
-                                  {selections_by_rule, observed, definitions, references}
-                              end
-                          end
-                      end
-                    )
-                end
-              )
-          end)
-
-        {:error, _reason} ->
-          {selections_by_rule, observed, definitions, references}
-      end
+  defp finalize_local_record_batches(record_batches) do
+    Enum.reduce(record_batches, {%{}, %{}}, fn {provenance_identity, batch},
+                                               {definitions, references} ->
+      {
+        Map.put(definitions, provenance_identity, Enum.reverse(batch.definitions)),
+        Map.put(references, provenance_identity, Enum.reverse(batch.references))
+      }
     end)
   end
 
@@ -537,11 +700,6 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       target_path: target.path,
       selector_identity: selection.selector_identity,
       viewport_scope: frame.viewport_scope,
-      parser_media_scope:
-        if(is_nil(frame.min_width) and is_nil(frame.max_width),
-          do: nil,
-          else: {frame.min_width, frame.max_width}
-        ),
       state_scope: selection.condition,
       source_order: {frame.source_index, frame.source_order},
       local_name: local_name,
@@ -558,42 +716,48 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          observed_local_names,
          definitions_by_provenance,
          references_by_provenance,
-         opts
+         opts,
+         pre_limited_provenances
        ) do
     batch_identities =
       (Map.keys(observed_local_names) ++ Map.keys(definitions_by_provenance))
       |> Enum.uniq()
 
-    Enum.reduce(batch_identities, {%{}, MapSet.new()}, fn provenance_identity,
-                                                          {resolutions, resource_limited} ->
-      local_names = Map.get(observed_local_names, provenance_identity, MapSet.new())
-      definitions = Map.get(definitions_by_provenance, provenance_identity, [])
+    Enum.reduce(batch_identities, {%{}, pre_limited_provenances}, fn provenance_identity,
+                                                                     {resolutions,
+                                                                      resource_limited} ->
+      if MapSet.member?(resource_limited, provenance_identity) do
+        {resolutions, resource_limited}
+      else
+        local_names = Map.get(observed_local_names, provenance_identity, MapSet.new())
+        definitions = Map.get(definitions_by_provenance, provenance_identity, [])
 
-      references =
-        references_by_provenance
-        |> Map.get(provenance_identity, [])
-        |> Enum.filter(fn {_reference_id, record} ->
-          MapSet.member?(local_names, Map.get(record, :local_name))
-        end)
+        references =
+          references_by_provenance
+          |> Map.get(provenance_identity, [])
+          |> Enum.filter(fn {_reference_id, record} ->
+            MapSet.member?(local_names, Map.get(record, :local_name))
+          end)
 
-      reference_records = Enum.map(references, &elem(&1, 1))
+        reference_records = Enum.map(references, &elem(&1, 1))
 
-      case SourceLocalCustomPropertyResolver.resolve(definitions, reference_records,
-             owner_source_id: owner_source_id,
-             effective_provenance_identity: provenance_identity,
-             authority_index: Keyword.get(opts, :authority_index, %VariableAuthority{})
-           ) do
-        {:ok, reference_results} ->
-          next_resolutions =
-            Enum.zip(references, reference_results)
-            |> Enum.reduce(resolutions, fn {{reference_id, _record}, resolution}, resolutions ->
-              Map.put(resolutions, {provenance_identity, reference_id}, resolution)
-            end)
+        case SourceLocalCustomPropertyResolver.resolve(definitions, reference_records,
+               owner_source_id: owner_source_id,
+               effective_provenance_identity: provenance_identity,
+               authority_index: Keyword.get(opts, :authority_index, %VariableAuthority{})
+             ) do
+          {:ok, reference_results} ->
+            next_resolutions =
+              Enum.zip(references, reference_results)
+              |> Enum.reduce(resolutions, fn {{reference_id, _record}, resolution}, resolutions ->
+                Map.put(resolutions, {provenance_identity, reference_id}, resolution)
+              end)
 
-          {next_resolutions, resource_limited}
+            {next_resolutions, resource_limited}
 
-        {:error, :resource_limit_exceeded} ->
-          {resolutions, MapSet.put(resource_limited, provenance_identity)}
+          {:error, :resource_limit_exceeded} ->
+            {resolutions, MapSet.put(resource_limited, provenance_identity)}
+        end
       end
     end)
   end
