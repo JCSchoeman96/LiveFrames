@@ -630,15 +630,21 @@ MAX_LOCAL_SUBSTITUTION_DEPTH=1
 
 Build one definition index per owner and effective layer. Key it by a validated
 local name and exact viewport/state scope. Candidate lookup must be bounded by
-the index; an ancestry walk stops at 64 nodes. Cycle detection uses a bounded
-work list over at most 256 definitions and 1,024 edges. A resolver that reaches
-a limit returns `RESOURCE_LIMIT_EXCEEDED`.
+the index; the relative ancestry search stops at 64 hops. This is not an
+absolute path-depth limit. Absolute structural path depth remains uncapped, so
+path-component work is part of the complexity contract. Cycle detection uses a
+bounded work list over at most 256 definitions and 1,024 edges. A resolver that
+reaches a limit returns `RESOURCE_LIMIT_EXCEEDED`.
 
-The expected work is `O(D + R * H)`, where `D` is the bounded definition count,
-`R` is the bounded reference count, and `H` is the owner ancestry limit. It
-must not perform a whole-document scan per reference, unbounded recursive
-substitution, unbounded inheritance walks, or exponential expansion. No
-runtime cache or service is needed.
+Let `D` be the definition count, `R` the reference count, `H` the relative
+ancestry limit, `E` the dependency-edge count, and `P` the total structural
+path-component work performed by bounded definition, reference, and dependency
+lookups, including index construction. The expected work is
+`O(D + R * H + E * H + P)`, where `D <= 256`, `R <= 1024`, `H <= 64`, and
+`E <= 1024`. `P` has no separate fixed limit because absolute structural path
+depth is uncapped. The implementation must not perform a whole-document scan
+per reference, unbounded recursive substitution, unbounded relative ancestry
+walks, or exponential expansion. No runtime cache or service is needed.
 
 ## Future implementation ownership
 
