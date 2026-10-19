@@ -182,6 +182,54 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              resolve(definitions, references)
   end
 
+  test "does not treat var text inside a quoted terminal as a dependency" do
+    quoted_terminal = "\"var(--hidden)\""
+
+    assert {:ok, [{:ok, ^quoted_terminal}]} =
+             resolve(
+               [definition("--local-name", quoted_terminal, [1])],
+               [reference("--local-name", [1])]
+             )
+  end
+
+  test "fails closed on an escaped var function spelling" do
+    escaped_var_terminal = "v\\61 r(--hidden)"
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve(
+               [definition("--local-name", escaped_var_terminal, [1])],
+               [reference("--local-name", [1])]
+             )
+  end
+
+  test "counts dependency edges after identical definitions coalesce" do
+    terminal = String.duplicate("var(--a)", 350)
+
+    definitions =
+      for source_order <- 1..3 do
+        definition("--local-name", terminal, [1], source_order: source_order)
+      end
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve(definitions, [reference("--local-name", [1])])
+  end
+
+  test "labels only cyclic definitions as cycles" do
+    definitions = [
+      definition("--root", "var(--a)", [1]),
+      definition("--a", "var(--b)", [1]),
+      definition("--b", "var(--a)", [1])
+    ]
+
+    references = [reference("--root", [1]), reference("--a", [1])]
+
+    assert {:ok,
+            [
+              {:error, :unsupported_nested_reference},
+              {:error, :cycle}
+            ]} = resolve(definitions, references)
+  end
+
   test "allows exactly 256 definitions and rejects 257 at batch level" do
     definitions =
       for source_order <- 1..256 do

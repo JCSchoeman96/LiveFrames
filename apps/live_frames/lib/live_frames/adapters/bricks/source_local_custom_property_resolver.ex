@@ -9,7 +9,6 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   @max_ancestry_hops 64
   @max_terminal_bytes 4_096
   @max_dependency_edges 1_024
-  @var_spellings ["var(", "vAr(", "vaR(", "vAR(", "Var(", "VAr(", "VaR(", "VAR("]
 
   @spec resolve([map()], [map()], keyword()) ::
           {:ok, [{:ok, binary()} | {:error, atom()}]} | {:error, :resource_limit_exceeded}
@@ -150,7 +149,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   end
 
   defp dependency_edge_limit(records, owner_source_id, provenance_identity) do
-    Enum.reduce_while(records, {:ok, 0}, fn record, {:ok, edge_count} ->
+    Enum.reduce_while(records, {:ok, 0, MapSet.new()}, fn record, {:ok, edge_count, seen} ->
       local_name = Map.get(record, :local_name)
       target_path = Map.get(record, :target_path)
       terminal = Map.get(record, :terminal_text)
@@ -162,18 +161,29 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
            owner_source_id,
            provenance_identity
          ) and is_binary(terminal) and byte_size(terminal) <= @max_terminal_bytes do
-        remaining_edges = @max_dependency_edges - edge_count
+        coalescing_key =
+          {local_name, target_path, Map.get(record, :viewport_scope),
+           Map.get(record, :state_scope), Map.get(record, :selector_identity), terminal}
 
-        case dependency_calls(terminal, remaining_edges + 1) do
-          :limit -> {:halt, {:error, :resource_limit_exceeded}}
-          {:ok, names, _fallback?} -> {:cont, {:ok, edge_count + length(names)}}
+        if MapSet.member?(seen, coalescing_key) do
+          {:cont, {:ok, edge_count, seen}}
+        else
+          remaining_edges = @max_dependency_edges - edge_count
+
+          case dependency_calls(terminal, remaining_edges + 1) do
+            :limit ->
+              {:halt, {:error, :resource_limit_exceeded}}
+
+            {:ok, names, _fallback?} ->
+              {:cont, {:ok, edge_count + length(names), MapSet.put(seen, coalescing_key)}}
+          end
         end
       else
-        {:cont, {:ok, edge_count}}
+        {:cont, {:ok, edge_count, seen}}
       end
     end)
     |> case do
-      {:ok, edge_count} when edge_count <= @max_dependency_edges -> :ok
+      {:ok, edge_count, _seen} when edge_count <= @max_dependency_edges -> :ok
       _overflow -> {:error, :resource_limit_exceeded}
     end
   end
@@ -446,6 +456,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             {node, dependencies}
           end)
 
+        cyclic_definitions = dependency_cycle_members(dependency_graph)
+
         dependency_states =
           Map.new(dependency_data, fn
             {{local_name, reversed_path, {:base, nil}} = key,
@@ -458,7 +470,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
                   Enum.any?(names, &(&1 == local_name)) ->
                     :self_reference
 
-                  names != [] and cycle_reachable?({local_name, reversed_path}, dependency_graph) ->
+                  MapSet.member?(cyclic_definitions, {local_name, reversed_path}) ->
                     :cycle
 
                   names != [] ->
@@ -512,70 +524,210 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   end
 
   defp dependency_calls(text, max_calls) do
-    scan_dependency_calls(text, 0, [], 0, false, max_calls)
+    scan_css_value(text, 0, [], 0, false, max_calls)
   end
 
-  defp scan_dependency_calls(text, offset, names, count, fallback?, max_calls) do
-    case next_var_call(text, offset) do
-      :none ->
-        {:ok, Enum.reverse(names), fallback?}
+  defp scan_css_value(text, offset, names, _count, fallback?, _max_calls)
+       when offset >= byte_size(text),
+       do: {:ok, Enum.reverse(names), fallback?}
 
-      {:found, start, spelling} ->
-        argument_start = start + byte_size(spelling)
+  defp scan_css_value(text, offset, names, count, fallback?, max_calls) do
+    case :binary.at(text, offset) do
+      quote when quote in [?', ?"] ->
+        scan_css_value(
+          text,
+          skip_css_string(text, offset + 1, quote),
+          names,
+          count,
+          fallback?,
+          max_calls
+        )
 
-        argument_end =
-          case :binary.match(text, ")", scope: {argument_start, byte_size(text) - argument_start}) do
-            {index, 1} -> index
-            :nomatch -> byte_size(text)
-          end
-
-        argument = binary_part(text, argument_start, argument_end - argument_start)
-        {name_text, has_fallback?} = split_fallback_argument(argument)
-        name = name_text |> String.trim() |> valid_dependency_name()
-        next_count = count + 1
-
-        if next_count >= max_calls do
-          :limit
-        else
-          scan_dependency_calls(
+      ?/ ->
+        if comment_start?(text, offset) do
+          scan_css_value(
             text,
-            argument_start,
-            [name | names],
-            next_count,
-            fallback? or has_fallback?,
+            skip_css_comment(text, offset + 2),
+            names,
+            count,
+            fallback?,
             max_calls
           )
+        else
+          scan_css_value(text, offset + 1, names, count, fallback?, max_calls)
+        end
+
+      byte ->
+        if css_name_byte?(byte) or byte == ?\\ do
+          {identifier, identifier_end} = consume_css_identifier(text, offset)
+          function_open = skip_css_comments(text, identifier_end)
+
+          if ascii_downcase(identifier) == "var" and function_open < byte_size(text) and
+               :binary.at(text, function_open) == ?( do
+            {name_text, has_fallback?} =
+              var_argument_name(text, function_open + 1, 0, function_open + 1)
+
+            next_count = count + 1
+
+            if next_count >= max_calls do
+              :limit
+            else
+              scan_css_value(
+                text,
+                function_open + 1,
+                [name_text |> String.trim() |> valid_dependency_name() | names],
+                next_count,
+                fallback? or has_fallback?,
+                max_calls
+              )
+            end
+          else
+            scan_css_value(text, identifier_end, names, count, fallback?, max_calls)
+          end
+        else
+          scan_css_value(text, offset + 1, names, count, fallback?, max_calls)
         end
     end
   end
 
-  defp next_var_call(text, offset) when offset >= byte_size(text), do: :none
+  defp consume_css_identifier(text, offset), do: consume_css_identifier(text, offset, [])
 
-  defp next_var_call(text, offset) do
-    remaining_bytes = byte_size(text) - offset
+  defp consume_css_identifier(text, offset, decoded) when offset >= byte_size(text),
+    do: {decoded |> Enum.reverse() |> IO.iodata_to_binary(), offset}
 
-    Enum.reduce(@var_spellings, nil, fn spelling, earliest ->
-      case :binary.match(text, spelling, scope: {offset, remaining_bytes}) do
-        :nomatch ->
-          earliest
+  defp consume_css_identifier(text, offset, decoded) do
+    byte = :binary.at(text, offset)
 
-        {index, _length} when is_nil(earliest) or index < elem(earliest, 0) ->
-          {index, spelling}
+    cond do
+      css_name_byte?(byte) ->
+        consume_css_identifier(text, offset + 1, [<<byte>> | decoded])
 
-        _match ->
-          earliest
-      end
-    end)
-    |> case do
-      nil -> :none
-      {index, spelling} -> {:found, index, spelling}
+      byte == ?\\ ->
+        {escaped, next_offset} = decode_css_escape(text, offset + 1)
+        consume_css_identifier(text, next_offset, [escaped | decoded])
+
+      true ->
+        {decoded |> Enum.reverse() |> IO.iodata_to_binary(), offset}
     end
   end
 
-  defp split_fallback_argument(argument) do
-    case :binary.match(argument, ",") do
-      {index, 1} -> {binary_part(argument, 0, index), true}
-      :nomatch -> {argument, false}
+  defp decode_css_escape(text, offset) when offset >= byte_size(text), do: {"", offset}
+
+  defp decode_css_escape(text, offset) do
+    byte = :binary.at(text, offset)
+
+    if hex_byte?(byte) do
+      {digits, next_offset} = consume_hex_escape(text, offset, 0, 0)
+
+      next_offset =
+        if next_offset < byte_size(text) and css_whitespace?(:binary.at(text, next_offset)),
+          do: next_offset + 1,
+          else: next_offset
+
+      {css_codepoint(digits), next_offset}
+    else
+      {<<byte>>, offset + 1}
+    end
+  end
+
+  defp consume_hex_escape(text, offset, count, value)
+       when offset >= byte_size(text) or count == 6,
+       do: {value, offset}
+
+  defp consume_hex_escape(text, offset, count, value) do
+    byte = :binary.at(text, offset)
+
+    if hex_byte?(byte) do
+      consume_hex_escape(text, offset + 1, count + 1, value * 16 + hex_value(byte))
+    else
+      {value, offset}
+    end
+  end
+
+  defp css_codepoint(value) when value == 0 or value > 0x10FFFF or value in 0xD800..0xDFFF,
+    do: <<0xEF, 0xBF, 0xBD>>
+
+  defp css_codepoint(value), do: <<value::utf8>>
+
+  defp var_argument_name(text, offset, _depth, name_end) when offset >= byte_size(text),
+    do: {binary_part(text, name_end, byte_size(text) - name_end), false}
+
+  defp var_argument_name(text, offset, depth, name_end) do
+    case :binary.at(text, offset) do
+      quote when quote in [?', ?"] ->
+        next_offset = skip_css_string(text, offset + 1, quote)
+        var_argument_name(text, next_offset, depth, name_end)
+
+      ?/ ->
+        if comment_start?(text, offset) do
+          var_argument_name(text, skip_css_comment(text, offset + 2), depth, name_end)
+        else
+          var_argument_name(text, offset + 1, depth, name_end)
+        end
+
+      ?( ->
+        var_argument_name(text, offset + 1, depth + 1, name_end)
+
+      ?) when depth > 0 ->
+        var_argument_name(text, offset + 1, depth - 1, name_end)
+
+      ?, when depth == 0 ->
+        {binary_part(text, name_end, offset - name_end), true}
+
+      ?) when depth == 0 ->
+        {binary_part(text, name_end, offset - name_end), false}
+
+      _byte ->
+        var_argument_name(text, offset + 1, depth, name_end)
+    end
+  end
+
+  defp skip_css_string(text, offset, _quote) when offset >= byte_size(text), do: offset
+
+  defp skip_css_string(text, offset, quote) do
+    case :binary.at(text, offset) do
+      ^quote -> offset + 1
+      ?\\ -> skip_css_string(text, min(offset + 2, byte_size(text)), quote)
+      _byte -> skip_css_string(text, offset + 1, quote)
+    end
+  end
+
+  defp skip_css_comment(text, offset) when offset + 1 >= byte_size(text), do: byte_size(text)
+
+  defp skip_css_comment(text, offset) do
+    if :binary.at(text, offset) == ?* and :binary.at(text, offset + 1) == ?/ do
+      offset + 2
+    else
+      skip_css_comment(text, offset + 1)
+    end
+  end
+
+  defp skip_css_comments(text, offset) when offset >= byte_size(text), do: offset
+
+  defp skip_css_comments(text, offset) do
+    if offset + 1 < byte_size(text) and :binary.at(text, offset) == ?/ and
+         :binary.at(text, offset + 1) == ?* do
+      skip_css_comments(text, skip_css_comment(text, offset + 2))
+    else
+      offset
+    end
+  end
+
+  defp comment_start?(text, offset),
+    do: offset + 1 < byte_size(text) and :binary.at(text, offset + 1) == ?*
+
+  defp css_name_byte?(byte),
+    do: byte in ?a..?z or byte in ?A..?Z or byte in ?0..?9 or byte in [?-, ?_] or byte >= 0x80
+
+  defp css_whitespace?(byte), do: byte in [9, 10, 12, 13, 32]
+  defp hex_byte?(byte), do: byte in ?0..?9 or byte in ?a..?f or byte in ?A..?F
+  defp hex_value(byte) when byte in ?0..?9, do: byte - ?0
+  defp hex_value(byte) when byte in ?a..?f, do: byte - ?a + 10
+  defp hex_value(byte), do: byte - ?A + 10
+
+  defp ascii_downcase(text) do
+    for <<byte <- text>>, into: <<>> do
+      if byte in ?A..?Z, do: <<byte + 32>>, else: <<byte>>
     end
   end
 
@@ -609,38 +761,55 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end
   end
 
-  defp cycle_reachable?(node, graph) do
-    {reachable?, _visited} = cycle_reachable?(node, graph, MapSet.new(), MapSet.new())
-    reachable?
+  defp dependency_cycle_members(graph) do
+    {_, cycle_members} =
+      Enum.reduce(Map.keys(graph), {MapSet.new(), MapSet.new()}, fn node,
+                                                                    {visited, cycle_members} ->
+        collect_dependency_cycles(
+          node,
+          graph,
+          MapSet.new(),
+          [],
+          visited,
+          cycle_members
+        )
+      end)
+
+    cycle_members
   end
 
-  defp cycle_reachable?(node, graph, active, visited) do
+  defp collect_dependency_cycles(node, graph, active, stack, visited, cycle_members) do
     cond do
       MapSet.member?(active, node) ->
-        {true, visited}
+        {visited, add_cycle_members(stack, node, cycle_members)}
 
       MapSet.member?(visited, node) ->
-        {false, visited}
+        {visited, cycle_members}
 
       true ->
         active = MapSet.put(active, node)
-        visited = MapSet.put(visited, node)
+        stack = [node | stack]
 
-        Enum.reduce_while(Map.get(graph, node, []), {false, visited}, fn dependency,
-                                                                         {_found, seen} ->
-          if MapSet.member?(active, dependency) do
-            {:halt, {true, seen}}
-          else
-            {found?, seen} = cycle_reachable?(dependency, graph, active, seen)
+        {visited, cycle_members} =
+          Enum.reduce(Map.get(graph, node, []), {visited, cycle_members}, fn dependency,
+                                                                             {seen, members} ->
+            collect_dependency_cycles(dependency, graph, active, stack, seen, members)
+          end)
 
-            if found? do
-              {:halt, {true, seen}}
-            else
-              {:cont, {false, seen}}
-            end
-          end
-        end)
+        {MapSet.put(visited, node), cycle_members}
     end
+  end
+
+  defp add_cycle_members(stack, cycle_target, cycle_members) do
+    stack
+    |> Enum.reduce_while(cycle_members, fn node, members ->
+      members = MapSet.put(members, node)
+
+      if node == cycle_target,
+        do: {:halt, members},
+        else: {:cont, members}
+    end)
+    |> MapSet.put(cycle_target)
   end
 
   defp select_definition(definitions) do
