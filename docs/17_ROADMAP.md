@@ -26,7 +26,8 @@ STATUS_EVIDENCE_BASE_CI_RESULT=PASS
   not package-boundary behavior, Hex publication, or
   `distribution.library=supported`.
 - The production Catalogue contains `live_frames.section.media_call_to_action`
-  in state `APPROVED`. Its `distribution` field is absent.
+  in state `APPROVED`. Distribution capability claims for the item are governed
+  by the C2D2R1 evidence gate and the separate C2D3 manifest-mutation gate below.
 - C2D2 remains a `BLOCKED` historical evidence review at its frozen base. It
   accurately recorded the package-boundary and documentation blockers then.
 - The package-boundary blocker identified by C2D2 has been remediated on `main`.
@@ -41,9 +42,14 @@ STATUS_EVIDENCE_BASE_CI_RESULT=PASS
   durable decision is recorded in
   `docs/development/c09d7c2d2r1_cta_library_capability_evidence_review.md`.
   The existence of an R1 review does not authorize C2D3.
-- C2D3 is not authorized. P10 consumer-project ejection is not implemented.
-- Hex and public package publication are not authorized or proven. The CTA
-  Catalogue item remains `APPROVED`; `APPROVED → RELEASED` is not authorized.
+- C2D3 is the separate manifest-mutation gate for persisting an accepted
+  distribution capability claim. It may rely only on accepted C2D2R1 evidence
+  and requires its own explicit authorization, implementation review, merge,
+  and acceptance. C2D2R1 acceptance does not itself execute C2D3.
+- Catalogue `APPROVED → RELEASED`, package publication, and P10 consumer-project
+  ejection are independent later gates, each with its own authority and evidence
+  requirements. Accepted library capability evidence and a C2D3 manifest
+  mutation do not imply or execute any of these gates.
 
 The accepted native-generation semantics remain in
 [`development/c09d6_native_generation_authority.md`](development/c09d6_native_generation_authority.md).
