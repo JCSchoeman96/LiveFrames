@@ -356,7 +356,7 @@ defmodule LiveFrames.BricksDesignIRTest do
             "name" => "owner",
             "settings" => %{
               "_cssCustom" => ".owner { --local-space: 6px; }",
-              source_key => ".owner { color: teal; }"
+              source_key => ".owner > * { color: teal; }"
             }
           },
           %{
@@ -373,15 +373,23 @@ defmodule LiveFrames.BricksDesignIRTest do
 
     owner = hd(document.root_nodes)
 
+    selected_source_path =
+      "components[0].elements[0].class_refs[1].settings." <> source_key
+
     assert %LiveFrames.IR.ResponsiveOverride{
              min_width: nil,
              max_width: nil,
-             source_trace: %{source_name: ^source_key},
+             source_trace: %{source_name: ^source_key, source_path: ^selected_source_path},
              styles: %{"color" => %StyleValue{kind: :literal, value: "12px"}}
            } = owner.responsive["mobile_portrait"]
 
     refute Map.has_key?(owner.responsive["mobile_portrait"].styles, "custom-css")
     refute Map.has_key?(owner.styles, "--local-space")
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.custom_css.unsupported_selector" and
+               String.contains?(diagnostic.metadata["source_path"] || "", source_key)
+           end)
   end
 
   test "an ineligible local definition prevents external VariableAuthority fallback" do
