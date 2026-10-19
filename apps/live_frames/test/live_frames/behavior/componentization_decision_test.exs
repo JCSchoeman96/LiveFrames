@@ -233,7 +233,8 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
 
     assert decision.outcome == :admissible
     assert gated_result == expected
-    assert gated_result.outcome == :needs_review
+    assert gated_result.outcome == :proposed
+    assert gated_result.contract.approval_status == :proposed
     assert length(gated_result.plan.node_dispositions) == 1
   end
 
@@ -265,7 +266,8 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
 
     assert decision.design_document_identity == elem(Identity.from_document(resolved_document), 1)
     assert proposal.design_document == resolved_document
-    assert proposal.outcome == :needs_review
+    assert proposal.outcome == :proposed
+    assert proposal.contract.approval_status == :proposed
     assert length(proposal.plan.node_dispositions) == 1
   end
 

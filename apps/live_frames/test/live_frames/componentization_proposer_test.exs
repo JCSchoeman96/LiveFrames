@@ -487,13 +487,19 @@ defmodule LiveFrames.ComponentizationProposerTest do
       evidence_refs: ["evidence-a", "evidence-z"]
     }
 
-    assert result.outcome == :needs_review
+    assert result.outcome == :proposed
+    assert result.contract.approval_status == :proposed
     assert result.design_document == design_document
     assert result.contract != nil
     assert result.plan.node_dispositions == [expected]
 
-    assert Enum.any?(result.plan.diagnostics, fn diagnostic ->
+    refute Enum.any?(result.plan.diagnostics, fn diagnostic ->
              diagnostic.code == "componentization_plan.unsupported_node"
+           end)
+
+    refute Enum.any?(result.plan.diagnostics, fn diagnostic ->
+             diagnostic.code ==
+               "componentization_plan.node_disposition.behavior_authority_mismatch"
            end)
   end
 
