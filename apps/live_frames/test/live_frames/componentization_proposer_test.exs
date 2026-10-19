@@ -731,8 +731,6 @@ defmodule LiveFrames.ComponentizationProposerTest do
   end
 
   test "Construction.build/3 rejects a duplicated Behavior binding identity" do
-    assert function_exported?(Construction, :build, 3)
-
     design_document = disposition_document()
 
     {context, [first, second]} =

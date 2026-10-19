@@ -144,8 +144,6 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
         :trigger_origin
       ])
 
-    assert function_exported?(ComponentizationDecision, :reference_index, 2)
-
     assert {:ok, index} =
              apply(ComponentizationDecision, :reference_index, [document, contract])
 
@@ -153,8 +151,6 @@ defmodule LiveFrames.Behavior.ComponentizationDecisionTest do
   end
 
   test "reference index returns Behavior diagnostics for malformed authority inputs" do
-    assert function_exported?(ComponentizationDecision, :reference_index, 2)
-
     assert {:error, diagnostics} =
              apply(ComponentizationDecision, :reference_index, [
                %DesignDocument{root_nodes: :malformed},
