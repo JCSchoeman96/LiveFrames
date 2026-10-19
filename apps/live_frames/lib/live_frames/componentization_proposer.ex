@@ -219,7 +219,7 @@ defmodule LiveFrames.ComponentizationProposer do
         Result.construction_failed(diagnostics, design_document)
 
       {:ok, contract, plan} ->
-        validate_references(contract, plan, design_document)
+        validate_references(contract, plan, design_document, behavior_authority_context)
     end
   rescue
     error ->
@@ -229,12 +229,14 @@ defmodule LiveFrames.ComponentizationProposer do
       )
   end
 
-  defp validate_references(contract, plan, design_document) do
+  defp validate_references(contract, plan, design_document, behavior_authority_context) do
     contract_reference_diagnostics =
       diagnostics_from(ComponentContract.validate_ir_references(contract, design_document))
 
     plan_reference_diagnostics =
-      diagnostics_from(ComponentizationPlan.validate_references(plan, contract, design_document))
+      diagnostics_from(
+        plan_reference_validation(plan, contract, design_document, behavior_authority_context)
+      )
 
     candidate_contract_diagnostics =
       contract.diagnostics
@@ -256,6 +258,26 @@ defmodule LiveFrames.ComponentizationProposer do
     plan = %{plan | diagnostics: canonicalize_diagnostics(candidate_plan_diagnostics)}
 
     finalize(contract, plan, outcome, design_document)
+  end
+
+  defp plan_reference_validation(
+         %{node_dispositions: dispositions} = plan,
+         contract,
+         design_document,
+         %BehaviorAuthorityContext{} = context
+       )
+       when is_list(dispositions) and dispositions != [] do
+    ComponentizationPlan.validate_references_with_behavior_authority(
+      plan,
+      contract,
+      design_document,
+      context.behavior_contract,
+      context.selected_behavior_review_result
+    )
+  end
+
+  defp plan_reference_validation(plan, contract, design_document, _behavior_authority_context) do
+    ComponentizationPlan.validate_references(plan, contract, design_document)
   end
 
   defp finalize(contract, plan, outcome, design_document) do
