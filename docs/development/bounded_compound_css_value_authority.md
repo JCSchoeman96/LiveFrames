@@ -43,7 +43,8 @@ RESOLVED_FORM_GRAMMAR_FROZEN=YES
 SLOT_GRAMMAR_CONTRACTS_FROZEN=YES
 MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
 MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
-MULTI_TOKEN_PAIR_EXTENSION_SOURCE_NEUTRAL=YES
+MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
 CANONICAL_COMPOUND_REFERENCE_RECORD_COUNT=48
 CANONICAL_ACTUAL_RESOLVER_OK_COUNT=40
 CANONICAL_ACTUAL_RESOLVER_ERROR_COUNT=8
@@ -454,29 +455,23 @@ revert-layer static unset visible
 commas; semicolons; `calc(` at position zero; values matching production 3;
 unbounded token count; any `(`-initiated function token in the value (not
 production 2); ASCII whitespace-separated binary operators (`+`, `-`, `*`, `/`
-between tokens).
-
-**Source-neutral literal extension (evidence-backed, not fingerprint-driven):**
-in addition to keyword and dimension/percentage literals above, a token may be
-an **unlisted unitless number literal** matching `~r/^-?\d+(\.\d+)?$/` (no unit
-suffix). This class is required by canonical joined-export `MULTI_TOKEN_VALUE`
-specimens on transform-related declarations (two-token `DIMENSION` or
-`UNITLESS_NUMBER` + `DIMENSION` pairs). Implementation must classify by syntax
-only. Safe specimen hashes are evidence identity only — they are **not**
-implementation selectors.
+between tokens); **unitless number literals** (no unit suffix) — not authorized
+on production 4 until a frozen inventory specimen documents
+`UNITLESS_NUMBER` in its `TOKEN_CLASS_SEQUENCE` (`MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO`).
 
 ```text
 MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
 MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
-MULTI_TOKEN_PAIR_EXTENSION_SOURCE_NEUTRAL=YES
+MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
 ```
 
 **`MULTI_TOKEN_VALUE` source form vs resolved form:**
 
 | Phase | Grammar |
 | --- | --- |
-| **Source form** | Two to `MAX_COMPOUND_TOKEN_COUNT` whitespace-separated tokens; each token is keyword, dimension, percentage, unitless number, or embedded `var(--name)` per rules above. |
-| **Resolved form** | Same token count and whitespace layout; each token is keyword, dimension, percentage, or unitless number only (`MULTI_TOKEN_ATOM` terminals). No `var(`. |
+| **Source form** | Two to `MAX_COMPOUND_TOKEN_COUNT` whitespace-separated tokens; each token is keyword, dimension, percentage, or embedded `var(--name)` per rules above. |
+| **Resolved form** | Same token count and whitespace layout; each token is keyword, dimension, or percentage only (`MULTI_TOKEN_ATOM` terminals). No `var(`. |
 
 ### MULTI_TOKEN inventory structural proof (five gap specimens)
 
@@ -497,6 +492,8 @@ loose-shape scan only).
 MULTI_TOKEN_INVENTORY_SPECIMEN_COUNT=5
 MULTI_TOKEN_INVENTORY_PROVEN_ACCEPTED_COUNT=5
 MULTI_TOKEN_JOINED_EXPORT_UNIQUE_FROZEN_MULTI_VALUE_COUNT=3
+MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
 ```
 
 | Inventory slot | `SPECIMEN_SAFE_HASH` | `TOKEN_COUNT` | `TOKEN_CLASS_SEQUENCE` | `EMBEDDED_LOCAL_REFERENCE_COUNT` | `TOP_LEVEL_COMMA` | `FUNCTION_TOKEN` | `OPERATOR_TOKEN` | `FROZEN_MULTI_TOKEN_GRAMMAR_ACCEPTS` |
@@ -712,7 +709,7 @@ All slots share these global bounds unless a row narrows further:
 | --- | --- |
 | `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `RGB_COLOR_FUNCTION_LITERAL` (frozen grammar below). `HEX_COLOR_LITERAL` is **not** authorized on this slot until a canonical `{:ok, terminal}` tracer documents a hex stop (`HEX_COLOR_LITERAL=NOT_AUTHORIZED_BY_CURRENT_EVIDENCE`). |
 | `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. |
-| `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`. |
+| `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. `UNITLESS_NUMBER_LITERAL` is **not** authorized here (`MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO`). |
 | `JUXTAPOSITION_LEFT_OPERAND` | `TIME_DURATION_LITERAL` only — lexical form `^(\d+(\.\d+)?|\.\d+)(s|ms)$` with **no** leading `+` or `-`. Semantic guard: parsed numeric magnitude is finite and `>= 0` (`NEGATIVE_TRANSITION_DURATION_AUTHORIZED=NO`, `TIME_DURATION_FINITE_REQUIRED=YES`, `TIME_DURATION_NON_NEGATIVE_REQUIRED=YES`). |
 | `JUXTAPOSITION_RIGHT_OPERAND` | `TRANSITION_TIMING_KEYWORD` only — exact member of the frozen finite allowlist below (no function forms, no arbitrary identifiers). |
 
