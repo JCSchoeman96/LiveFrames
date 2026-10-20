@@ -118,13 +118,14 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
             unsupported()
 
           true ->
-            tokens = Enum.flat_map(stops, &split_ws/1)
+            stop_tokens = Enum.map(stops, &gradient_stop_tokens/1)
+            tokens = List.flatten(stop_tokens)
 
             cond do
-              Enum.any?(stops, &(length(split_ws(&1)) > 4)) ->
+              Enum.any?(stop_tokens, &(length(&1) > 4)) ->
                 resource()
 
-              Enum.any?(stops, &(length(split_ws(&1)) == 0)) ->
+              Enum.any?(stop_tokens, &(&1 == [])) ->
                 unsupported()
 
               length(tokens) + 1 > @max_tokens ->
@@ -296,6 +297,8 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
 
   defp split_ws(value),
     do: Regex.split(~r/[\x20\t\r\n\f]+/, String.trim(value, " \t\r\n\f"), trim: true)
+
+  defp gradient_stop_tokens(stop), do: split_ws(Regex.replace(@local_var, stop, <<0>>))
 
   defp validate_terminals(occurrences, terminals) do
     if Enum.all?(occurrences, fn occurrence ->

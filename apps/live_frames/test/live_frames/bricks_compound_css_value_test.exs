@@ -124,6 +124,17 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
              {:error, :resource_limit_exceeded}
   end
 
+  test "counts a whitespace-spaced gradient var as one stop atom" do
+    assert {:ok, parsed} =
+             CompoundCssValue.parse("linear-gradient(90deg, var( --accent ) 0% 10%)")
+
+    assert [%{occurrence_index: 0, local_name: "accent"}] =
+             CompoundCssValue.occurrences(parsed)
+
+    assert {:ok, "linear-gradient(90deg, rgb(1,2,3) 0% 10%)"} =
+             CompoundCssValue.reconstruct(parsed, %{0 => "rgb(1,2,3)"})
+  end
+
   test "enforces calc expression grammar and positive factor predicate" do
     for factor <- ["1", "2.25", ".5"] do
       assert {:ok, _} = CompoundCssValue.parse("calc(var(--x) * #{factor})")
