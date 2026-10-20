@@ -36,6 +36,16 @@ MULTI_TOKEN_GRAMMAR=FROZEN
 VAR_OPERATION_GRAMMAR=FROZEN
 RESOLVED_TERMINAL_SLOT_VALIDATION=REQUIRED
 POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED
+POST_SUBSTITUTION_REVALIDATION_USES_RESOLVED_FORM=YES
+PRODUCTION_IDENTITY_PRESERVED_AFTER_RESOLUTION=YES
+SOURCE_FORM_GRAMMAR_FROZEN=YES
+RESOLVED_FORM_GRAMMAR_FROZEN=YES
+SLOT_GRAMMAR_CONTRACTS_FROZEN=YES
+MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
+MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
+MULTI_TOKEN_PAIR_EXTENSION_SOURCE_NEUTRAL=YES
+CANONICAL_OK_TERMINAL_COUNT=15
+CANONICAL_OK_TERMINAL_SLOT_ACCEPTED_COUNT=15
 RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
 SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
 COMPOUND_SUCCESS_VALUE_CLASSIFICATION=BYPASS_GENERIC_VAR_CALC_CLASSIFIER
@@ -111,7 +121,7 @@ bounded compound parse
   -> resolve occurrences through SourceLocalCustomPropertyResolver (unchanged contract)
   -> validate each {:ok, terminal} against its occurrence SLOT_GRAMMAR
   -> reconstruct one bounded terminal string
-  -> revalidate the SAME top-level compound production
+  -> revalidate the SAME production identity using RESOLVED_FORM_GRAMMAR
   -> CSSDeclaration.normalize(..., :source_resolver) safety acceptance
   -> existing literal StyleValue emission (no generic var()/calc() classifier)
 ```
@@ -206,7 +216,7 @@ State names denote **completed work**. `EMITTED` is terminal success.
 | `PARSED_SUPPORTED` | Embedded occurrence count within bounds; every embedded local name passes the accepted local-name boundary | Extract occurrences; assign normalizer-private `occurrence_index`; append unchanged resolver reference records | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
 | `LOCAL_REFERENCES_COLLECTED` | Existing `resolve/3` returns one ordered result per routed record; every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
 | `LOCAL_REFERENCES_RESOLVED` | Every `{:ok, terminal}` satisfies that occurrence's frozen `SLOT_GRAMMAR`; deterministic substitution succeeds within `MAX_RECONSTRUCTED_TERMINAL_BYTES` | Substitute validated terminals into the private parse representation | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
-| `TERMINAL_RECONSTRUCTED` | Reconstructed value satisfies the **same** top-level production as `GRAMMAR_CLASSIFIED`; no `var(` remains; byte/token/depth limits hold; `CSSDeclaration` accepts on `:source_resolver` without generic `var()`/`calc()` value classification | Hold bounded literal declaration candidate (`COMPOUND_SUCCESS_STYLE_KIND=LITERAL`) | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
+| `TERMINAL_RECONSTRUCTED` | Reconstructed value satisfies the **same production identity** as `GRAMMAR_CLASSIFIED` under that production's frozen **resolved-form** grammar; no `var(` remains; byte/token/depth limits hold; `CSSDeclaration` accepts on `:source_resolver` without generic `var()`/`calc()` value classification | Hold bounded literal declaration candidate (`COMPOUND_SUCCESS_STYLE_KIND=LITERAL`) | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
 | `CSS_REVALIDATED` | All declarations in the selector rule pass existing whole-rule atomicity | Emit normalized style as existing literal `StyleValue` (no `VariableAuthority` reentry) | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
 
 ```text
@@ -378,6 +388,13 @@ MAX_LINEAR_GRADIENT_STOPS=8
 MAX_STOP_SEGMENT_TOKENS=4
 ```
 
+**`FUNCTION_CALL` source form vs resolved form (`PRODUCTION_IDENTITY` unchanged):**
+
+| Phase | Grammar |
+| --- | --- |
+| **Source form** | Frozen outer `linear-gradient` / `calc` argument spans above, with embedded `var(--name)` atoms where authorized. |
+| **Resolved form** | Same outer call shape and argument span bounds; every former embedded `var(--name)` atom is replaced by one `GRADIENT_STOP_ATOM` or `CALC_OPERAND` terminal that already passed slot validation. No `var(` remains anywhere in the value. |
+
 ### Production `MULTI_TOKEN_VALUE`
 
 **Shape:** two to `MAX_COMPOUND_TOKEN_COUNT` tokens separated by ASCII
@@ -405,22 +422,33 @@ revert-layer static unset visible
   `var(--name)` span with local name per existing boundary, only when the full
   value is not production 3.
 
-**Explicit rejects:** general identifiers outside the keyword list and outside
-the frozen pair-extension allowlist below; top-level commas; semicolons;
-`calc(` at position zero; values matching production 3; unbounded token count;
-any `(`-initiated function token in the value (not production 2); ASCII
-whitespace-separated binary operators (`+`, `-`, `*`, `/` between tokens).
+**Explicit rejects:** general identifiers outside the keyword list; top-level
+commas; semicolons; `calc(` at position zero; values matching production 3;
+unbounded token count; any `(`-initiated function token in the value (not
+production 2); ASCII whitespace-separated binary operators (`+`, `-`, `*`, `/`
+between tokens).
 
-**Frozen pair extension (canonical evidence only):** in addition to the keyword
-union, exactly one **two-token** pattern is accepted when token 1's safe hash is
-`35e75b2615c08cd3dc16ea6f6d938e53da9d23596375d18ae7edc1bf6dbb1a57` and token 2
-is a dimension literal. No other identifier-like token is authorized outside the
-keyword list.
+**Source-neutral literal extension (evidence-backed, not fingerprint-driven):**
+in addition to keyword and dimension/percentage literals above, a token may be
+an **unlisted unitless number literal** matching `~r/^-?\d+(\.\d+)?$/` (no unit
+suffix). This class is required by canonical joined-export `MULTI_TOKEN_VALUE`
+specimens on transform-related declarations (two-token `DIMENSION` or
+`UNITLESS_NUMBER` + `DIMENSION` pairs). Implementation must classify by syntax
+only. Safe specimen hashes are evidence identity only — they are **not**
+implementation selectors.
 
 ```text
-MULTI_TOKEN_PAIR_EXTENSION_TOKEN1_SAFE_HASH_ALLOWLIST=
-  35e75b2615c08cd3dc16ea6f6d938e53da9d23596375d18ae7edc1bf6dbb1a57
+MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
+MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
+MULTI_TOKEN_PAIR_EXTENSION_SOURCE_NEUTRAL=YES
 ```
+
+**`MULTI_TOKEN_VALUE` source form vs resolved form:**
+
+| Phase | Grammar |
+| --- | --- |
+| **Source form** | Two to `MAX_COMPOUND_TOKEN_COUNT` whitespace-separated tokens; each token is keyword, dimension, percentage, unitless number, or embedded `var(--name)` per rules above. |
+| **Resolved form** | Same token count and whitespace layout; each token is keyword, dimension, percentage, or unitless number only (`MULTI_TOKEN_ATOM` terminals). No `var(`. |
 
 ### MULTI_TOKEN inventory structural proof (five gap specimens)
 
@@ -448,11 +476,8 @@ MULTI_TOKEN_JOINED_EXPORT_UNIQUE_FROZEN_MULTI_VALUE_COUNT=3
 | 1 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 | 2 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 | 3 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
-| 4 | `ae28d73e456a6b2f07d4ff7064d44218457d7aff8b2e51323d1b563d68992f36` | 2 | `PAIR_EXTENSION_TOKEN,DIMENSION` | 0 | NO | NO | NO | YES |
+| 4 | `ae28d73e456a6b2f07d4ff7064d44218457d7aff8b2e51323d1b563d68992f36` | 2 | `UNITLESS_NUMBER,DIMENSION` | 0 | NO | NO | NO | YES |
 | 5 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
-
-`PAIR_EXTENSION_TOKEN` denotes token 1 of the frozen pair-extension allowlist
-(safe hash above); it is not a keyword-list member.
 
 Slot 5 is structurally identical to slot 1 (same `SPECIMEN_SAFE_HASH` and
 token-class sequence). Joined-export reproduction shows one declaration
@@ -475,6 +500,13 @@ future authority revision documents a specimen.
 class on one overlay transition declaration and one state transition declaration
 (supplementary; not a second inventory unit).
 
+**`VAR_REFERENCE_WITH_OPERATION` source form vs resolved form:**
+
+| Phase | Grammar |
+| --- | --- |
+| **Source form** | `LOCAL_REF WS LOCAL_REF` — exactly two embedded direct `var(--name)` spans separated by ASCII whitespace only. |
+| **Resolved form** | `JUXTAPOSITION_OPERAND WS JUXTAPOSITION_OPERAND` — same whitespace rule; each operand is one slot-validated resolver terminal. No `var(`. |
+
 ### Grammar classification rule
 
 ```text
@@ -482,6 +514,25 @@ GRAMMAR_CLASSIFIED
   = exactly one production from disjoint rules (2)–(4)
   | FAIL_CLOSED_RESIDUAL
 ```
+
+### Source form vs resolved form (all productions)
+
+Classification and initial parse use **source-form** grammars (embedded
+`var(--name)` permitted where frozen above). After substitution, revalidation
+uses **resolved-form** grammars for the **same production identity**. Resolved
+forms never require `var(`.
+
+```text
+PRODUCTION_IDENTITY_PRESERVED_AFTER_RESOLUTION=YES
+SOURCE_FORM_GRAMMAR_FROZEN=YES
+RESOLVED_FORM_GRAMMAR_FROZEN=YES
+POST_SUBSTITUTION_REVALIDATION_USES_RESOLVED_FORM=YES
+POST_SUBSTITUTION_VAR_REMAINS=NO
+```
+
+Revalidation does **not** re-run disjoint classification from raw text alone; it
+checks the private parse tree / reconstructed string against the frozen
+resolved-form production attached at `GRAMMAR_CLASSIFIED`.
 
 ## Local reference extraction and resolver integration
 
@@ -608,32 +659,79 @@ RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
 RESOLVED_TERMINAL_SLOT_VALIDATION=REQUIRED
 POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED
 SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
+SLOT_GRAMMAR_CONTRACTS_FROZEN=YES
 ```
 
 The private bounded parse representation must carry, for every embedded
-occurrence, a frozen **`SLOT_GRAMMAR`** class. Use only classes evidenced by
-canonical specimens:
+occurrence, a frozen **`SLOT_GRAMMAR`** class (location + resolved terminal
+contract).
 
-| `SLOT_GRAMMAR` | Use |
+#### Frozen `SLOT_GRAMMAR` semantic contracts (resolved terminals)
+
+All slots share these global bounds unless a row narrows further:
+
+- `TERMINAL_TOKEN_COUNT=1` (exactly one whitespace-delimited token; no interior
+  ASCII whitespace).
+- `MAX_BYTES=MAX_TERMINAL_VALUE_BYTES` (4096, resolver cap).
+- `VAR_REMAINS=NO`, `SEMICOLON=NO`, `TOP_LEVEL_COMMA=NO`, `UNMATCHED_PAREN=NO`.
+- `FUNCTION_POLICY=NO` except `RGB_COLOR_FUNCTION_LITERAL` row below (single
+  `rgb(` / `rgba(` span with no nested `var(`).
+
+| `SLOT_GRAMMAR` | Permitted resolved terminal classes (exactly one token each) |
 | --- | --- |
-| `GRADIENT_STOP_ATOM` | One atom inside a `linear-gradient` stop segment |
-| `CALC_OPERAND` | Operand position inside frozen `calc` argument grammar |
-| `MULTI_TOKEN_ATOM` | One whitespace-delimited token in production 4 |
-| `JUXTAPOSITION_OPERAND` | One direct `var(--name)` span in production 3 |
+| `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `HEX_COLOR_LITERAL`; `RGB_COLOR_FUNCTION_LITERAL` (`^rgba?\([^)]*\)$`, no `var(` inside). |
+| `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. No unit suffix on the unitless form beyond the frozen calc contract. |
+| `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`. |
+| `JUXTAPOSITION_OPERAND` | `TIME_DURATION_LITERAL` (`^-?\d+(\.\d+)?(s|ms)$`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`; or `BOUNDED_SINGLE_TOKEN` — one token with `CSSDeclaration.safe_value?(terminal) == true` and no `var(`, used only when none of the literal rows match (canonical transition operands use this row). |
+
+Slot validation runs **before** substitution. Implementation must not hash
+tokens or compare specimen digests.
+
+#### Post-substitution flow
 
 After `resolve/3` returns `{:ok, terminal}` for an occurrence:
 
-1. `terminal` must satisfy that occurrence's `SLOT_GRAMMAR` (structural guard,
-   not merely `safe_value?/1`).
+1. `terminal` must satisfy that occurrence's frozen `SLOT_GRAMMAR` contract.
 2. Substitute into the private representation.
-3. The reconstructed value must satisfy the **same** top-level production
-   attached at `GRAMMAR_CLASSIFIED`.
+3. Reconstructed value must satisfy the **same production identity** using that
+   production's **resolved-form** grammar (`POST_SUBSTITUTION_REVALIDATION_USES_RESOLVED_FORM=YES`).
 4. Reconstructed value must remain inside byte/token/depth limits and contain
-   no unresolved `var(`.
+   no unresolved `var(` (`POST_SUBSTITUTION_VAR_REMAINS=NO`).
+5. `CSSDeclaration.normalize(..., :source_resolver)` then literal `StyleValue`.
 
 Any failure → `FAIL_CLOSED_RESIDUAL`. If canonical resolver terminals would
-require syntax outside the frozen compound grammar, stop architecture work with
+require syntax outside these contracts, stop with
 `STOP=RESOLVED_TERMINAL_GRAMMAR_UNPROVEN` (resolver contract must not change).
+
+#### Canonical resolver-terminal structural evidence (Romeo joined export)
+
+Evidence-only scan of Romeo canonical joined export (no raw terminals, names,
+selectors, or paths published). Method: for each embedded `var(--name)` inside a
+compound-shaped declaration, correlate the name with the **observed definition
+terminal** in the same export scan (proxy for `{:ok, terminal}` once
+implementation replays full ancestry routing through the unchanged resolver).
+
+```text
+CANONICAL_COMPOUND_EMBEDDED_OCCURRENCE_SCAN_COUNT=16
+CANONICAL_OK_TERMINAL_COUNT=15
+CANONICAL_OK_TERMINAL_SLOT_ACCEPTED_COUNT=15
+```
+
+| `RESOLVER_RESULT` | Count | Notes |
+| --- | ---: | --- |
+| `{:ok, terminal}` (definition terminal observed) | 15 | All 15 pass frozen `SLOT_GRAMMAR` contracts |
+| `:no_local_definition` | 1 | One `calc(` embedded occurrence — expect `FAIL_CLOSED_RESIDUAL` on compound lane |
+
+Distinct `TERMINAL_SAFE_HASH` values among the 15 accepted terminals: **3**
+(two juxtaposition operand shapes; one gradient stop `RGB_COLOR_FUNCTION_LITERAL`
+class). Juxtaposition operands classify as `BOUNDED_SINGLE_TOKEN` under
+`JUXTAPOSITION_OPERAND`. Gradient stop classifies as `RGB_COLOR_FUNCTION_LITERAL`
+under `GRADIENT_STOP_ATOM`.
+
+Per-occurrence `OCCURRENCE_SAFE_ID` digests are reproducible from
+`(production identity, declaration-value safe hash, embedded-name safe hash,
+occurrence index)` and are omitted here as duplicate-safe aggregates only.
+Implementation verification must publish the full per-occurrence table on rerun.
 
 ### Reconstruction and final `StyleValue` handoff
 
@@ -641,8 +739,8 @@ After all embedded references for a declaration resolve and pass slot validation
 
 1. Substitute validated terminals into the bounded parse representation.
 2. Emit **one** bounded UTF-8 string (`TERMINAL_RECONSTRUCTED`).
-3. Revalidate the **same** top-level compound production on the reconstructed
-   string (`POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED`).
+3. Revalidate the **same production identity** on the reconstructed string using
+   the frozen **resolved-form** grammar (`POST_SUBSTITUTION_REVALIDATION_USES_RESOLVED_FORM=YES`).
 4. Accept through `CSSDeclaration.normalize(..., :source_resolver)` /
    existing safety checks on the local-compound lane.
 5. Emit as existing **literal** `StyleValue` — **without** routing the
@@ -779,8 +877,9 @@ The compound capability must not:
 - resolve FRAME C (`NO_LOCAL_DEFINITION`) or FRAME D
   (`UNSUPPORTED_NESTED_REFERENCE`) by bypass;
 - add source-specific IDs, owner allowlists, or fingerprint-driven branches in
-  implementation logic (canonical evidence hashes in this authority record are
-  not implementation selectors);
+  implementation logic;
+- use canonical evidence safe hashes, specimen digests, or Romeo-derived token
+  hashes as parser selectors (`MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO`);
 - emit custom-property definitions into Design IR;
 - change Design IR version or `StyleValue` schema for compound success paths;
 - use `VariableAuthority` or token inference to salvage failed embedded local
