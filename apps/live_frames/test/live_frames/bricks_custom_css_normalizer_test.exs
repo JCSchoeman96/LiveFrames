@@ -186,6 +186,84 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert result.residuals_by_source_id[@owner] == []
   end
 
+  test "keeps values outside compound admission on the generic path" do
+    for {property, value} <- [
+          {"color", "teal"},
+          {"justify-content", "center center"},
+          {"margin", "10 20px"},
+          {"color", "unknown-function(teal)"},
+          {"color", "linear-gradient(90deg, transparent, +)"}
+        ] do
+      result = run(".owner { #{property}: #{value}; }")
+
+      assert result.residuals_by_source_id[@owner] == [], inspect({property, value})
+      assert result.styles_by_source_id[@owner][property].value == value
+    end
+  end
+
+  test "routes admitted malformed compound values to a closed residual" do
+    for value <- [
+          "linear-gradient(90deg, var(--accent), +)",
+          "unknown-function(var(--accent))",
+          "calc(var(--measure) + 2px)",
+          "var(--duration) + var(--timing)"
+        ] do
+      result = run(".owner { color: #{value}; }")
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    end
+  end
+
+  test "keeps admitted compound declarations out of generic normalization" do
+    for value <- [
+          "linear-gradient(90deg, var(--accent) 100%)",
+          "calc(var(--measure) * 2)",
+          "var(--duration) var(--timing)",
+          "10px 2rem"
+        ] do
+      result =
+        run(
+          ".owner { --accent: rgb(1,2,3); --measure: 12px; --duration: 250ms; --timing: ease-in-out; width: #{value}; }"
+        )
+
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+      refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "width")
+    end
+  end
+
+  test "a compound local name cannot fall back to external variable authority" do
+    authority_index = variable_authority("--external-space", "spacing.content_gap")
+
+    result =
+      run(".owner { background: linear-gradient(90deg, var(--external-space) 100%); }",
+        opts: [authority_index: authority_index]
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "compound and direct references share the provenance budget" do
+    compound_rules = List.duplicate(".owner { width: var(--duration) var(--timing); }", 511)
+    direct_rules = [".owner { color: var(--duration); }", ".owner { opacity: var(--timing); }"]
+
+    css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
+        Enum.join(compound_rules ++ direct_rules, "\n")
+
+    result = run(css)
+
+    assert %StyleValue{kind: :literal, value: "250ms"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    over_budget = run(css <> "\n.owner { height: var(--duration); }")
+    refute Map.has_key?(over_budget.styles_by_source_id, @owner)
+
+    assert Enum.any?(
+             over_budget.residuals_by_source_id[@owner],
+             &(&1["reason"] == "resource_limit_exceeded")
+           )
+  end
+
   test "relocates conditionless descendant rules only to descendants in the owner subtree" do
     result = run(".owner .child { color: red; }")
 

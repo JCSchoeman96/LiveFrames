@@ -2,6 +2,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   @moduledoc false
 
   alias LiveFrames.Adapters.Bricks.CustomCssParser
+  alias LiveFrames.Adapters.Bricks.CompoundCssValue
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver
   alias LiveFrames.Adapters.Bricks.TransientStyleState
@@ -19,6 +20,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   @grid_gap_multiply_expression ~r/^calc\s*\(\s*var\s*\(\s*--grid-gap\s*\)\s*\*\s*(\d+(?:\.\d+)?|\.\d+)\s*\)$/i
   @direct_variable_expression ~r/^var\(\s*(--[A-Za-z0-9_-]+)\s*\)$/
+  @two_dimension_value ~r/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg|%)[ \t\r\n\f]+-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg|%)$/
   @unsafe_value_fragments ["url(", "expression(", "javascript:", "behavior:", "-moz-binding"]
   @max_effective_layer_css_bytes 65_536
   @max_local_definitions 256
@@ -148,7 +150,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          opts
        ) do
     {selector_selections, observed_local_names, definitions_by_provenance,
-     references_by_provenance, record_limited_provenances} =
+     references_by_provenance, record_limited_provenances, compound_analysis} =
       analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts)
 
     {local_resolutions, resolver_limited_provenances} =
@@ -182,7 +184,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
               opts,
               selector_selections,
               observed_local_names,
-              local_resolutions
+              local_resolutions,
+              compound_analysis
             )
           end
 
@@ -415,6 +418,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp analyze_local_records(frames, owner_node, scope_nodes, scope_ids, opts) do
     observed_local_names = observed_local_definition_names(frames)
+    compound_analysis = analyze_compound_values(frames)
 
     {selections_by_rule, record_batches, resource_limited} =
       Enum.reduce(frames, {%{}, %{}, MapSet.new()}, fn frame,
@@ -442,6 +446,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                      selections,
                      provenance_identity,
                      Map.get(observed_local_names, provenance_identity, MapSet.new()),
+                     compound_analysis,
                      record_batches,
                      resource_limited
                    ) do
@@ -470,7 +475,48 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       finalize_local_record_batches(record_batches)
 
     {selections_by_rule, observed_local_names, definitions_by_provenance,
-     references_by_provenance, resource_limited}
+     references_by_provenance, resource_limited, compound_analysis}
+  end
+
+  defp analyze_compound_values(frames) do
+    Enum.reduce(frames, %{}, fn frame, analysis ->
+      Enum.reduce(frame.declarations, analysis, fn {property, value}, analysis ->
+        if local_definition_name?(property) do
+          analysis
+        else
+          route = compound_route(value)
+          Map.put(analysis, {frame_rule_id(frame), property}, route)
+        end
+      end)
+    end)
+  end
+
+  defp compound_route(value) when is_binary(value) do
+    trimmed = String.trim(value)
+    lowered = String.downcase(trimmed)
+
+    cond do
+      local_name = direct_variable_name(trimmed) ->
+        {:direct_reference, local_name}
+
+      Regex.match?(@two_dimension_value, trimmed) ->
+        compound_analysis(trimmed)
+
+      String.contains?(lowered, "var(") or String.contains?(lowered, "calc(") ->
+        compound_analysis(trimmed)
+
+      true ->
+        :generic
+    end
+  end
+
+  defp compound_route(_value), do: :generic
+
+  defp compound_analysis(value) do
+    case CompoundCssValue.parse(value) do
+      {:ok, parsed} -> {:compound, {:ok, parsed, CompoundCssValue.occurrences(parsed)}}
+      result -> {:compound, result}
+    end
   end
 
   defp observed_local_definition_names(frames) do
@@ -498,6 +544,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          selections,
          provenance_identity,
          observed_local_names,
+         compound_analysis,
          record_batches,
          resource_limited
        ) do
@@ -509,6 +556,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
              selection,
              provenance_identity,
              observed_local_names,
+             compound_analysis,
              batches,
              limited
            ) do
@@ -523,6 +571,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          selection,
          provenance_identity,
          observed_local_names,
+         compound_analysis,
          record_batches,
          resource_limited
        ) do
@@ -536,6 +585,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
              target,
              provenance_identity,
              observed_local_names,
+             compound_analysis,
              batches,
              limited
            ) do
@@ -551,6 +601,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          target,
          provenance_identity,
          observed_local_names,
+         compound_analysis,
          record_batches,
          resource_limited
        ) do
@@ -575,8 +626,44 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
             {:ok, batches, limited}
 
           true ->
-            case direct_variable_name(value) do
-              local_name when is_binary(local_name) ->
+            route = Map.get(compound_analysis, {frame_rule_id(frame), property}, :generic)
+
+            case route do
+              {:compound, {:ok, _parsed, occurrences}} ->
+                Enum.reduce_while(occurrences, {:ok, batches, limited}, fn occurrence,
+                                                                           {:ok, current,
+                                                                            current_limited} ->
+                  local_name = compound_local_name(occurrence.local_name)
+
+                  if MapSet.member?(observed_local_names, local_name) do
+                    reference_id =
+                      {frame_rule_id(frame), target.source_id, selection.selector_identity,
+                       property, occurrence.occurrence_index}
+
+                    case append_local_record(
+                           :reference,
+                           frame,
+                           selection,
+                           target,
+                           local_name,
+                           nil,
+                           reference_id,
+                           provenance_identity,
+                           current,
+                           current_limited
+                         ) do
+                      {:ok, next, next_limited} -> {:cont, {:ok, next, next_limited}}
+                      {:overflow, next, next_limited} -> {:halt, {:overflow, next, next_limited}}
+                    end
+                  else
+                    {:cont, {:ok, current, current_limited}}
+                  end
+                end)
+
+              {:compound, _failed_parse} ->
+                {:ok, batches, limited}
+
+              {:direct_reference, local_name} ->
                 if MapSet.member?(observed_local_names, local_name) do
                   reference_id =
                     {frame_rule_id(frame), target.source_id, selection.selector_identity,
@@ -598,7 +685,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                   {:ok, batches, limited}
                 end
 
-              nil ->
+              :generic ->
                 {:ok, batches, limited}
             end
         end
@@ -787,6 +874,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp direct_variable_name(_value), do: nil
 
+  defp compound_local_name("--" <> _rest = local_name), do: local_name
+  defp compound_local_name(name) when is_binary(name), do: "--" <> name
+
   defp consumable_local_definition_compiler_input?(frame, selection, property, value)
        when is_binary(property) and is_binary(value) do
     resolver_definition_scope?(frame, selection) and
@@ -814,7 +904,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          opts,
          selections_by_rule,
          observed_local_names,
-         local_resolutions
+         local_resolutions,
+         compound_analysis
        ) do
     rule_id = {frame.source_index, frame.source_order}
 
@@ -847,7 +938,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
               owner_node,
               opts,
               observed_local_names,
-              local_resolutions
+              local_resolutions,
+              compound_analysis
             )
         end
     end
@@ -870,7 +962,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          owner_node,
          opts,
          observed_local_names,
-         local_resolutions
+         local_resolutions,
+         compound_analysis
        ) do
     provenance_identity = effective_provenance_identity(frame.provenance)
 
@@ -883,7 +976,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                target,
                opts,
                Map.get(observed_local_names, provenance_identity, MapSet.new()),
-               local_resolutions
+               local_resolutions,
+               compound_analysis
              ) do
           {:error, reason} ->
             {:halt, {:error, reason}}
@@ -1154,7 +1248,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          target,
          opts,
          observed_local_names,
-         local_resolutions
+         local_resolutions,
+         compound_analysis
        ) do
     provenance_identity = effective_provenance_identity(frame.provenance)
 
@@ -1181,7 +1276,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                  provenance_identity,
                  opts,
                  observed_local_names,
-                 local_resolutions
+                 local_resolutions,
+                 compound_analysis
                ) do
             {:ok, tagged} -> {:cont, {:ok, Map.put(normalized, property, tagged)}}
             {:error, reason} -> {:halt, {:error, reason}}
@@ -1199,9 +1295,65 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          provenance_identity,
          opts,
          observed_local_names,
-         local_resolutions
+         local_resolutions,
+         compound_analysis
        ) do
-    case direct_variable_name(value) do
+    case Map.get(compound_analysis, {frame_rule_id(frame), property}, :generic) do
+      {:compound, {:error, :resource_limit_exceeded}} ->
+        {:error, "resource_limit_exceeded"}
+
+      {:compound, _compound_result} ->
+        {:error, "unresolved_value"}
+
+      route when route == :generic ->
+        normalize_direct_or_generic_target(
+          frame,
+          selection,
+          target,
+          property,
+          value,
+          provenance_identity,
+          opts,
+          observed_local_names,
+          local_resolutions,
+          route
+        )
+
+      {:direct_reference, _local_name} = route ->
+        normalize_direct_or_generic_target(
+          frame,
+          selection,
+          target,
+          property,
+          value,
+          provenance_identity,
+          opts,
+          observed_local_names,
+          local_resolutions,
+          route
+        )
+    end
+  end
+
+  defp normalize_direct_or_generic_target(
+         frame,
+         selection,
+         target,
+         property,
+         value,
+         provenance_identity,
+         opts,
+         observed_local_names,
+         local_resolutions,
+         route
+       ) do
+    local_name =
+      case route do
+        {:direct_reference, name} -> name
+        :generic -> nil
+      end
+
+    case local_name do
       nil ->
         normalize_declaration(property, value, opts)
 
