@@ -12,7 +12,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
     assert parsed.production == :function_call
     assert parsed.function_name == :linear_gradient
 
-    assert [%{occurrence_index: 0, local_name: "accent", slot_grammar: :gradient_stop_atom}] =
+    assert [%{occurrence_index: 0, local_name: "--accent", slot_grammar: :gradient_stop_atom}] =
              CompoundCssValue.occurrences(parsed)
 
     assert {:ok, "linear-gradient(90deg, transparent 0%, rgb(1,2,3) 100%)"} =
@@ -24,11 +24,14 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
              CompoundCssValue.reconstruct(upper, %{0 => "10%"})
   end
 
-  test "preserves extra hyphens after the embedded variable prefix" do
+  test "preserves the full embedded variable name and its case" do
     assert {:ok, parsed} =
              CompoundCssValue.parse("linear-gradient(90deg, var(----accent))")
 
-    assert [%{local_name: "--accent"}] = CompoundCssValue.occurrences(parsed)
+    assert [%{local_name: "----accent"}] = CompoundCssValue.occurrences(parsed)
+
+    assert {:ok, case_variant} = CompoundCssValue.parse("calc(var(--Accent))")
+    assert [%{local_name: "--Accent"}] = CompoundCssValue.occurrences(case_variant)
   end
 
   test "parses calc references with and without a positive factor" do
@@ -41,7 +44,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
       assert {:ok, parsed} = CompoundCssValue.parse(value)
       assert parsed.function_name == :calc
 
-      assert [%{local_name: "space", slot_grammar: :calc_operand}] =
+      assert [%{local_name: "--space", slot_grammar: :calc_operand}] =
                CompoundCssValue.occurrences(parsed)
     end
 
@@ -145,7 +148,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
     assert {:ok, parsed} =
              CompoundCssValue.parse("linear-gradient(90deg, var( --accent ) 0% 10%)")
 
-    assert [%{occurrence_index: 0, local_name: "accent"}] =
+    assert [%{occurrence_index: 0, local_name: "--accent"}] =
              CompoundCssValue.occurrences(parsed)
 
     assert {:ok, "linear-gradient(90deg, rgb(1,2,3) 0% 10%)"} =
@@ -161,6 +164,11 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
       assert CompoundCssValue.parse("calc(var(--x) * #{factor})") ==
                {:error, :unsupported_grammar}
     end
+
+    overflowing_factor = String.duplicate("9", 400)
+
+    assert CompoundCssValue.parse("calc(var(--x) * #{overflowing_factor})") ==
+             {:error, :unsupported_grammar}
 
     for expression <- [
           "var(--x), 2",
@@ -358,7 +366,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
   test "preserves distinct local names without selecting by a digest" do
     assert {:ok, first} = CompoundCssValue.parse("calc(var(--first))")
     assert {:ok, second} = CompoundCssValue.parse("calc(var(--other))")
-    assert [%{local_name: "first"}] = CompoundCssValue.occurrences(first)
-    assert [%{local_name: "other"}] = CompoundCssValue.occurrences(second)
+    assert [%{local_name: "--first"}] = CompoundCssValue.occurrences(first)
+    assert [%{local_name: "--other"}] = CompoundCssValue.occurrences(second)
   end
 end

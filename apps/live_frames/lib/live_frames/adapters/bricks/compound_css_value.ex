@@ -459,6 +459,8 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
       _ ->
         false
     end
+  rescue
+    ArgumentError -> false
   end
 
   defp finite_nonnegative?(value) do
@@ -478,7 +480,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   end
 
   defp extract_name(ref),
-    do: Regex.run(~r/--([A-Za-z0-9_-]+)/, ref, capture: :all_but_first) |> List.first()
+    do: Regex.run(~r/(--[A-Za-z0-9_-]+)/, ref, capture: :all_but_first) |> List.first()
 
   defp unsupported, do: {:error, :unsupported_grammar}
   defp resource, do: {:error, :resource_limit_exceeded}

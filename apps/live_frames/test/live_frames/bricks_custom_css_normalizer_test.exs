@@ -342,47 +342,45 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
   end
 
-  test "compound and direct references share the provenance budget" do
-    compound_rules = List.duplicate(".owner { width: var(--duration) var(--timing); }", 511)
-    direct_rules = [".owner { color: var(--duration); }", ".owner { opacity: var(--timing); }"]
+  test "compound and direct references share the 1024-record target-expansion budget" do
+    {nodes, children_by_source_id} = wide_tree(511)
 
     css =
-      ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
-        Enum.join(compound_rules ++ direct_rules, "\n")
+      ".owner { --duration: 250ms; --timing: ease-in-out; --accent: rgb(1,2,3); " <>
+        "color: var(--accent); background-color: var(--accent); }\n" <>
+        ".owner .child { width: var(--duration) var(--timing); }"
 
-    result = run(css)
+    result = normalize_tree(css, nodes, children_by_source_id)
 
-    assert %StyleValue{kind: :literal, value: "250ms"} =
+    assert %StyleValue{kind: :literal, value: "rgb(1,2,3)"} =
              result.styles_by_source_id[@owner]["color"]
 
-    assert result.residuals_by_source_id[@owner] == []
-
-    over_budget = run(css <> "\n.owner { height: var(--duration); }")
-    refute Map.has_key?(over_budget.styles_by_source_id, @owner)
-
-    assert Enum.any?(
-             over_budget.residuals_by_source_id[@owner],
-             &(&1["reason"] == "resource_limit_exceeded")
-           )
-  end
-
-  test "duplicate selector groups do not duplicate compound resolver references" do
-    compound_rules =
-      List.duplicate(
-        ".owner, .owner { width: var(--duration) var(--timing); }",
-        512
-      )
-
-    css =
-      ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
-        Enum.join(compound_rules, "\n")
-
-    result = run(css)
+    assert %StyleValue{kind: :literal, value: "rgb(1,2,3)"} =
+             result.styles_by_source_id[@owner]["background-color"]
 
     assert %StyleValue{kind: :literal, value: "250ms ease-in-out"} =
-             result.styles_by_source_id[@owner]["width"]
+             result.styles_by_source_id["child-1"]["width"]
 
-    assert result.residuals_by_source_id[@owner] == []
+    assert map_size(result.styles_by_source_id) == 512
+
+    assert Enum.all?(result.residuals_by_source_id, fn {_source_id, residuals} ->
+             residuals == []
+           end)
+
+    over_budget_css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; --accent: rgb(1,2,3); " <>
+        "color: var(--accent); background-color: var(--accent); " <>
+        "border-color: var(--accent); }\n" <>
+        ".owner .child { width: var(--duration) var(--timing); }"
+
+    over_budget = normalize_tree(over_budget_css, nodes, children_by_source_id)
+
+    assert over_budget.styles_by_source_id == %{}
+    assert over_budget.responsive_by_source_id == %{}
+
+    assert Enum.any?(over_budget.residuals_by_source_id, fn {_source_id, residuals} ->
+             Enum.any?(residuals, &(&1["reason"] == "resource_limit_exceeded"))
+           end)
   end
 
   test "relocates conditionless descendant rules only to descendants in the owner subtree" do

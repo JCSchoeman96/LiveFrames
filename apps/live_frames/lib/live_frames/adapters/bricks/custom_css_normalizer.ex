@@ -548,15 +548,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          record_batches,
          resource_limited
        ) do
-    unique_selections =
-      Enum.uniq_by(selections, fn selection ->
-        {selection.selector_identity, Enum.map(selection.targets, & &1.source_id)}
-      end)
-
-    Enum.reduce_while(unique_selections, {:ok, record_batches, resource_limited}, fn selection,
-                                                                                     {:ok,
-                                                                                      batches,
-                                                                                      limited} ->
+    Enum.reduce_while(selections, {:ok, record_batches, resource_limited}, fn selection,
+                                                                              {:ok, batches,
+                                                                               limited} ->
       case collect_selection_local_records(
              frame,
              selection,
@@ -639,7 +633,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                 Enum.reduce_while(occurrences, {:ok, batches, limited}, fn occurrence,
                                                                            {:ok, current,
                                                                             current_limited} ->
-                  local_name = compound_local_name(occurrence.local_name)
+                  local_name = occurrence.local_name
 
                   if MapSet.member?(observed_local_names, local_name) do
                     reference_id =
@@ -891,8 +885,6 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   end
 
   defp direct_variable_name(_value), do: nil
-
-  defp compound_local_name(name) when is_binary(name), do: "--" <> name
 
   defp consumable_local_definition_compiler_input?(frame, selection, property, value)
        when is_binary(property) and is_binary(value) do
@@ -1337,8 +1329,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
         with {:ok, terminals} <- terminals,
              {:ok, reconstructed} <- CompoundCssValue.reconstruct(parsed, terminals),
-             :ok <- safe_declaration_value(property, reconstructed, :source_resolver) do
-          {:ok, %{"kind" => "literal", "value" => String.trim(reconstructed)}}
+             {:ok, safe_value} <-
+               safe_declaration_value(property, reconstructed, :source_resolver) do
+          {:ok, %{"kind" => "literal", "value" => safe_value}}
         else
           {:error, "unsafe_declaration"} -> {:error, "unsafe_declaration"}
           {:error, "unsupported_declaration"} -> {:error, "unsupported_declaration"}
@@ -1424,8 +1417,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp normalize_declaration(property, value, opts, origin)
        when is_binary(property) and is_binary(value) do
-    with :ok <- safe_declaration_value(property, value, origin) do
-      normalize_declaration_value(property, String.trim(value), opts)
+    with {:ok, safe_value} <- safe_declaration_value(property, value, origin) do
+      normalize_declaration_value(property, safe_value, opts)
     end
   end
 
@@ -1450,7 +1443,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         {:error, "unsafe_declaration"}
 
       true ->
-        :ok
+        {:ok, String.trim(value)}
     end
   end
 
