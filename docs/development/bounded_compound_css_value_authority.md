@@ -38,6 +38,16 @@ IMPLEMENTATION_PLAN_SEMANTIC_DECISIONS_REQUIRED=NO
 LOCAL_COMPOUND_TOKEN_INFERENCE=NO
 LOCAL_COMPOUND_EXTERNAL_FALLBACK=NO
 
+LIFECYCLE_STATE_NAMES_MATCH_COMPLETED_WORK=YES
+EMITTED_TERMINAL_SUCCESS=YES
+FUNCTION_ARGUMENT_GRAMMAR=FROZEN
+FUNCTION_QUOTING_POLICY=FROZEN
+MULTI_TOKEN_IDENTIFIER_POLICY=FROZEN
+MULTI_TOKEN_LITERAL_POLICY=FROZEN
+OWNER_FINDING_TO_INVENTORY_SPECIMEN_BIJECTION=NOT_ASSERTED
+RESOLVER_STATE_SCOPE_CONTRACT_CHANGED=NO
+UNSUPPORTED_SCOPE_BYPASS_AUTHORIZED=NO
+
 BOUNDED_COMPOUND_VALUE_NORMALIZATION=SELECTED_NEXT_GENERIC_CAPABILITY
 
 COMPOUND_ARCHITECTURE_AUTHORITY_STATE=DRAFT_PENDING_INDEPENDENT_REVIEW
@@ -172,16 +182,24 @@ external-authority fallback.
 
 ### Lifecycle transition table
 
-| From | Guard | Side effect | Success state | Failure state |
+State names denote **completed work**. `EMITTED` is terminal success.
+`FAIL_CLOSED_RESIDUAL` is terminal failure. There is no transition out of
+`FAIL_CLOSED_RESIDUAL`.
+
+| From | Guard | Side effect (on success) | Success state | Failure state |
 | --- | --- | --- | --- | --- |
-| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES` | Record declaration under owner/provenance scope | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
-| `GRAMMAR_CLASSIFIED` | Value matches exactly one disjoint production (see below) | Attach production tag | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
-| `PARSED_SUPPORTED` | Production parser accepts value within token/depth/argument bounds | Build private parse tree | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
-| `LOCAL_REFERENCES_COLLECTED` | Each embedded `var(--name)` is observed-local and within per-declaration occurrence cap | Append unchanged resolver reference records; assign private occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
-| `LOCAL_REFERENCES_RESOLVED` | Batch `resolve/3` returns `{:ok, terminal}` for every reference record in declaration order | Map terminals to occurrence correlation | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
-| `TERMINAL_RECONSTRUCTED` | Substitution yields one string ≤ `MAX_RECONSTRUCTED_TERMINAL_BYTES` with no remaining `var(` | Hold reconstructed terminal | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
-| `CSS_REVALIDATED` | `CSSDeclaration` safety and value normalization accept reconstructed terminal on local-compound lane (no `VariableAuthority` for embedded locals) | Ordinary `StyleValue` candidate | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
-| `EMITTED` | Whole-rule atomicity satisfied for selector rule | Emit normalized style | — | — |
+| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES` | Classify exactly one disjoint compound production | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
+| `GRAMMAR_CLASSIFIED` | Selected production parses within all frozen production bounds | Build private bounded parse representation | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
+| `PARSED_SUPPORTED` | Embedded occurrence count within bounds; every embedded local name passes the accepted local-name boundary | Extract occurrences; assign normalizer-private `occurrence_index`; append unchanged resolver reference records | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_COLLECTED` | Existing `resolve/3` returns one ordered result per routed record; every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_RESOLVED` | Deterministic substitution succeeds within `MAX_RECONSTRUCTED_TERMINAL_BYTES` and leaves no `var(` | Construct exactly one terminal string | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
+| `TERMINAL_RECONSTRUCTED` | Existing `CSSDeclaration` safety and value normalization accept the reconstructed terminal on the local-compound lane | Hold ordinary normalized declaration candidate | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
+| `CSS_REVALIDATED` | All declarations in the selector rule pass existing whole-rule atomicity | Emit normalized style through the existing path | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
+
+```text
+LIFECYCLE_STATE_NAMES_MATCH_COMPLETED_WORK=YES
+EMITTED_TERMINAL_SUCCESS=YES
+```
 
 ## Count model
 
@@ -212,10 +230,19 @@ plus four owners × state template. This is the lane finding unit from accepted
 gap and no-ACSS records.
 
 **`SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_COUNT` (8):** the accepted gap
-decomposition safe-inspection inventory — **one sanitized source-expression
-specimen per compound owner finding**, each assigned exactly one grammar shape
-label (`2 + 5 + 1 = 8`). The inventory shape counts describe **these eight
-specimens**, not template-declaration totals and not resolver record counts.
+decomposition safe-inspection inventory — eight sanitized expression specimens
+each assigned exactly one grammar shape label (`2 + 5 + 1 = 8`). The inventory
+shape counts describe **these eight specimens only**, not template-declaration
+totals and not resolver record counts.
+
+```text
+OWNER_FINDING_TO_INVENTORY_SPECIMEN_BIJECTION=NOT_ASSERTED
+```
+
+Equal counts (`8` and `8`) do **not** prove a bijection between owner findings
+and inventory specimens. Joined-template re-verification shows multiple compound
+declarations inside a single overlay owner finding. Gap decomposition does not
+publish a per-finding specimen map in this record.
 
 **`OWNER_EXPANDED_COMPOUND_DECLARATION_OCCURRENCE_COUNT`:** supplementary
 re-verification on joined export templates counts compound declarations that
@@ -259,9 +286,10 @@ GRAMMAR_CLASSIFICATION_PRECEDENCE_REQUIRED=NO
 
 **Explicit rejects (all productions):** general CSS evaluation; outer function
 names other than the frozen allowlist (`linear-gradient`, `calc`); binary
-`+ - * /` operators (zero inventory specimens); recursive expression
-evaluation; unbounded nesting; raw source passthrough to Design IR or generated
-CSS.
+operators in `VAR_REFERENCE_WITH_OPERATION` and `MULTI_TOKEN_VALUE` (zero
+inventory specimens); `*` only where explicitly authorized inside frozen
+`calc` argument grammar; recursive expression evaluation; unbounded nesting;
+raw source passthrough to Design IR or generated CSS.
 
 ### Production `FUNCTION_CALL`
 
@@ -279,10 +307,49 @@ joined-template evidence shows **both** allowlisted calls carry embedded
   argument span.
 - It is tokenized for occurrence extraction; it is **not** modeled as a nested
   `FUNCTION_CALL` production and does **not** increment `MAX_COMPOUND_PARSE_DEPTH`.
-- Any other `(`-initiated function form inside the argument span (except
-  quoted-string contents) → `FAIL_CLOSED_RESIDUAL`.
+- Any other `(`-initiated function form inside the argument span →
+  `FAIL_CLOSED_RESIDUAL`.
 - Argument spans are not recursively evaluated; no inner `linear-gradient` /
   `calc` parsing.
+
+**Frozen argument grammars (`FUNCTION_ARGUMENT_GRAMMAR=FROZEN`):**
+
+Canonical joined-template safe inspection (boolean flags only; no raw source
+published) shows: **no quoted strings** in either allowlisted call; both carry
+embedded `var(--name)`; `linear-gradient` uses comma-separated inner segments
+with angle/percentage/keyword/var atoms; `calc` inner span is comma-free with
+embedded `var(--name)`.
+
+```text
+FUNCTION_QUOTING_POLICY=REJECT_ALL_QUOTED_STRING_ARGUMENTS
+QUOTED_STRING_ARGUMENTS=REJECT
+```
+
+**`linear-gradient` argument** (single inner span, ≤ `MAX_FUNCTION_ARGUMENT_BYTES`):
+
+- Must match: `<angle> , <stop-list>` where `<angle>` is
+  `\d+(\.\d+)?deg` (ASCII digits, optional fraction, literal suffix `deg`).
+- `<stop-list>` is one to `MAX_LINEAR_GRADIENT_STOPS` comma-separated **stop
+  segments** (comma + optional ASCII whitespace only as delimiter between
+  segments).
+- Each **stop segment** is one to `MAX_STOP_SEGMENT_TOKENS` whitespace-separated
+  atoms; each atom is exactly one of:
+  - literal keyword `transparent`;
+  - percentage `\d+(\.\d+)?%`;
+  - embedded direct `var(--name)` (local name per existing boundary);
+  - **not** a general identifier.
+- Operators, hashes, and nested `(` except embedded `var(--name)` → reject.
+
+**`calc` argument** (single inner span, ≤ `MAX_FUNCTION_ARGUMENT_BYTES`):
+
+- Must match exactly one of these forms (ASCII whitespace flexible around
+  tokens):
+  - `var(--name)`;
+  - `var(--name) * <positive-finite-number>` where
+    `<positive-finite-number>` uses the same `positive_finite_number/1` contract
+    as `CustomCssNormalizer` (positive finite float, empty suffix, no unit).
+- No comma, no second `var(`, no operators other than the single `*` form above,
+  no nested `(` besides `var(`.
 
 ```text
 FUNCTION_CALL_EMBEDDED_VAR_POLICY=PROVEN_AND_FROZEN
@@ -290,7 +357,11 @@ FUNCTION_CALL_NESTING_ACCOUNTING=
   OUTER_ALLOWLISTED_CALL_COUNTS_AS_DEPTH_1
   EMBEDDED_var_COUNTS_AS_DEPTH_0
   OTHER_NESTED_FUNCTIONS=REJECT
+FUNCTION_ARGUMENT_GRAMMAR=FROZEN
+FUNCTION_QUOTING_POLICY=FROZEN
 MAX_COMPOUND_PARSE_DEPTH=1
+MAX_LINEAR_GRADIENT_STOPS=8
+MAX_STOP_SEGMENT_TOKENS=4
 ```
 
 ### Production `MULTI_TOKEN_VALUE`
@@ -299,25 +370,36 @@ MAX_COMPOUND_PARSE_DEPTH=1
 whitespace; value does not satisfy `FUNCTION_CALL` or
 `VAR_REFERENCE_WITH_OPERATION`.
 
-**Frozen token classes (each token must match exactly one):**
+**Frozen token classes (`MULTI_TOKEN_IDENTIFIER_POLICY=FROZEN`,
+`MULTI_TOKEN_LITERAL_POLICY=FROZEN`):** each token must match exactly one of:
 
-- **Keyword token** — member of the finite keyword set already used by
-  `CustomCssNormalizer` for declaration values on the property being normalized.
-- **Dimension or number literal** — matches the same literal acceptance used
-  before compound reconstruction (no unit calculus).
-- **Identifier token** — `[A-Za-z_][A-Za-z0-9_-]*` without `(`.
-- **Embedded direct local reference token** — a single `var(--name)` substring
-  where `name` passes `CSSDeclaration.safe_property?/1`, only when the overall
-  value is **not** juxtaposition-two-vars form (production 3).
+- **Keyword token** — exact member of `CustomCssNormalizer` `@keyword_values`:
 
-**Explicit rejects:** top-level commas; semicolons; `calc(` at position zero;
-values matching production 3; unbounded token count.
+```text
+auto block bold border-box content-box currentColor flex grid hidden inherit
+initial inline inline-block inline-flex inline-grid none normal revert
+revert-layer static unset visible
+```
+
+- **Dimension literal** — matches
+  `~r/^\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$/` (case-sensitive unit suffix as
+  written).
+- **Percentage literal** — `\d+(\.\d+)?%` when not already covered as dimension
+  with `%` suffix.
+- **Embedded direct local reference token** — entire token is one
+  `var(--name)` span with local name per existing boundary, only when the full
+  value is not production 3.
+
+**Explicit rejects:** general identifiers outside the keyword list; top-level
+commas; semicolons; `calc(` at position zero; values matching production 3;
+unbounded token count; function-call tokens with `(`.
 
 **Inventory note:** five of eight **inventory specimens** are labeled
 `MULTI_TOKEN_VALUE` in accepted gap decomposition. Joined-template
-re-verification alone does not enumerate those five specimen strings; the
-production grammar above is frozen to satisfy the inventory requirement without
-expanding beyond evidenced token classes.
+re-verification does not reproduce all five specimen strings; the token union
+above is frozen from existing normalizer boundaries plus evidenced gradient
+keyword `transparent` (allowed only inside `linear-gradient` stop segments, not
+as a general MULTI_TOKEN identifier expansion).
 
 ### Production `VAR_REFERENCE_WITH_OPERATION`
 
@@ -418,8 +500,33 @@ Apply resolver results **without reinterpretation**:
 | `{:ok, terminal}` | Substitute into reconstruction input |
 | `:no_local_definition` | `FAIL_CLOSED_RESIDUAL` |
 | `:unsupported_nested_reference` | `FAIL_CLOSED_RESIDUAL` |
+| `:unsupported_scope` | `FAIL_CLOSED_RESIDUAL` |
 | Other closed errors | `FAIL_CLOSED_RESIDUAL` |
 | `:resource_limit_exceeded` | `FAIL_CLOSED_RESIDUAL` (batch) |
+
+### Resolver `state_scope` (unchanged contract)
+
+`SourceLocalCustomPropertyResolver` rejects every reference record with
+`state_scope != nil` with `:unsupported_scope`. This authority does not change
+that contract (`RESOLVER_STATE_SCOPE_CONTRACT_CHANGED=NO`,
+`UNSUPPORTED_SCOPE_BYPASS_AUTHORIZED=NO`).
+
+Reference records inherit `state_scope` from `selection.condition` when built
+by `CustomCssNormalizer`. Supplementary joined-template safe inspection (no raw
+selectors published) shows **no pseudo-state token** in overlay or state
+template selectors for the two compound template identities. Embedded local
+references routed from those templates therefore have
+`state_scope == nil` in this evidence pass.
+
+```text
+COMPOUND_REFERENCE_STATE_SCOPE_NIL_COUNT_JOINED_TEMPLATE_EMBEDDED_OCCURRENCES=6
+COMPOUND_REFERENCE_STATE_SCOPE_NON_NIL_COUNT_JOINED_TEMPLATE_EMBEDDED_OCCURRENCES=0
+OWNER_EXPANDED_STATE_SCOPE_COUNTS=NOT_ASSERTED_IN_THIS_RECORD
+```
+
+If a future owner export routes compound embedded references with non-`nil`
+`state_scope`, expect `UNSUPPORTED_SCOPE` and `FAIL_CLOSED_RESIDUAL` without
+resolver changes.
 
 **FRAME C and FRAME D must not become executable** because compound parsing
 succeeds. In particular:
@@ -492,8 +599,12 @@ specimens without assuming uniform template-level shape.
 
 | Owner-finding class | Count | Grammar productions implicated | Embedded locals | Resolver | Expected disposition |
 | --- | ---: | --- | --- | --- | --- |
-| Overlay template | 4 | Inventory mix includes `FUNCTION_CALL`, `MULTI_TOKEN_VALUE`, and juxtaposition specimens per gap `2+5+1`; template scan adds `linear-gradient`, `calc`, juxtaposition declarations | Yes (supplementary occurrence totals) | Each embedded occurrence must succeed under accepted resolver semantics | **DERIVE** — grammar may parse while `NO_LOCAL_DEFINITION` or `UNSUPPORTED_NESTED_REFERENCE` keeps rule residual |
-| State template | 4 | Juxtaposition production on transition; inventory includes one juxtaposition specimen | Yes (two occurrences per template) | Both occurrences must resolve for transition declaration to reconstruct | **DERIVE** — same fail-closed coupling |
+| Overlay template | 4 | Inventory mix includes `FUNCTION_CALL`, `MULTI_TOKEN_VALUE`, and juxtaposition specimens per gap `2+5+1`; template scan adds frozen `linear-gradient`, `calc`, juxtaposition declarations | Yes (supplementary occurrence totals) | `state_scope == nil` in joined-template evidence; each occurrence must succeed under accepted resolver semantics or fail closed (`NO_LOCAL_DEFINITION`, `UNSUPPORTED_NESTED_REFERENCE`, `UNSUPPORTED_SCOPE`, …) | **DERIVE** — grammar may parse while resolver closed outcomes keep rule residual |
+| State template | 4 | Juxtaposition production on transition; inventory includes one juxtaposition specimen | Yes (two occurrences per template) | Same `state_scope` evidence; both occurrences must resolve for transition declaration to reconstruct | **DERIVE** — same fail-closed coupling |
+
+Non-`nil` `state_scope` on any embedded reference record:
+`EXPECTED_RESOLVER_RESULT=UNSUPPORTED_SCOPE`,
+`EXPECTED_COMPOUND_DISPOSITION=FAIL_CLOSED_RESIDUAL`.
 
 ```text
 COMPOUND_SUCCESS_CRITERION_8_TO_0=REJECTED
@@ -531,8 +642,10 @@ OBAN=N/A
 | `MAX_RECONSTRUCTED_TERMINAL_BYTES` | 4096 | reconstruction output |
 | `MAX_COMPOUND_TOKEN_COUNT` | 32 | new compound grammar |
 | `MAX_EMBEDDED_LOCAL_REFERENCES_PER_DECLARATION` | 16 | occurrence extraction |
-| `MAX_FUNCTION_ARGUMENT_BYTES` | 2048 | opaque argument span |
-| `MAX_COMPOUND_PARSE_DEPTH` | 1 | no nested top-level productions |
+| `MAX_FUNCTION_ARGUMENT_BYTES` | 2048 | function inner span |
+| `MAX_LINEAR_GRADIENT_STOPS` | 8 | `linear-gradient` comma segments |
+| `MAX_STOP_SEGMENT_TOKENS` | 4 | atoms per gradient stop segment |
+| `MAX_COMPOUND_PARSE_DEPTH` | 1 | outer allowlisted call only |
 
 No whole-document rescan per occurrence. Parsing is per declaration value within
 already-selected effective CSS. No unbounded recursion, no general expression
