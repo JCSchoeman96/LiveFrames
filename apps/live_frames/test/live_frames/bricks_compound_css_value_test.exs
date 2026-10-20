@@ -93,6 +93,8 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
           "linear-gradient(90deg, red,,blue)",
           "linear-gradient(90deg, red, foo)",
           "linear-gradient(90deg, red + blue)",
+          "linear-gradient(90deg, stop var(--x))",
+          "linear-gradient(90deg, var(--x)))",
           "linear-gradient(90deg, #fff)",
           "linear-gradient(90deg, rgb(1,2,3))"
         ] do
@@ -168,7 +170,10 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
           "#fff",
           "rgb(256,0,0)",
           "rgb(1.5,0,0)",
+          "rgb(0000,0,0)",
+          "rgb(0,0,0,0.5)",
           "rgb(1, 0,0)",
+          "rgba(0,0,0)",
           "rgba(0,0,0,-.1)",
           "rgba(0,0,0,1.1)",
           "rgba(0,0,0,50%)",

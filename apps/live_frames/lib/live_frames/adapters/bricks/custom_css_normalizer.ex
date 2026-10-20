@@ -548,9 +548,15 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          record_batches,
          resource_limited
        ) do
-    Enum.reduce_while(selections, {:ok, record_batches, resource_limited}, fn selection,
-                                                                              {:ok, batches,
-                                                                               limited} ->
+    unique_selections =
+      Enum.uniq_by(selections, fn selection ->
+        {selection.selector_identity, Enum.map(selection.targets, & &1.source_id)}
+      end)
+
+    Enum.reduce_while(unique_selections, {:ok, record_batches, resource_limited}, fn selection,
+                                                                                     {:ok,
+                                                                                      batches,
+                                                                                      limited} ->
       case collect_selection_local_records(
              frame,
              selection,

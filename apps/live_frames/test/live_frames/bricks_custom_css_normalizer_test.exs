@@ -348,6 +348,25 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
            )
   end
 
+  test "duplicate selector groups do not duplicate compound resolver references" do
+    compound_rules =
+      List.duplicate(
+        ".owner, .owner { width: var(--duration) var(--timing); }",
+        512
+      )
+
+    css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
+        Enum.join(compound_rules, "\n")
+
+    result = run(css)
+
+    assert %StyleValue{kind: :literal, value: "250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["width"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
   test "relocates conditionless descendant rules only to descendants in the owner subtree" do
     result = run(".owner .child { color: red; }")
 

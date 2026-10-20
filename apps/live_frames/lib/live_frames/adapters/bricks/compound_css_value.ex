@@ -131,7 +131,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
                 resource()
 
               true ->
-                slots = gradient_vars(source)
+                slots = gradient_vars(source, body)
 
                 if slots == :invalid,
                   do: unsupported(),
@@ -244,10 +244,10 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     |> then(fn {tail, chunks, occs} -> {chunks ++ [tail], occs} end)
   end
 
-  defp gradient_vars(source) do
+  defp gradient_vars(source, body) do
     matches = Regex.scan(@local_var, source, return: :index)
 
-    if balanced_only_vars?(source) and gradient_atoms_valid?(source) do
+    if balanced_only_vars?(body) and gradient_atoms_valid?(body) do
       Enum.map(matches, fn [{start, len} | _] ->
         {binary_part(source, start, len), :gradient_stop_atom}
       end)
@@ -256,29 +256,28 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     end
   end
 
-  defp balanced_only_vars?(source) do
-    stripped = Regex.replace(@local_var, source, "")
-    body = stripped |> String.split("(", parts: 2) |> List.last() |> String.trim_trailing(")")
-    not String.contains?(body, ["'", "\"", "(", ")"])
+  defp balanced_only_vars?(body) do
+    stripped = Regex.replace(@local_var, body, "")
+    not String.contains?(stripped, ["'", "\"", "(", ")"])
   end
 
-  defp gradient_atoms_valid?(source) do
-    body =
-      Regex.replace(@local_var, source, "stop")
-      |> String.split("(", parts: 2)
-      |> List.last()
-      |> String.trim_trailing(")")
+  defp gradient_atoms_valid?(body) do
+    if String.contains?(body, <<0>>) do
+      false
+    else
+      body = Regex.replace(@local_var, body, <<0>>)
 
-    case split_top_level_commas(body) do
-      [_angle | stops] ->
-        Enum.all?(stops, fn stop -> Enum.all?(split_ws(stop), &valid_gradient_atom?(&1)) end)
+      case split_top_level_commas(body) do
+        [_angle | stops] ->
+          Enum.all?(stops, fn stop -> Enum.all?(split_ws(stop), &valid_gradient_atom?(&1)) end)
 
-      _ ->
-        false
+        _ ->
+          false
+      end
     end
   end
 
-  defp valid_gradient_atom?("stop"), do: true
+  defp valid_gradient_atom?(<<0>>), do: true
 
   defp valid_gradient_atom?(value),
     do: value == "transparent" or Regex.match?(~r/^\d+(?:\.\d+)?%$/, value)
@@ -325,13 +324,11 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   defp valid_slot?(_, _), do: false
 
   defp valid_rgb?(value) do
-    case Regex.run(~r/^rgba?\((.*)\)$/i, value, capture: :all_but_first) do
-      [inside] ->
-        parts = String.split(inside, ",")
-
-        case parts do
-          [r, g, b] -> Enum.all?([r, g, b], &channel?/1)
-          [r, g, b, a] -> Enum.all?([r, g, b], &channel?/1) and alpha?(a)
+    case Regex.run(~r/^(rgb|rgba)\((.*)\)$/i, value, capture: :all_but_first) do
+      [name, inside] ->
+        case {String.downcase(name), String.split(inside, ",")} do
+          {"rgb", [r, g, b]} -> Enum.all?([r, g, b], &channel?/1)
+          {"rgba", [r, g, b, a]} -> Enum.all?([r, g, b], &channel?/1) and alpha?(a)
           _ -> false
         end
 
@@ -340,7 +337,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     end
   end
 
-  defp channel?(value), do: Regex.match?(~r/^\d+$/, value) and String.to_integer(value) <= 255
+  defp channel?(value), do: Regex.match?(~r/^\d{1,3}$/, value) and String.to_integer(value) <= 255
 
   defp alpha?(value) do
     valid_alpha = Regex.match?(~r/^(?:0|1|(?:\d+\.\d+|\.\d+))$/, value)
