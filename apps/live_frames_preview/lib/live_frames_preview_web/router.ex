@@ -24,6 +24,7 @@ defmodule LiveFramesPreviewWeb.Router do
     live("/liveframes/lab", ConversionLabLive, :index)
     live("/liveframes/fidelity/hero", FidelityPreviewLive, :index)
     live("/liveframes/native/hero", NativeHeroPreviewLive, :index)
+    live("/liveframes/pages/frames-a-v0", PageTracers.FramesPageAV0Live, :index)
     live_storybook("/storybook", backend_module: LiveFramesPreviewWeb.Storybook)
   end
 end
