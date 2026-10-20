@@ -269,6 +269,11 @@ Classification uses the value after property-level trim. Direct-only
 `var(--name)` values remain on the **existing direct-reference path**, not this
 grammar.
 
+**Explicit rejects (all productions):** general CSS evaluation; arbitrary
+function names beyond bounded syntactic recognition; arbitrary operators beyond
+the fixed `VAR_REFERENCE_WITH_OPERATION` set; recursive expression evaluation;
+unbounded nesting; raw source passthrough to Design IR or generated CSS.
+
 ## Local reference extraction and resolver integration
 
 ### Extraction
