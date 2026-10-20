@@ -11,13 +11,29 @@ defmodule LiveFrames.ComponentReviewTest do
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.Diagnostic
   alias LiveFrames.ComponentizationPlan.RenderProjection
+  alias LiveFrames.ComponentizationPlan.Diagnostic, as: PlanDiagnostic
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
+  alias LiveFrames.ComponentReviewResult
+  alias LiveFrames.Behavior.Binding, as: BehaviorBinding
+  alias LiveFrames.Behavior.Binding.PrimitiveRef
+  alias LiveFrames.Behavior.BindingIdentity
+  alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.ReviewResult
+  alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR.Identity
+  alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.ValueBinding
 
   @boundary_id DesignNode.deterministic_id([1])
   @heading_id DesignNode.deterministic_id([1, 1])
   @outside_id DesignNode.deterministic_id([2])
+  @image_id DesignNode.deterministic_id([1, 2])
+  @actions_id DesignNode.deterministic_id([1, 3])
+  @disposition_target_id DesignNode.deterministic_id([1, 4])
+  @disposition_source_type "synthetic-builder"
+  @disposition_source_id "synthetic-node-42"
 
   defp document do
     DesignDocument.new(
@@ -147,6 +163,291 @@ defmodule LiveFrames.ComponentReviewTest do
     assert design_document == original_document
   end
 
+  test "legacy approval blocks every plan containing a node disposition" do
+    {contract, plan, design_document, _behavior_contract, _review} = disposition_candidate()
+
+    assert {:error, diagnostics} = ComponentReview.approve(contract, plan, design_document)
+    assert Enum.any?(diagnostics, &(&1.code == "component_contract.approval_blocked"))
+    assert contract.approval_status == :proposed
+  end
+
+  test "atomic disposition approval returns the approved contract with its exact review result" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    original_contract = contract
+    original_plan = plan
+    original_document = design_document
+
+    assert {:ok, proposed_contract_bytes} = ComponentContract.encode(contract)
+
+    assert ComponentizationPlan.validate_generation_prerequisites_with_behavior_authority(
+             plan,
+             contract,
+             design_document,
+             behavior_contract,
+             behavior_review
+           ) == :ok
+
+    assert {:ok, approved, review_result} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:task6",
+               "2026-10-18T00:00:00.000000Z",
+               ["component-evidence:b", "component-evidence:a"]
+             )
+
+    assert approved.approval_status == :approved
+    assert ComponentReviewResult.validate(review_result) == :ok
+
+    assert ComponentReviewResult.validate_against(review_result, approved, plan, design_document) ==
+             :ok
+
+    assert review_result.component_contract_id == approved.contract_id
+    assert review_result.component_contract_digest_algorithm == "sha-256"
+    assert review_result.componentization_plan_digest_algorithm == "sha-256"
+    assert review_result.decision == "approved"
+    assert review_result.evidence_refs == ["component-evidence:b", "component-evidence:a"]
+
+    assert {:ok, approved_contract_bytes} = ComponentContract.encode(approved)
+    approved_digest = sha256(approved_contract_bytes)
+    proposed_digest = sha256(proposed_contract_bytes)
+    assert review_result.component_contract_digest == approved_digest
+    refute review_result.component_contract_digest == proposed_digest
+
+    assert {:ok, encoded_review_result} = ComponentReviewResult.encode(review_result)
+
+    assert String.contains?(
+             encoded_review_result,
+             "\"evidence_refs\":[\"component-evidence:a\",\"component-evidence:b\"]"
+           )
+
+    assert original_contract.approval_status == :proposed
+    assert plan == original_plan
+    assert design_document == original_document
+    assert length(original_plan.node_dispositions) == 1
+  end
+
+  test "atomic disposition approval never promotes a needs_review candidate" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate(approval_status: :needs_review)
+
+    assert {:error, diagnostics} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:task6",
+               "2026-10-18T00:00:00.000000Z",
+               ["component-evidence:a"]
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "component_contract.approval_blocked"))
+    assert contract.approval_status == :needs_review
+  end
+
+  test "atomic disposition approval validates review metadata and Behavior authority" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    for {reviewer, reviewed_at, evidence_refs} <- [
+          {"", "2026-10-18T00:00:00.000000Z", ["component-evidence:a"]},
+          {<<255>>, "2026-10-18T00:00:00.000000Z", ["component-evidence:a"]},
+          {"reviewer:task6", "2026-10-18T00:00:00Z", ["component-evidence:a"]},
+          {"reviewer:task6", "2026-10-18T00:00:00.000000+00:00", ["component-evidence:a"]},
+          {"reviewer:task6", "2026-10-18T00:00:00.000000Z", []},
+          {"reviewer:task6", "2026-10-18T00:00:00.000000Z", ["same", "same"]},
+          {"reviewer:task6", "2026-10-18T00:00:00.000000Z", [<<255>>]}
+        ] do
+      assert {:error, _diagnostics} =
+               ComponentReview.approve_with_result(
+                 contract,
+                 plan,
+                 design_document,
+                 behavior_contract,
+                 behavior_review,
+                 reviewer,
+                 reviewed_at,
+                 evidence_refs
+               )
+    end
+
+    assert {:error, _diagnostics} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               %{behavior_review | decision: "needs_review"},
+               "reviewer:task6",
+               "2026-10-18T00:00:00.000000Z",
+               ["component-evidence:a"]
+             )
+  end
+
+  test "approve_with_result is proposed-only and requires a non-empty disposition plan" do
+    for status <- [:needs_review, :approved, :rejected] do
+      {contract, plan, design_document, behavior_contract, behavior_review} =
+        disposition_candidate(approval_status: status)
+
+      assert {:error, _diagnostics} =
+               ComponentReview.approve_with_result(
+                 contract,
+                 plan,
+                 design_document,
+                 behavior_contract,
+                 behavior_review,
+                 "reviewer:task6",
+                 "2026-10-18T00:00:00.000000Z",
+                 ["component-evidence:a"]
+               )
+    end
+
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    empty_plan = %{plan | node_dispositions: []}
+
+    assert {:error, _diagnostics} =
+             ComponentReview.approve_with_result(
+               contract,
+               empty_plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:task6",
+               "2026-10-18T00:00:00.000000Z",
+               ["component-evidence:a"]
+             )
+  end
+
+  test "approve_with_result rejects wrong document and Behavior authority inputs" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    changed_document = %{design_document | source_metadata: %{"revision" => "changed"}}
+    changed_behavior_contract = %{behavior_contract | bindings: []}
+    changed_selected_review = %{behavior_review | reviewer_identity: "reviewer:other"}
+
+    for {candidate_document, candidate_behavior, selected_review} <- [
+          {changed_document, behavior_contract, behavior_review},
+          {design_document, changed_behavior_contract, behavior_review},
+          {design_document, behavior_contract, changed_selected_review},
+          {design_document, behavior_contract, %{behavior_review | decision: "needs_review"}}
+        ] do
+      assert {:error, _diagnostics} =
+               ComponentReview.approve_with_result(
+                 contract,
+                 plan,
+                 candidate_document,
+                 candidate_behavior,
+                 selected_review,
+                 "reviewer:task6",
+                 "2026-10-18T00:00:00.000000Z",
+                 ["component-evidence:a"]
+               )
+    end
+  end
+
+  test "approve_with_result fails closed for stale NodeDisposition authority" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    {:ok, changed_review_id} =
+      ReviewResult.id(%{behavior_review | reviewer_identity: "reviewer:stale"})
+
+    [disposition] = plan.node_dispositions
+    missing_binding_id = "bnd_" <> String.duplicate("0", 64)
+
+    missing_binding_id =
+      if missing_binding_id == disposition.behavior_binding_id do
+        "bnd_" <> String.duplicate("1", 64)
+      else
+        missing_binding_id
+      end
+
+    stale_plans = [
+      %{
+        plan
+        | node_dispositions: [
+            %{disposition | behavior_contract_digest: String.duplicate("0", 64)}
+          ]
+      },
+      %{plan | node_dispositions: [%{disposition | behavior_review_id: changed_review_id}]},
+      %{plan | node_dispositions: [%{disposition | source_type: "stale-builder"}]},
+      %{plan | node_dispositions: [%{disposition | source_id: "stale-node-42"}]},
+      %{plan | node_dispositions: [%{disposition | behavior_binding_id: missing_binding_id}]}
+    ]
+
+    for stale_plan <- stale_plans do
+      assert {:error, _diagnostics} =
+               ComponentReview.approve_with_result(
+                 contract,
+                 stale_plan,
+                 design_document,
+                 behavior_contract,
+                 behavior_review,
+                 "reviewer:task6",
+                 "2026-10-18T00:00:00.000000Z",
+                 ["component-evidence:a"]
+               )
+    end
+  end
+
+  test "approve_with_result blocks a disposed node referenced by fresh Behavior authority" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      disposition_candidate()
+
+    [binding] = behavior_contract.bindings
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%{
+        behavior_contract
+        | bindings: [
+            %{binding | owner_node_id: @disposition_target_id, binding_id: nil, ordinal: nil}
+          ]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+    behavior_review = %{behavior_review | behavior_contract_digest: behavior_digest}
+    {:ok, behavior_review_id} = ReviewResult.id(behavior_review)
+    [disposition] = plan.node_dispositions
+
+    plan = %{
+      plan
+      | node_dispositions: [
+          %{
+            disposition
+            | behavior_binding_id: hd(behavior_contract.bindings).binding_id,
+              behavior_contract_digest: behavior_digest,
+              behavior_review_id: behavior_review_id
+          }
+        ]
+    }
+
+    assert {:error, diagnostics} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:task6",
+               "2026-10-18T00:00:00.000000Z",
+               ["component-evidence:a"]
+             )
+
+    assert "componentization_plan.node_disposition.behavior_reference_conflict" in codes(
+             {:error, diagnostics}
+           )
+  end
+
   test "approval is available only from proposed" do
     for status <- [:needs_review, :approved, :rejected] do
       {contract, plan, design_document} = candidate(approval_status: status)
@@ -177,6 +478,33 @@ defmodule LiveFrames.ComponentReviewTest do
 
       assert {:error, diagnostics} = ComponentReview.reject(contract, plan, design_document)
       assert Enum.any?(diagnostics, &(&1.code == "component_contract.approval_blocked"))
+    end
+  end
+
+  test "legacy reject and no-disposition approval compatibility is preserved" do
+    {contract, plan, design_document} = candidate()
+
+    assert {:ok, %{approval_status: :approved}} =
+             ComponentReview.approve(contract, plan, design_document)
+
+    assert {:ok, %{approval_status: :rejected}} =
+             ComponentReview.reject(contract, plan, design_document)
+
+    {needs_review, needs_review_plan, needs_review_document} =
+      candidate(approval_status: :needs_review)
+
+    {approved, approved_plan, approved_document} = candidate(approval_status: :approved)
+    {rejected, rejected_plan, rejected_document} = candidate(approval_status: :rejected)
+
+    for {status_contract, status_plan, status_document} <- [
+          {needs_review, needs_review_plan, needs_review_document},
+          {approved, approved_plan, approved_document},
+          {rejected, rejected_plan, rejected_document}
+        ] do
+      assert {:error, diagnostics} =
+               ComponentReview.approve(status_contract, status_plan, status_document)
+
+      assert "component_contract.approval_blocked" in codes({:error, diagnostics})
     end
   end
 
@@ -409,4 +737,122 @@ defmodule LiveFrames.ComponentReviewTest do
     assert ComponentReview.approve(contract, plan, design_document) ==
              ComponentReview.approve(contract, plan, design_document)
   end
+
+  defp disposition_candidate(options \\ []) do
+    target = %DesignNode{
+      node_id: @disposition_target_id,
+      semantic_type: "unsupported",
+      source_trace: %SourceTrace{
+        source_type: @disposition_source_type,
+        source_id: @disposition_source_id
+      }
+    }
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: @heading_id,
+              semantic_type: "heading",
+              attributes: %{"tag" => "h2"}
+            },
+            %DesignNode{node_id: @image_id, semantic_type: "paragraph"},
+            %DesignNode{
+              node_id: @actions_id,
+              semantic_type: "actions",
+              children: [
+                %DesignNode{
+                  node_id: DesignNode.deterministic_id([1, 3, 1]),
+                  semantic_type: "button"
+                }
+              ]
+            },
+            target
+          ]
+        },
+        %DesignNode{node_id: @outside_id, semantic_type: "paragraph"}
+      ]
+    }
+
+    {:ok, identity} = Identity.from_document(design_document)
+
+    binding = %BehaviorBinding{
+      primitive_ref: %PrimitiveRef{kind: "synthetic-task5", definition_version: "1.0.0"},
+      owner_node_id: @boundary_id,
+      binding_role: "task5-reference-validation"
+    }
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: identity,
+        bindings: [binding]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+    behavior_binding = hd(behavior_contract.bindings)
+
+    behavior_review = %ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: BehaviorSerializer.algorithm(),
+      behavior_contract_digest: behavior_digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:synthetic-task5",
+      reviewed_at: "2026-10-18T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["synthetic-review-evidence"]
+    }
+
+    {:ok, behavior_review_id} = ReviewResult.id(behavior_review)
+
+    disposition = %NodeDisposition{
+      design_node_id: @disposition_target_id,
+      disposition: :exclude_source_runtime_carrier,
+      source_type: @disposition_source_type,
+      source_id: @disposition_source_id,
+      behavior_binding_id: behavior_binding.binding_id,
+      behavior_contract_digest: behavior_digest,
+      behavior_review_id: behavior_review_id,
+      evidence_refs: ["synthetic-evidence-1"]
+    }
+
+    contract =
+      struct!(
+        ComponentContract.new(
+          contract_id: "hero-contract",
+          category: :section,
+          module_intent: "marketing_block",
+          function_intent: "hero"
+        ),
+        approval_status: Keyword.get(options, :approval_status, :proposed)
+      )
+
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(design_document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: @boundary_id,
+      node_dispositions: [disposition],
+      diagnostics: [
+        %PlanDiagnostic{
+          code: "componentization_plan.unsupported_node",
+          severity: :error,
+          message: "candidate-stage unsupported node blocker"
+        },
+        %PlanDiagnostic{
+          code: "componentization_plan.node_disposition.behavior_authority_mismatch",
+          severity: :error,
+          message: "candidate-stage authority blocker"
+        }
+      ]
+    }
+
+    {contract, plan, design_document, behavior_contract, behavior_review}
+  end
+
+  defp sha256(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
 end
