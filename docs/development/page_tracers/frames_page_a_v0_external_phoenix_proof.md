@@ -2,72 +2,135 @@
 
 ## Outcome
 
-Terminal outcome: `PASSED`.
+```text
+PAGE_ID=frames_page_a_v0
+CONSUMER_PROOF_RUN=page-a-v0-phoenix-correction-20261020T103945Z
+CONSUMER_ROOT=/tmp/liveframes-page-a-v0-correction.2wbH27/consumer_app
+TERMINAL_OUTCOME=PASSED
+```
 
-- ConsumerProofRun: `page-a-v0-phoenix-20261020t075455z-2156130`
-- Consumer root: `/tmp/liveframes_page_a_v0_consumer_20261020t075455z_2156130`
-- LiveFrames worktree: `/home/jcschoeman96/projects/current/LiveFrame/.worktrees/lead3-page-a-v0-implementation`
-- Branch and starting HEAD: `feat/lead3-page-a-v0`, `b484ef7536a840e18ead81214da304f509f7aede`
+This run replaces the earlier consumer run that copied LiveFrames CSS into the host. That earlier run is superseded and does not support this outcome.
 
-The lifecycle completed in this order:
+The proof used the implementation checkout at `feat/lead3-page-a-v0`, starting HEAD `86f04bb51b9e4dcfd5e0cc1dd14c076de8a67a20`. The accepted base remained `main` at `14133f14fc7d1d18e74e3786abab25c49d99b49c`. The LiveFrames package subtree was `ca3cff9c20d463d987e389861be7e85d77a9a7d0`.
 
-1. `DEFINED`: the consumer proof used the Task 3 requirements in `docs/superpowers/plans/2026-10-20-lead3-page-a-v0.md` and its bounded brief.
-2. `ENVIRONMENT_READY`: Phoenix installer 1.8.1 generated a new app under `/tmp`. Elixir was 1.19.3, OTP was 28, and Mix was 1.19.3.
-3. `DEPENDENCY_RESOLVED`: `mix deps.get` resolved the single local LiveFrames path dependency and the Hex dependencies. Phoenix resolved to 1.8.15 and Phoenix LiveView to 1.2.12.
-4. `PAGE_RENDERED`: the consumer's `GET /` test returned HTTP 200 and asserted exactly one `lf-hero` section and two `lf-section-media-call-to-action` sections. It checked their distinct IDs and synthetic headings.
-5. `ASSETS_VERIFIED`: the consumer's `GET /live_frames/css/live_frames.css` test returned HTTP 200 through the host endpoint's `Plug.Static`. The response contained both component selectors. The host file was byte-identical to the package's precompiled CSS, SHA-256 `cf50491747fd67abbc76625f2532debf1f64b62c50ff2870fafb97960b7043f4`.
-6. `PASSED`: the requested dependency, compile, and test commands passed, and the consumer boundary checks below passed.
+## ConsumerProofRun lifecycle
 
-## Consumer setup
+1. `DEFINED`: the correction reran Task 3's consumer proof against the current implementation checkout, with package-owned static delivery as an explicit acceptance condition.
+2. `ENVIRONMENT_READY`: isolated Mix and Hex homes were used to install `phx_new` 1.8.15. The fresh Phoenix host was generated under `/tmp`, outside the LiveFrames repository and all LiveFrames worktrees. Elixir was 1.19.3, OTP was 28, and Mix was 1.19.3.
+3. `DEPENDENCY_RESOLVED`: `mix deps.get` passed with one local path dependency to `/home/jcschoeman96/projects/current/LiveFrame/.worktrees/lead3-page-a-v0-implementation/apps/live_frames`. The generated Phoenix, Phoenix LiveView, and Phoenix HTML requirements were left unchanged. Phoenix resolved to 1.8.16, Phoenix LiveView to 1.2.12, and Phoenix HTML to 4.3.0.
+4. `PAGE_RENDERED`: the host's `GET /` endpoint test returned HTTP 200. It asserted one Hero root and two CTA roots rendered through the public Hero and MediaCallToAction APIs. The caller-owned headings, body text, links, and additive CTA classes were distinct for CTA A and CTA B.
+5. `ASSETS_VERIFIED`: the host endpoint served the stylesheet directly from the `:live_frames` application. Its GET test returned HTTP 200 at `/assets/liveframes/live_frames/css/live_frames.css`; the response contained `.lf-hero` and `.lf-section-media-call-to-action`. No LiveFrames CSS or other LiveFrames file was copied into the host.
+6. `PASSED`: `mix compile --warnings-as-errors` and the complete host test suite passed. Boundary checks found no private or source-system material, no preview or Storybook dependency, no Postgres requirement, and no host Tailwind build requirement.
 
-The successful generator command used the Task 3 profile exactly:
+## Generator and dependency
+
+The isolated generator was `phx_new` 1.8.15. The host was generated with the accepted profile:
 
 ```sh
-mix phx.new /tmp/liveframes_page_a_v0_consumer_20261020t075455z_2156130 \
-  --no-install --no-ecto --no-mailer --no-dashboard --no-gettext \
-  --no-tailwind --no-version-check
+mix phx.new "$HOST_ROOT" \
+  --no-install \
+  --no-ecto \
+  --no-mailer \
+  --no-dashboard \
+  --no-gettext \
+  --no-tailwind \
+  --no-version-check
 ```
 
-The consumer declares one local path dependency:
+Before adding the path dependency, the generated requirements were Phoenix `~> 1.8.15`, Phoenix LiveView `~> 1.2.0`, and Phoenix HTML `~> 4.1`. They were not manually edited:
 
 ```text
-/home/jcschoeman96/projects/current/LiveFrame/.worktrees/lead3-page-a-v0-implementation/apps/live_frames
+PHX_NEW_VERSION=1.8.15
+DEPENDENCY_CONSTRAINTS_MANUALLY_EDITED=NO
+DEPENDENCY_MODE=LOCAL_PATH_TO_EXACT_LIVE_FRAMES_APP
+LIVE_FRAMES_RESOLVED_SHA=86f04bb51b9e4dcfd5e0cc1dd14c076de8a67a20
+LIVE_FRAMES_PACKAGE_TREE=ca3cff9c20d463d987e389861be7e85d77a9a7d0
+ELIXIR_VERSION=1.19.3
+OTP_VERSION=28
+MIX_VERSION=1.19.3
+PHOENIX_VERSION=1.8.16
+PHOENIX_LIVE_VIEW_VERSION=1.2.12
+PHOENIX_HTML_VERSION=4.3.0
 ```
 
-The package source identity is LiveFrames commit `b484ef7536a840e18ead81214da304f509f7aede`, package tree `ca3cff9c20d463d987e389861be7e85d77a9a7d0`. Mix resolved the path directly from the supplied checkout. The consumer has no `deps/live_frames` copy or symlink.
+The host declares the local `apps/live_frames` path dependency. Mix resolved it directly from the implementation checkout; the application was not copied into the host.
 
-The generated host initially declared Phoenix LiveView `~> 1.1.0`; the LiveFrames package requires `~> 1.2.11`. The consumer constraint was set to `~> 1.2.11` before dependency resolution. Mix resolved 1.2.12.
+## Page and CSS evidence
 
-The consumer page imports `LiveFrames.Components.Sections.Hero.hero/1` and `LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1`. It renders one Hero and two CTA instances with distinct caller-owned text, image descriptions, IDs, and links. All values are synthetic.
+The host page imports and calls:
 
-The host Plug.Static serves `priv/static/live_frames/css/live_frames.css` and returns HTTP 200. The copied package CSS matches the package asset byte for byte, SHA-256 `cf50491747fd67abbc76625f2532debf1f64b62c50ff2870fafb97960b7043f4`. The host copied no LiveFrames CSS source files and ran no CSS build.
+```elixir
+LiveFrames.Components.Sections.Hero.hero/1
+LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1
+```
+
+It renders one synthetic Hero and two synthetic CTAs. The consumer test checks each heading and action destination, CTA A and CTA B's different body text, their independent additive classes, and the root counts:
+
+```text
+HERO_INSTANCE_COUNT=1
+CTA_INSTANCE_COUNT=2
+CTA_A_CONTENT_INDEPENDENT=YES
+CTA_B_CONTENT_INDEPENDENT=YES
+HERO_CONSUMER=PASS
+CTA_A_CONSUMER=PASS
+CTA_B_CONSUMER=PASS
+```
+
+The host owns the URL prefix and serves the LiveFrames package asset through `Plug.Static`:
+
+```elixir
+plug Plug.Static,
+  at: "/assets/liveframes",
+  from: :live_frames,
+  gzip: false,
+  only: ~w(live_frames)
+```
+
+The tested URL and package asset evidence are:
+
+```text
+CSS_DELIVERY=PLUG_STATIC_FROM_LIVE_FRAMES_APPLICATION
+CSS_URL=/assets/liveframes/live_frames/css/live_frames.css
+PRECOMPILED_CSS_HTTP=200
+CSS_SELECTOR_HERO=.lf-hero
+CSS_SELECTOR_CTA=.lf-section-media-call-to-action
+CSS_SELECTOR_CHECKS=PASS
+PACKAGE_CSS_SHA256=cf50491747fd67abbc76625f2532debf1f64b62c50ff2870fafb97960b7043f4
+COPIED_LIVEFRAMES_FILES=NONE
+```
+
+The status and selector assertions run through the consumer endpoint using `Phoenix.ConnTest`. The consumer's `priv/static` contains only its generated host assets; `priv/static/live_frames` does not exist.
 
 ## Commands and results
 
-All commands below ran from the consumer root.
+All commands ran from the disposable consumer root with its isolated Mix and Hex homes.
 
 | Command | Result |
 | --- | --- |
-| `mix deps.get` | PASS. Phoenix 1.8.15, Phoenix LiveView 1.2.12, and all dependencies resolved. |
-| `mix compile --warnings-as-errors` | PASS. Exit 0, no warnings. |
-| `mix test` | PASS. 6 tests, 0 failures. |
-| `mix precommit` | PASS. Exit 0, 6 tests, 0 failures. |
+| `mix deps.get` | PASS. The generated dependency requirements resolved without manual edits. |
+| `mix compile --warnings-as-errors` | PASS. Exit 0. |
+| `mix test test/consumer_app_web/controllers/page_controller_test.exs` | PASS after implementation: 2 tests, 0 failures. |
+| `mix test` | PASS: 6 tests, 0 failures. |
 
-The focused consumer test first ran before the page and static path were implemented. It reported 2 expected failures: the generated Phoenix page had no Page A sections, and the CSS request returned 404. After implementation, that focused test passed with 2 tests and 0 failures.
+The focused test ran before the page and dependency-backed static plug were added. Its two expected failures were the missing caller-owned Hero heading and the CSS URL returning 404. With the consumer page and `Plug.Static from: :live_frames` configured, both focused tests passed.
 
-The first invocation was `mix phx.new /tmp/liveframes-page-a-v0-consumer-20261020T075439Z-2154295 --no-install --no-ecto --no-mailer --no-dashboard --no-gettext --no-tailwind --no-version-check`. Phoenix rejected the inferred app name because the path contained hyphens and an uppercase timestamp; no files were created. The successful command used a lowercase, underscore-only path.
+## Consumer boundary checks
 
-## Boundary checks
+```text
+LIVE_FRAMES_PREVIEW_DEPENDENCY=ABSENT
+PHOENIX_STORYBOOK_DEPENDENCY=ABSENT
+HOST_TAILWIND_BUILD_REQUIRED=NO
+POSTGRES_REQUIRED=NO
+PRIVATE_SOURCE_LEAK=NO
+SOURCE_RUNTIME_REQUIRED=NO
+```
 
-- The consumer root resolves to `/tmp/liveframes_page_a_v0_consumer_20261020t075455z_2156130`, outside the LiveFrames repository and every LiveFrames worktree.
-- `mix.exs` contains exactly one local path dependency, to the specified `apps/live_frames` path. No `live_frames_preview` or `phoenix_storybook` dependency resolved.
-- The consumer source and configuration scan found no `private_reference`, Bricks export, ACSS data, WordPress runtime, or source-system runtime markers. No `fixtures`, `acss`, `private_reference`, or `apps/live_frames_preview` directory exists in the consumer. The only copied LiveFrames file is the precompiled CSS asset recorded above.
-- No Ecto, Phoenix Ecto, PostgreSQL, or Postgres dependency resolved. The consumer has no database repository configuration.
-- The consumer has no Tailwind dependency in its own `mix.exs`, Tailwind configuration, or Tailwind build command. `mix deps` lists Tailwind 0.5.1 because the LiveFrames package declares it as `runtime: false`. The host serves precompiled CSS without a Tailwind build. Its `assets.build` alias is for the host's esbuild bundle and was not needed for this proof.
-- No browser proof was run. Browser verification belongs to Task 4.
+The host dependency list contains neither `live_frames_preview` nor `phoenix_storybook`. No `ecto` or `postgrex` dependency or database repository is present. Phoenix was generated with `--no-tailwind`; the host has no Tailwind build configuration or build command. Tailwind 0.5.1 appears in the resolved lock graph through LiveFrames' `runtime: false` dependency, and is not used to build host assets.
 
-## Repository state
+No LiveFrames file was copied into host `priv/static`. A scan of the host working files found none of `private_reference`, `bricks-component-`, `ComponentizationPlan`, `DesignDocument`, or `ACSS`. The consumer contains no private-reference data, Bricks exports, ACSS data, WordPress runtime, or source-system runtime.
 
-Before the proof document was created, `git status --porcelain=v1` was empty at starting HEAD `b484ef7536a840e18ead81214da304f509f7aede`. The `apps/live_frames` package path was clean before and after the consumer run. After committing this proof document, `git status --porcelain=v1` was empty.
+No browser verification was run here; that evidence is recorded separately in the Page A v0 browser proof.
 
-The repository-wide gate set was not run, as Task 3 explicitly excludes it. No readiness report was changed. No later task was started. No PR was opened, and no CI run was started.
+## LiveFrames repository state
+
+The implementation worktree was clean at starting HEAD `86f04bb51b9e4dcfd5e0cc1dd14c076de8a67a20` before the consumer run and remained clean afterward. The `apps/live_frames` subtree was unchanged. The consumer application and its build output remain under `/tmp`.
