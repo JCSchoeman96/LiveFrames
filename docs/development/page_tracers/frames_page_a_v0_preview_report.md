@@ -12,6 +12,7 @@ LIVEFRAMES_TREE=72418fdfed0429440acb9db9de25a784f2b2ded1
 
 SECTIONS_DISCOVERED=Hero, CTA Tango A, CTA Tango B, Feature Romeo, Feature Milan, Pricing Echo, Gallery Bravo, Slider Basel
 SECTIONS_GENERATED=Hero, CTA Tango A, CTA Tango B
+SECTIONS_GENERATED_MEANING=Section instances rendered through native LiveFrames component APIs in Page A v0; this does not assert that their HEEx or CSS was emitted by the IR generator
 SECTIONS_PARTIAL=NONE
 SECTIONS_BLOCKED=Feature Romeo, Feature Milan, Pricing Echo, Gallery Bravo, Slider Basel
 SECTION_MATRIX=See section matrix below
@@ -32,7 +33,7 @@ SECTION_MATRIX=See section matrix below
 | Gallery Bravo | BLOCKED | No | Lead 1 | [Gallery lightbox and asset preflight](../gallery_bravo_lightbox_mapping_preflight.md) |
 | Slider Basel | BLOCKED | No | Lead 2 | [Slider carousel mapping preflight](../slider_basel_carousel_mapping_preflight.md), [current conversion matrix](../frames_native_conversion_matrix.md#historical-and-current-status-relationship) |
 
-The rendered Hero is the existing generic `LiveFrames.Components.Sections.Hero.hero/1` API. It does not claim conversion of Hero Barcelona's query-based decorative motion. The Page A route uses synthetic content and the two CTA instances have separate caller-owned headings, images, action destinations, body content, and root classes, as required by the [Page A implementation plan](../../superpowers/plans/2026-10-20-lead3-page-a-v0.md).
+`SECTIONS_GENERATED` names section instances rendered through native LiveFrames component APIs in Page A v0; it does not claim that their HEEx or CSS was emitted by the IR generator. The rendered Hero uses the existing generic `LiveFrames.Components.Sections.Hero.hero/1` API, so its rendered readiness is `SUPPORTED` while its hand-authored HEEx and CSS remain `PARTIAL` on the generated-output axes. It does not claim conversion of Hero Barcelona's query-based decorative motion. The Page A route uses synthetic content and the two CTA instances have separate caller-owned headings, images, action destinations, body content, and root classes, as required by the [Page A implementation plan](../../superpowers/plans/2026-10-20-lead3-page-a-v0.md).
 
 ## Capability matrix
 
