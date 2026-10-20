@@ -10,6 +10,44 @@ selector expansion, or a Romeo-specific branch.
 ```text
 REVIEW_NEXT_ROMEO_GENERIC_CAPABILITY=ACCEPTED
 
+PR269_BASE_ARCHITECTURE_AUTHORITY=ACCEPTED
+PR269_MERGE_SHA=539ffa09e7b957c7dd48ec03c1ce4d1b6a823e97
+DISCOVERY_BOUNDARY_DEFINED=YES
+IMPLEMENTATION_PLAN_MUST_BE_RECONCILED_AFTER_DISCOVERY_AMENDMENT=YES
+
+COMPOUND_DISCOVERY_BOUNDARY=COMPATIBILITY_PRESERVING
+COMPOUND_DISCOVERY_REUSES_EXISTING_GENERIC_CLOSED_TRIGGER=YES
+DIRECT_VAR_ROUTED_BEFORE_COMPOUND_DISCOVERY=YES
+LOCAL_DEFINITION_ROUTED_BEFORE_COMPOUND_DISCOVERY=YES
+OUTSIDE_COMPOUND_LANE_USES_EXISTING_GENERIC_PATH=YES
+COMPOUND_PARSE_CALLED_FOR_OUTSIDE_LANE=NO
+DISCOVERED_COMPOUND_CAN_FALL_BACK_TO_GENERIC=NO
+DISCOVERED_ZERO_PRODUCTION_MATCH=FAIL_CLOSED_RESIDUAL
+DISCOVERED_MULTI_PRODUCTION_MATCH=FAIL_CLOSED_RESIDUAL
+NO_MATCH_SEMANTICS=CONTEXTUAL_PRIVATE_PARSE_RESULT
+DISCOVERED_PARSE_NO_MATCH=FAIL_CLOSED_RESIDUAL
+DISCOVERED_PARSE_NO_MATCH_PUBLIC_REASON=unresolved_value
+COMPOUND_LIFECYCLE_ENTRY_STATE=DISCOVERED
+GENERIC_PATH_IS_COMPOUND_LIFECYCLE_STATE=NO
+DIRECT_PATH_IS_COMPOUND_LIFECYCLE_STATE=NO
+FAIL_CLOSED_RESIDUAL_TERMINAL=YES
+EMITTED_TERMINAL=YES
+
+COMPOUND_DISCOVERY_APPLIES_TO_LOCAL_DEFINITION_PROPERTY=NO
+COMPOUND_ANALYSIS_LOCAL_DEFINITION_PROPERTIES=SKIP
+COMPOUND_OCCURRENCES_FROM_DEFINITION_VALUES=0
+CUSTOM_PROPERTY_DEFINITIONS_REMAIN_COMPILER_INPUTS_ONLY=YES
+DIRECT_AND_COMPOUND_REFERENCE_COUNTER_SHARED=YES
+PARALLEL_COMPOUND_REFERENCE_COUNTER=NO
+MAX_LOCAL_REFERENCES_PER_OWNER_LAYER=1024
+
+COMPOUND_NEW_RESIDUAL_REASON_CODES=0
+CLOSED_RESOLVER_RESULT_PUBLIC_REASON=unresolved_value
+SLOT_FAILURE_PUBLIC_REASON=unresolved_value
+RESOLVED_GRAMMAR_FAILURE_PUBLIC_REASON=unresolved_value
+COMPOUND_RESOURCE_LIMIT_PUBLIC_REASON=resource_limit_exceeded
+RESOLVER_INTERNAL_ERROR_ATOM_PUBLICATION=NO
+
 BASE_SHA=1d2110e98b3db50b6c7c1ba82fe832ec347caecf
 BASE_TREE=d9d20998ab1ff06965a7b76d17b37f4af5e19ff4
 
@@ -107,9 +145,6 @@ UNSUPPORTED_SCOPE_BYPASS_AUTHORIZED=NO
 
 BOUNDED_COMPOUND_VALUE_NORMALIZATION=SELECTED_NEXT_GENERIC_CAPABILITY
 
-COMPOUND_ARCHITECTURE_AUTHORITY_STATE=DRAFT_PENDING_INDEPENDENT_REVIEW
-COMPOUND_ARCHITECTURE_AUTHORITY_READY=NO
-COMPOUND_IMPLEMENTATION_READY=NO
 COMPOUND_IMPLEMENTATION_AUTHORIZED=NO
 
 RESOLVER_REFERENCE_RECORD_SCHEMA_CHANGED=NO
@@ -121,9 +156,14 @@ ROMEO_COMPONENTIZATION_AUTHORIZED=NO
 ROMEO_NATIVE_GENERATION_AUTHORIZED=NO
 ```
 
-Implementation remains unauthorized until this authority is independently
-reviewed, merged, and followed by an accepted implementation plan and
-`COMPOUND_IMPLEMENTATION_AUTHORIZED=YES`.
+PR #269 accepted the base compound architecture at the merge SHA recorded
+above. The discovery-boundary rules in this amendment define pre-lifecycle
+routing; their presence in this file does not itself constitute acceptance.
+Acceptance of this amendment is determined through external review and merge.
+Before implementation can be authorized, the implementation plan must be
+reconciled with the accepted discovery boundary, reviewed, and separately
+authorized. Compound implementation,
+componentization, and native generation remain unauthorized.
 
 Programme records: [canonical gap decomposition](feature_romeo_canonical_gap_decomposition.md),
 [CSS local custom-property resolution authority](css_local_custom_property_resolution_authority.md),
@@ -197,12 +237,93 @@ representation, and deterministic bounded reconstruction. It must not call
 `VariableAuthority`, select definitions, perform ancestry lookup, infer tokens,
 emit `StyleValue`, know source-specific IDs, or parse selectors.
 
+## Pre-lifecycle routing — compatibility-preserving compound admission
+
+Apply this routing to non-custom-property consumer declarations before the
+compound lifecycle. The `DISCOVERED` lifecycle begins only after step C admits a
+declaration. The existing generic path and direct-reference path are routing
+destinations, not compound lifecycle states.
+
+Apply the following rules in order:
+
+1. **Local custom-property definition.** When
+   `local_definition_name?(property) == true`, skip compound discovery and do
+   not call `CompoundCssValue` or extract occurrences from the definition value.
+   Keep the declaration on the existing compiler-input and resolver definition
+   path. A definition value containing `var(...)` remains governed by the
+   existing `SourceLocalCustomPropertyResolver` definition dependency
+   classifier. Do not bypass or reinterpret `SELF_REFERENCE`, `CYCLE`,
+   `UNSUPPORTED_FALLBACK`, or `UNSUPPORTED_NESTED_REFERENCE`; FRAME D remains
+   fail-closed under the existing nested-definition contract.
+2. **Exact direct reference.** If the entire trimmed value matches the existing
+   accepted direct `var(--name)` form, route it to
+   `EXISTING_DIRECT_REFERENCE_PATH` before compound discovery. Do not change the
+   direct-reference grammar.
+3. **Compound discovery.** For every remaining consumer declaration, enter
+   `DISCOVERED` if either condition holds:
+   - `String.downcase(trimmed_value)` contains the exact substring `var(` or
+     `calc(`. This reuses the generic classifier's existing closed trigger; it
+     does not parse function names or add a general CSS classifier.
+   - The entire trimmed value exactly matches the frozen
+     `MULTI_TOKEN_VALUE` source grammar: exactly two `DIMENSION_LITERAL` tokens
+     separated by one or more permitted ASCII whitespace characters.
+4. **Existing generic path.** Every remaining value stays on the existing
+   generic declaration-value path unchanged. Do not call `CompoundCssValue` for
+   it.
+
+```text
+COMPOUND_DISCOVERY_BOUNDARY=COMPATIBILITY_PRESERVING
+COMPOUND_DISCOVERY_REUSES_EXISTING_GENERIC_CLOSED_TRIGGER=YES
+DIRECT_VAR_ROUTED_BEFORE_COMPOUND_DISCOVERY=YES
+LOCAL_DEFINITION_ROUTED_BEFORE_COMPOUND_DISCOVERY=YES
+OUTSIDE_COMPOUND_LANE_USES_EXISTING_GENERIC_PATH=YES
+COMPOUND_PARSE_CALLED_FOR_OUTSIDE_LANE=NO
+COMPOUND_DISCOVERY_APPLIES_TO_LOCAL_DEFINITION_PROPERTY=NO
+COMPOUND_ANALYSIS_LOCAL_DEFINITION_PROPERTIES=SKIP
+COMPOUND_OCCURRENCES_FROM_DEFINITION_VALUES=0
+CUSTOM_PROPERTY_DEFINITIONS_REMAIN_COMPILER_INPUTS_ONLY=YES
+```
+
+The routing boundary is bounded `O(value_bytes)` per declaration. It adds no
+whole-document scan, recursive parse, general CSS evaluator, or cache.
+
+| Synthetic consumer value | Pre-lifecycle route | Compound result |
+| --- | --- | --- |
+| `teal` | `EXISTING_GENERIC_VALUE_PATH` | Not discovered |
+| `center center` | `EXISTING_GENERIC_VALUE_PATH` | Not discovered |
+| `10 20px` | `EXISTING_GENERIC_VALUE_PATH` | Not discovered |
+| `unknown-function(...)` with no `var(` or `calc(` | `EXISTING_GENERIC_VALUE_PATH` | Not discovered |
+| exact `var(--x)` | `EXISTING_DIRECT_REFERENCE_PATH` | Not discovered |
+| `linear-gradient(90deg, transparent 0%, var(--x) 100%)` | `DISCOVERED` | Frozen `FUNCTION_CALL` |
+| malformed `linear-gradient(90deg, var(--x), +)` | `DISCOVERED` | `FAIL_CLOSED_RESIDUAL` |
+| `unknown-function(var(--x))` | `DISCOVERED` | `FAIL_CLOSED_RESIDUAL` |
+| malformed or unsupported `calc(var(--x) + 2px)` | `DISCOVERED` | `FAIL_CLOSED_RESIDUAL` |
+| exact `var(--a) var(--b)` | `DISCOVERED` | `VAR_REFERENCE_WITH_OPERATION` |
+| malformed `var(--a) + var(--b)` juxtaposition | `DISCOVERED` | `FAIL_CLOSED_RESIDUAL` |
+| exact `10px 2rem` | `DISCOVERED` | `MULTI_TOKEN_VALUE` |
+
+Once admitted to `DISCOVERED`, require exactly one frozen production match.
+Zero or multiple matches transition directly to `FAIL_CLOSED_RESIDUAL`; there
+is no transition back to the generic path. `CompoundCssValue.parse/1` may return
+`:no_match` for arbitrary out-of-lane values in pure-module tests. In normalizer
+integration it is called only after admission, so `DISCOVERED + :no_match`
+always fails closed with the existing public reason `"unresolved_value"`.
+
+```text
+DISCOVERED_COMPOUND_CAN_FALL_BACK_TO_GENERIC=NO
+DISCOVERED_ZERO_PRODUCTION_MATCH=FAIL_CLOSED_RESIDUAL
+DISCOVERED_MULTI_PRODUCTION_MATCH=FAIL_CLOSED_RESIDUAL
+NO_MATCH_SEMANTICS=CONTEXTUAL_PRIVATE_PARSE_RESULT
+DISCOVERED_PARSE_NO_MATCH=FAIL_CLOSED_RESIDUAL
+DISCOVERED_PARSE_NO_MATCH_PUBLIC_REASON=unresolved_value
+```
+
 ## Compiler lifecycle
 
-Every compound declaration follows this lifecycle. Each transition has a hard
-guard. Failure at any step is terminal for that declaration on that canonical
-run and maps to **fail-closed residual** (whole rule retained when atomicity
-applies).
+Every admitted compound consumer declaration follows this lifecycle. Each
+transition has a hard guard. The lifecycle begins only at `DISCOVERED`; failure
+at any step is terminal and maps to **fail-closed residual** (whole rule
+retained when atomicity applies).
 
 ```text
 DISCOVERED
@@ -247,7 +368,7 @@ State names denote **completed work**. `EMITTED` is terminal success.
 
 | From | Guard | Side effect (on success) | Success state | Failure state |
 | --- | --- | --- | --- | --- |
-| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES`; exactly one frozen compound production matches disjoint rules (2)–(4) | Attach the matching production identity | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
+| `DISCOVERED` | Pre-lifecycle routing admitted this consumer declaration; byte length ≤ `MAX_COMPOUND_VALUE_BYTES`; exactly one frozen compound production matches | Attach the matching production identity | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
 | `GRAMMAR_CLASSIFIED` | Selected production parses within all frozen production bounds | Build private bounded parse representation | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
 | `PARSED_SUPPORTED` | Embedded occurrence count within bounds; every embedded local name passes the accepted local-name boundary | Extract occurrences; assign normalizer-private `occurrence_index`; append unchanged resolver reference records | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
 | `LOCAL_REFERENCES_COLLECTED` | When embedded occurrence count is zero, vacuous success. Otherwise existing `resolve/3` returns one ordered result per routed record and every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation (or none) | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
@@ -318,27 +439,30 @@ feeds resolver batching estimates only.
 ## Grammar (three mutually exclusive productions)
 
 Three productions are required by confirmed evidence. They share one
-normalizer owner. Each value matches **at most one** production; there is no
-classification precedence list.
+normalizer owner. Production matching applies only to consumer declarations
+already admitted to `DISCOVERED` by the pre-lifecycle routing above. Each such
+value matches exactly one production to advance; zero or multiple matches fail
+closed. There is no classification precedence list.
 
 Direct-only `var(--name)` values remain on the **existing direct-reference
-path**, not this grammar.
+path** before lifecycle entry, not this grammar.
 
-**Disjoint classification (exhaustive, in this order):**
+**Disjoint production matching:**
 
-1. **Direct path** — entire trimmed value matches direct `var(--name)` → not
-   compound grammar (existing local-reference path).
-2. **`FUNCTION_CALL`** — trimmed value matches a frozen outer call (see
+1. **`FUNCTION_CALL`** — trimmed value matches a frozen outer call (see
    below).
-3. **`VAR_REFERENCE_WITH_OPERATION`** — trimmed value matches frozen
+2. **`VAR_REFERENCE_WITH_OPERATION`** — trimmed value matches frozen
    juxtaposition syntax (see below). Despite the lane name, canonical evidence
    contains **no** binary-operator specimens; operator tokens are not
    authorized.
-4. **`MULTI_TOKEN_VALUE`** — trimmed value is exactly two `DIMENSION_LITERAL`
-   tokens separated by one or more ASCII whitespace characters; does not match
-   (2) or (3); contains no `var(`; no outer frozen function call at position
-   zero.
-5. Otherwise → `FAIL_CLOSED_RESIDUAL`.
+3. **`MULTI_TOKEN_VALUE`** — trimmed value is exactly two `DIMENSION_LITERAL`
+   tokens separated by one or more permitted ASCII whitespace characters;
+   contains no `var(` and no outer frozen function call at position zero.
+
+Zero or multiple production matches after admission → `FAIL_CLOSED_RESIDUAL`.
+Values outside the admission boundary never reach this production matcher and
+continue through the existing direct-reference or generic path as specified
+above.
 
 ```text
 GRAMMAR_PRODUCTIONS_MUTUALLY_EXCLUSIVE=YES
@@ -640,11 +764,24 @@ before reconstruction.
 
 ### Batching
 
-Embedded references from all declarations in an owner/provenance batch merge
-into the **existing** resolver batch for that provenance identity. No
-per-declaration resolver invocation is required if the current batching contract
-already groups by provenance; occurrence cardinality must respect
-`MAX_LOCAL_REFERENCES_PER_OWNER_LAYER`.
+Direct-reference records and compound embedded-reference records from all
+declarations merge into the same existing post-selector resolver batch for an
+effective provenance identity. They consume the same existing
+`reference_count`; do not add a parallel compound counter. The 1,024-reference
+limit applies to the combined batch: a combined count at or below 1,024 is
+within the limit, and a combined count above 1,024 uses the existing
+`resource_limit_exceeded` fail-closed path. `MULTI_TOKEN_VALUE` contributes zero
+resolver records. Preserve one existing `resolve/3` call per provenance batch;
+never call the resolver once per occurrence.
+
+```text
+DIRECT_AND_COMPOUND_REFERENCE_COUNTER_SHARED=YES
+MAX_LOCAL_REFERENCES_PER_OWNER_LAYER=1024
+PARALLEL_COMPOUND_REFERENCE_COUNTER=NO
+MULTI_TOKEN_LOCAL_RESOLVER_REFERENCES_CURRENT_CAPABILITY=0
+PRODUCTION_RESOLVER_BATCHING=EXISTING_PER_PROVENANCE_BATCH
+PER_OCCURRENCE_RESOLVER_CALL_IMPLEMENTATION=NO
+```
 
 ### Resolver outcomes
 
@@ -658,6 +795,38 @@ Apply resolver results **without reinterpretation**:
 | `:unsupported_scope` | `FAIL_CLOSED_RESIDUAL` |
 | Other closed errors | `FAIL_CLOSED_RESIDUAL` |
 | `:resource_limit_exceeded` | `FAIL_CLOSED_RESIDUAL` (batch) |
+
+### Public residual reason mapping
+
+Map compound failures to existing public residual reasons. Do not add a reason
+code or publish a resolver result atom as the residual reason.
+
+| Compound or declaration outcome | Existing public residual reason |
+| --- | --- |
+| Unsupported compound grammar or zero/multiple production matches | `"unresolved_value"` |
+| `CompoundCssValue.parse/1` returns `:no_match` after `DISCOVERED` admission | `"unresolved_value"` |
+| Embedded local name is not observed | `"unresolved_value"` |
+| Any closed per-reference resolver outcome, including `:no_local_definition`, `:unsupported_nested_reference`, and `:unsupported_scope` | `"unresolved_value"` |
+| `:occurrence_terminal_mismatch` | `"unresolved_value"` |
+| `:invalid_slot_terminal` (`SLOT_GRAMMAR` rejection) | `"unresolved_value"` |
+| `:resolved_grammar_mismatch` | `"unresolved_value"` |
+| Compound declaration-local resource limit | `"resource_limit_exceeded"` |
+| Existing shared owner/provenance reference overflow | Existing `"resource_limit_exceeded"` path |
+| Existing unsafe-fragment or `CSSDeclaration` safety failure | Existing `"unsafe_declaration"` |
+| Existing unsupported-property failure | Existing `"unsupported_declaration"` |
+
+Whole-rule atomicity remains unchanged: any declaration failure retains the
+whole selector rule as residual with no partial base or responsive output.
+
+```text
+COMPOUND_NEW_RESIDUAL_REASON_CODES=0
+CLOSED_RESOLVER_RESULT_PUBLIC_REASON=unresolved_value
+SLOT_FAILURE_PUBLIC_REASON=unresolved_value
+RESOLVED_GRAMMAR_FAILURE_PUBLIC_REASON=unresolved_value
+COMPOUND_RESOURCE_LIMIT_PUBLIC_REASON=resource_limit_exceeded
+RESOLVER_INTERNAL_ERROR_ATOM_PUBLICATION=NO
+WHOLE_RULE_ATOMICITY=UNCHANGED
+```
 
 ### Resolver `state_scope` (unchanged contract)
 
@@ -989,6 +1158,9 @@ REDIS=N/A
 POSTGRES=N/A
 PUBSUB=N/A
 OBAN=N/A
+CACHEX=N/A
+CDN=N/A
+100K_CONCURRENT_USERS=N/A
 ```
 
 | Limit | Value | Source |
@@ -1008,9 +1180,10 @@ OBAN=N/A
 | `MAX_STOP_SEGMENT_TOKENS` | 4 | atoms per gradient stop segment |
 | `MAX_COMPOUND_PARSE_DEPTH` | 1 | outer allowlisted call only |
 
-No whole-document rescan per occurrence. Parsing is per declaration value within
-already-selected effective CSS. No unbounded recursion, no general expression
-evaluator, and no O(N²) tree walk over the document for compound work.
+Admission is bounded `O(value_bytes)` per declaration. No whole-document rescan
+per occurrence. Parsing is per declaration value within already-selected
+effective CSS. No unbounded recursion, general expression evaluator, new cache,
+or O(N²) tree walk over the document for compound work.
 PgBouncer: N/A.
 
 ## Authority isolation
@@ -1051,8 +1224,12 @@ Success terminates in existing normalized style values.
 
 ## Implementation plan scope (after authority acceptance)
 
-The implementation plan may schedule work only. It must **not** decide grammar
-semantics, production boundaries, or count units — those are frozen here.
+After this discovery-boundary amendment is accepted, the implementation plan
+must be reconciled with the pre-lifecycle routing, definition exclusion, shared
+reference budget, and residual reason mapping above before compound
+implementation can be authorized. The plan may schedule work only. It must
+**not** decide grammar semantics, production boundaries, or count units — those
+are frozen here.
 
 Permitted plan contents:
 
@@ -1066,7 +1243,7 @@ Permitted plan contents:
 
 ```text
 IMPLEMENTATION_PLAN_SEMANTIC_DECISIONS_REQUIRED=NO
-NEXT_GATE=CSS_COMPOUND_VALUE_ARCHITECTURE_AUTHORITY_REVIEW
-THEN=CSS_COMPOUND_VALUE_IMPLEMENTATION_PLAN
+IMPLEMENTATION_PLAN_MUST_BE_RECONCILED_AFTER_DISCOVERY_AMENDMENT=YES
 IMPLEMENTATION_AUTHORIZED=NO
+COMPOUND_IMPLEMENTATION_AUTHORIZED=NO
 ```
