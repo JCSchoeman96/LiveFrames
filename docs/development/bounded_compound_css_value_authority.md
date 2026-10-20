@@ -53,9 +53,27 @@ DEFINITION_TERMINAL_PROXY_USED_FOR_ACCEPTANCE=NO
 JUXTAPOSITION_SAFE_VALUE_FALLBACK=NO
 JUXTAPOSITION_SLOT_GRAMMAR_SOURCE_NEUTRAL=YES
 JUXTAPOSITION_SLOT_GRAMMAR_FROZEN=YES
+JUXTAPOSITION_RIGHT_ARBITRARY_IDENTIFIER=NO
+JUXTAPOSITION_RIGHT_TIMING_KEYWORD_GRAMMAR=FROZEN
+JUXTAPOSITION_RIGHT_FUNCTION_FORMS_AUTHORIZED=NO
+NEGATIVE_TRANSITION_DURATION_AUTHORIZED=NO
+TIME_DURATION_FINITE_REQUIRED=YES
+TIME_DURATION_NON_NEGATIVE_REQUIRED=YES
 RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN
 RGB_COLOR_ARBITRARY_INNER_TEXT=NO
 RGB_COLOR_SAFE_VALUE_ONLY_VALIDATION=NO
+RGB_FUNCTION_PARSER_ATOM=YES
+RGB_TOP_LEVEL_TOKEN_SPLIT_INSIDE_FUNCTION=NO
+RGB_INTERNAL_WHITESPACE_POLICY=FROZEN
+RGB_WHITESPACE_CONTRADICTION=NO
+RGBA_ALPHA_MIN=0
+RGBA_ALPHA_MAX=1
+RGBA_ALPHA_PERCENT_AUTHORIZED=NO
+RGBA_ALPHA_FINITE_REQUIRED=YES
+HEX_COLOR_LITERAL=NOT_AUTHORIZED_BY_CURRENT_EVIDENCE
+EVIDENCE_HARNESS_BATCH_SIZE_1_ONLY=YES
+PRODUCTION_RESOLVER_BATCHING=EXISTING_PER_PROVENANCE_BATCH
+PER_OCCURRENCE_RESOLVER_CALL_IMPLEMENTATION=NO
 RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
 SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
 COMPOUND_SUCCESS_VALUE_CLASSIFICATION=BYPASS_GENERIC_VAR_CALC_CLASSIFIER
@@ -680,39 +698,85 @@ contract).
 
 All slots share these global bounds unless a row narrows further:
 
-- `TERMINAL_TOKEN_COUNT=1` (exactly one whitespace-delimited token; no interior
-  ASCII whitespace).
+- `TERMINAL_TOKEN_COUNT=1` at **top-level** compound tokenization (exactly one
+  whitespace-delimited token per slot). `RGB_COLOR_FUNCTION_LITERAL` is a
+  **compound-parser atom**: commas and bounded internal delimiter whitespace
+  inside the function do **not** split the value into multiple top-level tokens
+  (`RGB_TOP_LEVEL_TOKEN_SPLIT_INSIDE_FUNCTION=NO`).
 - `MAX_BYTES=MAX_TERMINAL_VALUE_BYTES` (4096, resolver cap).
 - `VAR_REMAINS=NO`, `SEMICOLON=NO`, `TOP_LEVEL_COMMA=NO`, `UNMATCHED_PAREN=NO`.
 - `FUNCTION_POLICY=NO` except the frozen `RGB_COLOR_FUNCTION_LITERAL` grammar
-  below (one function parser atom; internal commas are part of that atom, not
-  ASCII-whitespace token separation).
+  below.
 
 | `SLOT_GRAMMAR` | Permitted resolved terminal classes |
 | --- | --- |
-| `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `HEX_COLOR_LITERAL` (`^#[0-9A-Fa-f]{3,8}$`); `RGB_COLOR_FUNCTION_LITERAL` (frozen grammar below). |
+| `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `RGB_COLOR_FUNCTION_LITERAL` (frozen grammar below). `HEX_COLOR_LITERAL` is **not** authorized on this slot until a canonical `{:ok, terminal}` tracer documents a hex stop (`HEX_COLOR_LITERAL=NOT_AUTHORIZED_BY_CURRENT_EVIDENCE`). |
 | `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. |
 | `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`. |
-| `JUXTAPOSITION_LEFT_OPERAND` | `TIME_DURATION_LITERAL` only — `^-?(\d+(\.\d+)?|\.\d+)(s|ms)$` (ASCII digits with optional leading fraction; unit suffix `s` or `ms`). |
-| `JUXTAPOSITION_RIGHT_OPERAND` | `CSS_TIMING_FUNCTION_IDENTIFIER` only — `^[-a-zA-Z][-a-zA-Z0-9]*$` (hyphenated timing keyword; no parentheses). |
+| `JUXTAPOSITION_LEFT_OPERAND` | `TIME_DURATION_LITERAL` only — lexical form `^(\d+(\.\d+)?|\.\d+)(s|ms)$` with **no** leading `+` or `-`. Semantic guard: parsed numeric magnitude is finite and `>= 0` (`NEGATIVE_TRANSITION_DURATION_AUTHORIZED=NO`, `TIME_DURATION_FINITE_REQUIRED=YES`, `TIME_DURATION_NON_NEGATIVE_REQUIRED=YES`). |
+| `JUXTAPOSITION_RIGHT_OPERAND` | `TRANSITION_TIMING_KEYWORD` only — exact member of the frozen finite allowlist below (no function forms, no arbitrary identifiers). |
+
+**Frozen `JUXTAPOSITION_RIGHT_OPERAND` timing keywords (`JUXTAPOSITION_RIGHT_TIMING_KEYWORD_GRAMMAR=FROZEN`):**
+
+Canonical actual `resolve/3` juxtaposition successes (safe hash
+`16c2539d96224e3c2de41c934cc96810ef4876a45ab4b911f35f98a2e7b1ab3e` for every
+right-hand operand) require exactly **one** source-neutral keyword in the
+no-parentheses transition-timing-function category:
+
+```text
+ease-in-out
+```
+
+```text
+JUXTAPOSITION_RIGHT_ARBITRARY_IDENTIFIER=NO
+JUXTAPOSITION_RIGHT_TIMING_KEYWORD_GRAMMAR=FROZEN
+JUXTAPOSITION_RIGHT_FUNCTION_FORMS_AUTHORIZED=NO
+```
+
+Do not accept `cubic-bezier(...)`, `steps(...)`, `linear(...)`, or other
+function-shaped timing values on this lane unless a future authority revision
+documents a specimen and extends the grammar.
 
 **Frozen `RGB_COLOR_FUNCTION_LITERAL` (`RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN`):**
 
-One parser atom (no ASCII whitespace inside). Function name is exactly `rgb` or
-`rgba` (case-insensitive). Parentheses required. Comma-separated arguments only;
-optional ASCII whitespace around commas and parentheses.
+`RGB_COLOR_FUNCTION_LITERAL` is **one compound-parser atom**
+(`RGB_FUNCTION_PARSER_ATOM=YES`). Top-level whitespace tokenization must not
+split inside the function (`RGB_TOP_LEVEL_TOKEN_SPLIT_INSIDE_FUNCTION=NO`).
+
+**Internal whitespace (`RGB_INTERNAL_WHITESPACE_POLICY=FROZEN`):** canonical
+joined-template safe inspection reports **no** interior ASCII whitespace in
+observed `rgb` / `rgba` color literals on this lane. Internal whitespace is
+**not** authorized unless a future tracer documents a specimen. Lexical form is
+tightly parenthesized comma-separated arguments with **no** spaces:
+
+- `rgb(` + three channel arguments + `)`
+- `rgba(` + three channel arguments + `,` + alpha + `)`
+
+Function name is exactly `rgb` or `rgba` (case-insensitive ASCII).
 
 - **`rgb` form:** exactly three channel arguments.
 - **`rgba` form:** exactly four arguments (three channels + alpha).
 
 Each channel argument: integer `0`–`255` (`\d{1,3}` with numeric value ≤ 255).
-Alpha argument (rgba only): `0`, `1`, or decimal `\d*\.?\d+` (no unit). No
+Alpha argument (rgba only): lexical `0`, lexical `1`, or a decimal fraction
+matching `^(\d+\.\d+|\d*\.\d+)$` whose parsed numeric value satisfies
+`0.0 <= alpha <= 1.0` (`RGBA_ALPHA_MIN=0`, `RGBA_ALPHA_MAX=1`,
+`RGBA_ALPHA_FINITE_REQUIRED=YES`, `RGBA_ALPHA_PERCENT_AUTHORIZED=NO`). No
 percent signs, no nested `var(`, no nested `(` functions, no slash syntax.
 
 ```text
 RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN
 RGB_COLOR_ARBITRARY_INNER_TEXT=NO
 RGB_COLOR_SAFE_VALUE_ONLY_VALIDATION=NO
+RGB_FUNCTION_PARSER_ATOM=YES
+RGB_TOP_LEVEL_TOKEN_SPLIT_INSIDE_FUNCTION=NO
+RGB_INTERNAL_WHITESPACE_POLICY=FROZEN
+RGB_WHITESPACE_CONTRADICTION=NO
+RGBA_ALPHA_MIN=0
+RGBA_ALPHA_MAX=1
+RGBA_ALPHA_PERCENT_AUTHORIZED=NO
+RGBA_ALPHA_FINITE_REQUIRED=YES
+HEX_COLOR_LITERAL=NOT_AUTHORIZED_BY_CURRENT_EVIDENCE
 ```
 
 **Juxtaposition operand structural evidence (canonical `{:ok, terminal}` shapes,
@@ -721,7 +785,7 @@ safe hashes only):**
 | Operand slot | `TERMINAL_SAFE_HASH` | `STRUCTURAL_CLASS` | `TOKEN_COUNT` | `IDENTIFIER_SHAPE` | `DURATION_SHAPE` | `NUMBER_SHAPE` | `DIMENSION_SHAPE` | `FUNCTION_SHAPE` |
 | --- | --- | --- | ---: | --- | --- | --- | --- | --- |
 | `JUXTAPOSITION_LEFT_OPERAND` | `6de8efede839b10ea1411d26c351cc848986e3742e33aa89581e8cd6ec3030f2` | `TIME_DURATION_LITERAL` | 1 | NO | YES | NO | NO | NO |
-| `JUXTAPOSITION_RIGHT_OPERAND` | `16c2539d96224e3c2de41c934cc96810ef4876a45ab4b911f35f98a2e7b1ab3e` | `CSS_TIMING_FUNCTION_IDENTIFIER` | 1 | YES | NO | NO | NO | NO |
+| `JUXTAPOSITION_RIGHT_OPERAND` | `16c2539d96224e3c2de41c934cc96810ef4876a45ab4b911f35f98a2e7b1ab3e` | `TRANSITION_TIMING_KEYWORD` | 1 | NO | NO | NO | NO | NO |
 
 ```text
 JUXTAPOSITION_SAFE_VALUE_FALLBACK=NO
@@ -762,9 +826,12 @@ names, selectors, paths, or CSS published). Method:
 3. Synthesize compound embedded-reference records with the **unchanged**
    resolver reference schema (same fields as today's direct-reference path).
 4. Call existing `SourceLocalCustomPropertyResolver.resolve/3` once per unique
-   compound reference record (batch size 1).
+   compound reference record (**batch size 1 in the evidence harness only**).
 
 ```text
+EVIDENCE_HARNESS_BATCH_SIZE_1_ONLY=YES
+PRODUCTION_RESOLVER_BATCHING=EXISTING_PER_PROVENANCE_BATCH
+PER_OCCURRENCE_RESOLVER_CALL_IMPLEMENTATION=NO
 RESOLVER_TERMINAL_EVIDENCE=ACTUAL_RESOLVE_3_OUTPUT
 DEFINITION_TERMINAL_PROXY_USED_FOR_ACCEPTANCE=NO
 CANONICAL_COMPOUND_REFERENCE_RECORD_COUNT=48
@@ -787,6 +854,12 @@ Per-occurrence `OCCURRENCE_SAFE_ID` digests are reproducible from
 `(production identity, declaration-value safe hash, occurrence index)` using the
 harness above. Implementation verification must publish the full per-occurrence
 table on rerun.
+
+**Production batching (not the evidence harness):** `CustomCssNormalizer` must
+continue to collect reference records, group by `effective_provenance_identity`,
+and invoke **one** existing `resolve/3` batch per provenance with
+cardinality-preserving correlation. The harness's batch-size-1 calls classify
+terminal shapes only; they are **not** the implementation architecture.
 
 ### Reconstruction and final `StyleValue` handoff
 
