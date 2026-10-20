@@ -242,6 +242,19 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
                {:error, :invalid_slot_terminal}
     end
 
+    overflowing_number = String.duplicate("9", 400)
+
+    assert CompoundCssValue.reconstruct(juxtaposition, %{
+             0 => overflowing_number <> "s",
+             1 => "ease-in-out"
+           }) == {:error, :invalid_slot_terminal}
+
+    assert {:ok, gradient} = CompoundCssValue.parse("linear-gradient(90deg, var(--stop))")
+
+    assert CompoundCssValue.reconstruct(gradient, %{
+             0 => "rgba(1,2,3," <> overflowing_number <> ".0)"
+           }) == {:error, :invalid_slot_terminal}
+
     assert CompoundCssValue.reconstruct(juxtaposition, %{0 => "1s", 1 => "ease"}) ==
              {:error, :invalid_slot_terminal}
   end

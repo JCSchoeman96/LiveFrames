@@ -342,6 +342,32 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
   end
 
+  test "overflowing resolved compound terminals fail closed" do
+    overflowing_number = String.duplicate("9", 400)
+
+    duration_result =
+      run(
+        ".owner { --duration: " <>
+          overflowing_number <>
+          "s; --timing: ease-in-out; transition: var(--duration) var(--timing); }"
+      )
+
+    refute Map.has_key?(Map.get(duration_result.styles_by_source_id, @owner, %{}), "transition")
+
+    assert [%{"reason" => "unresolved_value"}] =
+             duration_result.residuals_by_source_id[@owner]
+
+    alpha_result =
+      run(
+        ".owner { --stop: rgba(1,2,3," <>
+          overflowing_number <>
+          ".0); background: linear-gradient(90deg, var(--stop)); }"
+      )
+
+    refute Map.has_key?(Map.get(alpha_result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = alpha_result.residuals_by_source_id[@owner]
+  end
+
   test "compound and direct references share the 1024-record target-expansion budget" do
     {nodes, children_by_source_id} = wide_tree(511)
 

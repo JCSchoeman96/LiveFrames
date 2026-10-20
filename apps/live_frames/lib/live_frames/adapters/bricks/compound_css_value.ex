@@ -354,6 +354,8 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
         {number, ""} -> number >= 0 and number <= 1 and number == number
         _ -> false
       end
+  rescue
+    ArgumentError -> false
   end
 
   defp substitute(pieces, terminals) do
@@ -406,6 +408,8 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
       _ ->
         false
     end
+  rescue
+    ArgumentError -> false
   end
 
   defp calc_resolved_valid?(value) do
@@ -477,6 +481,8 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
       _ ->
         false
     end
+  rescue
+    ArgumentError -> false
   end
 
   defp extract_name(ref),
