@@ -140,9 +140,17 @@ browser's resource list remained unchanged during a three-second idle interval.
 ```text
 BROWSER_RESULT=PASS
 STRUCTURAL_FIDELITY=PASS
-FUNCTIONAL_FIDELITY=PASS
+FUNCTIONAL_FIDELITY=PARTIAL
 VISUAL_FIDELITY=PARTIAL
+ASH_CONSUMER_BOUNDARY=PASS
 ```
+
+Ash-derived values reached the unchanged LiveFrames components, and CTA A and
+CTA B retained their expected distinct `href` values. No component-specific
+behavior runtime applies to these links. This proof did not open or verify the
+destination pages, so the accepted Page A functional-fidelity axis remains
+partial. The Ash consumer and data boundary passed; that result does not change
+whole-page functional fidelity.
 
 Visual fidelity remains partial because this proof uses synthetic SVG images
 and does not compare the rendering against a source reference screenshot.
