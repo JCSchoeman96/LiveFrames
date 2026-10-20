@@ -409,6 +409,36 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
            end)
   end
 
+  test "unobserved compound references consume the target-expansion reference budget" do
+    css = ".owner .child { width: calc(var(--missing) * 2); }"
+
+    {nodes_at_limit, children_at_limit} = wide_tree(1_024)
+    at_limit = normalize_tree(css, nodes_at_limit, children_at_limit)
+
+    assert at_limit.styles_by_source_id == %{}
+    assert at_limit.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             at_limit.residuals_by_source_id[@owner]
+
+    refute Enum.any?(at_limit.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+
+    {nodes_over_limit, children_over_limit} = wide_tree(1_025)
+    over_limit = normalize_tree(css, nodes_over_limit, children_over_limit)
+
+    assert over_limit.styles_by_source_id == %{}
+    assert over_limit.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "resource_limit_exceeded", "source_text" => ^css}] =
+             over_limit.residuals_by_source_id[@owner]
+
+    refute Enum.any?(over_limit.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+  end
+
   test "relocates conditionless descendant rules only to descendants in the owner subtree" do
     result = run(".owner .child { color: red; }")
 

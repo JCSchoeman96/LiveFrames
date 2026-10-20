@@ -635,28 +635,24 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                                                                             current_limited} ->
                   local_name = occurrence.local_name
 
-                  if MapSet.member?(observed_local_names, local_name) do
-                    reference_id =
-                      {frame_rule_id(frame), target.source_id, selection.selector_identity,
-                       property, occurrence.occurrence_index}
+                  reference_id =
+                    {frame_rule_id(frame), target.source_id, selection.selector_identity,
+                     property, occurrence.occurrence_index}
 
-                    case append_local_record(
-                           :reference,
-                           frame,
-                           selection,
-                           target,
-                           local_name,
-                           nil,
-                           reference_id,
-                           provenance_identity,
-                           current,
-                           current_limited
-                         ) do
-                      {:ok, next, next_limited} -> {:cont, {:ok, next, next_limited}}
-                      {:overflow, next, next_limited} -> {:halt, {:overflow, next, next_limited}}
-                    end
-                  else
-                    {:cont, {:ok, current, current_limited}}
+                  case append_local_record(
+                         :reference,
+                         frame,
+                         selection,
+                         target,
+                         local_name,
+                         nil,
+                         reference_id,
+                         provenance_identity,
+                         current,
+                         current_limited
+                       ) do
+                    {:ok, next, next_limited} -> {:cont, {:ok, next, next_limited}}
+                    {:overflow, next, next_limited} -> {:halt, {:overflow, next, next_limited}}
                   end
                 end)
 
@@ -807,7 +803,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
          pre_limited_provenances
        ) do
     batch_identities =
-      (Map.keys(observed_local_names) ++ Map.keys(definitions_by_provenance))
+      (Map.keys(observed_local_names) ++
+         Map.keys(definitions_by_provenance) ++
+         Map.keys(references_by_provenance))
       |> Enum.uniq()
 
     Enum.reduce(batch_identities, {%{}, pre_limited_provenances}, fn provenance_identity,
@@ -822,8 +820,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         references =
           references_by_provenance
           |> Map.get(provenance_identity, [])
-          |> Enum.filter(fn {_reference_id, record} ->
-            MapSet.member?(local_names, Map.get(record, :local_name))
+          |> Enum.filter(fn {reference_id, record} ->
+            retain_local_reference?(reference_id, record, local_names)
           end)
 
         reference_records = Enum.map(references, &elem(&1, 1))
@@ -860,6 +858,16 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       end
     end)
   end
+
+  defp retain_local_reference?(
+         {_rule_id, _target_source_id, _selector_identity, _property, _occurrence_index},
+         _record,
+         _local_names
+       ),
+       do: true
+
+  defp retain_local_reference?(_reference_id, record, local_names),
+    do: MapSet.member?(local_names, Map.get(record, :local_name))
 
   defp effective_provenance_identity(provenance) do
     {
