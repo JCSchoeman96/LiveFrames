@@ -338,6 +338,7 @@ defmodule LiveFrames.NativeGeneratorTest do
 
     cases = [
       {behavior_contract, nil},
+      {nil, behavior_review},
       {%BehaviorContract{}, behavior_review},
       {wrong_document_contract, behavior_review},
       {behavior_contract, %{behavior_review | decision: "needs_review"}},
