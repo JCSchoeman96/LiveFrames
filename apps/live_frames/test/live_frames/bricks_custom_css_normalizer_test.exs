@@ -186,6 +186,259 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert result.residuals_by_source_id[@owner] == []
   end
 
+  test "keeps values outside compound admission on the generic path" do
+    for {property, value} <- [
+          {"color", "teal"},
+          {"justify-content", "center center"},
+          {"margin", "10 20px"},
+          {"color", "unknown-function(teal)"},
+          {"color", "linear-gradient(90deg, transparent, +)"}
+        ] do
+      result = run(".owner { #{property}: #{value}; }")
+
+      assert result.residuals_by_source_id[@owner] == [], inspect({property, value})
+      assert result.styles_by_source_id[@owner][property].value == value
+    end
+  end
+
+  test "routes admitted malformed compound values to a closed residual" do
+    for value <- [
+          "linear-gradient(90deg, var(--accent), +)",
+          "unknown-function(var(--accent))",
+          "calc(var(--measure) + 2px)",
+          "var(--duration) + var(--timing)"
+        ] do
+      result = run(".owner { color: #{value}; }")
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    end
+  end
+
+  test "finalizes supported compounds as literal values" do
+    cases = [
+      {"background", "linear-gradient(90deg, var(--accent) 100%)",
+       "linear-gradient(90deg, rgb(1,2,3) 100%)", "--accent: rgb(1,2,3);"},
+      {"width", "calc(var(--measure) * 2)", "calc(12px * 2)", "--measure: 12px;"},
+      {"transition", "var(--duration) var(--timing)", "250ms ease-in-out",
+       "--duration: 250ms; --timing: ease-in-out;"},
+      {"gap", "10px 20px", "10px 20px", ""}
+    ]
+
+    for {property, expression, expected, definitions} <- cases do
+      result = run(".owner { #{definitions} #{property}: #{expression}; }")
+
+      assert %StyleValue{kind: :literal, value: ^expected} =
+               result.styles_by_source_id[@owner][property]
+
+      assert result.residuals_by_source_id[@owner] == []
+    end
+  end
+
+  test "trims outer declaration whitespace before compound parsing" do
+    result =
+      run(".owner { --measure: 12px; width: \u00a0calc(var(--measure) * 2)\u00a0; }")
+
+    assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
+             result.styles_by_source_id[@owner]["width"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "rejects compound terminals that do not fit their occurrence slot" do
+    result =
+      run(
+        ".owner { --duration: ease-in-out; --timing: ease-in-out; transition: var(--duration) var(--timing); }"
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+  end
+
+  test "keeps ineligible and nested compound definitions closed" do
+    ineligible =
+      run(
+        ".owner:hover { --accent: rgb(1,2,3); } .owner { background: linear-gradient(90deg, var(--accent) 100%); }"
+      )
+
+    assert [
+             %{"reason" => "unsupported_scope"},
+             %{"reason" => "unresolved_value"}
+           ] = ineligible.residuals_by_source_id[@owner]
+
+    nested =
+      run(
+        ".owner { --base: 12px; --derived: calc(var(--base)); width: calc(var(--derived) * 2); }"
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = nested.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(nested.styles_by_source_id, @owner, %{}), "width")
+  end
+
+  test "keeps compound references closed for state scope and external-only names" do
+    state_scoped =
+      run(".owner { --measure: 12px; } .owner:hover { width: calc(var(--measure) * 2); }")
+
+    assert [%{"reason" => "unresolved_value"}] = state_scoped.residuals_by_source_id[@owner]
+
+    authority_index = variable_authority("--external-accent", "color.accent")
+
+    external =
+      run(
+        ".owner { background: linear-gradient(90deg, var(--external-accent) 100%); }",
+        opts: [authority_index: authority_index]
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = external.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(external.styles_by_source_id, @owner, %{}), "background")
+  end
+
+  test "normalizes each target occurrence of a compound declaration" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "first-item" => node("first-item", ["item"], [1, 1], parent_id: @owner),
+      "second-item" => node("second-item", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner { --measure: 12px; } .owner .item { width: calc(var(--measure) * 2); }",
+        nodes,
+        %{@owner => ["first-item", "second-item"]}
+      )
+
+    for source_id <- ["first-item", "second-item"] do
+      assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
+               result.styles_by_source_id[source_id]["width"]
+    end
+  end
+
+  test "keeps a mixed compound rule atomic when a sibling is unsafe" do
+    result =
+      run(
+        ".owner { --measure: 12px; } .owner { width: calc(var(--measure) * 2); background: url(https://example.test/image.png); }"
+      )
+
+    assert [%{"reason" => "unsafe_declaration"}] = result.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "width")
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+  end
+
+  test "a compound local name cannot fall back to external variable authority" do
+    authority_index = variable_authority("--external-space", "spacing.content_gap")
+
+    result =
+      run(".owner { background: linear-gradient(90deg, var(--external-space) 100%); }",
+        opts: [authority_index: authority_index]
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "compound reference names retain leading hyphens without resolving a different local name" do
+    result =
+      run(".owner { --accent: rgb(1,2,3); background: linear-gradient(90deg, var(----accent)); }")
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "overflowing resolved compound terminals fail closed" do
+    overflowing_number = String.duplicate("9", 400)
+
+    duration_result =
+      run(
+        ".owner { --duration: " <>
+          overflowing_number <>
+          "s; --timing: ease-in-out; transition: var(--duration) var(--timing); }"
+      )
+
+    refute Map.has_key?(Map.get(duration_result.styles_by_source_id, @owner, %{}), "transition")
+
+    assert [%{"reason" => "unresolved_value"}] =
+             duration_result.residuals_by_source_id[@owner]
+
+    alpha_result =
+      run(
+        ".owner { --stop: rgba(1,2,3," <>
+          overflowing_number <>
+          ".0); background: linear-gradient(90deg, var(--stop)); }"
+      )
+
+    refute Map.has_key?(Map.get(alpha_result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = alpha_result.residuals_by_source_id[@owner]
+  end
+
+  test "compound and direct references share the 1024-record target-expansion budget" do
+    {nodes, children_by_source_id} = wide_tree(511)
+
+    css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; --accent: rgb(1,2,3); " <>
+        "color: var(--accent); background-color: var(--accent); }\n" <>
+        ".owner .child { width: var(--duration) var(--timing); }"
+
+    result = normalize_tree(css, nodes, children_by_source_id)
+
+    assert %StyleValue{kind: :literal, value: "rgb(1,2,3)"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    assert %StyleValue{kind: :literal, value: "rgb(1,2,3)"} =
+             result.styles_by_source_id[@owner]["background-color"]
+
+    assert %StyleValue{kind: :literal, value: "250ms ease-in-out"} =
+             result.styles_by_source_id["child-1"]["width"]
+
+    assert map_size(result.styles_by_source_id) == 512
+
+    assert Enum.all?(result.residuals_by_source_id, fn {_source_id, residuals} ->
+             residuals == []
+           end)
+
+    over_budget_css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; --accent: rgb(1,2,3); " <>
+        "color: var(--accent); background-color: var(--accent); " <>
+        "border-color: var(--accent); }\n" <>
+        ".owner .child { width: var(--duration) var(--timing); }"
+
+    over_budget = normalize_tree(over_budget_css, nodes, children_by_source_id)
+
+    assert over_budget.styles_by_source_id == %{}
+    assert over_budget.responsive_by_source_id == %{}
+
+    assert Enum.any?(over_budget.residuals_by_source_id, fn {_source_id, residuals} ->
+             Enum.any?(residuals, &(&1["reason"] == "resource_limit_exceeded"))
+           end)
+  end
+
+  test "unobserved compound references consume the target-expansion reference budget" do
+    css = ".owner .child { width: calc(var(--missing) * 2); }"
+
+    {nodes_at_limit, children_at_limit} = wide_tree(1_024)
+    at_limit = normalize_tree(css, nodes_at_limit, children_at_limit)
+
+    assert at_limit.styles_by_source_id == %{}
+    assert at_limit.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "unresolved_value", "source_text" => ^css}] =
+             at_limit.residuals_by_source_id[@owner]
+
+    refute Enum.any?(at_limit.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+
+    {nodes_over_limit, children_over_limit} = wide_tree(1_025)
+    over_limit = normalize_tree(css, nodes_over_limit, children_over_limit)
+
+    assert over_limit.styles_by_source_id == %{}
+    assert over_limit.responsive_by_source_id == %{}
+
+    assert [%{"reason" => "resource_limit_exceeded", "source_text" => ^css}] =
+             over_limit.residuals_by_source_id[@owner]
+
+    refute Enum.any?(over_limit.styles_by_source_id, fn {_source_id, styles} ->
+             Enum.any?(styles, fn {_property, value} -> value.kind == :token_ref end)
+           end)
+  end
+
   test "relocates conditionless descendant rules only to descendants in the owner subtree" do
     result = run(".owner .child { color: red; }")
 
