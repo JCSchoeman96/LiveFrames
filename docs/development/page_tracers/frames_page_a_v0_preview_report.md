@@ -49,8 +49,8 @@ Axes appear in the order required by the Lead 3 design. CTA Tango A and B share 
 | Responsive | SUPPORTED | SUPPORTED | SUPPORTED | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
 | Navigation | SUPPORTED | SUPPORTED | SUPPORTED | BLOCKED | NOT_REQUIRED | NOT_REQUIRED | NOT_REQUIRED | NOT_REQUIRED |
 | Behavior | NOT_REQUIRED | NOT_REQUIRED | NOT_REQUIRED | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
-| Browser verified | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
-| Consumer verified | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| Browser verified | SUPPORTED | SUPPORTED | SUPPORTED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
+| Consumer verified | SUPPORTED | SUPPORTED | SUPPORTED | BLOCKED | BLOCKED | BLOCKED | BLOCKED | BLOCKED |
 | Ash/data ready | NOT_REQUIRED | NOT_REQUIRED | NOT_REQUIRED | NOT_REQUIRED | PARTIAL | NOT_REQUIRED | BLOCKED | PARTIAL |
 
 Evidence for the rendered APIs: Hero is an accepted hand-authored native section with package CSS; its markup and responsive CSS are in [`hero.ex`](../../../apps/live_frames/lib/live_frames/components/sections/hero.ex) and [`hero.css`](../../../apps/live_frames/assets/css/components/sections/hero.css). The CTA has an approved component contract and delivered native generation; the current roadmap records C09D7-A accepted and C09D7-B delivered. Its output and responsive CSS are in [`media_call_to_action.ex`](../../../apps/live_frames/lib/live_frames/components/sections/media_call_to_action.ex) and [`media_call_to_action.css`](../../../apps/live_frames/assets/css/components/sections/media_call_to_action.css). The Page A route test asserts both CTA contents, links, classes, and a single stylesheet reference in [`frames_page_a_v0_live_test.exs`](../../../apps/live_frames_preview/test/live_frames_preview_web/page_tracers/frames_page_a_v0_live_test.exs). The Hero's `Generated HEEx` and `Generated CSS` axes are `PARTIAL` because its native API is hand-authored, not emitted by the IR generator; the current generation authority records that distinction in §2 [C09D6 native generation authority](../c09d6_native_generation_authority.md).
@@ -78,12 +78,12 @@ The Milan Lead 1 row covers the current unsupported-node componentization blocke
 GENERIC_GAPS=Romeo canonical source/style/navigation mapping; Milan unsupported-node blocker; Pricing component boundary and responsive occurrence mapping; Gallery media/count/item mapping; Slider carousel/style mapping
 BEHAVIOR_GAPS=Romeo CSS-versus-managed-state sufficiency; Milan selection/timer runtime and cleanup; Pricing cross-mode focus/state continuity; Gallery lightbox occurrence inputs; Slider carousel lifecycle and accessibility
 DATA_GAPS=Milan collection correlation; Gallery renderable asset, result count, and stable item identity; Slider stable slide identity
-CONSUMER_GAPS=No clean external Phoenix consumer proof for this LiveFrames identity
+CONSUMER_GAPS=Blocked Page A sections have no external Phoenix proof; Hero and both CTA instances passed the clean external Phoenix proof
 
-STRUCTURAL_FIDELITY=NOT_ASSESSED
-FUNCTIONAL_FIDELITY=NOT_ASSESSED
-VISUAL_FIDELITY=NOT_ASSESSED
-BROWSER_RESULT=NOT_RUN
+STRUCTURAL_FIDELITY=PASS
+FUNCTIONAL_FIDELITY=PARTIAL
+VISUAL_FIDELITY=PARTIAL
+BROWSER_RESULT=PASSED
 
 STOP=NONE
 STOP_FALSE_READINESS_CLAIM=NOT_TRIGGERED
@@ -91,8 +91,8 @@ STOP_BLOCKED_SECTION_RENDERED_AS_FAKE_COMPONENT=NOT_TRIGGERED
 STOP_OWNER_LEAD_UNRESOLVED=NOT_TRIGGERED
 ```
 
-Page-level browser evidence and the clean external Phoenix consumer proof belong to Tasks 3 and 4 of the [approved implementation plan](../../superpowers/plans/2026-10-20-lead3-page-a-v0.md). They are not claimed here. No blocked intended section is rendered. The owners listed above resolve the Lead 3 design's Feature Milan routing ambiguity by its separate blocker lanes.
+The [clean external Phoenix proof](frames_page_a_v0_external_phoenix_proof.md) and [page-level browser proof](frames_page_a_v0_browser_proof.md) support the consumer and browser states for Hero and the two CTA instances only. Functional and visual fidelity remain partial for the reasons recorded in the browser proof. No blocked intended section is rendered. The owners listed above resolve the Lead 3 design's Feature Milan routing ambiguity by its separate blocker lanes.
 
 ## CTA status reconciliation
 
-For Page A v0, the current roadmap records C09D7-A as accepted and C09D7-B as delivered. The approved Lead 3 design names Hero and CTA Tango as the two current genuine native component APIs for the first page tracer. Accordingly, CTA Tango A and B are `SUPPORTED` for in-repository native composition and generation. The older `CTA_NATIVE_READY=NO` row in the conversion matrix predates the accepted C09D7-A/B state and describes a broader native readiness gate; it does not make the current CTA API unavailable. This report does not claim external consumer, browser page, Catalogue distribution, or release readiness. See [current roadmap](../../17_ROADMAP.md), [approved C09D7-A component review](../c09d7a_cta_tango_component_review.md), [C09D7-B IR4 reauthorization](../c09d7b_cta_tango_ir4_reauthorization.md), and [approved Lead 3 design §10](../../superpowers/specs/2026-10-19-lead3-page-tracer-design.md#10-page-a-v0-scenario).
+For Page A v0, the current roadmap records C09D7-A as accepted and C09D7-B as delivered. The approved Lead 3 design names Hero and CTA Tango as the two current genuine native component APIs for the first page tracer. Accordingly, CTA Tango A and B are `SUPPORTED` for in-repository native composition and generation. The older `CTA_NATIVE_READY=NO` row in the conversion matrix predates the accepted C09D7-A/B state and describes a broader native readiness gate; it does not make the current CTA API unavailable. This report does not claim Catalogue distribution or release readiness. See [current roadmap](../../17_ROADMAP.md), [approved C09D7-A component review](../c09d7a_cta_tango_component_review.md), [C09D7-B IR4 reauthorization](../c09d7b_cta_tango_ir4_reauthorization.md), and [approved Lead 3 design §10](../../superpowers/specs/2026-10-19-lead3-page-tracer-design.md#10-page-a-v0-scenario).
