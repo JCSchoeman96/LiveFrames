@@ -26,7 +26,17 @@ FRAME_D_IMPLEMENTATION_AUTHORIZED=NO
 CSS_COMPOUND_VALUE_REQUIREMENT=CONFIRMED
 CSS_COMPOUND_VALUE_COUNT=8
 CSS_COMPOUND_VALUE_SHAPES=3
-CSS_COMPOUND_VALUE_SHAPE_COUNTS=FUNCTION_CALL:2;MULTI_TOKEN_VALUE:5;VAR_REFERENCE_WITH_OPERATION:1
+
+GRAMMAR_PRODUCTIONS_MUTUALLY_EXCLUSIVE=YES
+GRAMMAR_CLASSIFICATION_PRECEDENCE_REQUIRED=NO
+FUNCTION_CALL_EMBEDDED_VAR_POLICY=PROVEN_AND_FROZEN
+FUNCTION_CALL_NESTING_ACCOUNTING=FROZEN
+FUNCTION_ALLOWLIST_OR_CATEGORY=FROZEN
+MULTI_TOKEN_GRAMMAR=FROZEN
+VAR_OPERATION_GRAMMAR=FROZEN
+IMPLEMENTATION_PLAN_SEMANTIC_DECISIONS_REQUIRED=NO
+LOCAL_COMPOUND_TOKEN_INFERENCE=NO
+LOCAL_COMPOUND_EXTERNAL_FALLBACK=NO
 
 BOUNDED_COMPOUND_VALUE_NORMALIZATION=SELECTED_NEXT_GENERIC_CAPABILITY
 
@@ -157,122 +167,180 @@ one declaration fails
 No lifecycle state may route into `VariableAuthority` as a substitute for
 failed embedded local resolution.
 
-Transition guards must include: supported bounded production; byte, token, and
-reference bounds; deterministic occurrence ordering; accepted owner/provenance
-scope; successful existing resolver results (one ordered result per reference
-record, unchanged contract); bounded reconstruction; existing CSS safety
-validation. Any failed guard transitions to `FAIL_CLOSED_RESIDUAL` with no
-fallback to external authority.
+Any failed guard transitions to `FAIL_CLOSED_RESIDUAL` with no recovery or
+external-authority fallback.
+
+### Lifecycle transition table
+
+| From | Guard | Side effect | Success state | Failure state |
+| --- | --- | --- | --- | --- |
+| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES` | Record declaration under owner/provenance scope | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
+| `GRAMMAR_CLASSIFIED` | Value matches exactly one disjoint production (see below) | Attach production tag | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
+| `PARSED_SUPPORTED` | Production parser accepts value within token/depth/argument bounds | Build private parse tree | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_COLLECTED` | Each embedded `var(--name)` is observed-local and within per-declaration occurrence cap | Append unchanged resolver reference records; assign private occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_RESOLVED` | Batch `resolve/3` returns `{:ok, terminal}` for every reference record in declaration order | Map terminals to occurrence correlation | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
+| `TERMINAL_RECONSTRUCTED` | Substitution yields one string ≤ `MAX_RECONSTRUCTED_TERMINAL_BYTES` with no remaining `var(` | Hold reconstructed terminal | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
+| `CSS_REVALIDATED` | `CSSDeclaration` safety and value normalization accept reconstructed terminal on local-compound lane (no `VariableAuthority` for embedded locals) | Ordinary `StyleValue` candidate | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
+| `EMITTED` | Whole-rule atomicity satisfied for selector rule | Emit normalized style | — | — |
 
 ## Count model
 
-Keep these units distinct. Do not equate findings, template identities,
-embedded `var(` occurrences, resolver reference records, or residual
-fingerprints.
+Do not equate owner findings, template identities, sanitized inventory specimens,
+declaration-level compound shapes, embedded `var(` occurrences, resolver
+reference records, or residual fingerprints.
 
 ```text
-COMPOUND_FINDING_COUNT=8
+COMPOUND_OWNER_FINDING_COUNT=8
 COMPOUND_TEMPLATE_IDENTITY_COUNT=2
-OWNER_EXPANSION_COUNT=4
+OWNER_COUNT=4
 
-COMPOUND_FINDING_SHAPE_COUNTS=
+SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_COUNT=8
+SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_SHAPE_COUNTS=
   FUNCTION_CALL:2
   MULTI_TOKEN_VALUE:5
   VAR_REFERENCE_WITH_OPERATION:1
 
-REFERENCE_OCCURRENCE_COUNT=SEPARATE_UNIT_NOT_EQUAL_TO_FINDING_COUNT
-RESOLVER_REFERENCE_RECORD_COUNT=SEPARATE_UNIT_NOT_EQUAL_TO_FINDING_COUNT
-RESIDUAL_FINGERPRINT_COUNT=SEPARATE_UNIT_NOT_EQUAL_TO_FINDING_COUNT
+OWNER_EXPANDED_COMPOUND_DECLARATION_OCCURRENCE_COUNT=SEPARATE_UNIT
+EMBEDDED_VAR_OCCURRENCE_COUNT=SEPARATE_UNIT
+RESOLVER_REFERENCE_RECORD_COUNT=SEPARATE_UNIT
+RESIDUAL_FINGERPRINT_COUNT=SEPARATE_UNIT
 ```
 
-The eight findings expand as four owners × two template identities. Template-level
-safe inspection observed embedded `var(` declaration and occurrence totals
-separate from the eight finding count (see dependency matrix).
+**`COMPOUND_OWNER_FINDING_COUNT` (8):** one confirmed required compound
+residual per card owner per template identity — four owners × overlay template
+plus four owners × state template. This is the lane finding unit from accepted
+gap and no-ACSS records.
 
-## Grammar (three bounded productions)
+**`SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_COUNT` (8):** the accepted gap
+decomposition safe-inspection inventory — **one sanitized source-expression
+specimen per compound owner finding**, each assigned exactly one grammar shape
+label (`2 + 5 + 1 = 8`). The inventory shape counts describe **these eight
+specimens**, not template-declaration totals and not resolver record counts.
 
-Canonical evidence requires **three distinct productions** for eight confirmed
-required findings. They share one normalization owner; they are not one
-interchangeable production.
+**`OWNER_EXPANDED_COMPOUND_DECLARATION_OCCURRENCE_COUNT`:** supplementary
+re-verification on joined export templates counts compound declarations that
+require this capability (overlay template: three compound declarations; state
+template: one). Owner expansion of declaration occurrences is **not** equal to
+eight and is **not** labeled by the `2 / 5 / 1` inventory.
+
+**`EMBEDDED_VAR_OCCURRENCE_COUNT`:** supplementary joined-template scan —
+overlay template three declarations containing embedded `var(` with four total
+occurrences; state template one declaration with two occurrences. This unit
+feeds resolver batching estimates only.
+
+## Grammar (three mutually exclusive productions)
+
+Three productions are required by confirmed evidence. They share one
+normalizer owner. Each value matches **at most one** production; there is no
+classification precedence list.
+
+Direct-only `var(--name)` values remain on the **existing direct-reference
+path**, not this grammar.
+
+**Disjoint classification (exhaustive, in this order):**
+
+1. **Direct path** — entire trimmed value matches direct `var(--name)` → not
+   compound grammar (existing local-reference path).
+2. **`FUNCTION_CALL`** — trimmed value matches a frozen outer call (see
+   below).
+3. **`VAR_REFERENCE_WITH_OPERATION`** — trimmed value matches frozen
+   juxtaposition syntax (see below). Despite the lane name, canonical evidence
+   contains **no** binary-operator specimens; operator tokens are not
+   authorized.
+4. **`MULTI_TOKEN_VALUE`** — trimmed value contains two or more
+   whitespace-separated tokens, does not match (2) or (3), and contains no
+   outer frozen function call at position zero.
+5. Otherwise → `FAIL_CLOSED_RESIDUAL`.
+
+```text
+GRAMMAR_PRODUCTIONS_MUTUALLY_EXCLUSIVE=YES
+GRAMMAR_CLASSIFICATION_PRECEDENCE_REQUIRED=NO
+```
+
+**Explicit rejects (all productions):** general CSS evaluation; outer function
+names other than the frozen allowlist (`linear-gradient`, `calc`); binary
+`+ - * /` operators (zero inventory specimens); recursive expression
+evaluation; unbounded nesting; raw source passthrough to Design IR or generated
+CSS.
 
 ### Production `FUNCTION_CALL`
 
-**Intent:** Outermost value is a single function invocation.
+**Frozen allowlist (outer name only):** `linear-gradient`, `calc` (case-insensitive
+ASCII identifier before `(`).
 
-**Supported shape (bounded):**
+**Shape:** entire trimmed value is one allowlisted name, `(`, a bounded argument
+span, and a closing `)` with no tokens outside the call.
 
-- One ASCII identifier (with optional internal `-`) immediately followed by `(`.
-- Balanced parentheses with a **bounded argument span** scanned as opaque
-  source text subject to delimiter, string, and nesting limits below.
-- No additional top-level tokens outside the call (after trim).
+**Embedded local references (`FUNCTION_CALL_EMBEDDED_VAR_POLICY`):** Canonical
+joined-template evidence shows **both** allowlisted calls carry embedded
+`var(--name)` spans inside the argument region. Policy:
 
-**Explicit rejects:** multiple top-level calls, unbalanced parens, disallowed
-nesting depth, argument spans exceeding byte/token limits, nested function calls
-inside arguments unless a future authority revision explicitly authorizes them
-(current authority: **argument spans are not recursively evaluated**).
+- `var(--name)` is the **only** permitted nested call-like form inside the
+  argument span.
+- It is tokenized for occurrence extraction; it is **not** modeled as a nested
+  `FUNCTION_CALL` production and does **not** increment `MAX_COMPOUND_PARSE_DEPTH`.
+- Any other `(`-initiated function form inside the argument span (except
+  quoted-string contents) → `FAIL_CLOSED_RESIDUAL`.
+- Argument spans are not recursively evaluated; no inner `linear-gradient` /
+  `calc` parsing.
 
-**Canonical template evidence (authority record only, not an implementation
-branch):** overlay template identity carries **two** `FUNCTION_CALL` compound
-declarations among twelve properties.
+```text
+FUNCTION_CALL_EMBEDDED_VAR_POLICY=PROVEN_AND_FROZEN
+FUNCTION_CALL_NESTING_ACCOUNTING=
+  OUTER_ALLOWLISTED_CALL_COUNTS_AS_DEPTH_1
+  EMBEDDED_var_COUNTS_AS_DEPTH_0
+  OTHER_NESTED_FUNCTIONS=REJECT
+MAX_COMPOUND_PARSE_DEPTH=1
+```
 
 ### Production `MULTI_TOKEN_VALUE`
 
-**Intent:** Whitespace-separated sequence of bounded tokens without a single
-outer function call.
+**Shape:** two to `MAX_COMPOUND_TOKEN_COUNT` tokens separated by ASCII
+whitespace; value does not satisfy `FUNCTION_CALL` or
+`VAR_REFERENCE_WITH_OPERATION`.
 
-**Supported shape (bounded):**
+**Frozen token classes (each token must match exactly one):**
 
-- One to `MAX_COMPOUND_TOKEN_COUNT` tokens separated by ASCII whitespace.
-- Each token is one of: keyword (finite allowed set aligned with existing
-  `@keyword_values` where applicable), dimension/number literal matching
-  existing literal acceptance, identifier, or a `var(--name)` span subject to
-  local-reference extraction.
+- **Keyword token** — member of the finite keyword set already used by
+  `CustomCssNormalizer` for declaration values on the property being normalized.
+- **Dimension or number literal** — matches the same literal acceptance used
+  before compound reconstruction (no unit calculus).
+- **Identifier token** — `[A-Za-z_][A-Za-z0-9_-]*` without `(`.
+- **Embedded direct local reference token** — a single `var(--name)` substring
+  where `name` passes `CSSDeclaration.safe_property?/1`, only when the overall
+  value is **not** juxtaposition-two-vars form (production 3).
 
-**Explicit rejects:** unbounded tokenization, `calc(`, expression operators
-beyond the separate `VAR_REFERENCE_WITH_OPERATION` production, semicolons,
-commas as token separators at top level (comma only inside function argument
-spans owned by `FUNCTION_CALL`).
+**Explicit rejects:** top-level commas; semicolons; `calc(` at position zero;
+values matching production 3; unbounded token count.
 
-**Romeo evidence:** five of eight findings use this shape class across owners
-(gap decomposition safe inspection).
+**Inventory note:** five of eight **inventory specimens** are labeled
+`MULTI_TOKEN_VALUE` in accepted gap decomposition. Joined-template
+re-verification alone does not enumerate those five specimen strings; the
+production grammar above is frozen to satisfy the inventory requirement without
+expanding beyond evidenced token classes.
 
 ### Production `VAR_REFERENCE_WITH_OPERATION`
 
-**Intent:** Two or more `var(--name)` occurrences and/or a bounded arithmetic
-or juxtaposition pattern between spans that the direct-reference regex does not
-cover as a whole.
+**Frozen syntax (canonical evidence):** exactly **two** direct `var(--name)`
+spans separated by **ASCII whitespace only** (one or more space characters).
+No operator token appears between the spans in accepted evidence.
 
-**Supported shape (bounded):**
+**Explicit rejects:** three or more `var(` spans; any `+`, `-`, `*`, `/`
+between spans; `calc(`; outer function call; literals between spans unless a
+future authority revision documents a specimen.
 
-- At least one `var(--name)` substring.
-- Optional single operator token from a fixed set: `+`, `-`, `*`, `/` (ASCII
-  only), with bounded whitespace.
-- Operands are `var(--name)` or bounded numeric/dimension literals already
-  permitted elsewhere.
-
-**Explicit rejects:** chained operators, parentheses groups, `calc()`, nested
-functions, more than `MAX_VAR_REFERENCE_WITH_OPERATION_OPERANDS` operands.
-
-**Canonical template evidence:** state template identity — one transition
-declaration, **two** embedded `var(` occurrences, classified
-`VAR_REFERENCE_WITH_OPERATION`.
+**Inventory mapping:** one of eight inventory specimens carries this label
+(gap decomposition). Joined-template re-verification shows the same juxtaposition
+class on one overlay transition declaration and one state transition declaration
+(supplementary; not a second inventory unit).
 
 ### Grammar classification rule
 
 ```text
 GRAMMAR_CLASSIFIED
-  = exactly one primary production per declaration value
-  | FAIL_CLOSED_RESIDUAL (ambiguous or multi-production)
+  = exactly one production from disjoint rules (2)–(4)
+  | FAIL_CLOSED_RESIDUAL
 ```
-
-Classification uses the value after property-level trim. Direct-only
-`var(--name)` values remain on the **existing direct-reference path**, not this
-grammar.
-
-**Explicit rejects (all productions):** general CSS evaluation; arbitrary
-function names beyond bounded syntactic recognition; arbitrary operators beyond
-the fixed `VAR_REFERENCE_WITH_OPERATION` set; recursive expression evaluation;
-unbounded nesting; raw source passthrough to Design IR or generated CSS.
 
 ## Local reference extraction and resolver integration
 
@@ -368,48 +436,73 @@ After all embedded references for a declaration resolve `{:ok, terminal}`:
 
 1. Substitute terminals into the bounded parse representation.
 2. Emit **one** bounded UTF-8 string (`TERMINAL_RECONSTRUCTED`).
-3. Pass that string through existing `CSSDeclaration` checks and
-   `normalize_declaration_value/3` **only as a consumer of a fully reconstructed
-   literal** — not as a second resolver.
+3. Pass that string through existing `CSSDeclaration` checks and value
+   normalization **only as a consumer of a fully reconstructed literal** — not
+   as a second resolver.
 
 Reconstruction must not introduce new `var(` spans. If substitution would exceed
 `MAX_RECONSTRUCTED_TERMINAL_BYTES`, fail closed.
 
-## Finding dependency matrix (eight confirmed required)
-
-There are **eight** owner findings: four card owners × two template identities
-(overlay layout rule + state opacity/transition rule). Safe inspection on joined
-Romeo export templates (no selectors, values, or names published):
-
-| Template identity (declaration-key signature) | Findings per owner | Primary compound shapes | Embedded `var(` declarations | Embedded occurrence total |
-| --- | ---: | --- | ---: | ---: |
-| `a885b67246be9e14a0308dc3f1c4f32848026ff3c94509c2730aa5d82a3509bf` (overlay) | 4 | `FUNCTION_CALL` ×2, `VAR_REFERENCE_WITH_OPERATION` ×1 per template | 3 | 4 |
-| `3e15d9729224a0b73fc1df3485917774b748bb3641204800957595c455f90eaa` (state) | 4 | `VAR_REFERENCE_WITH_OPERATION` ×1 (transition) | 1 | 2 |
+**Local-compound lane isolation:** embedded occurrences route only through
+`SourceLocalCustomPropertyResolver`. Reconstructed values must not contain
+`var(`. If normalization would consult `VariableAuthority` because a
+non-observed-local or external name appears, the declaration **fails closed** on
+this lane rather than inferring tokens or substituting externally.
 
 ```text
-COMPOUND_FINDING_COUNT=8
-COMPOUND_TEMPLATE_IDENTITY_COUNT=2
-OWNER_EXPANSION_COUNT=4
+LOCAL_COMPOUND_TOKEN_INFERENCE=NO
+LOCAL_COMPOUND_EXTERNAL_FALLBACK=NO
 ```
 
-### Per-finding dependency columns (authority closure)
+## Finding dependency matrix (eight confirmed required)
 
-Each of the eight findings must be evaluated at implementation verification
-time with this matrix. **Do not assume all eight become non-residual.**
+### Unit reconciliation
 
-| Finding class | Grammar required | Embedded local refs | Preliminary resolver dependency | Expected post-compound disposition |
-| --- | --- | --- | --- | --- |
-| Overlay ×4 | `FUNCTION_CALL` + `MULTI_TOKEN_VALUE` + possible `VAR_REFERENCE_WITH_OPERATION` on subset of properties | Yes (3 decls / 4 occurrences per template) | Each occurrence must resolve under **accepted** direct-target / proven-ancestor contract; nested definition terminals remain fail-closed | **PARTIAL** — grammar may parse while some occurrences still `UNSUPPORTED_NESTED_REFERENCE` or `NO_LOCAL_DEFINITION` |
-| State ×4 | `VAR_REFERENCE_WITH_OPERATION` on transition | Yes (2 occurrences per template) | Same; two occurrences must both succeed for transition declaration to reconstruct | **PARTIAL** — same fail-closed coupling |
+| Unit | Count | Meaning |
+| --- | ---: | --- |
+| `COMPOUND_OWNER_FINDING_COUNT` | 8 | One compound residual finding per owner per template identity |
+| `COMPOUND_TEMPLATE_IDENTITY_COUNT` | 2 | Overlay layout rule pattern; state opacity/transition rule pattern |
+| `OWNER_COUNT` | 4 | Card owners in canonical Romeo export |
+| `SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_COUNT` | 8 | Gap safe-inspection specimens (`2+5+1` shape labels) |
+| `OWNER_EXPANDED_COMPOUND_DECLARATION_OCCURRENCE` (supplementary) | 3× overlay + 1× state **per joined template** | Compound declarations requiring grammar, not owner-finding count |
+| `EMBEDDED_VAR_OCCURRENCE` (supplementary) | 4 overlay + 2 state **per joined template** | `var(` spans inside compound declarations |
+
+The `2 / 5 / 1` figures describe **`SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_SHAPE_COUNTS` only**. They do not describe declaration totals on templates, embedded-var totals, or resolver record counts.
+
+### Inventory shape distribution (gap authority)
+
+| Inventory shape label | Specimen count | Role |
+| --- | ---: | --- |
+| `FUNCTION_CALL` | 2 | Two inventory specimens (allowlisted outer calls) |
+| `MULTI_TOKEN_VALUE` | 5 | Five inventory specimens (whitespace token sequences) |
+| `VAR_REFERENCE_WITH_OPERATION` | 1 | One inventory specimen (two-`var` whitespace juxtaposition) |
+
+Owner-level assignment of which of the eight findings carries which inventory
+label is **not** published in gap records; implementation verification must map
+specimens without assuming uniform template-level shape.
+
+### Template supplementary evidence (joined export, no raw source)
+
+| Template identity | Owner findings using template | Compound declarations per template | Frozen outer / juxtaposition forms observed |
+| --- | ---: | ---: | --- |
+| Overlay layout | 4 | 3 | `linear-gradient`, `calc`, two-`var` juxtaposition (transition) |
+| State opacity/transition | 4 | 1 | two-`var` juxtaposition (transition) |
+
+### Per-finding-class dependency (verification)
+
+| Owner-finding class | Count | Grammar productions implicated | Embedded locals | Resolver | Expected disposition |
+| --- | ---: | --- | --- | --- | --- |
+| Overlay template | 4 | Inventory mix includes `FUNCTION_CALL`, `MULTI_TOKEN_VALUE`, and juxtaposition specimens per gap `2+5+1`; template scan adds `linear-gradient`, `calc`, juxtaposition declarations | Yes (supplementary occurrence totals) | Each embedded occurrence must succeed under accepted resolver semantics | **DERIVE** — grammar may parse while `NO_LOCAL_DEFINITION` or `UNSUPPORTED_NESTED_REFERENCE` keeps rule residual |
+| State template | 4 | Juxtaposition production on transition; inventory includes one juxtaposition specimen | Yes (two occurrences per template) | Both occurrences must resolve for transition declaration to reconstruct | **DERIVE** — same fail-closed coupling |
 
 ```text
 COMPOUND_SUCCESS_CRITERION_8_TO_0=REJECTED
 EXPECTED_CANONICAL_DELTA=DERIVE_FROM_MATRIX_AT_IMPLEMENTATION_VERIFY
-PRELIMINARY_EXPECTATION=SOME_FINDINGS_REMAIN_RESIDUAL_IF_RESOLVER_FAIL_CLOSED
+COUNT_MODEL_RECONCILED=YES
 ```
 
-Implementation verification must publish observed counts, not a predetermined
-zero residual target.
+Implementation verification must publish observed counts per unit, not a
+predetermined zero residual target.
 
 ## Bounds and performance
 
@@ -458,9 +551,15 @@ The compound capability must not:
   implementation logic (canonical evidence hashes in this authority record are
   not implementation selectors);
 - emit custom-property definitions into Design IR;
-- change Design IR version or `StyleValue` schema for compound success paths
-  (success still produces ordinary literals/keywords/token refs via existing
-  normalization).
+- change Design IR version or `StyleValue` schema for compound success paths;
+- use `VariableAuthority` or token inference to salvage failed embedded local
+  resolution on the compound lane.
+
+Successful compound normalization emits only values that pass existing
+`CSSDeclaration` checks after reconstruction. Permitted outcomes are ordinary
+literals or keywords already accepted for the property. Token-reference emission
+on this lane requires an independent external-authority path not driven by
+embedded local `var(` occurrences.
 
 ## Design IR impact
 
@@ -474,17 +573,23 @@ STYLE_VALUE_SCHEMA_CHANGE_REQUIRED=NO
 
 Success terminates in existing normalized style values.
 
-## Open items for implementation plan (not this record)
+## Implementation plan scope (after authority acceptance)
 
-The implementation plan must close executable test vectors for:
+The implementation plan may schedule work only. It must **not** decide grammar
+semantics, production boundaries, or count units — those are frozen here.
 
-1. Exact token/operator allowlists per production.
-2. Occurrence-index collision tests across multi-target selector rules.
-3. Resolver batch cardinality when compound references share a declaration.
-4. Canonical Romeo rerun expectations derived from the matrix row outcomes.
-5. TDD ordering: `CompoundCssValue` pure tests first, then normalizer integration.
+Permitted plan contents:
+
+1. TDD sequencing (`CompoundCssValue` pure tests, then normalizer integration).
+2. Test vectors exercising the frozen productions and fail-closed paths.
+3. Occurrence-correlation collision cases across multi-target selector rules.
+4. Resolver batch cardinality checks when multiple embedded references share a
+   declaration.
+5. Canonical rerun protocol publishing **per-unit** deltas from the dependency
+   matrix.
 
 ```text
+IMPLEMENTATION_PLAN_SEMANTIC_DECISIONS_REQUIRED=NO
 NEXT_GATE=CSS_COMPOUND_VALUE_ARCHITECTURE_AUTHORITY_REVIEW
 THEN=CSS_COMPOUND_VALUE_IMPLEMENTATION_PLAN
 IMPLEMENTATION_AUTHORIZED=NO
