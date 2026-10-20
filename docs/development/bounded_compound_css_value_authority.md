@@ -44,8 +44,18 @@ SLOT_GRAMMAR_CONTRACTS_FROZEN=YES
 MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
 MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
 MULTI_TOKEN_PAIR_EXTENSION_SOURCE_NEUTRAL=YES
-CANONICAL_OK_TERMINAL_COUNT=15
-CANONICAL_OK_TERMINAL_SLOT_ACCEPTED_COUNT=15
+CANONICAL_COMPOUND_REFERENCE_RECORD_COUNT=48
+CANONICAL_ACTUAL_RESOLVER_OK_COUNT=40
+CANONICAL_ACTUAL_RESOLVER_ERROR_COUNT=8
+CANONICAL_ACTUAL_RESOLVER_OK_SLOT_ACCEPTED_COUNT=40
+RESOLVER_TERMINAL_EVIDENCE=ACTUAL_RESOLVE_3_OUTPUT
+DEFINITION_TERMINAL_PROXY_USED_FOR_ACCEPTANCE=NO
+JUXTAPOSITION_SAFE_VALUE_FALLBACK=NO
+JUXTAPOSITION_SLOT_GRAMMAR_SOURCE_NEUTRAL=YES
+JUXTAPOSITION_SLOT_GRAMMAR_FROZEN=YES
+RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN
+RGB_COLOR_ARBITRARY_INNER_TEXT=NO
+RGB_COLOR_SAFE_VALUE_ONLY_VALIDATION=NO
 RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
 SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
 COMPOUND_SUCCESS_VALUE_CLASSIFICATION=BYPASS_GENERIC_VAR_CALC_CLASSIFIER
@@ -476,7 +486,7 @@ MULTI_TOKEN_JOINED_EXPORT_UNIQUE_FROZEN_MULTI_VALUE_COUNT=3
 | 1 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 | 2 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 | 3 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
-| 4 | `ae28d73e456a6b2f07d4ff7064d44218457d7aff8b2e51323d1b563d68992f36` | 2 | `UNITLESS_NUMBER,DIMENSION` | 0 | NO | NO | NO | YES |
+| 4 | `ae28d73e456a6b2f07d4ff7064d44218457d7aff8b2e51323d1b563d68992f36` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 | 5 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
 
 Slot 5 is structurally identical to slot 1 (same `SPECIMEN_SAFE_HASH` and
@@ -505,7 +515,7 @@ class on one overlay transition declaration and one state transition declaration
 | Phase | Grammar |
 | --- | --- |
 | **Source form** | `LOCAL_REF WS LOCAL_REF` — exactly two embedded direct `var(--name)` spans separated by ASCII whitespace only. |
-| **Resolved form** | `JUXTAPOSITION_OPERAND WS JUXTAPOSITION_OPERAND` — same whitespace rule; each operand is one slot-validated resolver terminal. No `var(`. |
+| **Resolved form** | `JUXTAPOSITION_LEFT_OPERAND WS JUXTAPOSITION_RIGHT_OPERAND` — same whitespace rule; each operand is one slot-validated resolver terminal. No `var(`. |
 
 ### Grammar classification rule
 
@@ -674,15 +684,50 @@ All slots share these global bounds unless a row narrows further:
   ASCII whitespace).
 - `MAX_BYTES=MAX_TERMINAL_VALUE_BYTES` (4096, resolver cap).
 - `VAR_REMAINS=NO`, `SEMICOLON=NO`, `TOP_LEVEL_COMMA=NO`, `UNMATCHED_PAREN=NO`.
-- `FUNCTION_POLICY=NO` except `RGB_COLOR_FUNCTION_LITERAL` row below (single
-  `rgb(` / `rgba(` span with no nested `var(`).
+- `FUNCTION_POLICY=NO` except the frozen `RGB_COLOR_FUNCTION_LITERAL` grammar
+  below (one function parser atom; internal commas are part of that atom, not
+  ASCII-whitespace token separation).
 
-| `SLOT_GRAMMAR` | Permitted resolved terminal classes (exactly one token each) |
+| `SLOT_GRAMMAR` | Permitted resolved terminal classes |
 | --- | --- |
-| `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `HEX_COLOR_LITERAL`; `RGB_COLOR_FUNCTION_LITERAL` (`^rgba?\([^)]*\)$`, no `var(` inside). |
-| `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. No unit suffix on the unitless form beyond the frozen calc contract. |
+| `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `HEX_COLOR_LITERAL` (`^#[0-9A-Fa-f]{3,8}$`); `RGB_COLOR_FUNCTION_LITERAL` (frozen grammar below). |
+| `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. |
 | `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`. |
-| `JUXTAPOSITION_OPERAND` | `TIME_DURATION_LITERAL` (`^-?\d+(\.\d+)?(s|ms)$`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`; `UNITLESS_NUMBER_LITERAL`; or `BOUNDED_SINGLE_TOKEN` — one token with `CSSDeclaration.safe_value?(terminal) == true` and no `var(`, used only when none of the literal rows match (canonical transition operands use this row). |
+| `JUXTAPOSITION_LEFT_OPERAND` | `TIME_DURATION_LITERAL` only — `^-?(\d+(\.\d+)?|\.\d+)(s|ms)$` (ASCII digits with optional leading fraction; unit suffix `s` or `ms`). |
+| `JUXTAPOSITION_RIGHT_OPERAND` | `CSS_TIMING_FUNCTION_IDENTIFIER` only — `^[-a-zA-Z][-a-zA-Z0-9]*$` (hyphenated timing keyword; no parentheses). |
+
+**Frozen `RGB_COLOR_FUNCTION_LITERAL` (`RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN`):**
+
+One parser atom (no ASCII whitespace inside). Function name is exactly `rgb` or
+`rgba` (case-insensitive). Parentheses required. Comma-separated arguments only;
+optional ASCII whitespace around commas and parentheses.
+
+- **`rgb` form:** exactly three channel arguments.
+- **`rgba` form:** exactly four arguments (three channels + alpha).
+
+Each channel argument: integer `0`–`255` (`\d{1,3}` with numeric value ≤ 255).
+Alpha argument (rgba only): `0`, `1`, or decimal `\d*\.?\d+` (no unit). No
+percent signs, no nested `var(`, no nested `(` functions, no slash syntax.
+
+```text
+RGB_COLOR_ARGUMENT_GRAMMAR=FROZEN
+RGB_COLOR_ARBITRARY_INNER_TEXT=NO
+RGB_COLOR_SAFE_VALUE_ONLY_VALIDATION=NO
+```
+
+**Juxtaposition operand structural evidence (canonical `{:ok, terminal}` shapes,
+safe hashes only):**
+
+| Operand slot | `TERMINAL_SAFE_HASH` | `STRUCTURAL_CLASS` | `TOKEN_COUNT` | `IDENTIFIER_SHAPE` | `DURATION_SHAPE` | `NUMBER_SHAPE` | `DIMENSION_SHAPE` | `FUNCTION_SHAPE` |
+| --- | --- | --- | ---: | --- | --- | --- | --- | --- |
+| `JUXTAPOSITION_LEFT_OPERAND` | `6de8efede839b10ea1411d26c351cc848986e3742e33aa89581e8cd6ec3030f2` | `TIME_DURATION_LITERAL` | 1 | NO | YES | NO | NO | NO |
+| `JUXTAPOSITION_RIGHT_OPERAND` | `16c2539d96224e3c2de41c934cc96810ef4876a45ab4b911f35f98a2e7b1ab3e` | `CSS_TIMING_FUNCTION_IDENTIFIER` | 1 | YES | NO | NO | NO | NO |
+
+```text
+JUXTAPOSITION_SAFE_VALUE_FALLBACK=NO
+JUXTAPOSITION_SLOT_GRAMMAR_SOURCE_NEUTRAL=YES
+JUXTAPOSITION_SLOT_GRAMMAR_FROZEN=YES
+```
 
 Slot validation runs **before** substitution. Implementation must not hash
 tokens or compare specimen digests.
@@ -703,35 +748,45 @@ Any failure → `FAIL_CLOSED_RESIDUAL`. If canonical resolver terminals would
 require syntax outside these contracts, stop with
 `STOP=RESOLVED_TERMINAL_GRAMMAR_UNPROVEN` (resolver contract must not change).
 
-#### Canonical resolver-terminal structural evidence (Romeo joined export)
+#### Canonical resolver-terminal evidence (`resolve/3` output)
 
-Evidence-only scan of Romeo canonical joined export (no raw terminals, names,
-selectors, or paths published). Method: for each embedded `var(--name)` inside a
-compound-shaped declaration, correlate the name with the **observed definition
-terminal** in the same export scan (proxy for `{:ok, terminal}` once
-implementation replays full ancestry routing through the unchanged resolver).
+Evidence-only harness on Romeo canonical joined export (no raw terminals, local
+names, selectors, paths, or CSS published). Method:
+
+1. Derive `generic_custom_css` owners, node index, and children map using the
+   same public Bricks pipeline inputs as `DesignIRNormalizer` (`DependencyExtractor`,
+   `TreeBuilder`, `Bricks.to_ir` node paths).
+2. Replay `analyze_local_records` field derivation (evidence fork of
+   `CustomCssNormalizer` record builder only; **not** repository code) to obtain
+   definition records and selector/target routing.
+3. Synthesize compound embedded-reference records with the **unchanged**
+   resolver reference schema (same fields as today's direct-reference path).
+4. Call existing `SourceLocalCustomPropertyResolver.resolve/3` once per unique
+   compound reference record (batch size 1).
 
 ```text
-CANONICAL_COMPOUND_EMBEDDED_OCCURRENCE_SCAN_COUNT=16
-CANONICAL_OK_TERMINAL_COUNT=15
-CANONICAL_OK_TERMINAL_SLOT_ACCEPTED_COUNT=15
+RESOLVER_TERMINAL_EVIDENCE=ACTUAL_RESOLVE_3_OUTPUT
+DEFINITION_TERMINAL_PROXY_USED_FOR_ACCEPTANCE=NO
+CANONICAL_COMPOUND_REFERENCE_RECORD_COUNT=48
+CANONICAL_ACTUAL_RESOLVER_OK_COUNT=40
+CANONICAL_ACTUAL_RESOLVER_ERROR_COUNT=8
+CANONICAL_ACTUAL_RESOLVER_OK_SLOT_ACCEPTED_COUNT=40
 ```
 
-| `RESOLVER_RESULT` | Count | Notes |
-| --- | ---: | --- |
-| `{:ok, terminal}` (definition terminal observed) | 15 | All 15 pass frozen `SLOT_GRAMMAR` contracts |
-| `:no_local_definition` | 1 | One `calc(` embedded occurrence — expect `FAIL_CLOSED_RESIDUAL` on compound lane |
+Acceptance requires `CANONICAL_ACTUAL_RESOLVER_OK_COUNT ==
+CANONICAL_ACTUAL_RESOLVER_OK_SLOT_ACCEPTED_COUNT` (satisfied on this evidence
+pass).
 
-Distinct `TERMINAL_SAFE_HASH` values among the 15 accepted terminals: **3**
-(two juxtaposition operand shapes; one gradient stop `RGB_COLOR_FUNCTION_LITERAL`
-class). Juxtaposition operands classify as `BOUNDED_SINGLE_TOKEN` under
-`JUXTAPOSITION_OPERAND`. Gradient stop classifies as `RGB_COLOR_FUNCTION_LITERAL`
-under `GRADIENT_STOP_ATOM`.
+| `RESOLVER_RESULT` (compound embedded references) | Count | Notes |
+| --- | ---: | --- |
+| `{:ok, terminal}` | 40 | All 40 pass frozen `SLOT_GRAMMAR` contracts |
+| `:unsupported_nested_reference` | 4 | Gradient-stop embedded locals (FRAME D closed) |
+| `:no_local_definition` | 4 | Includes `calc(` embedded locals without eligible definition |
 
 Per-occurrence `OCCURRENCE_SAFE_ID` digests are reproducible from
-`(production identity, declaration-value safe hash, embedded-name safe hash,
-occurrence index)` and are omitted here as duplicate-safe aggregates only.
-Implementation verification must publish the full per-occurrence table on rerun.
+`(production identity, declaration-value safe hash, occurrence index)` using the
+harness above. Implementation verification must publish the full per-occurrence
+table on rerun.
 
 ### Reconstruction and final `StyleValue` handoff
 
