@@ -233,6 +233,16 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     end
   end
 
+  test "trims outer declaration whitespace before compound parsing" do
+    result =
+      run(".owner { --measure: 12px; width: \u00a0calc(var(--measure) * 2)\u00a0; }")
+
+    assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
+             result.styles_by_source_id[@owner]["width"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
   test "rejects compound terminals that do not fit their occurrence slot" do
     result =
       run(

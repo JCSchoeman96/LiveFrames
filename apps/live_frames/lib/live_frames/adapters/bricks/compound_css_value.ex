@@ -7,7 +7,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   @max_refs 16
   @ascii_trim ~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/
   @local_var ~r/var\([\x20\t\r\n\f]*(--[A-Za-z0-9_-]+)[\x20\t\r\n\f]*\)/
-  @dimension ~r/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg)$/
+  @dimension ~r/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg|%)$/
 
   defmodule Occurrence do
     @moduledoc false

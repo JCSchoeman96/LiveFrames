@@ -69,7 +69,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
       assert {:ok, "10px 2rem"} = CompoundCssValue.reconstruct(parsed, %{})
     end
 
-    assert CompoundCssValue.parse("\u00a010px 2rem\u00a0") == :no_match
+    assert CompoundCssValue.parse("10px\u00a02rem") == :no_match
   end
 
   test "returns no match outside the frozen productions" do
@@ -182,7 +182,8 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
           "rgb(255,255,255)",
           "rgba(1,2,3,0)",
           "rgba(1,2,3,1)",
-          "rgba(1,2,3,0.5)"
+          "rgba(1,2,3,0.5)",
+          "-1%"
         ] do
       assert {:ok, _} = CompoundCssValue.reconstruct(gradient, %{0 => atom})
     end
@@ -202,7 +203,6 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
           "rgba(0,0,0,foo)",
           "rgba(0,0,0,NaN)",
           "rgba(0,0,0,.5  )",
-          "-1%",
           "red()"
         ] do
       assert CompoundCssValue.reconstruct(gradient, %{0 => atom}) ==
@@ -211,7 +211,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
 
     assert {:ok, calc} = CompoundCssValue.parse("calc(var(--x))")
 
-    for atom <- ["0", "-2.5", "10px", "2%"] do
+    for atom <- ["0", "-2.5", "10px", "2%", "-2%"] do
       assert {:ok, _} = CompoundCssValue.reconstruct(calc, %{0 => atom})
     end
 
