@@ -14,6 +14,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   alias LiveFrames.StaticNavigation
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.NativeGenerator.Diagnostic
+  alias LiveFrames.NativeGenerator.FilteredStructure
 
   @forbidden_source_fragments ~w(
     Code.eval
@@ -28,6 +29,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     @moduledoc false
 
     defstruct nodes_by_id: %{},
+              filtered_structure: nil,
               boundary_id: nil,
               boundary_node: nil,
               slot_targets: MapSet.new(),
@@ -40,6 +42,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               item_fields_by_collection: %{},
               package_root_class: nil,
               private_class_by_id: %{},
+              private_class_owner_ids: MapSet.new(),
               module_name: nil,
               function_name: nil,
               artifact_path: nil,
@@ -54,16 +57,22 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               count_attr_names: MapSet.new()
   end
 
-  @spec build_indexes(ComponentContract.t(), ComponentizationPlan.t(), map(), map()) ::
+  @spec build_indexes(
+          ComponentContract.t(),
+          ComponentizationPlan.t(),
+          FilteredStructure.t(),
+          map(),
+          MapSet.t()
+        ) ::
           {:ok, Indexes.t()} | {:error, Diagnostic.t()}
   def build_indexes(
         contract,
         plan,
-        nodes_by_id,
+        %FilteredStructure{} = filtered_structure,
         value_bindings,
-        private_class_by_id \\ %{},
-        primary_action_slot_targets \\ MapSet.new()
+        primary_action_slot_targets
       ) do
+    nodes_by_id = filtered_structure.nodes_by_id
     boundary_node = Map.get(nodes_by_id, plan.boundary_node_id)
 
     if boundary_node == nil do
@@ -125,6 +134,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       {:ok,
        %Indexes{
          nodes_by_id: nodes_by_id,
+         filtered_structure: filtered_structure,
          boundary_id: plan.boundary_node_id,
          boundary_node: boundary_node,
          slot_targets: slot_targets,
@@ -136,7 +146,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          collection_inputs_by_binding_id: collection_inputs_by_binding_id,
          item_fields_by_collection: item_fields_by_collection,
          package_root_class: package_root_class(contract),
-         private_class_by_id: private_class_by_id,
+         private_class_by_id: filtered_structure.private_class_by_id,
          module_name: module_name(contract),
          function_name: contract.function_intent,
          artifact_path: artifact_path(contract),
@@ -1205,7 +1215,11 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp class_attr(indexes, node, roles, collection_stack, is_root?) do
     package? = is_root? and node.node_id == indexes.boundary_id
     consumer? = is_root? and Map.has_key?(roles, :root_class)
-    private_class = Map.get(indexes.private_class_by_id, node.node_id)
+
+    private_class =
+      if MapSet.member?(indexes.private_class_owner_ids, node.node_id) do
+        Map.get(indexes.private_class_by_id, node.node_id)
+      end
 
     cond do
       package? and consumer? ->
@@ -1240,10 +1254,11 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   defp static_or_expr_body(_node, expr) when is_binary(expr), do: "{#{expr}}"
   defp static_or_expr_body(_node, nil), do: ""
 
-  defp render_children(indexes, %DesignNode{children: children}, collection_stack, _is_root?) do
-    children
-    |> Enum.reduce_while({:ok, []}, fn child, {:ok, acc} ->
-      case render_node(indexes, child.node_id, collection_stack, false) do
+  defp render_children(indexes, %DesignNode{node_id: node_id}, collection_stack, _is_root?) do
+    indexes.filtered_structure
+    |> FilteredStructure.children(node_id)
+    |> Enum.reduce_while({:ok, []}, fn child_id, {:ok, acc} ->
+      case render_node(indexes, child_id, collection_stack, false) do
         {:ok, lines} -> {:cont, {:ok, [lines | acc]}}
         {:error, diagnostic} -> {:halt, {:error, diagnostic}}
       end

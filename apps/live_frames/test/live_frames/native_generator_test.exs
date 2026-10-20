@@ -308,8 +308,7 @@ defmodule LiveFrames.NativeGeneratorTest do
         component_review_result_id
       )
 
-    assert {:error, :generation_failed, [diagnostic]} = result
-    assert diagnostic.code == "native_generator.semantic_unsupported"
+    assert {:ok, %{artifacts: [_module, _stylesheet]}} = result
   end
 
   test "ordinary generate/3 still generates plans without dispositions" do

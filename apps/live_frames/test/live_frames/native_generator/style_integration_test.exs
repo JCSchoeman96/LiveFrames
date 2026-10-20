@@ -12,6 +12,8 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.StyleValue
   alias LiveFrames.NativeGenerator
+  alias LiveFrames.NativeGenerator.FilteredStructure
+  alias LiveFrames.NativeGenerator.Renderer
   alias LiveFrames.NativeGenerator.StyleIntegration
 
   defp contract(category \\ :section, attrs \\ [], slots \\ []) do
@@ -41,6 +43,26 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     }
 
     NativeGenerator.generate(contract, plan, document)
+  end
+
+  defp filtered_structure!(contract, plan, document, disposed_node_ids) do
+    case FilteredStructure.build(
+           document,
+           plan.boundary_node_id,
+           disposed_node_ids,
+           Renderer.package_root_class(contract)
+         ) do
+      {:ok, filtered_structure} -> filtered_structure
+      {:error, diagnostic} -> flunk("expected filtered structure, got #{inspect(diagnostic)}")
+    end
+  end
+
+  defp build_styles(contract, plan, document, disposed_node_ids \\ []) do
+    StyleIntegration.build(
+      contract,
+      plan,
+      filtered_structure!(contract, plan, document, disposed_node_ids)
+    )
   end
 
   defp boundary(children \\ []) do
@@ -93,6 +115,71 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
         ]
       }
     }
+  end
+
+  test "filtered structure controls ordinary, responsive, and state-rule style traversal" do
+    before_id = DesignNode.deterministic_id([1, 1])
+    disposed_id = DesignNode.deterministic_id([1, 2])
+    after_id = DesignNode.deterministic_id([1, 3])
+
+    before_node = %DesignNode{
+      node_id: before_id,
+      semantic_type: "paragraph",
+      styles: %{"color" => StyleValue.literal("teal")}
+    }
+
+    disposed_node = %DesignNode{
+      node_id: disposed_id,
+      semantic_type: "raw",
+      styles: %{
+        "color" => StyleValue.literal("red"),
+        "custom-css" =>
+          state_value([state_rule("hover", disposed_id, %{"opacity" => literal(0.5)}, 0)])
+      }
+    }
+
+    after_node = %DesignNode{
+      node_id: after_id,
+      semantic_type: "paragraph",
+      styles: %{"display" => StyleValue.keyword("grid")},
+      responsive: %{
+        "mobile" => %ResponsiveOverride{
+          breakpoint_id: "mobile",
+          source_name: "mobile",
+          resolution_status: :resolved,
+          max_width: 767,
+          styles: %{"font-size" => StyleValue.literal("24px")}
+        }
+      }
+    }
+
+    root = boundary([before_node, disposed_node, after_node])
+    document = %DesignDocument{root_nodes: [root]}
+    c = contract()
+    plan = plan_for(root, c)
+    filtered_structure = filtered_structure!(c, plan, document, [disposed_id])
+
+    assert filtered_structure.nodes_by_id[root.node_id].children == root.children
+    assert filtered_structure.children_by_id[root.node_id] == [before_id, after_id]
+
+    assert {:ok, styles} = StyleIntegration.build(c, plan, filtered_structure)
+
+    before_class = "lf-section-style-fixture__n-000001-000001"
+    disposed_class = "lf-section-style-fixture__n-000001-000002"
+    after_class = "lf-section-style-fixture__n-000001-000003"
+
+    assert styles.nodes_by_id == filtered_structure.nodes_by_id
+    assert styles.private_class_by_id[before_id] == before_class
+    assert styles.private_class_by_id[after_id] == after_class
+    refute Map.has_key?(styles.private_class_by_id, disposed_id)
+    assert styles.stylesheet_content =~ ".#{before_class} {"
+    assert styles.stylesheet_content =~ "color: teal;"
+    assert styles.stylesheet_content =~ ".#{after_class} {"
+    assert styles.stylesheet_content =~ "display: grid;"
+    assert styles.stylesheet_content =~ "font-size: 24px;"
+    refute styles.stylesheet_content =~ disposed_class
+    refute styles.stylesheet_content =~ ":hover"
+    refute styles.stylesheet_content =~ "color: red;"
   end
 
   test "primary button intent emits token backed base, hover, and focus-visible rules" do
@@ -217,7 +304,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     document = %DesignDocument{root_nodes: [root]}
 
     assert {:error, :generation_blocked, [diagnostic]} =
-             StyleIntegration.build(c, plan_for(root, c), document)
+             build_styles(c, plan_for(root, c), document)
 
     assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
     assert diagnostic.metadata.node_id == figure_id
@@ -248,7 +335,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     document = %DesignDocument{root_nodes: [root]}
 
     assert {:error, :generation_blocked, [diagnostic]} =
-             StyleIntegration.build(c, plan_for(root, c), document)
+             build_styles(c, plan_for(root, c), document)
 
     assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
     assert diagnostic.metadata.node_id == figure_id
@@ -272,7 +359,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     document = %DesignDocument{root_nodes: [root]}
 
     assert {:error, :generation_blocked, [diagnostic]} =
-             StyleIntegration.build(c, plan_for(root, c), document)
+             build_styles(c, plan_for(root, c), document)
 
     assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
     assert diagnostic.metadata.node_id == figure_id
@@ -886,13 +973,20 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
              "native_generator.styling.responsive_cascade_authority_gap"
   end
 
-  test "canonical path mismatches from styling integration remain generation_blocked" do
+  test "canonical path mismatches block filtered structure construction" do
     node = %DesignNode{node_id: "node_renamed", semantic_type: "section"}
     document = %DesignDocument{root_nodes: [node]}
     c = contract()
     plan = %ComponentizationPlan{contract_id: c.contract_id, boundary_node_id: node.node_id}
 
-    assert {:error, :generation_blocked, [diagnostic]} = StyleIntegration.build(c, plan, document)
+    assert {:error, diagnostic} =
+             FilteredStructure.build(
+               document,
+               plan.boundary_node_id,
+               [],
+               Renderer.package_root_class(c)
+             )
+
     assert diagnostic.code == "native_generator.styling.node_identity_mismatch"
   end
 
@@ -1030,7 +1124,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
       c = contract()
 
       {:ok, result} =
-        StyleIntegration.build(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+        build_styles(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
 
       stylesheet = result.stylesheet_content
 
@@ -1061,7 +1155,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     c = contract()
 
     {:ok, result} =
-      StyleIntegration.build(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+      build_styles(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
 
     stylesheet = result.stylesheet_content
     private_class = "lf-section-style-fixture__n-000001-000001"
@@ -1194,7 +1288,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
       end
 
     {:ok, result} =
-      StyleIntegration.build(
+      build_styles(
         contract(),
         plan_for(boundary(headings), contract()),
         %DesignDocument{root_nodes: [boundary(headings)]}
