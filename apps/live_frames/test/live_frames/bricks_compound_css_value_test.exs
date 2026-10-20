@@ -62,6 +62,16 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
              CompoundCssValue.reconstruct(spaced, %{0 => "0ms", 1 => "ease-in-out"})
   end
 
+  test "trims the frozen ASCII whitespace around a declaration" do
+    for whitespace <- [" ", "\t", "\r", "\n", "\f"] do
+      assert {:ok, parsed} = CompoundCssValue.parse(whitespace <> "10px 2rem" <> whitespace)
+      assert parsed.production == :multi_token_value
+      assert {:ok, "10px 2rem"} = CompoundCssValue.reconstruct(parsed, %{})
+    end
+
+    assert CompoundCssValue.parse("\u00a010px 2rem\u00a0") == :no_match
+  end
+
   test "returns no match outside the frozen productions" do
     for value <- [
           "teal",

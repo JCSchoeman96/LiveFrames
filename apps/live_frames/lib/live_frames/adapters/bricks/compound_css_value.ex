@@ -5,6 +5,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   @max_argument_bytes 2048
   @max_tokens 32
   @max_refs 16
+  @ascii_trim ~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/
   @local_var ~r/var\([\x20\t\r\n\f]*(--[A-Za-z0-9_-]+)[\x20\t\r\n\f]*\)/
   @dimension ~r/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg)$/
 
@@ -40,12 +41,14 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
           | :no_match
           | {:error, :unsupported_grammar | :resource_limit_exceeded}
   def parse(value) when is_binary(value) do
-    value = String.trim(value, " \t\r\n\f")
+    if byte_size(value) > @max_bytes do
+      {:error, :resource_limit_exceeded}
+    else
+      value = Regex.replace(@ascii_trim, value, "")
 
-    cond do
-      byte_size(value) > @max_bytes -> {:error, :resource_limit_exceeded}
-      function_attempt?(value) -> parse_function(value)
-      true -> parse_non_function(value)
+      if function_attempt?(value),
+        do: parse_function(value),
+        else: parse_non_function(value)
     end
   end
 
