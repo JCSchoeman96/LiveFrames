@@ -3,12 +3,11 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentizationPlan
-  alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StateRuleSet
   alias LiveFrames.IR.StyleValue
   alias LiveFrames.NativeGenerator.Diagnostic
-  alias LiveFrames.NativeGenerator.NodeStyleIdentity
+  alias LiveFrames.NativeGenerator.FilteredStructure
   alias LiveFrames.NativeGenerator.StylesheetRenderer
   alias LiveFrames.NativeGenerator.StyleValueCSS
 
@@ -39,26 +38,25 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     "line-height" => "button.primary.line_height"
   }
 
-  @spec build(ComponentContract.t(), ComponentizationPlan.t(), DesignDocument.t()) ::
+  @spec build(ComponentContract.t(), ComponentizationPlan.t(), FilteredStructure.t()) ::
           {:ok, map()} | {:error, :generation_blocked, [Diagnostic.t()]}
   def build(
         %ComponentContract{} = contract,
         %ComponentizationPlan{} = plan,
-        %DesignDocument{} = doc
+        %FilteredStructure{} = filtered_structure
       ) do
-    package_class = LiveFrames.NativeGenerator.Renderer.package_root_class(contract)
-
-    with {:ok, identity} <- identity_index(doc, package_class),
-         {:ok, boundary_node} <- boundary_node(plan.boundary_node_id, identity.nodes_by_id),
+    with :ok <- validate_boundary(plan, filtered_structure),
+         {:ok, boundary_node} <-
+           boundary_node(filtered_structure.boundary_node_id, filtered_structure.nodes_by_id),
          {:ok, style_result, classes} <-
-           collect_styles(boundary_node, plan, identity),
+           collect_styles(boundary_node, plan, filtered_structure),
          {:ok, css} <- render_styles_and_state(style_result),
          {:ok, stylesheet_path} <- stylesheet_path(contract) do
       {:ok,
        %{
          private_class_by_id: classes,
          primary_action_slot_targets: style_result.primary_action_slot_targets,
-         nodes_by_id: identity.nodes_by_id,
+         nodes_by_id: filtered_structure.nodes_by_id,
          stylesheet_content: css,
          stylesheet_path: stylesheet_path
        }}
@@ -69,34 +67,48 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
-  defp identity_index(doc, package_class) do
-    case NodeStyleIdentity.build(doc, package_class) do
-      {:ok, identity} -> {:ok, identity}
-      {:error, diagnostic} -> {:error, diagnostic}
-    end
+  defp validate_boundary(
+         %ComponentizationPlan{boundary_node_id: boundary_node_id},
+         %FilteredStructure{boundary_node_id: boundary_node_id}
+       ),
+       do: :ok
+
+  defp validate_boundary(_plan, _filtered_structure) do
+    {:error,
+     Diagnostic.error(
+       "native_generator.boundary_missing",
+       "boundary node is missing from the design document"
+     )}
   end
 
   defp boundary_node(boundary_id, nodes_by_id) do
     case Map.fetch(nodes_by_id, boundary_id) do
-      {:ok, node} -> {:ok, node}
-      :error -> {:error, :boundary_missing}
+      {:ok, node} ->
+        {:ok, node}
+
+      :error ->
+        {:error,
+         Diagnostic.error(
+           "native_generator.boundary_missing",
+           "boundary node is missing from the design document"
+         )}
     end
   end
 
-  defp collect_styles(boundary_node, plan, identity) do
+  defp collect_styles(boundary_node, plan, filtered_structure) do
     slot_targets =
       plan.render_projections
       |> Enum.filter(&(&1.render_role == :subtree_slot))
       |> Map.new(&{&1.target_node_id, &1.public_slot_name})
 
     style_context = %{
-      nodes_by_id: identity.nodes_by_id,
-      path_by_id: identity.path_by_id,
-      private_class_by_id: identity.private_class_by_id,
-      boundary_path: Map.get(identity.path_by_id, plan.boundary_node_id),
+      nodes_by_id: filtered_structure.nodes_by_id,
+      path_by_id: filtered_structure.path_by_id,
+      private_class_by_id: filtered_structure.private_class_by_id,
+      boundary_path: Map.get(filtered_structure.path_by_id, filtered_structure.boundary_node_id),
       subtree_slot_paths:
         Enum.flat_map(Map.keys(slot_targets), fn node_id ->
-          case Map.fetch(identity.path_by_id, node_id) do
+          case Map.fetch(filtered_structure.path_by_id, node_id) do
             {:ok, path} -> [path]
             :error -> []
           end
@@ -108,6 +120,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
            plan,
            slot_targets,
            style_context,
+           filtered_structure,
            {[], %{}, MapSet.new(), []}
          ) do
       {:ok, {rendered, classes, primary_action_slot_targets, state_rules}} ->
@@ -129,7 +142,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
-  defp collect_node_styles(node, plan, slot_targets, style_context, acc) do
+  defp collect_node_styles(node, plan, slot_targets, style_context, filtered_structure, acc) do
     case Map.fetch(slot_targets, node.node_id) do
       {:ok, public_slot_name} ->
         collect_subtree_slot_style(node, public_slot_name, style_context.private_class_by_id, acc)
@@ -139,10 +152,11 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
                collect_node_style(node, plan.boundary_node_id, style_context, acc),
              {:ok, descendant_acc} <-
                collect_child_styles(
-                 node.children,
+                 FilteredStructure.children(filtered_structure, node.node_id),
                  plan,
                  slot_targets,
                  style_context,
+                 filtered_structure,
                  next_acc
                ) do
           {:ok, descendant_acc}
@@ -150,11 +164,24 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
-  defp collect_child_styles(children, plan, slot_targets, style_context, acc) do
-    Enum.reduce_while(children, {:ok, acc}, fn child, {:ok, child_acc} ->
-      case collect_node_styles(child, plan, slot_targets, style_context, child_acc) do
-        {:ok, next_acc} -> {:cont, {:ok, next_acc}}
-        {:error, diagnostic} -> {:halt, {:error, diagnostic}}
+  defp collect_child_styles(child_ids, plan, slot_targets, style_context, filtered_structure, acc) do
+    Enum.reduce_while(child_ids, {:ok, acc}, fn child_id, {:ok, child_acc} ->
+      case Map.fetch(filtered_structure.nodes_by_id, child_id) do
+        {:ok, child} ->
+          case collect_node_styles(
+                 child,
+                 plan,
+                 slot_targets,
+                 style_context,
+                 filtered_structure,
+                 child_acc
+               ) do
+            {:ok, next_acc} -> {:cont, {:ok, next_acc}}
+            {:error, diagnostic} -> {:halt, {:error, diagnostic}}
+          end
+
+        :error ->
+          {:halt, {:error, style_diagnostic(:filtered_child_missing)}}
       end
     end)
   end

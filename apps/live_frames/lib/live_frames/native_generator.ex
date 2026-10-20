@@ -9,6 +9,7 @@ defmodule LiveFrames.NativeGenerator do
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.NativeGenerator.Artifact
   alias LiveFrames.NativeGenerator.Diagnostic
+  alias LiveFrames.NativeGenerator.FilteredStructure
   alias LiveFrames.NativeGenerator.GeneratedArtifactBundle
   alias LiveFrames.NativeGenerator.Renderer
   alias LiveFrames.NativeGenerator.StyleIntegration
@@ -36,7 +37,7 @@ defmodule LiveFrames.NativeGenerator do
       _ ->
         with :ok <- gate_contract(contract, design_document),
              :ok <- gate_plan(plan, contract, design_document) do
-          generate_after_gates(contract, plan, design_document)
+          generate_after_gates(contract, plan, design_document, [])
         else
           {:error, :generation_blocked, diagnostics} ->
             {:error, :generation_blocked, diagnostics}
@@ -82,7 +83,14 @@ defmodule LiveFrames.NativeGenerator do
              plan,
              design_document
            ) do
-      generate_after_gates(approved_component_contract, plan, design_document)
+      authorized_disposed_node_ids = Enum.map(plan.node_dispositions, & &1.design_node_id)
+
+      generate_after_gates(
+        approved_component_contract,
+        plan,
+        design_document,
+        authorized_disposed_node_ids
+      )
     else
       {:error, :generation_blocked, diagnostics} ->
         {:error, :generation_blocked, diagnostics}
@@ -92,17 +100,35 @@ defmodule LiveFrames.NativeGenerator do
     end
   end
 
-  defp generate_after_gates(contract, plan, design_document) do
-    with {:ok, styling} <- StyleIntegration.build(contract, plan, design_document),
+  defp generate_after_gates(contract, plan, design_document, authorized_disposed_node_ids) do
+    case FilteredStructure.build(
+           design_document,
+           plan.boundary_node_id,
+           authorized_disposed_node_ids,
+           Renderer.package_root_class(contract)
+         ) do
+      {:ok, filtered_structure} ->
+        generate_from_structure(contract, plan, design_document, filtered_structure)
+
+      {:error, %Diagnostic{} = diagnostic} ->
+        {:error, :generation_blocked, [diagnostic]}
+    end
+  end
+
+  defp generate_from_structure(contract, plan, design_document, filtered_structure) do
+    with {:ok, styling} <- StyleIntegration.build(contract, plan, filtered_structure),
          {:ok, indexes} <-
            Renderer.build_indexes(
              contract,
              plan,
-             styling.nodes_by_id,
+             filtered_structure,
              normalize_registry(design_document.value_bindings),
-             styling.private_class_by_id,
              styling.primary_action_slot_targets
            ),
+         indexes <- %{
+           indexes
+           | private_class_owner_ids: Map.keys(styling.private_class_by_id) |> MapSet.new()
+         },
          {:ok, source} <- Renderer.render_module(indexes),
          {:ok, bundle} <- build_bundle(contract, plan, design_document, indexes, source, styling) do
       {:ok, bundle}
