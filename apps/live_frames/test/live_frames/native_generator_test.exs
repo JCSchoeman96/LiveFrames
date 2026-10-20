@@ -2,6 +2,8 @@ defmodule LiveFrames.NativeGeneratorTest do
   use ExUnit.Case, async: true
 
   alias LiveFrames.ComponentContract
+  alias LiveFrames.ComponentReview
+  alias LiveFrames.ComponentReviewResult
   alias LiveFrames.ComponentContract.Attr
   alias LiveFrames.ComponentContract.BindingProjection
   alias LiveFrames.ComponentContract.CollectionInput
@@ -15,10 +17,19 @@ defmodule LiveFrames.NativeGeneratorTest do
   alias LiveFrames.IR.DesignDocument
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StyleValue
+  alias LiveFrames.IR.Identity
+  alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR
   alias LiveFrames.NativeGenerator
   alias LiveFrames.NativeGenerator.Renderer
+  alias LiveFrames.Behavior.Binding, as: BehaviorBinding
+  alias LiveFrames.Behavior.Binding.PrimitiveRef
+  alias LiveFrames.Behavior.BindingIdentity
+  alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.ReviewResult, as: BehaviorReviewResult
+  alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
+  alias LiveFrames.ComponentizationPlan.NodeDisposition
 
   @boundary_id DesignNode.deterministic_id([1])
   @heading_id DesignNode.deterministic_id([1, 1])
@@ -110,6 +121,475 @@ defmodule LiveFrames.NativeGeneratorTest do
   end
 
   defp elixir_artifact(bundle), do: Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
+
+  defp disposition_authority do
+    target_id = DesignNode.deterministic_id([1, 3])
+    source_type = "synthetic-builder"
+    source_id = "synthetic-node-42"
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: @heading_id,
+              semantic_type: "heading",
+              attributes: %{"tag" => "h2"},
+              content: "Static heading"
+            },
+            %DesignNode{
+              node_id: @paragraph_id,
+              semantic_type: "paragraph",
+              content: "Static body"
+            },
+            %DesignNode{
+              node_id: target_id,
+              semantic_type: "raw",
+              source_trace: %SourceTrace{source_type: source_type, source_id: source_id}
+            }
+          ]
+        }
+      ]
+    }
+
+    component_contract = contract(approval_status: :proposed)
+    {:ok, identity} = Identity.from_document(design_document)
+
+    binding = %BehaviorBinding{
+      primitive_ref: %PrimitiveRef{kind: "synthetic-task7", definition_version: "1.0.0"},
+      owner_node_id: @boundary_id,
+      binding_role: "task7-authority-fixture"
+    }
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: identity,
+        bindings: [binding]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+
+    behavior_review_result = %BehaviorReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: BehaviorSerializer.algorithm(),
+      behavior_contract_digest: behavior_digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:task7-test",
+      reviewed_at: "2026-10-20T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["synthetic-behavior-evidence"]
+    }
+
+    {:ok, behavior_review_id} = BehaviorReviewResult.id(behavior_review_result)
+    behavior_binding = hd(behavior_contract.bindings)
+
+    plan =
+      plan(component_contract, design_document,
+        node_dispositions: [
+          %NodeDisposition{
+            design_node_id: target_id,
+            disposition: :exclude_source_runtime_carrier,
+            source_type: source_type,
+            source_id: source_id,
+            behavior_binding_id: behavior_binding.binding_id,
+            behavior_contract_digest: behavior_digest,
+            behavior_review_id: behavior_review_id,
+            evidence_refs: ["synthetic-disposition-evidence"]
+          }
+        ],
+        diagnostics: []
+      )
+
+    {:ok, approved_contract, component_review_result} =
+      ComponentReview.approve_with_result(
+        component_contract,
+        plan,
+        design_document,
+        behavior_contract,
+        behavior_review_result,
+        "reviewer:task7-test",
+        "2026-10-20T00:00:00.000000Z",
+        ["synthetic-component-evidence"]
+      )
+
+    {:ok, component_review_result_id} = ComponentReviewResult.id(component_review_result)
+
+    {approved_contract, plan, design_document, behavior_contract, behavior_review_result,
+     component_review_result, component_review_result_id}
+  end
+
+  defp refresh_behavior_authority(
+         {contract, plan, document, behavior_contract, behavior_review, component_review,
+          review_id},
+         bindings
+       ) do
+    {:ok, identity} = Identity.from_document(document)
+
+    bindings = Enum.map(bindings, &%{&1 | binding_id: nil, ordinal: nil})
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%{
+        behavior_contract
+        | design_document_identity: identity,
+          bindings: bindings
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+
+    behavior_review = %{
+      behavior_review
+      | design_document_identity: identity,
+        behavior_contract_digest: behavior_digest
+    }
+
+    {:ok, behavior_review_id} = BehaviorReviewResult.id(behavior_review)
+    [disposition] = plan.node_dispositions
+
+    disposition = %{
+      disposition
+      | behavior_contract_digest: behavior_digest,
+        behavior_review_id: behavior_review_id
+    }
+
+    disposition =
+      case behavior_contract.bindings do
+        [binding | _] -> %{disposition | behavior_binding_id: binding.binding_id}
+        [] -> disposition
+      end
+
+    {contract, %{plan | node_dispositions: [disposition]}, document, behavior_contract,
+     behavior_review, component_review, review_id}
+  end
+
+  test "generate/3 requires explicit authority for disposition-bearing plans" do
+    {approved_contract, plan, design_document, _behavior_contract, _behavior_review_result,
+     _component_review_result, _component_review_result_id} = disposition_authority()
+
+    assert {:error, :generation_blocked, diagnostics} =
+             NativeGenerator.generate(approved_contract, plan, design_document)
+
+    assert Enum.map(diagnostics, & &1.code) == ["native_generator.disposition_authority_required"]
+  end
+
+  test "generate/7 accepts the selected exact review authority before entering generation" do
+    {approved_contract, plan, design_document, behavior_contract, behavior_review_result,
+     component_review_result, component_review_result_id} = disposition_authority()
+
+    assert ComponentReviewResult.id(component_review_result) == {:ok, component_review_result_id}
+
+    assert :ok ==
+             ComponentReviewResult.validate_against(
+               component_review_result,
+               approved_contract,
+               plan,
+               design_document
+             )
+
+    assert :ok ==
+             ComponentizationPlan.validate_for_generation_with_behavior_authority(
+               plan,
+               approved_contract,
+               design_document,
+               behavior_contract,
+               behavior_review_result
+             )
+
+    result =
+      NativeGenerator.generate(
+        approved_contract,
+        plan,
+        design_document,
+        behavior_contract,
+        behavior_review_result,
+        component_review_result,
+        component_review_result_id
+      )
+
+    assert {:error, :generation_failed, [diagnostic]} = result
+    assert diagnostic.code == "native_generator.semantic_unsupported"
+  end
+
+  test "ordinary generate/3 still generates plans without dispositions" do
+    document = document()
+    c = contract()
+    p = plan(c, document)
+
+    assert {:ok, %{artifacts: [_module, _stylesheet]}} = NativeGenerator.generate(c, p, document)
+  end
+
+  test "generate/7 blocks when Behavior authority is missing or mismatched" do
+    tuple = disposition_authority()
+
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id} =
+      tuple
+
+    other_document = %{document | provenance: %{"source" => "different-document"}}
+    {:ok, other_identity} = Identity.from_document(other_document)
+
+    {:ok, wrong_document_contract} =
+      BindingIdentity.assign(%{
+        behavior_contract
+        | design_document_identity: other_identity,
+          bindings: Enum.map(behavior_contract.bindings, &%{&1 | binding_id: nil, ordinal: nil})
+      })
+
+    cases = [
+      {behavior_contract, nil},
+      {%BehaviorContract{}, behavior_review},
+      {wrong_document_contract, behavior_review},
+      {behavior_contract, %{behavior_review | decision: "needs_review"}},
+      {behavior_contract, %{behavior_review | reviewer_identity: "reviewer:changed"}},
+      {behavior_contract, %{behavior_review | design_document_identity: nil}},
+      {behavior_contract,
+       %{behavior_review | behavior_contract_digest: String.duplicate("0", 64)}}
+    ]
+
+    for {changed_contract, changed_review} <- cases do
+      assert {:error, expected_diagnostics} =
+               ComponentizationPlan.validate_for_generation_with_behavior_authority(
+                 plan,
+                 contract,
+                 document,
+                 changed_contract,
+                 changed_review
+               )
+
+      assert {:error, :generation_blocked, ^expected_diagnostics} =
+               NativeGenerator.generate(
+                 contract,
+                 plan,
+                 document,
+                 changed_contract,
+                 changed_review,
+                 component_review,
+                 review_id
+               )
+    end
+  end
+
+  test "generate/7 blocks a stale NodeDisposition Behavior digest" do
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id} =
+      disposition_authority()
+
+    [disposition] = plan.node_dispositions
+
+    stale_plan = %{
+      plan
+      | node_dispositions: [%{disposition | behavior_contract_digest: String.duplicate("0", 64)}]
+    }
+
+    assert {:error, :generation_blocked, [_ | _]} =
+             NativeGenerator.generate(
+               contract,
+               stale_plan,
+               document,
+               behavior_contract,
+               behavior_review,
+               component_review,
+               review_id
+             )
+  end
+
+  test "generate/7 blocks a selected BehaviorReviewResult that is not approved" do
+    tuple = disposition_authority()
+
+    {_contract, _plan, _document, behavior_contract, behavior_review, _component_review,
+     _review_id} =
+      tuple
+
+    changed_review = %{behavior_review | decision: "needs_review"}
+
+    {contract, plan, document, behavior_contract, changed_review, component_review, review_id} =
+      refresh_behavior_authority(put_elem(tuple, 4, changed_review), behavior_contract.bindings)
+
+    assert {:error, expected_diagnostics} =
+             ComponentizationPlan.validate_for_generation_with_behavior_authority(
+               plan,
+               contract,
+               document,
+               behavior_contract,
+               changed_review
+             )
+
+    assert {:error, :generation_blocked, ^expected_diagnostics} =
+             NativeGenerator.generate(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               changed_review,
+               component_review,
+               review_id
+             )
+  end
+
+  test "generate/7 reuses Task 5 diagnostics for Behavior reference conflicts and missing bindings" do
+    tuple = disposition_authority()
+
+    {_contract, plan, _document, behavior_contract, _behavior_review, _component_review,
+     _review_id} =
+      tuple
+
+    [binding] = behavior_contract.bindings
+    target_id = hd(plan.node_dispositions).design_node_id
+    conflicting_binding = %{binding | owner_node_id: target_id}
+    conflicting = refresh_behavior_authority(tuple, [conflicting_binding])
+    missing_binding = refresh_behavior_authority(tuple, [])
+
+    for {authority, expected_code} <- [
+          {conflicting, "componentization_plan.node_disposition.behavior_reference_conflict"},
+          {missing_binding, "componentization_plan.node_disposition.behavior_binding_mismatch"}
+        ] do
+      {changed_contract, changed_plan, changed_document, changed_behavior, changed_review,
+       changed_component_review, changed_review_id} = authority
+
+      assert {:error, upstream_diagnostics} =
+               ComponentizationPlan.validate_for_generation_with_behavior_authority(
+                 changed_plan,
+                 changed_contract,
+                 changed_document,
+                 changed_behavior,
+                 changed_review
+               )
+
+      assert Enum.any?(upstream_diagnostics, &(&1.code == expected_code))
+
+      assert {:error, :generation_blocked, ^upstream_diagnostics} =
+               NativeGenerator.generate(
+                 changed_contract,
+                 changed_plan,
+                 changed_document,
+                 changed_behavior,
+                 changed_review,
+                 changed_component_review,
+                 changed_review_id
+               )
+    end
+  end
+
+  test "generate/7 blocks invalid selected ComponentReviewResult authority" do
+    tuple = disposition_authority()
+
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id} =
+      tuple
+
+    changed_review = %{component_review | reviewer_identity: "reviewer:changed"}
+
+    cases = [
+      {nil, review_id},
+      {:wrong_shape, review_id},
+      {component_review, "crv_" <> String.duplicate("0", 64)},
+      {changed_review, review_id},
+      {%{component_review | decision: "needs_review"},
+       review_id_for(%{component_review | decision: "needs_review"})},
+      {%{component_review | decision: "rejected"},
+       review_id_for(%{component_review | decision: "rejected"})},
+      {%{component_review | component_contract_id: "other-contract"},
+       review_id_for(%{component_review | component_contract_id: "other-contract"})}
+    ]
+
+    for {selected_review, selected_id} <- cases do
+      assert {:error, :generation_blocked, [diagnostic]} =
+               NativeGenerator.generate(
+                 contract,
+                 plan,
+                 document,
+                 behavior_contract,
+                 behavior_review,
+                 selected_review,
+                 selected_id
+               )
+
+      assert diagnostic.code == "native_generator.component_review_authority_mismatch"
+    end
+  end
+
+  test "generate/7 binds the exact approved contract bytes and encoded plan" do
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id} =
+      disposition_authority()
+
+    changed_contract = %{contract | module_intent: "changed_marketing_block"}
+    changed_plan = %{plan | provenance: %{"task7" => "changed"}}
+
+    for {selected_contract, selected_plan} <- [
+          {changed_contract, plan},
+          {contract, changed_plan}
+        ] do
+      assert {:error, :generation_blocked, [diagnostic]} =
+               NativeGenerator.generate(
+                 selected_contract,
+                 selected_plan,
+                 document,
+                 behavior_contract,
+                 behavior_review,
+                 component_review,
+                 review_id
+               )
+
+      assert diagnostic.code == "native_generator.component_review_authority_mismatch"
+    end
+  end
+
+  test "generate/7 blocks a changed document after refreshing Task 5 Behavior identity" do
+    tuple = disposition_authority()
+
+    {contract, plan, document, behavior_contract, _behavior_review, component_review, review_id} =
+      tuple
+
+    [boundary] = document.root_nodes
+    [heading | tail] = boundary.children
+
+    changed_document = %{
+      document
+      | root_nodes: [%{boundary | children: [%{heading | content: "Changed"} | tail]}]
+    }
+
+    changed_plan = %{
+      plan
+      | design_document_sha256:
+          elem(ComponentizationPlan.design_document_sha256(changed_document), 1)
+    }
+
+    fresh_behavior_tuple =
+      refresh_behavior_authority(
+        {contract, changed_plan, changed_document, behavior_contract, elem(tuple, 4),
+         component_review, review_id},
+        behavior_contract.bindings
+      )
+
+    {contract, changed_plan, changed_document, behavior_contract, behavior_review, _, _} =
+      fresh_behavior_tuple
+
+    assert :ok ==
+             ComponentizationPlan.validate_for_generation_with_behavior_authority(
+               changed_plan,
+               contract,
+               changed_document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             NativeGenerator.generate(
+               contract,
+               changed_plan,
+               changed_document,
+               behavior_contract,
+               behavior_review,
+               component_review,
+               review_id
+             )
+
+    assert diagnostic.code == "native_generator.component_review_authority_mismatch"
+  end
+
+  defp review_id_for(review_result) do
+    {:ok, id} = ComponentReviewResult.id(review_result)
+    id
+  end
 
   test "unapproved contract returns generation_blocked" do
     document = document()
