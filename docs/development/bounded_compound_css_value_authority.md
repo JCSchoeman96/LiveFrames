@@ -43,8 +43,15 @@ RESOLVED_FORM_GRAMMAR_FROZEN=YES
 SLOT_GRAMMAR_CONTRACTS_FROZEN=YES
 MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
 MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
+MULTI_TOKEN_TOKEN_COUNT_MIN=2
+MULTI_TOKEN_TOKEN_COUNT_MAX=2
+MULTI_TOKEN_KEYWORD_AUTHORIZED=NO
+MULTI_TOKEN_SEPARATE_PERCENTAGE_CLASS_AUTHORIZED=NO
 MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_EMBEDDED_LOCAL_REFERENCE_AUTHORIZED=NO
 MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_COUNT_AUTHORIZED=NO
+MULTI_TOKEN_LOCAL_RESOLVER_REFERENCES_CURRENT_CAPABILITY=0
 CANONICAL_COMPOUND_REFERENCE_RECORD_COUNT=48
 CANONICAL_ACTUAL_RESOLVER_OK_COUNT=40
 CANONICAL_ACTUAL_RESOLVER_ERROR_COUNT=8
@@ -92,7 +99,7 @@ LIFECYCLE_STATE_NAMES_MATCH_COMPLETED_WORK=YES
 EMITTED_TERMINAL_SUCCESS=YES
 FUNCTION_ARGUMENT_GRAMMAR=FROZEN
 FUNCTION_QUOTING_POLICY=FROZEN
-MULTI_TOKEN_IDENTIFIER_POLICY=FROZEN
+MULTI_TOKEN_IDENTIFIER_POLICY=REJECT_ALL_IDENTIFIERS
 MULTI_TOKEN_LITERAL_POLICY=FROZEN
 OWNER_FINDING_TO_INVENTORY_SPECIMEN_BIJECTION=NOT_ASSERTED
 RESOLVER_STATE_SCOPE_CONTRACT_CHANGED=NO
@@ -243,7 +250,7 @@ State names denote **completed work**. `EMITTED` is terminal success.
 | `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES`; exactly one frozen compound production matches disjoint rules (2)–(4) | Attach the matching production identity | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
 | `GRAMMAR_CLASSIFIED` | Selected production parses within all frozen production bounds | Build private bounded parse representation | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
 | `PARSED_SUPPORTED` | Embedded occurrence count within bounds; every embedded local name passes the accepted local-name boundary | Extract occurrences; assign normalizer-private `occurrence_index`; append unchanged resolver reference records | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
-| `LOCAL_REFERENCES_COLLECTED` | Existing `resolve/3` returns one ordered result per routed record; every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_COLLECTED` | When embedded occurrence count is zero, vacuous success. Otherwise existing `resolve/3` returns one ordered result per routed record and every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation (or none) | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
 | `LOCAL_REFERENCES_RESOLVED` | Every `{:ok, terminal}` satisfies that occurrence's frozen `SLOT_GRAMMAR`; deterministic substitution succeeds within `MAX_RECONSTRUCTED_TERMINAL_BYTES` | Substitute validated terminals into the private parse representation | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
 | `TERMINAL_RECONSTRUCTED` | Reconstructed value satisfies the **same production identity** as `GRAMMAR_CLASSIFIED` under that production's frozen **resolved-form** grammar; no `var(` remains; byte/token/depth limits hold; `CSSDeclaration` accepts on `:source_resolver` without generic `var()`/`calc()` value classification | Hold bounded literal declaration candidate (`COMPOUND_SUCCESS_STYLE_KIND=LITERAL`) | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
 | `CSS_REVALIDATED` | All declarations in the selector rule pass existing whole-rule atomicity | Emit normalized style as existing literal `StyleValue` (no `VariableAuthority` reentry) | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
@@ -327,9 +334,10 @@ path**, not this grammar.
    juxtaposition syntax (see below). Despite the lane name, canonical evidence
    contains **no** binary-operator specimens; operator tokens are not
    authorized.
-4. **`MULTI_TOKEN_VALUE`** — trimmed value contains two or more
-   whitespace-separated tokens, does not match (2) or (3), and contains no
-   outer frozen function call at position zero.
+4. **`MULTI_TOKEN_VALUE`** — trimmed value is exactly two `DIMENSION_LITERAL`
+   tokens separated by one or more ASCII whitespace characters; does not match
+   (2) or (3); contains no `var(`; no outer frozen function call at position
+   zero.
 5. Otherwise → `FAIL_CLOSED_RESIDUAL`.
 
 ```text
@@ -426,52 +434,54 @@ MAX_STOP_SEGMENT_TOKENS=4
 
 ### Production `MULTI_TOKEN_VALUE`
 
-**Shape:** two to `MAX_COMPOUND_TOKEN_COUNT` tokens separated by ASCII
-whitespace; value does not satisfy `FUNCTION_CALL` or
+**Frozen shape (evidence-backed):** exactly **two** tokens, one ASCII
+whitespace run between them (`MULTI_TOKEN_TOKEN_COUNT_MIN=2`,
+`MULTI_TOKEN_TOKEN_COUNT_MAX=2`). Value does not satisfy `FUNCTION_CALL` or
 `VAR_REFERENCE_WITH_OPERATION`.
 
-**Frozen token classes (`MULTI_TOKEN_IDENTIFIER_POLICY=FROZEN`,
-`MULTI_TOKEN_LITERAL_POLICY=FROZEN`):** each token must match exactly one of:
+**Frozen literal class (`MULTI_TOKEN_LITERAL_POLICY=FROZEN`):** both tokens
+must be **`DIMENSION_LITERAL`** — matches
+`~r/^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$/` (case-sensitive unit suffix;
+unary minus only inside the dimension token, not a separate operator token).
+Values with `%` use this same class when `%` is the unit suffix; there is no
+separate production-4 percentage token class
+(`MULTI_TOKEN_SEPARATE_PERCENTAGE_CLASS_AUTHORIZED=NO`).
 
-- **Keyword token** — exact member of `CustomCssNormalizer` `@keyword_values`:
-
-```text
-auto block bold border-box content-box currentColor flex grid hidden inherit
-initial inline inline-block inline-flex inline-grid none normal revert
-revert-layer static unset visible
-```
-
-- **Dimension literal** — matches
-  `~r/^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$/` (case-sensitive unit suffix as
-  written; unary minus only as part of the dimension token, not a separate
-  operator token).
-- **Percentage literal** — `\d+(\.\d+)?%` when not already covered as dimension
-  with `%` suffix.
-- **Embedded direct local reference token** — entire token is one
-  `var(--name)` span with local name per existing boundary, only when the full
-  value is not production 3.
-
-**Explicit rejects:** general identifiers outside the keyword list; top-level
-commas; semicolons; `calc(` at position zero; values matching production 3;
-unbounded token count; any `(`-initiated function token in the value (not
-production 2); ASCII whitespace-separated binary operators (`+`, `-`, `*`, `/`
-between tokens); **unitless number literals** (no unit suffix) — not authorized
-on production 4 until a frozen inventory specimen documents
-`UNITLESS_NUMBER` in its `TOKEN_CLASS_SEQUENCE` (`MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO`).
+**Explicit rejects:** keyword tokens (`MULTI_TOKEN_KEYWORD_AUTHORIZED=NO`);
+embedded `var(--name)` (`MULTI_TOKEN_EMBEDDED_LOCAL_REFERENCE_AUTHORIZED=NO`);
+unitless number literals (`MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO`); token
+counts other than two (`MULTI_TOKEN_UNEVIDENCED_TOKEN_COUNT_AUTHORIZED=NO`);
+general identifiers; top-level commas; semicolons; `calc(` at position zero;
+values matching production 3; any `(`-initiated function token (not production
+2); ASCII whitespace-separated binary operators (`+`, `-`, `*`, `/` between
+tokens).
 
 ```text
 MULTI_TOKEN_HASH_USED_AS_EVIDENCE_ONLY=YES
 MULTI_TOKEN_HASH_USED_AS_IMPLEMENTATION_SELECTOR=NO
+MULTI_TOKEN_TOKEN_COUNT_MIN=2
+MULTI_TOKEN_TOKEN_COUNT_MAX=2
+MULTI_TOKEN_KEYWORD_AUTHORIZED=NO
+MULTI_TOKEN_SEPARATE_PERCENTAGE_CLASS_AUTHORIZED=NO
 MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_EMBEDDED_LOCAL_REFERENCE_AUTHORIZED=NO
 MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_COUNT_AUTHORIZED=NO
+MULTI_TOKEN_LOCAL_RESOLVER_REFERENCES_CURRENT_CAPABILITY=0
 ```
+
+**Resolver integration (current freeze):** all five inventory specimens have
+`EMBEDDED_LOCAL_REFERENCE_COUNT=0`. Production 4 must not append resolver
+reference records or invoke `resolve/3` for that declaration (vacuous
+`LOCAL_REFERENCES_RESOLVED`). Resolver batching remains required for productions
+2 and 3 only.
 
 **`MULTI_TOKEN_VALUE` source form vs resolved form:**
 
 | Phase | Grammar |
 | --- | --- |
-| **Source form** | Two to `MAX_COMPOUND_TOKEN_COUNT` whitespace-separated tokens; each token is keyword, dimension, percentage, or embedded `var(--name)` per rules above. |
-| **Resolved form** | Same token count and whitespace layout; each token is keyword, dimension, or percentage only (`MULTI_TOKEN_ATOM` terminals). No `var(`. |
+| **Source form** | `DIMENSION_LITERAL` + ASCII whitespace + `DIMENSION_LITERAL` (exactly two dimension tokens). |
+| **Resolved form** | Identical to source form on the current freeze (no embedded locals; no substitution). |
 
 ### MULTI_TOKEN inventory structural proof (five gap specimens)
 
@@ -492,8 +502,15 @@ loose-shape scan only).
 MULTI_TOKEN_INVENTORY_SPECIMEN_COUNT=5
 MULTI_TOKEN_INVENTORY_PROVEN_ACCEPTED_COUNT=5
 MULTI_TOKEN_JOINED_EXPORT_UNIQUE_FROZEN_MULTI_VALUE_COUNT=3
+MULTI_TOKEN_TOKEN_COUNT_MIN=2
+MULTI_TOKEN_TOKEN_COUNT_MAX=2
+MULTI_TOKEN_KEYWORD_AUTHORIZED=NO
+MULTI_TOKEN_SEPARATE_PERCENTAGE_CLASS_AUTHORIZED=NO
 MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO
+MULTI_TOKEN_EMBEDDED_LOCAL_REFERENCE_AUTHORIZED=NO
 MULTI_TOKEN_UNEVIDENCED_TOKEN_CLASS_AUTHORIZED=NO
+MULTI_TOKEN_UNEVIDENCED_TOKEN_COUNT_AUTHORIZED=NO
+MULTI_TOKEN_LOCAL_RESOLVER_REFERENCES_CURRENT_CAPABILITY=0
 ```
 
 | Inventory slot | `SPECIMEN_SAFE_HASH` | `TOKEN_COUNT` | `TOKEN_CLASS_SEQUENCE` | `EMBEDDED_LOCAL_REFERENCE_COUNT` | `TOP_LEVEL_COMMA` | `FUNCTION_TOKEN` | `OPERATOR_TOKEN` | `FROZEN_MULTI_TOKEN_GRAMMAR_ACCEPTS` |
@@ -565,6 +582,9 @@ resolved-form production attached at `GRAMMAR_CLASSIFIED`.
 
 After `PARSED_SUPPORTED`, scan the bounded parse tree for `var(--name)` spans
 that match `CSSDeclaration.safe_property?/1` local names (`--` prefix).
+Production `MULTI_TOKEN_VALUE` on the current freeze embeds none
+(`MULTI_TOKEN_LOCAL_RESOLVER_REFERENCES_CURRENT_CAPABILITY=0`); those
+declarations contribute zero reference records.
 
 For each occurrence:
 
@@ -709,7 +729,7 @@ All slots share these global bounds unless a row narrows further:
 | --- | --- |
 | `GRADIENT_STOP_ATOM` | `GRADIENT_KEYWORD_TRANSPARENT` (`transparent`); `PERCENTAGE_LITERAL` (`\d+(\.\d+)?%`); `DIMENSION_LITERAL` (`^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$`); `RGB_COLOR_FUNCTION_LITERAL` (frozen grammar below). `HEX_COLOR_LITERAL` is **not** authorized on this slot until a canonical `{:ok, terminal}` tracer documents a hex stop (`HEX_COLOR_LITERAL=NOT_AUTHORIZED_BY_CURRENT_EVIDENCE`). |
 | `CALC_OPERAND` | `UNITLESS_NUMBER_LITERAL` (`^-?\d+(\.\d+)?$` matching `positive_finite_number/1` when used as calc factor); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. |
-| `MULTI_TOKEN_ATOM` | Same token classes as production 4 **resolved** tokens: `LISTED_KEYWORD` (`@keyword_values`); `DIMENSION_LITERAL`; `PERCENTAGE_LITERAL`. `UNITLESS_NUMBER_LITERAL` is **not** authorized here (`MULTI_TOKEN_UNITLESS_NUMBER_AUTHORIZED=NO`). |
+| `MULTI_TOKEN_ATOM` | `DIMENSION_LITERAL` only — same bounded class as production 4 tokens (`MULTI_TOKEN_LITERAL_POLICY=FROZEN`). Not used on the current freeze because production 4 has no embedded locals; reserved for a future evidence-backed extension. |
 | `JUXTAPOSITION_LEFT_OPERAND` | `TIME_DURATION_LITERAL` only — lexical form `^(\d+(\.\d+)?|\.\d+)(s|ms)$` with **no** leading `+` or `-`. Semantic guard: parsed numeric magnitude is finite and `>= 0` (`NEGATIVE_TRANSITION_DURATION_AUTHORIZED=NO`, `TIME_DURATION_FINITE_REQUIRED=YES`, `TIME_DURATION_NON_NEGATIVE_REQUIRED=YES`). |
 | `JUXTAPOSITION_RIGHT_OPERAND` | `TRANSITION_TIMING_KEYWORD` only — exact member of the frozen finite allowlist below (no function forms, no arbitrary identifiers). |
 
