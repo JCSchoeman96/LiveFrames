@@ -134,3 +134,115 @@ No browser verification was run here; that evidence is recorded separately in th
 ## LiveFrames repository state
 
 The implementation worktree was clean at starting HEAD `86f04bb51b9e4dcfd5e0cc1dd14c076de8a67a20` before the consumer run and remained clean afterward. The `apps/live_frames` subtree was unchanged. The consumer application and its build output remain under `/tmp`.
+
+## Post-merge exact-main consumer reproof
+
+This run is the current external consumer evidence for Page A v0. It preserves the earlier run above as historical evidence. The terminal result at the end of this section is authoritative for the current Page A consumer package identity.
+
+```text
+PAGE_ID=frames_page_a_v0
+CONSUMER_PROOF_RUN=page-a-v0-post-merge-exact-main-20261020T120223Z
+BASE_SHA=64855802b347a710fb60bdb6054ce62d4390b8c2
+BASE_TREE=ac869f2df3cc7f2004d0c6f5fee53950ff5f1768
+BASE_CI=39412560656
+BASE_CI_RESULT=SUCCESS
+PR274_MERGE_SHA=a2123a5ad2062aa3dc510de876df3a1954a49f05
+REVIEWED_PR274_HEAD=7e19e556183e8e57646e7b83f1eeb0a7d56ee9d4
+PROOF_LIVEFRAMES_SHA=64855802b347a710fb60bdb6054ce62d4390b8c2
+PROOF_LIVEFRAMES_TREE=ac869f2df3cc7f2004d0c6f5fee53950ff5f1768
+PROOF_PACKAGE_TREE=d2474d2aa35e44e2198fa50540daf06b675065c6
+CONSUMER_ROOT=/tmp/liveframes-page-a-v0-post-merge-reproof/consumer_app
+DEPENDENCY_MODE=LOCAL_PATH_TO_EXACT_LIVE_FRAMES_APP
+DEPENDENCY_PATH=/tmp/liveframes-page-a-v0-post-merge-reproof-worktree/apps/live_frames
+```
+
+The preflight fetched `origin/main` and matched the authorized SHA and tree. PR #274's merge SHA was an ancestor, and `apps/live_frames` had package tree `d2474d2aa35e44e2198fa50540daf06b675065c6`. The original repository and the isolated worktree were clean before the proof. `origin/main` remained at the authorized SHA throughout the run.
+
+### Environment and generator
+
+The fresh Phoenix host was generated outside the repository and all LiveFrames worktrees. Its generator command was:
+
+```sh
+mix phx.new "$HOST_ROOT" \
+  --no-install \
+  --no-ecto \
+  --no-mailer \
+  --no-dashboard \
+  --no-gettext \
+  --no-tailwind \
+  --no-version-check
+```
+
+The host had one direct local path dependency to the exact `apps/live_frames` directory listed above. Mix resolved `live_frames 0.1.0` from that path. No LiveFrames source or CSS was copied into the host.
+
+```text
+PHX_NEW_VERSION=1.8.15
+ELIXIR_VERSION=1.19.3
+OTP_VERSION=28
+MIX_VERSION=1.19.3
+PHOENIX_VERSION=1.8.16
+PHOENIX_LIVE_VIEW_VERSION=1.2.13
+PHOENIX_HTML_VERSION=4.3.0
+```
+
+### Page and stylesheet
+
+The page calls the public `LiveFrames.Components.Sections.Hero.hero/1` and `LiveFrames.Components.Sections.MediaCallToAction.media_call_to_action/1` APIs. `GET /` returned HTTP 200 with exactly one Hero root and two CTA roots. The two CTAs retained separate headings, body text, destinations, three synthetic image values each, and additive root classes.
+
+The consumer's endpoint used dependency-backed static delivery:
+
+```elixir
+plug Plug.Static,
+  at: "/assets/liveframes",
+  from: :live_frames,
+  gzip: false,
+  only: ~w(live_frames)
+```
+
+```text
+CSS_URL=/assets/liveframes/live_frames/css/live_frames.css
+PRECOMPILED_CSS_HTTP=200
+CSS_SELECTOR_HERO=.lf-hero
+CSS_SELECTOR_CTA=.lf-section-media-call-to-action
+CSS_SELECTOR_CHECKS=PASS
+PACKAGE_CSS_SHA256=cf50491747fd67abbc76625f2532debf1f64b62c50ff2870fafb97960b7043f4
+HOST_PRIV_STATIC_LIVE_FRAMES_DIRECTORY=ABSENT
+COPIED_LIVEFRAMES_FILES=NONE
+```
+
+The Phoenix connection test requested the CSS URL and checked HTTP 200 plus both selectors in the returned response. The boundary test confirmed that `priv/static/live_frames` did not exist. The host dependency stayed a direct local path to the exact worktree app.
+
+### Test results
+
+The focused tests first ran against the generated host before page and static wiring. They produced the expected red result: 3 tests, 2 failures, with no Hero root and a 404 stylesheet response. After wiring the public components and dependency-backed static plug, the focused suite passed with 3 tests and 0 failures.
+
+The final commands ran from the disposable consumer root with isolated Mix and Hex homes:
+
+| Command | Result |
+| --- | --- |
+| `mix deps.get` | PASS, exit 0 |
+| `mix compile --warnings-as-errors` | PASS, exit 0 |
+| `mix test` | PASS, 7 tests, 0 failures |
+
+### Consumer boundary
+
+```text
+PRIVATE_SOURCE_LEAK=NO
+SOURCE_RUNTIME_REQUIRED=NO
+PREVIEW_DEPENDENCY=NO
+STORYBOOK_DEPENDENCY=NO
+HOST_TAILWIND_REQUIRED=NO
+ECTO_POSTGRES_REQUIRED=NO
+COPIED_LIVEFRAMES_FILES=NONE
+LIVEFRAMES_WORKTREE_AFTER_PROOF=CLEAN
+```
+
+The host dependency files contain no Preview, Storybook, Ecto, or PostgreSQL dependency. The host has no direct Tailwind dependency or Tailwind config, and the consumer suite passed without a host asset build. Tailwind 0.5.1 is present in the lock graph through LiveFrames' `runtime: false` dependency. The host contains no `private_reference`, Bricks export, Frames source, or ACSS source files. The test also confirmed there is no host `priv/static/live_frames` directory.
+
+### Authoritative terminal result
+
+```text
+POST_MERGE_EXACT_MAIN_REPROOF=PASSED
+CONSUMER_VERIFIED=SUPPORTED
+TERMINAL_OUTCOME=PASSED
+```
