@@ -122,10 +122,21 @@ defmodule LiveFrames.NativeGeneratorTest do
 
   defp elixir_artifact(bundle), do: Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
 
-  defp disposition_authority do
+  defp disposition_authority(heading_overrides \\ []) do
     target_id = DesignNode.deterministic_id([1, 3])
     source_type = "synthetic-builder"
     source_id = "synthetic-node-42"
+
+    heading =
+      struct!(
+        %DesignNode{
+          node_id: @heading_id,
+          semantic_type: "heading",
+          attributes: %{"tag" => "h2"},
+          content: "Static heading"
+        },
+        heading_overrides
+      )
 
     design_document = %DesignDocument{
       root_nodes: [
@@ -133,12 +144,7 @@ defmodule LiveFrames.NativeGeneratorTest do
           node_id: @boundary_id,
           semantic_type: "section",
           children: [
-            %DesignNode{
-              node_id: @heading_id,
-              semantic_type: "heading",
-              attributes: %{"tag" => "h2"},
-              content: "Static heading"
-            },
+            heading,
             %DesignNode{
               node_id: @paragraph_id,
               semantic_type: "paragraph",
@@ -309,6 +315,56 @@ defmodule LiveFrames.NativeGeneratorTest do
       )
 
     assert {:ok, %{artifacts: [_module, _stylesheet]}} = result
+  end
+
+  test "generate/7 preserves NAV-CARRIER heading markup and styling when an unrelated carrier is disposed" do
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id} =
+      disposition_authority(
+        attributes: %{
+          "tag" => "h2",
+          "navigation" => %{"href" => "/go", "target" => "_blank"}
+        },
+        styles: %{"font-size" => StyleValue.literal("2rem")}
+      )
+
+    [disposition] = plan.node_dispositions
+    [boundary] = document.root_nodes
+    [heading, _paragraph, source_runtime_carrier] = boundary.children
+
+    assert heading.node_id == @heading_id
+    assert disposition.design_node_id == source_runtime_carrier.node_id
+    assert disposition.design_node_id != heading.node_id
+    assert source_runtime_carrier.semantic_type == "raw"
+    assert source_runtime_carrier.source_trace.source_type == "synthetic-builder"
+    assert source_runtime_carrier.source_trace.source_id == "synthetic-node-42"
+
+    # The nested anchor comes from heading rendering and has no DesignNode of its own.
+    assert Enum.map(boundary.children, & &1.node_id) ==
+             [@heading_id, @paragraph_id, disposition.design_node_id]
+
+    assert {:ok, bundle} =
+             NativeGenerator.generate(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review,
+               component_review,
+               review_id
+             )
+
+    module = elixir_artifact(bundle).content
+    stylesheet = Enum.find(bundle.artifacts, &(&1.kind == :stylesheet)).content
+    heading_class = Renderer.package_root_class(contract) <> "__n-000001-000001"
+
+    assert module =~
+             ~r/<h2\b[^>]*class=\{"#{Regex.escape(heading_class)}"\}[^>]*>\s*<a\b[^>]*href="\/go"[^>]*target="_blank"[^>]*rel="noopener noreferrer">\{"Static heading"\}<\/a><\/h2>/s
+
+    assert stylesheet ==
+             ".#{heading_class} {\n  font-size: 2rem;\n" <>
+               "  font-weight: var(--lf-typography-display-weight);\n" <>
+               "  line-height: var(--lf-typography-display-line-height);\n}\n\n" <>
+               ".#{heading_class} > a {\n  color: inherit;\n  text-decoration: inherit;\n}\n"
   end
 
   test "ordinary generate/3 still generates plans without dispositions" do
