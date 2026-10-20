@@ -892,7 +892,6 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp direct_variable_name(_value), do: nil
 
-  defp compound_local_name("--" <> _rest = local_name), do: local_name
   defp compound_local_name(name) when is_binary(name), do: "--" <> name
 
   defp consumable_local_definition_compiler_input?(frame, selection, property, value)

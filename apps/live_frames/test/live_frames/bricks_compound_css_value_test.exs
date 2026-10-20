@@ -24,6 +24,13 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
              CompoundCssValue.reconstruct(upper, %{0 => "10%"})
   end
 
+  test "preserves extra hyphens after the embedded variable prefix" do
+    assert {:ok, parsed} =
+             CompoundCssValue.parse("linear-gradient(90deg, var(----accent))")
+
+    assert [%{local_name: "--accent"}] = CompoundCssValue.occurrences(parsed)
+  end
+
   test "parses calc references with and without a positive factor" do
     for value <- [
           "calc(var(--space))",

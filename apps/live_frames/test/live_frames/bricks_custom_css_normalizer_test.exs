@@ -334,6 +334,14 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
   end
 
+  test "compound reference names retain leading hyphens without resolving a different local name" do
+    result =
+      run(".owner { --accent: rgb(1,2,3); background: linear-gradient(90deg, var(----accent)); }")
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
   test "compound and direct references share the provenance budget" do
     compound_rules = List.duplicate(".owner { width: var(--duration) var(--timing); }", 511)
     direct_rules = [".owner { color: var(--duration); }", ".owner { opacity: var(--timing); }"]
