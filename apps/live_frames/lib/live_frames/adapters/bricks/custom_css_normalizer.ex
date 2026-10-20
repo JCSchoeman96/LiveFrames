@@ -833,7 +833,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
                effective_provenance_identity: provenance_identity,
                authority_index: Keyword.get(opts, :authority_index, %VariableAuthority{})
              ) do
-          {:ok, reference_results} ->
+          {:ok, reference_results} when length(reference_results) == length(references) ->
             next_resolutions =
               Enum.zip(references, reference_results)
               |> Enum.reduce(resolutions, fn {{reference_id, _record}, resolution}, resolutions ->
@@ -841,6 +841,18 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
               end)
 
             {next_resolutions, resource_limited}
+
+          {:ok, _reference_results} ->
+            failed_resolutions =
+              Enum.reduce(references, resolutions, fn {reference_id, _record}, resolutions ->
+                Map.put(
+                  resolutions,
+                  {provenance_identity, reference_id},
+                  {:error, :result_count_mismatch}
+                )
+              end)
+
+            {failed_resolutions, resource_limited}
 
           {:error, :resource_limit_exceeded} ->
             {resolutions, MapSet.put(resource_limited, provenance_identity)}
@@ -1302,7 +1314,34 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
       {:compound, {:error, :resource_limit_exceeded}} ->
         {:error, "resource_limit_exceeded"}
 
-      {:compound, _compound_result} ->
+      {:compound, {:ok, parsed, occurrences}} ->
+        terminals =
+          Enum.reduce_while(occurrences, {:ok, %{}}, fn occurrence, {:ok, terminals} ->
+            reference_id =
+              {frame_rule_id(frame), target.source_id, selection.selector_identity, property,
+               occurrence.occurrence_index}
+
+            case Map.get(local_resolutions, {provenance_identity, reference_id}) do
+              {:ok, terminal} when is_binary(terminal) ->
+                {:cont, {:ok, Map.put(terminals, occurrence.occurrence_index, terminal)}}
+
+              _closed_result ->
+                {:halt, :error}
+            end
+          end)
+
+        with {:ok, terminals} <- terminals,
+             {:ok, reconstructed} <- CompoundCssValue.reconstruct(parsed, terminals),
+             :ok <- safe_declaration_value(property, reconstructed, :source_resolver) do
+          {:ok, %{"kind" => "literal", "value" => String.trim(reconstructed)}}
+        else
+          {:error, "unsafe_declaration"} -> {:error, "unsafe_declaration"}
+          {:error, "unsupported_declaration"} -> {:error, "unsupported_declaration"}
+          {:error, :resource_limit_exceeded} -> {:error, "resource_limit_exceeded"}
+          _closed_result -> {:error, "unresolved_value"}
+        end
+
+      {:compound, _closed_parse_result} ->
         {:error, "unresolved_value"}
 
       route when route == :generic ->
@@ -1380,6 +1419,16 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
 
   defp normalize_declaration(property, value, opts, origin)
        when is_binary(property) and is_binary(value) do
+    with :ok <- safe_declaration_value(property, value, origin) do
+      normalize_declaration_value(property, String.trim(value), opts)
+    end
+  end
+
+  defp normalize_declaration(_property, _value, _opts, _origin),
+    do: {:error, "unsupported_declaration"}
+
+  defp safe_declaration_value(property, value, origin)
+       when is_binary(property) and is_binary(value) do
     lowered = String.downcase(value)
 
     cond do
@@ -1396,11 +1445,11 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         {:error, "unsafe_declaration"}
 
       true ->
-        normalize_declaration_value(property, String.trim(value), opts)
+        :ok
     end
   end
 
-  defp normalize_declaration(_property, _value, _opts, _origin),
+  defp safe_declaration_value(_property, _value, _origin),
     do: {:error, "unsupported_declaration"}
 
   defp resource_failure_residuals(processed_owners, resource_limited_provenances, rejects) do

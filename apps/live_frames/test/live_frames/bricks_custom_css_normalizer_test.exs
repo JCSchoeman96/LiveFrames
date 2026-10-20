@@ -213,21 +213,103 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     end
   end
 
-  test "keeps admitted compound declarations out of generic normalization" do
-    for value <- [
-          "linear-gradient(90deg, var(--accent) 100%)",
-          "calc(var(--measure) * 2)",
-          "var(--duration) var(--timing)",
-          "10px 2rem"
-        ] do
-      result =
-        run(
-          ".owner { --accent: rgb(1,2,3); --measure: 12px; --duration: 250ms; --timing: ease-in-out; width: #{value}; }"
-        )
+  test "finalizes supported compounds as literal values" do
+    cases = [
+      {"background", "linear-gradient(90deg, var(--accent) 100%)",
+       "linear-gradient(90deg, rgb(1,2,3) 100%)", "--accent: rgb(1,2,3);"},
+      {"width", "calc(var(--measure) * 2)", "calc(12px * 2)", "--measure: 12px;"},
+      {"transition", "var(--duration) var(--timing)", "250ms ease-in-out",
+       "--duration: 250ms; --timing: ease-in-out;"},
+      {"gap", "10px 20px", "10px 20px", ""}
+    ]
 
-      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
-      refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "width")
+    for {property, expression, expected, definitions} <- cases do
+      result = run(".owner { #{definitions} #{property}: #{expression}; }")
+
+      assert %StyleValue{kind: :literal, value: ^expected} =
+               result.styles_by_source_id[@owner][property]
+
+      assert result.residuals_by_source_id[@owner] == []
     end
+  end
+
+  test "rejects compound terminals that do not fit their occurrence slot" do
+    result =
+      run(
+        ".owner { --duration: ease-in-out; --timing: ease-in-out; transition: var(--duration) var(--timing); }"
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+  end
+
+  test "keeps ineligible and nested compound definitions closed" do
+    ineligible =
+      run(
+        ".owner:hover { --accent: rgb(1,2,3); } .owner { background: linear-gradient(90deg, var(--accent) 100%); }"
+      )
+
+    assert [
+             %{"reason" => "unsupported_scope"},
+             %{"reason" => "unresolved_value"}
+           ] = ineligible.residuals_by_source_id[@owner]
+
+    nested =
+      run(
+        ".owner { --base: 12px; --derived: calc(var(--base)); width: calc(var(--derived) * 2); }"
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = nested.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(nested.styles_by_source_id, @owner, %{}), "width")
+  end
+
+  test "keeps compound references closed for state scope and external-only names" do
+    state_scoped =
+      run(".owner { --measure: 12px; } .owner:hover { width: calc(var(--measure) * 2); }")
+
+    assert [%{"reason" => "unresolved_value"}] = state_scoped.residuals_by_source_id[@owner]
+
+    authority_index = variable_authority("--external-accent", "color.accent")
+
+    external =
+      run(
+        ".owner { background: linear-gradient(90deg, var(--external-accent) 100%); }",
+        opts: [authority_index: authority_index]
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = external.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(external.styles_by_source_id, @owner, %{}), "background")
+  end
+
+  test "normalizes each target occurrence of a compound declaration" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "first-item" => node("first-item", ["item"], [1, 1], parent_id: @owner),
+      "second-item" => node("second-item", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner { --measure: 12px; } .owner .item { width: calc(var(--measure) * 2); }",
+        nodes,
+        %{@owner => ["first-item", "second-item"]}
+      )
+
+    for source_id <- ["first-item", "second-item"] do
+      assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
+               result.styles_by_source_id[source_id]["width"]
+    end
+  end
+
+  test "keeps a mixed compound rule atomic when a sibling is unsafe" do
+    result =
+      run(
+        ".owner { --measure: 12px; } .owner { width: calc(var(--measure) * 2); background: url(https://example.test/image.png); }"
+      )
+
+    assert [%{"reason" => "unsafe_declaration"}] = result.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "width")
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
   end
 
   test "a compound local name cannot fall back to external variable authority" do
@@ -254,6 +336,8 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
 
     assert %StyleValue{kind: :literal, value: "250ms"} =
              result.styles_by_source_id[@owner]["color"]
+
+    assert result.residuals_by_source_id[@owner] == []
 
     over_budget = run(css <> "\n.owner { height: var(--duration); }")
     refute Map.has_key?(over_budget.styles_by_source_id, @owner)
