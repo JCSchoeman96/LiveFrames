@@ -30,6 +30,12 @@ defmodule LiveFrames.ComponentReviewResultTest do
   test "encodes the frozen 604-byte review result and its independent ID" do
     assert Code.ensure_loaded?(ComponentReviewResult)
 
+    independently_derived_id =
+      "crv_" <>
+        (:crypto.hash(:sha256, @golden_bytes) |> Base.encode16(case: :lower))
+
+    assert independently_derived_id == @golden_id
+
     review = fixture()
 
     assert Enum.sort(Map.keys(review)) ==
@@ -55,6 +61,24 @@ defmodule LiveFrames.ComponentReviewResultTest do
     assert {:ok, @golden_bytes} = ComponentReviewResult.encode(review)
     assert byte_size(@golden_bytes) == 604
     assert {:ok, @golden_id} = ComponentReviewResult.id(review)
+  end
+
+  test "canonicalizes evidence references in Unicode scalar order" do
+    forward = fixture(evidence_refs: ["z", "a"])
+    reverse = fixture(evidence_refs: ["a", "z"])
+
+    assert {:ok, forward_bytes} = ComponentReviewResult.encode(forward)
+    assert {:ok, reverse_bytes} = ComponentReviewResult.encode(reverse)
+    assert forward_bytes == reverse_bytes
+    assert ComponentReviewResult.id(forward) == ComponentReviewResult.id(reverse)
+
+    unicode_review = fixture(evidence_refs: ["中", "é", "a", "A"])
+    assert {:ok, unicode_bytes} = ComponentReviewResult.encode(unicode_review)
+    assert String.contains?(unicode_bytes, "\"evidence_refs\":[\"A\",\"a\",\"é\",\"中\"]")
+
+    duplicate_review = fixture(evidence_refs: ["a", "a"])
+    assert {:error, _} = ComponentReviewResult.validate(duplicate_review)
+    assert {:error, _} = ComponentReviewResult.encode(duplicate_review)
   end
 
   test "validates the closed fields, algorithms, digests, decisions, and review metadata" do
@@ -84,7 +108,29 @@ defmodule LiveFrames.ComponentReviewResultTest do
     ]
 
     for review <- invalid_results do
-      refute ComponentReviewResult.validate(review) == :ok
+      assert_invalid_result(review)
+    end
+
+    boundary_invalid_results = [
+      %{valid | component_contract_id: ""},
+      %{valid | component_contract_id: <<255>>},
+      %{valid | component_contract_digest: String.duplicate("a", 63)},
+      %{valid | component_contract_digest: String.duplicate("a", 65)},
+      %{valid | component_contract_digest: String.duplicate("g", 64)},
+      %{valid | componentization_plan_digest: String.duplicate("a", 63)},
+      %{valid | componentization_plan_digest: String.duplicate("a", 65)},
+      %{valid | componentization_plan_digest: String.duplicate("g", 64)},
+      %{valid | reviewed_at: "2026-10-18T00:00:00.00000Z"},
+      %{valid | reviewed_at: "2026-10-18T00:00:00.0000000Z"},
+      %{valid | reviewed_at: "2026-10-18T00:00:00.000000+00:00"},
+      Enum.reduce(Map.keys(Map.from_struct(valid)), valid, &Map.put(&2, &1, nil)),
+      Map.from_struct(valid),
+      %{valid | __struct__: :wrong_component_review_result},
+      %{}
+    ]
+
+    for review <- boundary_invalid_results do
+      assert_invalid_result(review)
     end
   end
 
@@ -122,45 +168,30 @@ defmodule LiveFrames.ComponentReviewResultTest do
     changed_plan = %{plan | provenance: %{"revision" => "changed"}}
     changed_document = %{design_document | source_metadata: %{"revision" => "changed"}}
 
-    assert {:error, _} =
-             ComponentReviewResult.validate_against(
-               review,
-               changed_contract,
-               plan,
-               design_document
-             )
+    mismatches = [
+      {%{review | decision: "rejected"}, contract, plan, design_document},
+      {%{review | component_contract_id: "component:other"}, contract, plan, design_document},
+      {%{review | component_contract_digest: String.duplicate("4", 64)}, contract, plan,
+       design_document},
+      {%{review | componentization_plan_digest: String.duplicate("4", 64)}, contract, plan,
+       design_document},
+      {%{review | design_document_sha256: String.duplicate("4", 64)}, contract, plan,
+       design_document},
+      {review, changed_contract, plan, design_document},
+      {review, contract, changed_plan, design_document},
+      {review, contract, plan, changed_document},
+      {review, %{contract | approval_status: :proposed}, plan, design_document}
+    ]
 
-    assert {:error, _} =
-             ComponentReviewResult.validate_against(
-               review,
-               contract,
-               changed_plan,
-               design_document
-             )
-
-    assert {:error, _} =
-             ComponentReviewResult.validate_against(
-               review,
-               contract,
-               plan,
-               changed_document
-             )
-
-    assert {:error, _} =
-             ComponentReviewResult.validate_against(
-               %{review | decision: "needs_review"},
-               contract,
-               plan,
-               design_document
-             )
-
-    assert {:error, _} =
-             ComponentReviewResult.validate_against(
-               review,
-               %{contract | approval_status: :proposed},
-               plan,
-               design_document
-             )
+    for {candidate_review, candidate_contract, candidate_plan, candidate_document} <- mismatches do
+      assert {:error, _} =
+               ComponentReviewResult.validate_against(
+                 candidate_review,
+                 candidate_contract,
+                 candidate_plan,
+                 candidate_document
+               )
+    end
   end
 
   test "matches approved contract bytes even when the semantic contract ID is unchanged" do
@@ -217,4 +248,10 @@ defmodule LiveFrames.ComponentReviewResultTest do
   end
 
   defp digest(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+
+  defp assert_invalid_result(review) do
+    assert {:error, _} = ComponentReviewResult.validate(review)
+    assert {:error, _} = ComponentReviewResult.encode(review)
+    assert {:error, _} = ComponentReviewResult.id(review)
+  end
 end
