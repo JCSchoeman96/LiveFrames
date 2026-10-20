@@ -34,6 +34,17 @@ FUNCTION_CALL_NESTING_ACCOUNTING=FROZEN
 FUNCTION_ALLOWLIST_OR_CATEGORY=FROZEN
 MULTI_TOKEN_GRAMMAR=FROZEN
 VAR_OPERATION_GRAMMAR=FROZEN
+RESOLVED_TERMINAL_SLOT_VALIDATION=REQUIRED
+POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED
+RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
+SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
+COMPOUND_SUCCESS_VALUE_CLASSIFICATION=BYPASS_GENERIC_VAR_CALC_CLASSIFIER
+COMPOUND_SUCCESS_STYLE_KIND=LITERAL
+CSS_DECLARATION_REVALIDATION=REQUIRED
+VARIABLE_AUTHORITY_REENTRY=NO
+MULTI_TOKEN_INVENTORY_SPECIMEN_COUNT=5
+MULTI_TOKEN_INVENTORY_PROVEN_ACCEPTED_COUNT=5
+DISCOVERED_TO_CLASSIFIED_GUARD_COMPLETE=YES
 IMPLEMENTATION_PLAN_SEMANTIC_DECISIONS_REQUIRED=NO
 LOCAL_COMPOUND_TOKEN_INFERENCE=NO
 LOCAL_COMPOUND_EXTERNAL_FALLBACK=NO
@@ -96,11 +107,13 @@ OPTION_B_VERDICT=BOUNDED_COMPOUND_PARSE_PLUS_EXISTING_LOCAL_RESOLVER
 
 ```text
 bounded compound parse
-  -> extract embedded local-reference occurrences
+  -> extract embedded local-reference occurrences (each with frozen SLOT_GRAMMAR)
   -> resolve occurrences through SourceLocalCustomPropertyResolver (unchanged contract)
+  -> validate each {:ok, terminal} against its occurrence SLOT_GRAMMAR
   -> reconstruct one bounded terminal string
-  -> existing CSSDeclaration safety / value normalization
-  -> existing StyleValue emission
+  -> revalidate the SAME top-level compound production
+  -> CSSDeclaration.normalize(..., :source_resolver) safety acceptance
+  -> existing literal StyleValue emission (no generic var()/calc() classifier)
 ```
 
 `SourceLocalCustomPropertyResolver` remains the single local-definition
@@ -188,17 +201,18 @@ State names denote **completed work**. `EMITTED` is terminal success.
 
 | From | Guard | Side effect (on success) | Success state | Failure state |
 | --- | --- | --- | --- | --- |
-| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES` | Classify exactly one disjoint compound production | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
+| `DISCOVERED` | Value is not an exact direct `var(--name)`; byte length ≤ `MAX_COMPOUND_VALUE_BYTES`; exactly one frozen compound production matches disjoint rules (2)–(4) | Attach the matching production identity | `GRAMMAR_CLASSIFIED` | `FAIL_CLOSED_RESIDUAL` |
 | `GRAMMAR_CLASSIFIED` | Selected production parses within all frozen production bounds | Build private bounded parse representation | `PARSED_SUPPORTED` | `FAIL_CLOSED_RESIDUAL` |
 | `PARSED_SUPPORTED` | Embedded occurrence count within bounds; every embedded local name passes the accepted local-name boundary | Extract occurrences; assign normalizer-private `occurrence_index`; append unchanged resolver reference records | `LOCAL_REFERENCES_COLLECTED` | `FAIL_CLOSED_RESIDUAL` |
 | `LOCAL_REFERENCES_COLLECTED` | Existing `resolve/3` returns one ordered result per routed record; every result required for this declaration is `{:ok, terminal}` | Correlate returned terminals with occurrence correlation | `LOCAL_REFERENCES_RESOLVED` | `FAIL_CLOSED_RESIDUAL` |
-| `LOCAL_REFERENCES_RESOLVED` | Deterministic substitution succeeds within `MAX_RECONSTRUCTED_TERMINAL_BYTES` and leaves no `var(` | Construct exactly one terminal string | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
-| `TERMINAL_RECONSTRUCTED` | Existing `CSSDeclaration` safety and value normalization accept the reconstructed terminal on the local-compound lane | Hold ordinary normalized declaration candidate | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
-| `CSS_REVALIDATED` | All declarations in the selector rule pass existing whole-rule atomicity | Emit normalized style through the existing path | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
+| `LOCAL_REFERENCES_RESOLVED` | Every `{:ok, terminal}` satisfies that occurrence's frozen `SLOT_GRAMMAR`; deterministic substitution succeeds within `MAX_RECONSTRUCTED_TERMINAL_BYTES` | Substitute validated terminals into the private parse representation | `TERMINAL_RECONSTRUCTED` | `FAIL_CLOSED_RESIDUAL` |
+| `TERMINAL_RECONSTRUCTED` | Reconstructed value satisfies the **same** top-level production as `GRAMMAR_CLASSIFIED`; no `var(` remains; byte/token/depth limits hold; `CSSDeclaration` accepts on `:source_resolver` without generic `var()`/`calc()` value classification | Hold bounded literal declaration candidate (`COMPOUND_SUCCESS_STYLE_KIND=LITERAL`) | `CSS_REVALIDATED` | `FAIL_CLOSED_RESIDUAL` |
+| `CSS_REVALIDATED` | All declarations in the selector rule pass existing whole-rule atomicity | Emit normalized style as existing literal `StyleValue` (no `VariableAuthority` reentry) | `EMITTED` | `FAIL_CLOSED_RESIDUAL` |
 
 ```text
 LIFECYCLE_STATE_NAMES_MATCH_COMPLETED_WORK=YES
 EMITTED_TERMINAL_SUCCESS=YES
+DISCOVERED_TO_CLASSIFIED_GUARD_COMPLETE=YES
 ```
 
 ## Count model
@@ -382,24 +396,69 @@ revert-layer static unset visible
 ```
 
 - **Dimension literal** — matches
-  `~r/^\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$/` (case-sensitive unit suffix as
-  written).
+  `~r/^-?\d+(\.\d+)?(px|rem|em|vh|vw|fr|deg|%)$/` (case-sensitive unit suffix as
+  written; unary minus only as part of the dimension token, not a separate
+  operator token).
 - **Percentage literal** — `\d+(\.\d+)?%` when not already covered as dimension
   with `%` suffix.
 - **Embedded direct local reference token** — entire token is one
   `var(--name)` span with local name per existing boundary, only when the full
   value is not production 3.
 
-**Explicit rejects:** general identifiers outside the keyword list; top-level
-commas; semicolons; `calc(` at position zero; values matching production 3;
-unbounded token count; function-call tokens with `(`.
+**Explicit rejects:** general identifiers outside the keyword list and outside
+the frozen pair-extension allowlist below; top-level commas; semicolons;
+`calc(` at position zero; values matching production 3; unbounded token count;
+any `(`-initiated function token in the value (not production 2); ASCII
+whitespace-separated binary operators (`+`, `-`, `*`, `/` between tokens).
 
-**Inventory note:** five of eight **inventory specimens** are labeled
-`MULTI_TOKEN_VALUE` in accepted gap decomposition. Joined-template
-re-verification does not reproduce all five specimen strings; the token union
-above is frozen from existing normalizer boundaries plus evidenced gradient
-keyword `transparent` (allowed only inside `linear-gradient` stop segments, not
-as a general MULTI_TOKEN identifier expansion).
+**Frozen pair extension (canonical evidence only):** in addition to the keyword
+union, exactly one **two-token** pattern is accepted when token 1's safe hash is
+`35e75b2615c08cd3dc16ea6f6d938e53da9d23596375d18ae7edc1bf6dbb1a57` and token 2
+is a dimension literal. No other identifier-like token is authorized outside the
+keyword list.
+
+```text
+MULTI_TOKEN_PAIR_EXTENSION_TOKEN1_SAFE_HASH_ALLOWLIST=
+  35e75b2615c08cd3dc16ea6f6d938e53da9d23596375d18ae7edc1bf6dbb1a57
+```
+
+### MULTI_TOKEN inventory structural proof (five gap specimens)
+
+Gap authority assigns **five** sanitized inventory specimens the
+`MULTI_TOKEN_VALUE` label (`SOURCE_EXPRESSION_OCCURRENCE_INVENTORY_SHAPE_COUNTS`).
+This record proves each inventory slot against the **frozen** production above
+using safe hashes only (no raw specimen strings).
+
+**Proof method:** Romeo canonical joined-export declaration scan plus multiset
+reconciliation. Three unique value safe hashes reproduce all five inventory
+slots: two slots share the `77976a3c…` structure, two share `f37901a6…`, one
+uses `ae28d73e…`. A separate joined-export declaration safe hash
+`d1b725ae…` is **not** an inventory MULTI specimen — it contains top-level
+commas and function tokens and is excluded from production 4 (supplementary
+loose-shape scan only).
+
+```text
+MULTI_TOKEN_INVENTORY_SPECIMEN_COUNT=5
+MULTI_TOKEN_INVENTORY_PROVEN_ACCEPTED_COUNT=5
+MULTI_TOKEN_JOINED_EXPORT_UNIQUE_FROZEN_MULTI_VALUE_COUNT=3
+```
+
+| Inventory slot | `SPECIMEN_SAFE_HASH` | `TOKEN_COUNT` | `TOKEN_CLASS_SEQUENCE` | `EMBEDDED_LOCAL_REFERENCE_COUNT` | `TOP_LEVEL_COMMA` | `FUNCTION_TOKEN` | `OPERATOR_TOKEN` | `FROZEN_MULTI_TOKEN_GRAMMAR_ACCEPTS` |
+| ---: | --- | ---: | --- | ---: | --- | --- | --- | --- |
+| 1 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
+| 2 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
+| 3 | `f37901a6d5aa5afc748505d0bf0739fe019c70f71e5d1aafdf849e846584de78` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
+| 4 | `ae28d73e456a6b2f07d4ff7064d44218457d7aff8b2e51323d1b563d68992f36` | 2 | `PAIR_EXTENSION_TOKEN,DIMENSION` | 0 | NO | NO | NO | YES |
+| 5 | `77976a3cd61c02d4dfff52f29ba10490ed91a8862d2b569a8cbdbedb2a9fc7eb` | 2 | `DIMENSION,DIMENSION` | 0 | NO | NO | NO | YES |
+
+`PAIR_EXTENSION_TOKEN` denotes token 1 of the frozen pair-extension allowlist
+(safe hash above); it is not a keyword-list member.
+
+Slot 5 is structurally identical to slot 1 (same `SPECIMEN_SAFE_HASH` and
+token-class sequence). Joined-export reproduction shows one declaration
+occurrence for that hash; the second gap inventory slot with the same structure
+is proven by **signature equality** to slot 1, not by a second distinct export
+occurrence.
 
 ### Production `VAR_REFERENCE_WITH_OPERATION`
 
@@ -497,7 +556,7 @@ Apply resolver results **without reinterpretation**:
 
 | Resolver result | Compound lifecycle |
 | --- | --- |
-| `{:ok, terminal}` | Substitute into reconstruction input |
+| `{:ok, terminal}` | Validate terminal against occurrence `SLOT_GRAMMAR`, then substitute |
 | `:no_local_definition` | `FAIL_CLOSED_RESIDUAL` |
 | `:unsupported_nested_reference` | `FAIL_CLOSED_RESIDUAL` |
 | `:unsupported_scope` | `FAIL_CLOSED_RESIDUAL` |
@@ -537,22 +596,81 @@ compound grammar supported
 = FAIL_CLOSED_RESIDUAL (whole rule if atomicity applies)
 ```
 
-### Reconstruction
+### Post-resolution grammar safety (`SLOT_GRAMMAR`)
 
-After all embedded references for a declaration resolve `{:ok, terminal}`:
+`SourceLocalCustomPropertyResolver` returns bounded terminal strings but does
+**not** guarantee that a terminal is syntactically valid for the compound slot
+into which it will be substituted. `CSSDeclaration.safe_value?/1` is a safety
+boundary, not compound grammar validation.
 
-1. Substitute terminals into the bounded parse representation.
+```text
+RESOLVER_TERMINAL_CONTRACT_CHANGED=NO
+RESOLVED_TERMINAL_SLOT_VALIDATION=REQUIRED
+POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED
+SUBSTITUTION_CAN_EXPAND_GRAMMAR=NO
+```
+
+The private bounded parse representation must carry, for every embedded
+occurrence, a frozen **`SLOT_GRAMMAR`** class. Use only classes evidenced by
+canonical specimens:
+
+| `SLOT_GRAMMAR` | Use |
+| --- | --- |
+| `GRADIENT_STOP_ATOM` | One atom inside a `linear-gradient` stop segment |
+| `CALC_OPERAND` | Operand position inside frozen `calc` argument grammar |
+| `MULTI_TOKEN_ATOM` | One whitespace-delimited token in production 4 |
+| `JUXTAPOSITION_OPERAND` | One direct `var(--name)` span in production 3 |
+
+After `resolve/3` returns `{:ok, terminal}` for an occurrence:
+
+1. `terminal` must satisfy that occurrence's `SLOT_GRAMMAR` (structural guard,
+   not merely `safe_value?/1`).
+2. Substitute into the private representation.
+3. The reconstructed value must satisfy the **same** top-level production
+   attached at `GRAMMAR_CLASSIFIED`.
+4. Reconstructed value must remain inside byte/token/depth limits and contain
+   no unresolved `var(`.
+
+Any failure → `FAIL_CLOSED_RESIDUAL`. If canonical resolver terminals would
+require syntax outside the frozen compound grammar, stop architecture work with
+`STOP=RESOLVED_TERMINAL_GRAMMAR_UNPROVEN` (resolver contract must not change).
+
+### Reconstruction and final `StyleValue` handoff
+
+After all embedded references for a declaration resolve and pass slot validation:
+
+1. Substitute validated terminals into the bounded parse representation.
 2. Emit **one** bounded UTF-8 string (`TERMINAL_RECONSTRUCTED`).
-3. Pass that string through existing `CSSDeclaration` checks and value
-   normalization **only as a consumer of a fully reconstructed literal** — not
-   as a second resolver.
+3. Revalidate the **same** top-level compound production on the reconstructed
+   string (`POST_SUBSTITUTION_COMPOUND_REVALIDATION=REQUIRED`).
+4. Accept through `CSSDeclaration.normalize(..., :source_resolver)` /
+   existing safety checks on the local-compound lane.
+5. Emit as existing **literal** `StyleValue` — **without** routing the
+   reconstructed string through generic `normalize_declaration_value/3`
+   `var()`/`calc()` classification.
+
+**Code fact (frozen boundary):** today's `CustomCssNormalizer.normalize_declaration_value/3`
+accepts only the specialized `calc(var(--grid-gap) * factor)` case; any other
+value containing `calc(` is returned as unresolved. Reconstructed local compound
+`calc(...)` values therefore **must not** use that generic classifier on success.
+
+```text
+COMPOUND_SUCCESS_VALUE_CLASSIFICATION=BYPASS_GENERIC_VAR_CALC_CLASSIFIER
+COMPOUND_SUCCESS_STYLE_KIND=LITERAL
+CSS_DECLARATION_REVALIDATION=REQUIRED
+VARIABLE_AUTHORITY_REENTRY=NO
+```
+
+This is not raw CSS passthrough. A value reaches literal `StyleValue` only
+after: frozen compound parse; bounded resolver success; slot validation;
+reconstruction; same-production revalidation; `CSSDeclaration` acceptance.
 
 Reconstruction must not introduce new `var(` spans. If substitution would exceed
 `MAX_RECONSTRUCTED_TERMINAL_BYTES`, fail closed.
 
 **Local-compound lane isolation:** embedded occurrences route only through
 `SourceLocalCustomPropertyResolver`. Reconstructed values must not contain
-`var(`. If normalization would consult `VariableAuthority` because a
+`var(`. If acceptance would consult `VariableAuthority` because a
 non-observed-local or external name appears, the declaration **fails closed** on
 this lane rather than inferring tokens or substituting externally.
 
@@ -669,10 +787,11 @@ The compound capability must not:
   resolution on the compound lane.
 
 Successful compound normalization emits only values that pass existing
-`CSSDeclaration` checks after reconstruction. Permitted outcomes are ordinary
-literals or keywords already accepted for the property. Token-reference emission
-on this lane requires an independent external-authority path not driven by
-embedded local `var(` occurrences.
+`CSSDeclaration` checks after reconstruction and slot/top-level revalidation.
+Permitted success representation on this lane is **literal** `StyleValue` only
+(`COMPOUND_SUCCESS_STYLE_KIND=LITERAL`). Token-reference emission on this lane
+requires an independent external-authority path not driven by embedded local
+`var(` occurrences.
 
 ## Design IR impact
 
