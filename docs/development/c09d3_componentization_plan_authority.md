@@ -908,6 +908,17 @@ UNBOUND_ACCESSIBILITY_COMPANION =
   the companion remains optional at item-shape level. Its value is required
   only when the image source is present.
 
+UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
+  each image-source ItemField using UNBOUND_ACCESSIBILITY_COMPANION names
+  exactly one companion through its exact alt_item_field_name
+  each companion is referenced by exactly one such image-source ItemField
+  N such image sources require N distinct companions
+  multiple distinct companions may exist in one CollectionInput or
+  ComponentContract when multiple image sources require them
+  a companion cannot be shared by two image sources
+  no unbound companion ItemField is admitted without an owning image source
+  this is per-source cardinality, not one global companion per contract
+
 COLLECTION_ITEM_ALT_SAME_NODE_RULE =
   the BINDING_BACKED_SIBLING path requires its alt ValueBinding to target the
   exact same image DesignNode as the asset source within the same collection
@@ -958,6 +969,8 @@ unbound companion has any BindingProjection or RenderProjection
 unbound companion required != false
 unbound companion default != nil
 unbound companion is referenced by zero or multiple consumer-supplied sources
+unbound ItemField is not referenced by exactly one eligible image source
+two image sources share one unbound companion
 unbound companion is used as a nested collection, count, image source, or
   independent render target
 binding-backed sibling path has a missing or mismatched BindingProjection

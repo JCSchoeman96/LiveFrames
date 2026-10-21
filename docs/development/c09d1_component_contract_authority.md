@@ -1131,14 +1131,26 @@ COLLECTION_ITEM_FIELD_PROJECTION_RULE = a collection-item ValueBinding becomes
 
 COLLECTION_ITEM_ACCESSIBILITY_COMPANION_RULE = ordinary item fields remain
   binding/projection driven. The sole exception is one caller-owned
-  accessibility companion for a binding-backed collection-item image source:
-  an explicit sibling ItemField of type :string, required = false, default =
-  nil, with no BindingProjection, used only as consumer-supplied alt input for
-  that image source. The companion has no inferred or manufactured Design IR
-  binding, and source alt metadata is not inferred. Its value is conditionally
-  required when the source is present, as defined by C09D3 §10.2 and C09D6-A
-  §10.12.1. The closed exception does not authorize arbitrary unbound
-  collection fields.
+  accessibility companion for EACH binding-backed collection-item image
+  source that uses consumer-supplied alt: an explicit sibling ItemField of type
+  :string, required = false, default = nil, with no BindingProjection, used
+  only as alt input for that source. The companion has no inferred or
+  manufactured Design IR binding, and source alt metadata is not inferred. Its
+  value is conditionally required when the source is present, as defined by
+  C09D3 §10.2 and C09D6-A §10.12.1. The closed exception does not authorize
+  arbitrary unbound collection fields.
+
+UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
+  each consumer-supplied image-source ItemField using
+  UNBOUND_ACCESSIBILITY_COMPANION names exactly one companion through its
+  alt_item_field_name
+  each companion is referenced by exactly one such image-source ItemField
+  N such image sources require N distinct companions
+  multiple distinct companions may exist in one CollectionInput or
+  ComponentContract when multiple image sources require them
+  a companion cannot be shared by two image sources
+  this is per-source cardinality, not one global companion per contract
+  no companion is admitted without its owning image source
 
   This exception changes no ComponentContract serialized shape or
   contract_format_version. BINDING_LINK_AUTHORITY remains the sole structured
