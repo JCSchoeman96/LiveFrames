@@ -854,15 +854,17 @@ COLLECTION_ITEM_CONSUMER_ALT_POLICY =
     "required_when_source_present" => true
   }
 
-  alt_item_field_name -> existing ItemField in the SAME owning CollectionInput
-  alt ItemField.type -> :string
+COLLECTION_ITEM_CONSUMER_ALT_PATH =
+  BINDING_BACKED_SIBLING XOR UNBOUND_ACCESSIBILITY_COMPANION
 
+BINDING_BACKED_SIBLING =
+  alt_item_field_name -> existing ItemField in the SAME owning CollectionInput
+  alt ItemField.type = :string
   alt ItemField has exactly one ordinary value-source BindingProjection:
     projection_kind = collection_item_field
     item_field_name = alt_item_field_name
     source_collection_binding_id =
       image source projection.source_collection_binding_id
-
   referenced alt ValueBinding:
     value_kind = field
     scope = collection_item
@@ -870,14 +872,58 @@ COLLECTION_ITEM_CONSUMER_ALT_POLICY =
     collection_binding_id =
       image source ValueBinding.collection_binding_id
     target_node_id = image source ValueBinding.target_node_id
+  this existing path remains valid and behaviorally unchanged
+
+UNBOUND_ACCESSIBILITY_COMPANION =
+  image source ItemField has exactly one ordinary BindingProjection with:
+    source_binding_kind = value
+    projection_kind = collection_item_field
+    item_field_name = the image source ItemField name
+    source_collection_binding_id = owning CollectionInput binding id
+  its referenced ValueBinding has:
+    value_kind = field
+    scope = collection_item
+    target_kind = asset
+    collection_binding_id = owning CollectionInput binding id
+  its target DesignNode.semantic_type = image
+
+  alt_item_field_name names an explicit ItemField in the SAME CollectionInput
+  alt ItemField.type = :string
+  alt ItemField.required = false
+  alt ItemField.default = nil
+  alt ItemField has zero BindingProjection rows of any kind
+  alt ItemField has no RenderProjection
+  no Design IR binding is inferred or manufactured for the companion
+  no separate ValueBinding is assigned to the companion
+  the companion is referenced by exactly one consumer-supplied image source
+  it cannot be reused, nested, used as a count field or image source, or made
+  an independent render target
+  the companion exists only as caller-owned accessibility input for its source
+
+  source ItemField accessibility contains exactly:
+    "image_alt_policy" => "consumer_supplied"
+    "alt_item_field_name" => the companion ItemField name
+    "required_when_source_present" => true
+
+  the companion remains optional at item-shape level. Its value is required
+  only when the image source is present.
 
 COLLECTION_ITEM_ALT_SAME_NODE_RULE =
-  informative collection-item images require the sibling alt field to target
-  the exact same image DesignNode as the asset source within the same collection
-  item shape; if no such binding-backed sibling alt field exists -> NEEDS_REVIEW;
-  do not manufacture an unbound ItemField (RenderProjection does not support
-  item fields in plan 1.0.0)
+  the BINDING_BACKED_SIBLING path requires its alt ValueBinding to target the
+  exact same image DesignNode as the asset source within the same collection
+  item shape. The UNBOUND_ACCESSIBILITY_COMPANION path has no Design IR alt
+  binding and supplies caller-owned accessibility input under its closed rule.
+  Neither path creates an item-field RenderProjection.
 ```
+
+For a companion, reference validation must establish
+`projection_count_for_alt_companion = 0`, same collection, `type = :string`,
+`required = false`, `default = nil`, and exactly one consumer-source reference.
+Any projection on the companion invalidates the unbound path; validation must
+not ignore or reinterpret it. The existing `VALUE_BINDING_COVERAGE_RULE` is
+unchanged: every real in-boundary ValueBinding still requires its ordinary
+projection. The companion has no associated ValueBinding and grants no coverage
+exception.
 
 #### Decorative collection-item image
 
@@ -906,11 +952,19 @@ consumer_supplied without required_when_source_present = true
 alt item field missing
 alt item field belongs to another CollectionInput
 alt item field type != :string
-alt BindingProjection missing
-alt BindingProjection belongs to another source collection
-alt ValueBinding.scope != collection_item
-alt ValueBinding.target_kind != text
-alt ValueBinding targets a different DesignNode than the image source
+consumer-supplied path is neither one valid BINDING_BACKED_SIBLING nor one
+  valid UNBOUND_ACCESSIBILITY_COMPANION
+unbound companion has any BindingProjection or RenderProjection
+unbound companion required != false
+unbound companion default != nil
+unbound companion is referenced by zero or multiple consumer-supplied sources
+unbound companion is used as a nested collection, count, image source, or
+  independent render target
+binding-backed sibling path has a missing or mismatched BindingProjection
+binding-backed sibling path has a different source collection
+binding-backed sibling ValueBinding.scope != collection_item
+binding-backed sibling ValueBinding.target_kind != text
+binding-backed sibling ValueBinding targets a different DesignNode than source
 decorative policy contains alt_item_field_name
 ```
 
