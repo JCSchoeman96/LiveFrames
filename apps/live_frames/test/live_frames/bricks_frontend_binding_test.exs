@@ -3,6 +3,8 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
+  alias LiveFrames.ComponentContract
+  alias LiveFrames.ComponentizationPlan
   alias LiveFrames.Fidelity
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignNode
@@ -84,6 +86,29 @@ defmodule LiveFrames.BricksFrontendBindingTest do
   defp node_by_source_id(document, source_id) do
     Enum.find(flatten(document.root_nodes), &(&1.source_trace.source_id == source_id))
   end
+
+  defp private_sentinel_paths(value, path \\ [])
+
+  defp private_sentinel_paths(value, path) when is_binary(value) do
+    if String.contains?(value, @private_php_sentinel), do: [path], else: []
+  end
+
+  defp private_sentinel_paths(value, path) when is_map(value) do
+    value
+    |> then(fn
+      %{__struct__: _} = struct -> Map.from_struct(struct)
+      map -> map
+    end)
+    |> Enum.flat_map(fn {key, nested} -> private_sentinel_paths(nested, path ++ [key]) end)
+  end
+
+  defp private_sentinel_paths(value, path) when is_list(value) do
+    value
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {nested, index} -> private_sentinel_paths(nested, path ++ [index]) end)
+  end
+
+  defp private_sentinel_paths(_value, _path), do: []
 
   test "admits a query owner with hasLoop and a structurally linked child" do
     assert {:ok, document} =
@@ -883,6 +908,46 @@ defmodule LiveFrames.BricksFrontendBindingTest do
              ])
 
     assert binding_for(changed, "php-code").value_binding_id == binding.value_binding_id
+  end
+
+  test "translated PHP sentinel is absent from surviving diagnostic fields" do
+    assert {:ok, document} =
+             to_ir([
+               source_element("php-code", "code", 0, %{
+                 "executeCode" => true,
+                 "code" => @full_description_source,
+                 "_cssGlobalClasses" => ["missing-class"]
+               })
+             ])
+
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.class.unresolved_external"))
+    diagnostic_paths = private_sentinel_paths(document.diagnostics)
+    assert diagnostic_paths == []
+    assert private_sentinel_paths(IR.encode!(document)) == []
+
+    contract =
+      ComponentContract.new(
+        contract_id: "privacy-contract",
+        module_intent: "test",
+        function_intent: "privacy",
+        provenance: document.provenance
+      )
+
+    assert private_sentinel_paths(contract) == []
+    assert private_sentinel_paths(ComponentContract.encode!(contract)) == []
+
+    assert {:ok, identity} = Identity.from_document(document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: identity.digest,
+      boundary_node_id: hd(document.root_nodes).node_id,
+      provenance: document.provenance
+    }
+
+    assert private_sentinel_paths(plan) == []
+    assert {:ok, encoded_plan} = ComponentizationPlan.encode(plan)
+    assert private_sentinel_paths(encoded_plan) == []
   end
 
   test "unsupported, mixed, disabled, CODE1-like, and CODE2-like code stays unsupported" do

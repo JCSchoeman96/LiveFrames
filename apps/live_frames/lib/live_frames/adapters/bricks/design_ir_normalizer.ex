@@ -305,6 +305,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         context.document.adapter_version
       )
 
+    trace_index = apply_frontend_trace_overrides(trace_index, frontend_bindings.node_actions)
+
     source_diagnostics =
       context.source_diagnostics
       |> reconcile_frontend_binding_diagnostics(frontend_bindings)
@@ -362,6 +364,19 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
 
     validate_and_serialize(document)
+  end
+
+  defp apply_frontend_trace_overrides(trace_index, node_actions) do
+    Enum.reduce(node_actions, trace_index, fn
+      {source_id, %{source_trace: %SourceTrace{} = source_trace}}, acc ->
+        case Map.get(acc, source_id) do
+          %{trace: _trace} = entry -> Map.put(acc, source_id, %{entry | trace: source_trace})
+          nil -> acc
+        end
+
+      {_source_id, _actions}, acc ->
+        acc
+    end)
   end
 
   defp generic_custom_css_owners(context) do
