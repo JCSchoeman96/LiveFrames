@@ -3,7 +3,7 @@ defmodule LiveFrames.BricksPhpSemanticRecognizerTest do
 
   alias LiveFrames.Adapters.Bricks.PhpSemanticRecognizer
 
-  @canonical "<?php $product = wc_get_product(get_the_ID()); $description = $product->get_description(); if ($product) { echo $description; } ?>"
+  @canonical "<?php $product = wc_get_product(get_the_ID()); if ($product) { $description = $product->get_description(); echo $description; } ?>"
 
   test "recognizes only the current entity full description flow" do
     assert PhpSemanticRecognizer.recognize(@canonical) ==
@@ -11,7 +11,7 @@ defmodule LiveFrames.BricksPhpSemanticRecognizerTest do
 
     source =
       "<?php /* start */ $item = wc_get_product ( get_the_ID ( ) ) ; // product\n" <>
-        "$body = $item -> get_description ( ) ; if ( $item ) { echo $body ; } ?>"
+        "if ( $item ) { $body = $item -> get_description ( ) ; echo $body ; } ?>"
 
     assert PhpSemanticRecognizer.recognize(source) ==
              {:ok, :current_entity_full_description}
@@ -92,6 +92,50 @@ defmodule LiveFrames.BricksPhpSemanticRecognizerTest do
         "if ($1) { echo $description; }"
 
     assert {:error, :parse_failed} = PhpSemanticRecognizer.recognize(source)
+  end
+
+  test "rejects superglobal and reserved variable aliases" do
+    accepted =
+      for alias_name <- ["_GET", "_SERVER", "GLOBALS", "this"],
+          PhpSemanticRecognizer.recognize(
+            String.replace(@canonical, "$product", "$" <> alias_name)
+          ) ==
+            {:ok, :current_entity_full_description},
+          do: alias_name
+
+    assert accepted == []
+  end
+
+  test "accepts a delimited PHP opening tag and rejects a missing separator" do
+    valid = String.replace_prefix(@canonical, "<?php ", "<?php\n")
+    malformed = String.replace_prefix(@canonical, "<?php ", "<?php")
+    partial = String.replace_prefix(@canonical, "<?php ", "<?ph ")
+    attached_identifier = String.replace_prefix(@canonical, "<?php ", "<?phpx ")
+
+    assert PhpSemanticRecognizer.recognize(valid) ==
+             {:ok, :current_entity_full_description}
+
+    assert {:error, _reason} = PhpSemanticRecognizer.recognize(malformed)
+    assert {:error, _reason} = PhpSemanticRecognizer.recognize(partial)
+    assert {:error, _reason} = PhpSemanticRecognizer.recognize(attached_identifier)
+  end
+
+  test "recognizes the description assignment inside the product guard" do
+    source =
+      "<?php $product = wc_get_product(get_the_ID()); " <>
+        "if ($product) { $description = $product->get_description(); echo $description; } ?>"
+
+    assert PhpSemanticRecognizer.recognize(source) ==
+             {:ok, :current_entity_full_description}
+  end
+
+  test "rejects the description assignment before the product guard" do
+    source =
+      "<?php $product = wc_get_product(get_the_ID()); " <>
+        "$description = $product->get_description(); " <>
+        "if ($product) { echo $description; } ?>"
+
+    assert {:error, _reason} = PhpSemanticRecognizer.recognize(source)
   end
 
   test "rejects comments before the opening PHP tag as inline output" do

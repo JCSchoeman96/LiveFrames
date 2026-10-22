@@ -23,6 +23,7 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
     proc_open popen file_get_contents file_put_contents fopen fwrite unlink
     curl_init wp_remote_get wp_remote_post mysqli_query pg_query
   )
+  @reserved_aliases ~w(_GET _SERVER GLOBALS this)
 
   @type semantic :: :current_entity_full_description
   @type reason ::
@@ -38,6 +39,7 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
          :ok <- check_tag_context(source),
          {:ok, tokens, stats} <- lex(source),
          :ok <- check_resource_limits(tokens, stats),
+         :ok <- reject_reserved_aliases(tokens),
          :ok <- reject_unsafe_identifiers(tokens),
          {:ok, semantic} <- parse(tokens) do
       {:ok, semantic}
@@ -71,7 +73,7 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
         prefix = binary_part(source, 0, open_tag)
         tail = binary_part(source, open_tag + 5, byte_size(source) - open_tag - 5)
 
-        if ascii_whitespace?(prefix),
+        if ascii_whitespace?(prefix) and open_tag_delimited?(tail),
           do: check_tag_context(tail, :inside),
           else: {:error, :parse_failed}
 
@@ -95,6 +97,11 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
   end
 
   defp contains_marker?(binary, marker), do: find_marker(binary, marker) != :error
+
+  defp open_tag_delimited?(<<char, _rest::binary>>) when char in [32, 9, 10, 11, 12, 13],
+    do: true
+
+  defp open_tag_delimited?(_tail), do: false
 
   defp ascii_whitespace?(<<>>), do: true
 
@@ -294,6 +301,17 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
     end
   end
 
+  defp reject_reserved_aliases(tokens) do
+    if Enum.any?(tokens, fn
+         {:variable, name} -> name in @reserved_aliases
+         _token -> false
+       end) do
+      {:error, :parse_failed}
+    else
+      :ok
+    end
+  end
+
   defp parse(tokens) do
     tokens = maybe_drop(tokens, :open_tag)
 
@@ -301,10 +319,8 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
     # to alias, product alias to description receiver, description result to
     # alias, product alias to guard, and description alias to echo.
     with {:ok, product, tokens, product_edges} <- parse_product_assignment(tokens),
-         {:ok, description, tokens, description_edges} <-
-           parse_description_assignment(tokens, product),
-         :ok <- distinct_aliases(product, description),
-         {:ok, tokens, output_edges} <- parse_guarded_output(tokens, product, description),
+         {:ok, tokens, description_edges, output_edges} <-
+           parse_guarded_output(tokens, product),
          :ok <- check_analysis_steps(product_edges + description_edges + output_edges),
          [] <- maybe_drop(tokens, :close_tag) do
       {:ok, :current_entity_full_description}
@@ -330,25 +346,6 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
 
   defp parse_product_assignment(tokens), do: {:error, classify_unmatched(tokens)}
 
-  defp parse_description_assignment(
-         [
-           {:variable, description},
-           "=",
-           {:variable, product},
-           :arrow,
-           {:identifier, "get_description"},
-           "(",
-           ")",
-           ";"
-           | rest
-         ],
-         product
-       ),
-       do: {:ok, description, rest, @description_assignment_edges}
-
-  defp parse_description_assignment(tokens, _product),
-    do: {:error, classify_unmatched(tokens)}
-
   defp distinct_aliases(product, description) when product != description, do: :ok
   defp distinct_aliases(_product, _description), do: {:error, :semantic_ambiguous}
 
@@ -359,18 +356,28 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
            {:variable, product},
            ")",
            "{",
+           {:variable, description},
+           "=",
+           {:variable, product},
+           :arrow,
+           {:identifier, "get_description"},
+           "(",
+           ")",
+           ";",
            {:identifier, "echo"},
            {:variable, description},
            ";",
            "}"
            | rest
          ],
-         product,
-         description
-       ),
-       do: {:ok, rest, @guarded_output_edges}
+         product
+       ) do
+    with :ok <- distinct_aliases(product, description) do
+      {:ok, rest, @description_assignment_edges, @guarded_output_edges}
+    end
+  end
 
-  defp parse_guarded_output(tokens, _product, _description),
+  defp parse_guarded_output(tokens, _product),
     do: {:error, classify_unmatched(tokens)}
 
   defp check_analysis_steps(steps) when steps <= @max_analysis_steps, do: :ok
