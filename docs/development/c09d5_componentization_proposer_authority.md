@@ -34,6 +34,11 @@ non-authoritative examples only.
 - `v3` — image-source detection (D3-only), accessibility map equality,
   remove InputProvenanceAudit and review_required, freeze ProposerResult pair
   and provisional approval_status (PR #122 final tightening)
+- `v4` — G2-A scoped collection-item consumer-alt companion authority: semantic
+  input validation accepts the closed unbound accessibility companion with
+  per-source 1:1 cardinality and multiple distinct pairs per collection or
+  contract, without changing SemanticInput record shapes or proposer
+  construction (2026-10-21)
 
 ---
 
@@ -450,6 +455,43 @@ IMAGE_ACCESSIBILITY_DECISION_CONSISTENCY_RULE =
   an ImageAccessibilityDecision
 ```
 
+```text
+UNBOUND_ACCESSIBILITY_COMPANION_SEMANTIC_INPUT_RULE =
+  preserve the existing binding-backed sibling path unchanged
+
+  when a consumer_supplied image-source ItemFieldDecision names an
+  alt_item_field_name with no BindingAssignmentDecision targeting that
+  companion, validate the unbound accessibility-companion path:
+    companion ItemFieldDecision exists under the same source_collection_binding_id
+    companion.type = :string
+    companion.required = false
+    companion.default = nil
+    no BindingAssignmentDecision targets the companion
+    exactly one consumer_supplied image-source ItemFieldDecision references it
+
+  UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
+    each consumer_supplied image-source ItemFieldDecision using the unbound
+    path names exactly one companion through its alt_item_field_name
+    each unassigned ItemFieldDecision is referenced by exactly one such source
+    N unbound companion image sources require N distinct ItemFieldDecisions
+    multiple distinct companions may exist in one CollectionInput or contract
+    a companion cannot be shared and no companion may exist without a source
+    this is per-source cardinality, not one global companion per contract
+
+  build source-to-companion and companion-to-source indexes once during
+  validation; do not rescan all decisions for each image source
+
+  the companion ItemFieldDecision is materialized as an ordinary ItemField;
+  construction emits no BindingProjection for it because there is no
+  BindingAssignmentDecision
+
+  a missing or mismatched companion relationship -> invalid_input
+  componentization_proposer.input.conflict
+
+  no SemanticInput struct/schema change, decision family, marker field, or
+  proposer construction change is introduced by this rule
+```
+
 #### `StaticContentDispositionDecision`
 
 | Field | Required | Notes |
@@ -707,6 +749,9 @@ validators.
   rules per D1.
 - **Item fields:** only from `ItemFieldDecision` scoped to a collection binding
   id; nested collections require explicit parent item field name of type `:list`.
+  The sole unbound accessibility companion exception follows
+  `UNBOUND_ACCESSIBILITY_COMPANION_SEMANTIC_INPUT_RULE` and remains an ordinary
+  ItemFieldDecision; it does not create generic unbound fields.
 - **Binding projections:** only for explicit `BindingAssignmentDecision`; shape
   per D1 §12; `target_node_id` copied from IR binding (VALUE/COLLECTION target
   rules).

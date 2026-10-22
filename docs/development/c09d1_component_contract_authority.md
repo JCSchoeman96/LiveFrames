@@ -1129,6 +1129,34 @@ SINGULAR_FIELD_PROJECTION_RULE = a proven site/root ValueBinding becomes a
 COLLECTION_ITEM_FIELD_PROJECTION_RULE = a collection-item ValueBinding becomes
   a semantic field inside its owning collection item, never a top-level attr.
 
+COLLECTION_ITEM_ACCESSIBILITY_COMPANION_RULE = ordinary item fields remain
+  binding/projection driven. The sole exception is one caller-owned
+  accessibility companion for EACH binding-backed collection-item image
+  source that uses consumer-supplied alt: an explicit sibling ItemField of type
+  :string, required = false, default = nil, with no BindingProjection, used
+  only as alt input for that source. The companion has no inferred or
+  manufactured Design IR binding, and source alt metadata is not inferred. Its
+  value is conditionally required when the source is present, as defined by
+  C09D3 §10.2 and C09D6-A §10.12.1. The closed exception does not authorize
+  arbitrary unbound collection fields.
+
+UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
+  each consumer-supplied image-source ItemField using
+  UNBOUND_ACCESSIBILITY_COMPANION names exactly one companion through its
+  alt_item_field_name
+  each companion is referenced by exactly one such image-source ItemField
+  N such image sources require N distinct companions
+  multiple distinct companions may exist in one CollectionInput or
+  ComponentContract when multiple image sources require them
+  a companion cannot be shared by two image sources
+  this is per-source cardinality, not one global companion per contract
+  no companion is admitted without its owning image source
+
+  This exception changes no ComponentContract serialized shape or
+  contract_format_version. BINDING_LINK_AUTHORITY remains the sole structured
+  relationship between an IR binding and a projected public member; the
+  caller-owned companion has no such relationship.
+
 COLLECTION_COUNT_PROJECTION_RULE = a visible count for a top-level
   collection becomes an ordinary non-negative integer public_attrs entry
   associated through count_attr_name and projected as collection_count_attr.

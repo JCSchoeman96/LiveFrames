@@ -64,6 +64,12 @@ current **runtime** Catalogue posture is summarized in §2 and §15.
   the closed static heading-navigation carrier and §21.3 only for
   renderer-owned direct-child anchor neutralization. It does not replace v7;
   all other C09D6 v7 authority remains unchanged. Tracked by PR #242.
+- `2026-10-21 COLLECTION-ITEM-ALT-COMPANION scoped amendment` — extends the
+  collection-item consumer-supplied image-alt runtime in §10.12.1 to accept
+  the closed caller-owned unbound accessibility companion authorized by D1,
+  D3, and D5. Companion lookup is independent for each image-source ItemField
+  and uses that source's exact `alt_item_field_name`. There is no global or
+  default companion name. The binding-backed asset-alt path remains unchanged.
 
 ---
 
@@ -538,9 +544,11 @@ or `heading_level` from ordinary `ValueBinding` rows (RenderProjection-owned).
 **Top-level informative image `alt` asymmetry (D3):** consumer-supplied top-level
 `alt` is **`asset_alt` `RenderProjection` only** (including when `asset_src` is
 `scalar_attr` binding-backed). **No** top-level `scalar_attr` binding row defines
-`asset_alt`. Collection-item informative `alt` remains the sibling
-`collection_item_field` binding with `value_kind: field`, `target_kind: text` on
-the same `image` node (D3).
+`asset_alt`. Collection-item informative `alt` uses the D3 XOR path:
+`BINDING_BACKED_SIBLING` (the existing same-node text binding) or
+`UNBOUND_ACCESSIBILITY_COMPANION` (the closed caller-owned sibling ItemField).
+Both paths serve the `asset_alt` locus; neither adds a RenderProjection for an
+item field.
 
 | Admission pattern | Native output locus |
 | --- | --- |
@@ -995,6 +1003,19 @@ source present + consumer_supplied + alt absent
 Apply to top-level image attrs and collection item image/alt field pairs.
 **Never** emit an informative `<img>` with `src` present without satisfying the
 approved alt requirement. `nil` does not mean decorative (D1).
+
+For each validated `UNBOUND_ACCESSIBILITY_COMPANION`, resolve the exact
+`alt_item_field_name` from that image source ItemField's accessibility map.
+Resolve each source independently. Read its companion from the current item in
+the existing collection stack with `lf_item_field(item, ordinal, field_name)`.
+Do not keep a global companion name or use a default companion name. Reuse the
+existing collection-item accessor and its string-key/existing-atom-key
+behavior. Do not create a BindingProjection, RenderProjection, or new runtime
+helper. Do not call the accessor solely for an image whose optional source is
+absent. When the source is present, nil or an empty string raises the same
+deterministic accessibility error; a non-empty string becomes `alt`.
+ItemField `required = false` and `default = nil` remain unchanged because the
+alt requirement depends on source presence.
 
 ### 10.13 Validation emission (attrs and item fields)
 
