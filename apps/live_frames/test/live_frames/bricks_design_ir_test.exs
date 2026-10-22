@@ -2207,7 +2207,8 @@ defmodule LiveFrames.BricksDesignIRTest do
 
     source_code =
       "<?php /* #{sentinel} */ $product = wc_get_product(get_the_ID()); " <>
-        "$description = $product->get_description(); if ($product) { echo $description; } ?>"
+        "if ($product) { $description = $product->get_description(); " <>
+        "echo $description; } ?>"
 
     source =
       synthetic_source([

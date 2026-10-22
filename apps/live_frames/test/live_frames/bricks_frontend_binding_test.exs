@@ -14,7 +14,8 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   @private_php_sentinel "PRIVATE_TRANSLATION_SENTINEL_dcb17f"
   @full_description_source "<?php /* #{@private_php_sentinel} */ $product = wc_get_product(get_the_ID()); " <>
-                             "$description = $product->get_description(); if ($product) { echo $description; } ?>"
+                             "if ($product) { $description = $product->get_description(); " <>
+                             "echo $description; } ?>"
 
   @token_fixture_path Path.expand(
                         "../../../../fixtures/automatic_css/acss_settings.json",
