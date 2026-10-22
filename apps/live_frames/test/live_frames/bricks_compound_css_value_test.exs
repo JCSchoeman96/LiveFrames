@@ -382,4 +382,303 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
     assert [%{local_name: "--first"}] = CompoundCssValue.occurrences(first)
     assert [%{local_name: "--other"}] = CompoundCssValue.occurrences(second)
   end
+
+  test "parses a single transition shorthand spec" do
+    assert {:ok, parsed} =
+             parse_transition_shorthand("opacity var(--duration) var(--timing)")
+
+    assert parsed.production == :transition_shorthand
+    assert parsed.function_name == nil
+
+    assert [
+             %{occurrence_index: 0, local_name: "--duration"},
+             %{occurrence_index: 1, local_name: "--timing"}
+           ] = CompoundCssValue.occurrences(parsed)
+  end
+
+  test "parses a two-spec transition shorthand" do
+    assert {:ok, parsed} =
+             parse_transition_shorthand(
+               "opacity var(--duration) var(--timing), transform var(--duration-b) var(--timing-b)"
+             )
+
+    assert parsed.production == :transition_shorthand
+    assert length(CompoundCssValue.occurrences(parsed)) == 4
+  end
+
+  test "accepts ASCII whitespace variants in transition shorthand" do
+    for whitespace <- [" ", "\t", "\r", "\n", "\f"] do
+      value = "opacity" <> whitespace <> "var( --duration )" <> whitespace <> "var(--timing)"
+      assert {:ok, _parsed} = parse_transition_shorthand(value)
+    end
+
+    for around_comma <- [",", " ,", ", ", "\t,\f"] do
+      value =
+        "opacity var(--duration) var(--timing)" <>
+          around_comma <> "transform var(--duration-b) var(--timing-b)"
+
+      assert {:ok, _parsed} = parse_transition_shorthand(value)
+    end
+  end
+
+  test "reconstructs transition specs with canonical comma and space" do
+    assert {:ok, single} =
+             parse_transition_shorthand("opacity\nvar(--duration)\tvar(--timing)")
+
+    assert {:ok, "opacity 250ms ease-in-out"} =
+             CompoundCssValue.reconstruct(single, %{0 => "250ms", 1 => "ease-in-out"})
+
+    assert {:ok, multiple} =
+             parse_transition_shorthand(
+               "opacity\nvar(--duration)\tvar(--timing)\r\n,\f transform\tvar(--duration-b)\nvar(--timing-b)"
+             )
+
+    assert {:ok, "opacity 250ms ease-in-out, transform 1.5s ease-in-out"} =
+             CompoundCssValue.reconstruct(multiple, %{
+               0 => "250ms",
+               1 => "ease-in-out",
+               2 => "1.5s",
+               3 => "ease-in-out"
+             })
+  end
+
+  test "assigns transition occurrence indexes and slot grammars in source order" do
+    assert {:ok, single} =
+             parse_transition_shorthand("opacity var(--duration) var(--timing)")
+
+    assert [
+             %{occurrence_index: 0, slot_grammar: :transition_duration_operand},
+             %{occurrence_index: 1, slot_grammar: :juxtaposition_right_operand}
+           ] = CompoundCssValue.occurrences(single)
+
+    assert {:ok, multiple} =
+             parse_transition_shorthand(
+               "opacity var(--duration-a) var(--timing-a), transform var(--duration-b) var(--timing-b)"
+             )
+
+    assert [
+             %{occurrence_index: 0, slot_grammar: :transition_duration_operand},
+             %{occurrence_index: 1, slot_grammar: :juxtaposition_right_operand},
+             %{occurrence_index: 2, slot_grammar: :transition_duration_operand},
+             %{occurrence_index: 3, slot_grammar: :juxtaposition_right_operand}
+           ] = CompoundCssValue.occurrences(multiple)
+  end
+
+  test "preserves transition property identifiers and local reference case" do
+    assert {:ok, parsed} =
+             parse_transition_shorthand("unknown-property var(--DurationA) var(--TimingB)")
+
+    assert [
+             %{local_name: "--DurationA"},
+             %{local_name: "--TimingB"}
+           ] = CompoundCssValue.occurrences(parsed)
+
+    assert {:ok, "unknown-property 250ms ease-in-out"} =
+             CompoundCssValue.reconstruct(parsed, %{0 => "250ms", 1 => "ease-in-out"})
+  end
+
+  test "accepts safe unknown lowercase hyphenated property identifiers" do
+    for property <- ["unknown-property", "unknown-property-2", "property3-name"] do
+      assert {:ok, _parsed} =
+               parse_transition_shorthand("#{property} var(--duration) var(--timing)")
+    end
+  end
+
+  test "rejects reserved transition property identifiers" do
+    for property <- ["inherit", "initial", "unset", "revert", "revert-layer", "none", "all"] do
+      assert parse_transition_shorthand("#{property} var(--duration) var(--timing)") == :no_match
+    end
+  end
+
+  test "rejects duplicate transition property identifiers" do
+    assert parse_transition_shorthand(
+             "opacity var(--duration) var(--timing), opacity var(--duration-b) var(--timing-b)"
+           ) == :no_match
+  end
+
+  test "rejects uppercase transition property identifiers" do
+    assert parse_transition_shorthand("Opacity var(--duration) var(--timing)") == :no_match
+  end
+
+  test "rejects escaped and custom transition property identifiers" do
+    for property <- ["\\6f pacity", "--custom"] do
+      assert parse_transition_shorthand("#{property} var(--duration) var(--timing)") == :no_match
+    end
+  end
+
+  test "rejects a third transition spec" do
+    assert parse_transition_shorthand(
+             "opacity var(--duration) var(--timing), transform var(--duration-b) var(--timing-b), color var(--duration-c) var(--timing-c)"
+           ) == :no_match
+  end
+
+  test "rejects a transition spec with no duration reference" do
+    assert parse_transition_shorthand("opacity var(--timing)") == :no_match
+  end
+
+  test "rejects a transition spec with no timing reference" do
+    assert parse_transition_shorthand("opacity var(--duration)") == :no_match
+  end
+
+  test "rejects extra transition tokens" do
+    for extra <- ["2s", "allow-discrete"] do
+      assert parse_transition_shorthand("opacity var(--duration) var(--timing) #{extra}") ==
+               :no_match
+    end
+  end
+
+  test "rejects literal transition durations" do
+    assert parse_transition_shorthand("opacity 250ms var(--timing)") == :no_match
+  end
+
+  test "rejects literal transition timings" do
+    assert parse_transition_shorthand("opacity var(--duration) ease-in-out") == :no_match
+  end
+
+  test "rejects delay and transition behavior tokens" do
+    for extra <- ["1s", "allow-discrete"] do
+      assert parse_transition_shorthand("opacity var(--duration) var(--timing) #{extra}") ==
+               :no_match
+    end
+  end
+
+  test "rejects function syntax in transition shorthand" do
+    for value <- [
+          "opacity var(--duration) cubic-bezier(0,0,1,1)",
+          "unknown(var(--duration)) var(--timing) var(--timing-b)",
+          "opacity var(--duration) steps(1,end)"
+        ] do
+      assert parse_transition_shorthand(value) == :no_match
+    end
+  end
+
+  test "rejects malformed transition comma layouts" do
+    first = "opacity var(--duration) var(--timing)"
+    second = "transform var(--duration-b) var(--timing-b)"
+
+    for value <- [
+          "," <> first,
+          first <> ",",
+          first <> ",," <> second,
+          first <> " " <> second,
+          first <> ", " <> second <> ", " <> second
+        ] do
+      assert parse_transition_shorthand(value) == :no_match
+    end
+  end
+
+  test "rejects transition var fallback syntax" do
+    assert parse_transition_shorthand("opacity var(--duration, 250ms) var(--timing)") == :no_match
+  end
+
+  test "rejects malformed transition var references" do
+    for value <- [
+          "opacity var(--duration var(--timing)",
+          "opacity var(--duration)) var(--timing)",
+          "opacity var(--duration) var(--timing"
+        ] do
+      assert parse_transition_shorthand(value) == :no_match
+    end
+  end
+
+  test "rejects non-ASCII transition whitespace" do
+    assert parse_transition_shorthand("opacity\u00a0var(--duration) var(--timing)") ==
+             :no_match
+  end
+
+  test "accepts zero and positive finite transition duration terminals" do
+    assert {:ok, parsed} = parse_transition_shorthand("opacity var(--duration) var(--timing)")
+
+    for duration <- ["0ms", "250ms", ".5s"] do
+      assert {:ok, "opacity " <> ^duration <> " ease-in-out"} =
+               CompoundCssValue.reconstruct(parsed, %{0 => duration, 1 => "ease-in-out"})
+    end
+  end
+
+  test "rejects invalid transition duration terminals" do
+    assert {:ok, parsed} = parse_transition_shorthand("opacity var(--duration) var(--timing)")
+    overflow = String.duplicate("9", 400) <> "s"
+
+    for duration <- ["-1s", "+1s", "1", "1e3s", "250ms\n", overflow, "NaNs"] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => duration, 1 => "ease-in-out"}) ==
+               {:error, :invalid_slot_terminal},
+             duration
+    end
+  end
+
+  test "rejects timing terminals outside the existing right-slot contract" do
+    assert {:ok, parsed} = parse_transition_shorthand("opacity var(--duration) var(--timing)")
+
+    for timing <- [
+          "ease",
+          "linear",
+          "ease-in",
+          "ease-out",
+          "steps(1,end)",
+          "cubic-bezier(0,0,1,1)"
+        ] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => "250ms", 1 => timing}) ==
+               {:error, :invalid_slot_terminal},
+             timing
+    end
+  end
+
+  test "enforces the transition parser 4096-byte source boundary" do
+    suffix = " var(--duration) var(--timing)"
+    property = String.duplicate("a", 4096 - byte_size(suffix))
+    max_value = property <> suffix
+
+    assert byte_size(max_value) == 4096
+    assert {:ok, _parsed} = parse_transition_shorthand(max_value)
+    assert parse_transition_shorthand(max_value <> " ") == {:error, :resource_limit_exceeded}
+  end
+
+  test "canonical transition reconstruction leaves no var reference" do
+    assert {:ok, parsed} =
+             parse_transition_shorthand(
+               "opacity var(--duration) var(--timing), transform var(--duration-b) var(--timing-b)"
+             )
+
+    assert {:ok, reconstructed} =
+             CompoundCssValue.reconstruct(parsed, %{
+               0 => "250ms",
+               1 => "ease-in-out",
+               2 => "1.5s",
+               3 => "ease-in-out"
+             })
+
+    refute reconstructed =~ "var("
+  end
+
+  test "keeps parse one unchanged for IDENT-prefixed transition values" do
+    assert CompoundCssValue.parse("opacity var(--duration) var(--timing)") == :no_match
+
+    assert CompoundCssValue.parse(
+             "opacity var(--duration) var(--timing), transform var(--d) var(--t)"
+           ) == :no_match
+  end
+
+  test "keeps the existing bare var juxtaposition production unchanged" do
+    value = "var(--duration) var(--timing)"
+    assert {:ok, parsed} = CompoundCssValue.parse(value)
+    assert parsed.production == :var_reference_with_operation
+
+    assert [
+             %{occurrence_index: 0, slot_grammar: :juxtaposition_left_operand},
+             %{occurrence_index: 1, slot_grammar: :juxtaposition_right_operand}
+           ] = CompoundCssValue.occurrences(parsed)
+
+    assert CompoundCssValue.reconstruct(parsed, %{0 => "250ms", 1 => "ease-in-out"}) ==
+             {:ok, "250ms ease-in-out"}
+  end
+
+  defp parse_transition_shorthand(value) do
+    Code.ensure_loaded!(CompoundCssValue)
+
+    if function_exported?(CompoundCssValue, :parse_transition_shorthand, 1) do
+      apply(CompoundCssValue, :parse_transition_shorthand, [value])
+    else
+      :no_match
+    end
+  end
 end
