@@ -8,6 +8,14 @@ These rules apply to this repository. Direct user instructions take precedence.
 - Xdebug is on
 - PHP 8.5.3
 
+## Local database credentials
+- Do not ask the user for local database passwords or DevCore-managed database variables.
+- If `.devcore/project.conf` exists, DevCore manages all local DEV and TEST database credentials.
+- Before requesting credentials, read `.devcore/project.conf` and `.devcore/render-map.tsv`, then run `devcore-project doctor`.
+- If local state is missing or stale, run `devcore-project activate`.
+- Run database-dependent commands through `devcore-project run dev -- <command>` or `devcore-project run test -- <command>`.
+- Report a bootstrap or service failure only after these steps fail. Never request or print a password value.
+
 ## Scope
 
 - Work only on the requested change.
