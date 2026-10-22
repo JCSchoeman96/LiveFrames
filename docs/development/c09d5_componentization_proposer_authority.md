@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D5-A
 
-**Plan version:** v3
+**Plan version:** v5
 
 **Scope:** freeze explicit semantic-decision input model and proposer construction
 rules; no proposer production code in this slice
@@ -39,6 +39,10 @@ non-authoritative examples only.
   per-source 1:1 cardinality and multiple distinct pairs per collection or
   contract, without changing SemanticInput record shapes or proposer
   construction (2026-10-21)
+- `v5` G2-A2 proposer outcome correction: `STATIC_COLLECTION_ITEM_RULE` no
+  longer forces `needs_review` for a validated unbound accessibility companion
+  when no other section 16.4 trigger or blocking diagnostic exists. Semantic
+  input shapes and proposer construction are unchanged (2026-10-22)
 
 ---
 
@@ -981,12 +985,85 @@ in-boundary evidence_insufficient binding (with or without
   EvidenceHandlingDecision omit_public_projection) — never :proposed
 BINDING_BACKED_SLOT_PLAN_RULE
 STATIC_COLLECTION_ITEM_RULE
+  except exact validated UNBOUND_ACCESSIBILITY_COMPANION
 UNSUPPORTED_NODE_RULE inside boundary
 STATIC_INTERNAL_IMAGE_RULE
 ```
 
 `MULTI_ROOT_PROPOSER_RULE` and missing required decision fields are
 `invalid_input`, not listed here.
+
+```text
+PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_OUTCOME_RULE =
+
+  a valid unbound accessibility companion does not independently force
+  :needs_review merely because it has zero BindingProjections
+
+  if:
+    intrinsic validation passes
+    reference validation passes
+    no error or fatal diagnostic exists
+    no OTHER section 16.4 mandatory review trigger exists
+
+  then:
+    the companion is compatible with outcome = :proposed
+
+  an arbitrary unbound collection ItemField keeps the mandatory
+  STATIC_COLLECTION_ITEM_RULE review trigger and is not exempt
+
+  any other section 16.4 trigger, or any blocking reference diagnostic,
+  still applies
+
+  malformed, invalid, orphan, shared, or projected candidates receive no
+  exemption; their terminal outcome is governed by the next rule
+```
+
+```text
+PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_FAILURE_RULE =
+
+  only an exact valid UNBOUND_ACCESSIBILITY_COMPANION receives the
+  STATIC_COLLECTION_ITEM_RULE exemption
+
+  malformed, invalid, orphan, shared, projected, or otherwise
+  non-conforming candidates do not receive the exemption
+
+  this G2-A2 rule does NOT reclassify their terminal outcome
+
+  terminal outcome remains owned by the existing proposer taxonomy:
+
+    SemanticInput validation failure
+      -> invalid_input
+      -> no contract/plan pair
+
+    intrinsic-valid pair with blocking contract/plan reference diagnostic
+      -> needs_review
+
+    intrinsic construction failure
+      -> construction_failed
+      -> no pair
+
+  no invalid companion may become proposed merely because outcome
+  classification recognizes an accessibility-shaped relationship
+
+  the exemption and the failure taxonomy are separate:
+    CLASSIFIER_EXEMPTION != FAILURE_RECLASSIFICATION
+```
+
+```text
+PROPOSER_VALIDATION_OWNERSHIP_RULE =
+
+  SemanticInput validation (step 2) validates the decision relationship
+  ComponentContract.validate_ir_references/2 and
+    ComponentizationPlan.validate_references/3 validate the complete G2
+    contract and plan relationship
+  proposer outcome classification must not reimplement the complete validator
+  proposer outcome classification only prevents a validated G2 companion from
+    being mistaken for ordinary static or unbound customization
+```
+
+The exemption in this section is one exception to `STATIC_COLLECTION_ITEM_RULE`.
+It is not generic unbound ItemField support. Ordinary unbound collection-item
+fields keep the mandatory `needs_review` trigger.
 
 ### 16.5 Blocking diagnostics vs `approval_status`
 
@@ -1013,6 +1090,7 @@ PROPOSER_DIAGNOSTIC_APPROVAL_RULE =
 | ImageAccessibilityDecision / public-member accessibility mismatch | `invalid_input` |
 | Intrinsic-valid pair; reference/coverage/accessibility failures | `needs_review` |
 | Intrinsic-valid pair; all pass; no triggers | `proposed` |
+| Intrinsic-valid pair; all pass; the only static-item candidate is a valid unbound accessibility companion (section 16.4 exception) | `proposed` |
 
 ### 16.7 Semantic-input validation vs artifact intrinsic validation
 

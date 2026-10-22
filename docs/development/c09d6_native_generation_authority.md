@@ -235,9 +235,13 @@ The **native generator must never** change `approval_status`.
 Human approval **must never** set `approval_status = :approved` while the
 contract remains `:needs_review`, **even when**
 `validate_generation_prerequisites/3` returns `:ok`. C09D5 mandatory review
-triggers (for example `STATIC_COLLECTION_ITEM_RULE`) can require
+triggers (for example ordinary `STATIC_COLLECTION_ITEM_RULE`) can require
 `:needs_review` without a generation-prerequisite blocker; prerequisites do not
-“clear” that classification.
+“clear” that classification. A validated unbound accessibility companion is
+explicitly outside that trigger under the G2 authority (C09D3 §10.2 and C09D5
+§16.4). That clarifies classification only. Generation prerequisites still do
+not override real mandatory review triggers, and reviewers must not approve a
+genuine `:needs_review` candidate. ComponentReview is not weakened.
 
 Only `:proposed` candidates may become `:approved` (§6.5). A `:needs_review`
 pair must be **revised and re-proposed** or **rejected** (§6.2).
