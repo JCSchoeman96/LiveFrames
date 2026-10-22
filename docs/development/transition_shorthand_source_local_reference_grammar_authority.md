@@ -99,21 +99,29 @@ ZERO_DEFINITION_REFERENCES=0
 MULTI_VALUE_REFERENCE_NAMES=0
 ```
 
+Private measurement values and names remain unpublished:
+
+```text
+PRIVATE_MEASUREMENT_RAW_VALUES_PUBLISHED=NO
+PRIVATE_MEASUREMENT_NAMES_PUBLISHED=NO
+PRIVATE_MEASUREMENT_HASHES_ONLY=YES
+```
+
 Candidate terminal classes (owner-scoped, every candidate of each name):
 
 ```text
 DURATION_CANDIDATE_CLASSES=TIME_LITERAL:28
-TIMING_CANDIDATE_CLASSES=TRANSITION_TIMING_KEYWORD_EASE_IN_OUT:28
-TIMING_EASE_IN_OUT_HASH16=16c2539d96224e3c
+TIMING_CANDIDATE_CLASSES=EXISTING_JUXTAPOSITION_RIGHT_OPERAND_CONTRACT:28
+TIMING_CANDIDATE_HASH16=16c2539d96224e3c
 ```
 
-The `ease-in-out` hash equals the accepted juxtaposition right-operand hash in [the causal record](feature_romeo_required_residual_causal_decomposition.md).
+The opaque timing-terminal hash matches the accepted public juxtaposition right-operand contract fingerprint in [the causal record](feature_romeo_required_residual_causal_decomposition.md).
 
 Resolver outcomes, measured by one batched `resolve/3` call per provenance with transition reference records injected in the evidence fork:
 
 ```text
 TRANSITION_RESOLVER_REFERENCES=56
-TRANSITION_RESOLVER_RESULTS=ok_time_literal:28,ok_ease_in_out:28
+TRANSITION_RESOLVER_RESULTS=ok_time_literal:28,ok_existing_right_operand_contract:28
 TRANSITION_DECLARATIONS_ALL_REFERENCES_OK=20 OF 20
 TRANSITION_DECLARATION_REFERENCE_COUNTS=2:12,4:8
 ```
@@ -177,8 +185,9 @@ Routing is evaluated per consumer declaration, before the compound lifecycle, in
 The two productions are syntactically disjoint: juxtaposition starts with `var(` and the transition production starts with an identifier. Exactly-one matching is therefore structural, not a precedence list.
 
 ```text
-TRANSITION_ADMISSION_SCOPE=PROPERTY_EQUALS_TRANSITION_ONLY
-TRANSITION_PRODUCTION_REACHABLE_FROM_OTHER_PROPERTIES=NO
+C1_IDENT_PREFIXED_PRODUCTION_SCOPE=PROPERTY_EQUALS_TRANSITION_ONLY
+C1_IDENT_PREFIXED_PRODUCTION_REACHABLE_FROM_OTHER_PROPERTIES=NO
+LEGACY_JUXTAPOSITION_SCOPE=PRE_EXISTING_PROPERTY_AGNOSTIC_UNCHANGED
 DISCOVERED_TRANSITION_FALLBACK_TO_GENERIC=NO
 DISCOVERED_TRANSITION_FALLBACK_TO_EXTERNAL_AUTHORITY=NO
 ```
@@ -187,54 +196,60 @@ DISCOVERED_TRANSITION_FALLBACK_TO_EXTERNAL_AUTHORITY=NO
 
 ```text
 LEGACY_JUXTAPOSITION_PROPERTY_BREADTH=PRE_EXISTING_NOT_CHANGED_BY_C1
-LEGACY_JUXTAPOSITION_NARROWING_DECISION=OWNER_REQUIRED_SEPARATELY
+LEGACY_JUXTAPOSITION_NARROWING_DECISION=DEFERRED_SEPARATE_OWNER_DECISION
 ```
 
 ## Lifecycle
 
 The transition-specific entity is `TransitionShorthandCandidate`: a `transition` declaration admitted to `DISCOVERED`. It is implemented as the existing private compound route tuple, with no new struct, public field, or IR shape.
 
-```text
-NOT_APPLICABLE = property is not exactly transition, or the value has no var(
-DISCOVERED = admitted by the routing rules above
-GRAMMAR_CLASSIFIED = exactly one authorized production matches
-LOCAL_REFERENCES_COLLECTED = occurrences recorded for the per-provenance batch
-LOCAL_REFERENCES_RESOLVED = every occurrence has {:ok, terminal} and passed its slot
-TERMINALS_VALIDATED = slot grammar accepted every terminal
-TRANSITION_RECONSTRUCTED = canonical string built and resolved-form validated
-CSS_REVALIDATED = CSSDeclaration accepted on :source_resolver
-EMITTED = literal StyleValue (terminal success)
-FAIL_CLOSED_RESIDUAL = terminal failure, with no transition out
-```
+`NOT_APPLICABLE` is a routing outcome outside the candidate lifecycle. Routing enters `DISCOVERED` under the admission rules above.
 
-Mapping to the existing compound lifecycle, so that no new public state is introduced:
+| Conceptual state | Meaning |
+| --- | --- |
+| `NOT_APPLICABLE` | The transition candidate route does not apply. |
+| `DISCOVERED` | Routing admitted the transition candidate. |
+| `GRAMMAR_CLASSIFIED` | Exactly one authorized production matched within limits. |
+| `LOCAL_REFERENCES_COLLECTED` | Valid, bounded occurrence records are ready for the shared batch. |
+| `LOCAL_REFERENCES_RESOLVED` | The shared batch returned one correlated result per occurrence. |
+| `TERMINALS_VALIDATED` | Every correlated result is `{:ok, terminal}`. Exact slot checks are the next guard. |
+| `TRANSITION_RECONSTRUCTED` | Every terminal passed its exact slot contract and the canonical string is built. |
+| `CSS_REVALIDATED` | The canonical string passed resolved transition-production revalidation, contains no `var()`, and remains bounded. CSS safety is the next guard. |
+| `EMITTED` | CSS safety succeeded and the existing caller emitted the literal `StyleValue` under whole-rule atomicity. |
+| `FAIL_CLOSED_RESIDUAL` | A guard failed; the candidate cannot emit. |
 
-| Prompt state | Existing state |
+The conceptual state names identify checkpoints. The explicit guards define which validation has completed.
+
+| From | Guard | To |
+| --- | --- | --- |
+| `DISCOVERED` | Exactly one authorized production matches; byte, token and production limits pass. | `GRAMMAR_CLASSIFIED` |
+| `GRAMMAR_CLASSIFIED` | Occurrence structure is valid and bounded. | `LOCAL_REFERENCES_COLLECTED` |
+| `LOCAL_REFERENCES_COLLECTED` | The shared resolver batch returns one correlated result per occurrence. | `LOCAL_REFERENCES_RESOLVED` |
+| `LOCAL_REFERENCES_RESOLVED` | Every result is `{:ok, terminal}`. | `TERMINALS_VALIDATED` |
+| `TERMINALS_VALIDATED` | Every duration/timing terminal passes its exact slot contract; canonical reconstruction succeeds. | `TRANSITION_RECONSTRUCTED` |
+| `TRANSITION_RECONSTRUCTED` | The canonical resolved form passes transition-production revalidation, contains no `var()`, and remains within bounds. | `CSS_REVALIDATED` |
+| `CSS_REVALIDATED` | `safe_declaration_value("transition", reconstructed, :source_resolver)` / `CSSDeclaration` validation succeeds; the existing caller permits selector-rule emission under whole-rule atomicity. | `EMITTED` |
+
+Any failed guard goes to `FAIL_CLOSED_RESIDUAL`. Nothing leaves either terminal state. `EMITTED` is reached through the existing caller only when whole-rule atomicity permits the selector rule to emit. If another declaration fails later, the caller discards the whole selector rule. It does not mutate the already-evaluated transition candidate into a new semantic result.
+
+The mapping below is separate from the authoritative lifecycle. It describes current internal compound checkpoints, not additional conceptual states or a new public interface:
+
+| Conceptual checkpoint | Current internal compound checkpoint |
 | --- | --- |
 | `DISCOVERED` | `DISCOVERED` |
 | `GRAMMAR_CLASSIFIED` | `GRAMMAR_CLASSIFIED` |
 | `LOCAL_REFERENCES_COLLECTED` | `LOCAL_REFERENCES_COLLECTED` |
-| `LOCAL_REFERENCES_RESOLVED` | `LOCAL_REFERENCES_RESOLVED` |
-| `TERMINALS_VALIDATED` | part of `LOCAL_REFERENCES_RESOLVED` |
+| `LOCAL_REFERENCES_RESOLVED`, `TERMINALS_VALIDATED` | Parts of `LOCAL_REFERENCES_RESOLVED` |
 | `TRANSITION_RECONSTRUCTED` | `TERMINAL_RECONSTRUCTED` |
-| `CSS_REVALIDATED` | `CSS_REVALIDATED` |
-| `EMITTED` | `EMITTED` |
+| `CSS_REVALIDATED` | Resolved-form check before the existing CSS safety checkpoint |
+| `EMITTED` | `EMITTED`, subject to caller atomicity |
 | `FAIL_CLOSED_RESIDUAL` | `FAIL_CLOSED_RESIDUAL` |
 
-Guards and side effects:
-
-| From | Guard | Side effect on success | To |
-| --- | --- | --- | --- |
-| `DISCOVERED` | Exactly one production matches; byte length ≤ 4096 | Attach production identity | `GRAMMAR_CLASSIFIED` |
-| `GRAMMAR_CLASSIFIED` | Structure within bounds (below) | Build private parse with occurrences | `LOCAL_REFERENCES_COLLECTED` |
-| `LOCAL_REFERENCES_COLLECTED` | Records appended to the shared owner batch | None | `LOCAL_REFERENCES_RESOLVED` after the single `resolve/3` batch returns one result per record |
-| `LOCAL_REFERENCES_RESOLVED` | Every result `{:ok, terminal}`; every terminal passes its slot | Correlate by occurrence index | `TERMINAL_RECONSTRUCTED` |
-| `TERMINAL_RECONSTRUCTED` | Canonical string satisfies the same production under the resolved form; no `var(`; within limits | Hold literal candidate | `CSS_REVALIDATED` |
-| `CSS_REVALIDATED` | Whole-rule atomicity holds for the selector rule | Emit literal `StyleValue` | `EMITTED` |
-
-Parsing and reconstruction have `SIDE_EFFECTS=NONE`. Any failed guard becomes `FAIL_CLOSED_RESIDUAL`, and nothing leaves that state.
-
 ```text
+SIDE_EFFECTS_DURING_PARSE=NONE
+SIDE_EFFECTS_DURING_RESOLUTION_CORRELATION=NONE
+SIDE_EFFECTS_DURING_RECONSTRUCTION=NONE
+TERMINAL_STATES=EMITTED,FAIL_CLOSED_RESIDUAL
 TRANSITION_GRAMMAR_FAILURE_FALLBACK_TO_GENERIC=NO
 NO_AMBIGUOUS_INTERMEDIATE_RESULT_LEAKS_INTO_IR=YES
 ```
@@ -303,14 +318,19 @@ TRANSITION_PROPERTY_IDENTIFIER_SEMANTIC_VALIDATION=NONE
 ## Duration slot
 
 ```text
-TRANSITION_DURATION_SLOT_GRAMMAR=TIME_DURATION_LITERAL
+TRANSITION_DURATION_SLOT_GRAMMAR=TIME_DURATION_LITERAL_Z_ANCHORED
 TRANSITION_DURATION_LEXICAL=^(\d+(\.\d+)?|\.\d+)(s|ms)\z
 TRANSITION_DURATION_SEMANTIC=finite, non-negative
-TRANSITION_DURATION_REUSES_EXISTING_SLOT=YES
-TRANSITION_DURATION_SLOT_CONTRACT_ANCHOR_CORRECTION_REQUIRED=YES
+TRANSITION_DURATION_REUSES_EXISTING_SLOT=NO
+TRANSITION_DURATION_SEMANTICALLY_EQUIVALENT_TO_EXISTING_SLOT=YES
+LEGACY_JUXTAPOSITION_DURATION_SLOT_CHANGED_BY_C1=NO
+LEGACY_DURATION_ANCHOR_HARDENING=DEFERRED_SEPARATE_NON_BLOCKING
+SECOND_LOCAL_RESOLVER=NO
+NEW_RESOLVER_INTERFACE=NO
+NEW_IR_SHAPE=NO
 ```
 
-The shared slot is `juxtaposition_left_operand`. Its semantics are identical: a non-negative finite `<time>` with explicit unit. The current regex uses `$`, which in PCRE also matches before a trailing newline, so `"1s\n"` passes. Reuse therefore requires anchoring with `\z`. This is a behaviour change only for terminals containing a trailing newline. The implementation must prove that no resolver terminal can carry one, or make the correction with a regression test. A signed exponent, `calc()`, `var()`, a unitless number, or a list is rejected.
+The existing `juxtaposition_left_operand` slot has the same intended semantics, a non-negative finite time with an explicit unit. Its current regex uses the weaker `$` end anchor, which also matches before a trailing newline. C1 must leave that legacy behaviour unchanged. The transition-specific production gets its own strict `\z`-anchored duration terminal contract inside `CompoundCssValue`. This is a slot validator, not a new resolver. Legacy anchor hardening is deferred separately and does not block the C1 implementation plan. A signed exponent, `calc()`, `var()`, a unitless number, or a list is rejected.
 
 ## Timing slot
 
@@ -321,7 +341,7 @@ TRANSITION_TIMING_REUSES_EXISTING_SLOT=YES
 TRANSITION_TIMING_KEYWORD_EXPANSION=NO
 ```
 
-The shared slot `juxtaposition_right_operand` accepts exactly `ease-in-out`. The measured timing candidates are 28 of 28 `ease-in-out`. No other easing keyword, `linear`, `ease`, `step-*`, `cubic-bezier()`, `steps()` or `linear()` is authorized, because no evidence exists for them. Any other terminal fails the slot and fails closed. The check is exact string equality, so it has no anchoring issue.
+The shared slot `juxtaposition_right_operand` accepts exactly `ease-in-out`. Private measurement uses the opaque contract classification above. No other easing keyword, `linear`, `ease`, `step-*`, `cubic-bezier()`, `steps()` or `linear()` is authorized, because no evidence exists for them. Any other terminal fails the slot and fails closed. The check is exact string equality, so it has no anchoring issue.
 
 ## Occurrence and reference accounting
 
@@ -375,7 +395,7 @@ POST_SUBSTITUTION_TRANSITION_REVALIDATION=YES
 POST_SUBSTITUTION_REVALIDATION_FORM=RESOLVED_TRANSITION_FORM
 RESOLVED_TRANSITION_FORM := RESOLVED_SPEC ( ", " RESOLVED_SPEC )?
 RESOLVED_SPEC := PROPERTY_IDENTIFIER " " DURATION_TERMINAL " " "ease-in-out"
-DURATION_TERMINAL := TIME_DURATION_LITERAL (\z-anchored, finite, non-negative)
+DURATION_TERMINAL := TIME_DURATION_LITERAL_Z_ANCHORED (\z-anchored, finite, non-negative)
 RESOLVED_FORM_CONTAINS_var=NO
 CSS_DECLARATION_REVALIDATION=YES
 ```
@@ -473,7 +493,8 @@ Recommended implementation boundary, not authorized here:
 apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex
   + :transition_shorthand production (type, clause in resolved_valid?/2)
   + parse_transition_shorthand/1 (pure)
-  + \z anchor correction on the shared duration slot
+  + transition-specific strict \z-anchored duration slot validator
+  legacy juxtaposition slots unchanged
   parse/1 unchanged
 
 apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex
@@ -484,7 +505,7 @@ apps/live_frames/test/live_frames/bricks_compound_css_value_test.exs
 apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs
 ```
 
-A new module is not justified. The transition route shares `Parsed`, `Occurrence`, reconstruction, terminal validation, and the slot contracts. A separate module would require exporting those private helpers or duplicating them. No Romeo-specific module, name, fixture, or fingerprint branch is permitted.
+A new module is not justified. The transition route shares `Parsed`, `Occurrence`, reconstruction and terminal-validation machinery. It reuses the public timing slot contract and adds its own strict duration slot contract. A separate module would require exporting those private helpers or duplicating them. No Romeo-specific module, name, fixture, or fingerprint branch is permitted.
 
 ## Required decisions
 
@@ -543,14 +564,47 @@ PARSER_COMPLEXITY=O(value_bytes), at most 7 tokens and 4 references per declarat
 
 Protected against: arbitrary CSS execution, `url()`, `expression()`, `javascript:`, `behavior:`, `-moz-binding`, residual `var()`, unbounded token growth, unbounded list size, parser ambiguity (the productions are disjoint and exactly one must match), cross-owner local resolution, and external-authority fallback. Final reconstructed declarations stay subject to the existing unsafe-fragment, property, and `CSSDeclaration` checks. Parsing and reconstruction take no source text beyond the declaration value and emit no source text into diagnostics.
 
-## Open items before any implementation plan
+## Authority freeze and follow-up categories
 
 ```text
-OPEN_1=Anchor correction of the shared duration slot. Prove that no resolver terminal ends with a line feed, or land the \z anchor with a regression test.
-OPEN_2=Owner decision on the legacy property-agnostic juxtaposition breadth (LEGACY_JUXTAPOSITION_NARROWING_DECISION). C1 leaves it unchanged.
-OPEN_3=Production resolver outcome for transition references, which is zero records today. The implementation rerun must measure it.
-OPEN_4=NativeGenerator treatment of the transition literal. Out of scope; not authorized.
+C1_SOURCE_GRAMMAR=FULLY_BOUNDED
+PROPERTY_SCOPE=FROZEN
+PROPERTY_IDENTIFIER_POLICY=FROZEN
+DURATION_SLOT_POLICY=FROZEN
+TIMING_SLOT_POLICY=FROZEN
+SPEC_COUNT_BOUND=FROZEN
+REFERENCE_ACCOUNTING=FROZEN
+RECONSTRUCTION_POLICY=FROZEN
+POST_SUBSTITUTION_VALIDATION=FROZEN
+FAIL_CLOSED_POLICY=FROZEN
+PRE_IMPLEMENTATION_PLAN_BLOCKERS=NONE
 ```
+
+### Deferred, non-blocking
+
+```text
+LEGACY_JUXTAPOSITION_NARROWING_DECISION=DEFERRED_SEPARATE_OWNER_DECISION
+LEGACY_DURATION_ANCHOR_HARDENING=DEFERRED_SEPARATE_NON_BLOCKING
+```
+
+These pre-existing behaviours remain unchanged by C1 and do not block its implementation plan.
+
+### Implementation acceptance obligations
+
+```text
+C1_PRODUCTION_RESOLVER_OUTCOME=MUST_BE_MEASURED_AFTER_IMPLEMENTATION
+C1_CANONICAL_ROMEO_RERUN=REQUIRED_AFTER_IMPLEMENTATION
+```
+
+The production resolver measurement requires the production grammar to emit transition reference records. It is an implementation acceptance criterion, not a pre-plan blocker. These corrections do not authorize implementation or a private evidence rerun.
+
+### Out of scope
+
+```text
+NATIVE_GENERATOR_TREATMENT=OUT_OF_SCOPE_NOT_AUTHORIZED
+```
+
+NativeGenerator work does not block the C1 implementation plan.
 
 ## Gates
 
