@@ -23,7 +23,7 @@ defmodule LiveFrames.Adapters.Bricks.PhpSemanticRecognizer do
     proc_open popen file_get_contents file_put_contents fopen fwrite unlink
     curl_init wp_remote_get wp_remote_post mysqli_query pg_query
   )
-  @reserved_aliases ~w(_GET _SERVER GLOBALS this)
+  @reserved_aliases ~w(GLOBALS _SERVER _GET _POST _FILES _COOKIE _SESSION _REQUEST _ENV this)
 
   @type semantic :: :current_entity_full_description
   @type reason ::

@@ -95,15 +95,33 @@ defmodule LiveFrames.BricksPhpSemanticRecognizerTest do
   end
 
   test "rejects superglobal and reserved variable aliases" do
-    accepted =
-      for alias_name <- ["_GET", "_SERVER", "GLOBALS", "this"],
-          PhpSemanticRecognizer.recognize(
-            String.replace(@canonical, "$product", "$" <> alias_name)
-          ) ==
-            {:ok, :current_entity_full_description},
-          do: alias_name
+    reserved_aliases = [
+      "GLOBALS",
+      "_SERVER",
+      "_GET",
+      "_POST",
+      "_FILES",
+      "_COOKIE",
+      "_SESSION",
+      "_REQUEST",
+      "_ENV",
+      "this"
+    ]
 
-    assert accepted == []
+    for alias_name <- reserved_aliases do
+      assert {:error, :parse_failed} =
+               PhpSemanticRecognizer.recognize(source_with_aliases(alias_name, "body"))
+
+      assert {:error, :parse_failed} =
+               PhpSemanticRecognizer.recognize(source_with_aliases("item", alias_name))
+    end
+  end
+
+  defp source_with_aliases(product_alias, description_alias) do
+    "<?php $#{product_alias} = wc_get_product(get_the_ID()); " <>
+      "if ($#{product_alias}) { " <>
+      "$#{description_alias} = $#{product_alias}->get_description(); " <>
+      "echo $#{description_alias}; } ?>"
   end
 
   test "accepts a delimited PHP opening tag and rejects a missing separator" do
