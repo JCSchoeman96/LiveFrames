@@ -57,19 +57,21 @@ defmodule LiveFrames.IR.Migration do
         end
 
       {:ok, @v2} ->
-        with {:ok, v3} <- migrate_v2_to_v3(map, :check_legacy_values) do
+        with :ok <- reject_v5_only_binding_enums(map),
+             {:ok, v3} <- migrate_v2_to_v3(map, :check_legacy_values) do
           with {:ok, v4} <- migrate_v3_to_v4(v3) do
             migrate_v4_to_v5(v4)
           end
         end
 
       {:ok, @v3} ->
-        with {:ok, v4} <- migrate_v3_to_v4(map) do
+        with :ok <- reject_v5_only_binding_enums(map),
+             {:ok, v4} <- migrate_v3_to_v4(map) do
           migrate_v4_to_v5(v4)
         end
 
       {:ok, @v4} ->
-        with :ok <- reject_v5_enums_in_v4(map) do
+        with :ok <- reject_v5_only_binding_enums(map) do
           migrate_v4_to_v5(map)
         end
 
@@ -98,7 +100,7 @@ defmodule LiveFrames.IR.Migration do
     end
   end
 
-  defp reject_v5_enums_in_v4(map) do
+  defp reject_v5_only_binding_enums(map) do
     bindings = Map.get(map, "value_bindings", %{})
 
     has_new_enum =
@@ -110,7 +112,7 @@ defmodule LiveFrames.IR.Migration do
         end)
 
     if has_new_enum do
-      {:error, [value_binding_migration_error("v4 bindings cannot use v5-only enum values")]}
+      {:error, [value_binding_migration_error("legacy bindings cannot use v5-only enum values")]}
     else
       :ok
     end

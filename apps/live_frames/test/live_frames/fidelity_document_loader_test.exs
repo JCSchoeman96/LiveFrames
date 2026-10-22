@@ -76,6 +76,27 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     )
   end
 
+  defp legacy_binding_input(version, overrides) do
+    binding =
+      if version in ["2.0.0", "3.0.0"] do
+        value_binding_map()
+        |> Map.delete("modifier")
+        |> Map.put("modifier_status", "none")
+      else
+        value_binding_map()
+      end
+      |> Map.merge(overrides)
+
+    base =
+      case version do
+        "2.0.0" -> minimal_v2_map()
+        "3.0.0" -> minimal_v3_map()
+        "4.0.0" -> minimal_v3_map() |> Map.put("ir_version", "4.0.0")
+      end
+
+    put_in(base, ["value_bindings"], %{"value_001" => binding})
+  end
+
   defp migration_pairs(document) do
     document
     |> get_in(["provenance", "liveframes_ir_migrations"])
@@ -134,6 +155,32 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       assert {:error, diagnostics} = Migration.to_current(invalid)
       assert Enum.any?(diagnostics, &(&1.code == "ir.migration.value_binding_invalid"))
     end
+  end
+
+  test "rejects v5 binding enums in every legacy migration input" do
+    for version <- ["2.0.0", "3.0.0", "4.0.0"],
+        {field, value} <- [{"target_kind", "rich_text"}, {"scope", "current_entity"}] do
+      input = legacy_binding_input(version, %{field => value})
+      result = Migration.to_current(input)
+
+      assert {:error, diagnostics} = result
+      refute match?({:ok, %{"ir_version" => "5.0.0"}}, result)
+      assert input["ir_version"] == version
+      assert Enum.any?(diagnostics, &(&1.code == "ir.migration.value_binding_invalid"))
+    end
+
+    both_enums =
+      legacy_binding_input("2.0.0", %{
+        "target_kind" => "rich_text",
+        "scope" => "current_entity"
+      })
+
+    both_result = Migration.to_current(both_enums)
+
+    assert {:error, diagnostics} = both_result
+    refute match?({:ok, %{"ir_version" => "5.0.0"}}, both_result)
+    assert both_enums["ir_version"] == "2.0.0"
+    assert Enum.any?(diagnostics, &(&1.code == "ir.migration.value_binding_invalid"))
   end
 
   test "v5 loader decodes rich_text and current_entity without creating atoms" do
