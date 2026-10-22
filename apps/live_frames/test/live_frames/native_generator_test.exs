@@ -375,6 +375,61 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert {:ok, %{artifacts: [_module, _stylesheet]}} = NativeGenerator.generate(c, p, document)
   end
 
+  test "generate/3 stops on in-boundary rich-text bindings before creating artifacts" do
+    design_document = document()
+    [boundary] = design_document.root_nodes
+    [heading, paragraph] = boundary.children
+
+    binding = %ValueBinding{
+      value_binding_id: "vb_description",
+      target_node_id: @heading_id,
+      target_kind: :rich_text,
+      value_kind: :field,
+      scope: :current_entity,
+      value_key: "commerce.product.full_description",
+      normalization_status: :normalized,
+      modifier: %LiveFrames.IR.ValueModifier.None{}
+    }
+
+    design_document = %{
+      design_document
+      | root_nodes: [
+          %{
+            boundary
+            | children: [%{heading | semantic_type: "rich_text", content: nil}, paragraph]
+          }
+        ],
+        value_bindings: %{binding.value_binding_id => binding}
+    }
+
+    component_contract =
+      contract(
+        public_attrs: [attr("description")],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: binding.value_binding_id,
+            projection_kind: :scalar_attr,
+            public_attr_name: "description",
+            target_node_id: binding.target_node_id
+          }
+        ]
+      )
+
+    component_plan = plan(component_contract, design_document)
+    assert component_plan.render_projections == []
+
+    assert {:error, :generation_blocked, diagnostics} =
+             NativeGenerator.generate(component_contract, component_plan, design_document)
+
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             match?(
+               %PlanDiagnostic{code: "componentization_plan.binding.rich_text_trust_required"},
+               diagnostic
+             )
+           end)
+  end
+
   test "generate/7 blocks when Behavior authority is missing or mismatched" do
     tuple = disposition_authority()
 
