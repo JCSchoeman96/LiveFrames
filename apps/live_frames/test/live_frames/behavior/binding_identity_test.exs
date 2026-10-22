@@ -62,6 +62,7 @@ defmodule LiveFrames.Behavior.BindingIdentityTest do
     ir4_id = hd(ir4_contract.bindings).binding_id
 
     assert ir3_id == "bnd_a0fbef5fe549adc33e7070a21899cb2d3e83a6df2f1662640e7db8b65df188c4"
+    assert ir4_id == "bnd_4db78dd58405d51e60e9ef5b6e1a88f606aa416eaa22d1c0d564b5be99cd6b88"
     refute ir4_id == ir3_id
   end
 
