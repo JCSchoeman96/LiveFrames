@@ -1466,6 +1466,79 @@ defmodule LiveFrames.ComponentizationProposerTest do
              :ok
   end
 
+  test "non-image accessibility metadata cannot exempt a zero-reference item field" do
+    {design_document, semantic_input} = collection_image_fixture([])
+    text_node_id = DesignNode.deterministic_id([1, 1, 1])
+    [boundary] = design_document.root_nodes
+    [collection_node] = boundary.children
+
+    design_document = %{
+      design_document
+      | root_nodes: [
+          %{
+            boundary
+            | children: [
+                %{
+                  collection_node
+                  | children: [%DesignNode{node_id: text_node_id, semantic_type: "paragraph"}]
+                }
+              ]
+          }
+        ],
+        value_bindings: %{
+          "vb_label" =>
+            value("vb_label",
+              target_node_id: text_node_id,
+              target_kind: :text,
+              scope: :collection_item,
+              collection_binding_id: "outer",
+              value_key: "label"
+            )
+        }
+    }
+
+    semantic_input = %{
+      semantic_input
+      | item_fields: [
+          field("outer", "label",
+            accessibility: %{
+              "image_alt_policy" => "consumer_supplied",
+              "alt_item_field_name" => "caption",
+              "required_when_source_present" => true
+            }
+          ),
+          field("outer", "caption")
+        ],
+        binding_assignments:
+          semantic_input.binding_assignments ++
+            [
+              %BindingAssignmentDecision{
+                source_binding_kind: :value,
+                source_binding_id: "vb_label",
+                assignment_kind: :collection_item_field_value,
+                item_field_name: "label",
+                source_collection_binding_id: "outer"
+              }
+            ]
+    }
+
+    assert semantic_input.image_accessibility == []
+    assert :ok = LiveFrames.IR.validate(design_document)
+    assert {:ok, _validated_input} = Input.validate(semantic_input, design_document)
+
+    result = ComponentizationProposer.propose(design_document, semantic_input)
+
+    assert result.outcome == :needs_review, inspect(result.construction_diagnostics)
+    assert result.contract.approval_status == :needs_review
+    refute Enum.any?(result.contract.binding_projections, &(&1.item_field_name == "caption"))
+
+    assert ComponentizationPlan.validate_references(
+             result.plan,
+             result.contract,
+             design_document
+           ) == :ok
+  end
+
   test "shared or malformed named companions do not become proposed" do
     {design_document, shared_input} =
       collection_image_fixture([{"photo", "alt"}, {"cover", "alt"}])
