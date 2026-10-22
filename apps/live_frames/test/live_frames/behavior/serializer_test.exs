@@ -30,18 +30,45 @@ defmodule LiveFrames.Behavior.SerializerTest do
              Serializer.encode(%Contract{design_document_identity: @identity})
   end
 
-  test "accepts the closed IR3 and IR4 identity set" do
+  test "accepts the closed IR3, IR4, and IR5 identity set" do
     ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
 
     assert {:ok, _bytes} =
              Serializer.encode(%Contract{design_document_identity: ir4_identity})
 
-    for version <- ["1.0.0", "2.0.0", "5.0.0", "future"] do
+    ir5_identity = %Identity{@identity | ir_version: "5.0.0"}
+
+    assert {:ok, _bytes} =
+             Serializer.encode(%Contract{design_document_identity: ir5_identity})
+
+    for version <- ["1.0.0", "2.0.0", "future"] do
       identity = %Identity{@identity | ir_version: version}
 
       assert {:error, [%{code: "behavior.contract.identity_invalid", category: "identity"}]} =
                Serializer.encode(%Contract{design_document_identity: identity})
     end
+  end
+
+  test "keeps the frozen IR4 contract bytes and digest" do
+    ir4_identity = %Identity{@identity | ir_version: "4.0.0", digest: String.duplicate("b", 64)}
+
+    binding = %Binding{
+      binding_id: "bnd_4db78dd58405d51e60e9ef5b6e1a88f606aa416eaa22d1c0d564b5be99cd6b88",
+      ordinal: 0,
+      primitive_ref: %PrimitiveRef{kind: "disclosure", definition_version: "1.0.0"},
+      owner_node_id: "node-owner",
+      binding_role: "primary"
+    }
+
+    contract = %Contract{design_document_identity: ir4_identity, bindings: [binding]}
+
+    expected =
+      ~S|{"behavior_contract_format_version":"1.0.0","bindings":[{"binding_id":"bnd_4db78dd58405d51e60e9ef5b6e1a88f606aa416eaa22d1c0d564b5be99cd6b88","binding_role":"primary","controlled_targets":[],"diagnostics":[],"focus_policy":null,"initial_state":null,"keyboard_policy":null,"motion_policy":null,"ordinal":0,"owner_node_id":"node-owner","primitive_policy_values":{},"primitive_ref":{"definition_version":"1.0.0","kind":"disclosure"},"provenance":{},"responsive_overrides":[],"source_trace":null,"timer_policy":null,"triggers":[]}],"design_document_identity":{"canonicalization_id":"lf-ir-serializer-v1","digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","digest_algorithm":"sha-256","ir_version":"4.0.0"},"diagnostics":[],"provenance":{}}|
+
+    assert {:ok, ^expected} = Serializer.encode(contract)
+
+    assert {:ok, "4f71d5cc08d319e2b52f8c8c628735c382a374a93ec5ae1f4d39422c84740a2a"} =
+             Serializer.digest(contract)
   end
 
   test "serializes a persisted binding with the complete PrimitiveRef and explicit nulls" do

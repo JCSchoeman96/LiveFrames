@@ -155,6 +155,39 @@ defmodule LiveFrames.ComponentContractReferenceValidationTest do
              )
     end
 
+    test "scalar_attr accepts a current-entity field binding for rich text" do
+      document =
+        ir_document(
+          root_nodes: [
+            %DesignNode{node_id: @site_id, semantic_type: "rich_text", children: []},
+            %DesignNode{node_id: @repeat_id, semantic_type: "container", children: []}
+          ],
+          value_bindings: %{
+            "vb_description" =>
+              value_binding("vb_description",
+                target_node_id: @site_id,
+                target_kind: :rich_text,
+                value_kind: :field,
+                scope: :current_entity,
+                value_key: "commerce.product.full_description"
+              )
+          }
+        )
+
+      projection = %BindingProjection{
+        source_binding_kind: :value,
+        source_binding_id: "vb_description",
+        projection_kind: :scalar_attr,
+        public_attr_name: "title",
+        target_node_id: @site_id
+      }
+
+      contract = base_contract(binding_projections: [projection])
+
+      assert ComponentContract.validate_ir_references(contract, document) == :ok
+      assert contract.binding_projections == [projection]
+    end
+
     test "collection_attr valid and collection input public attr mismatch" do
       document =
         ir_document(

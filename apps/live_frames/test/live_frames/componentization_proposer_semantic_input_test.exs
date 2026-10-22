@@ -226,6 +226,33 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
     assert Map.get(struct(Input), :source_node_dispositions) == []
   end
 
+  test "current-entity rich-text field accepts one scalar attr assignment" do
+    base = document()
+    [root] = base.root_nodes
+
+    doc =
+      %{base | root_nodes: [%{root | semantic_type: "rich_text"}]}
+      |> Map.put(:value_bindings, %{
+        "description" =>
+          value("description",
+            target_kind: :rich_text,
+            value_kind: :field,
+            scope: :current_entity,
+            value_key: "commerce.product.full_description"
+          )
+      })
+
+    decisions =
+      input(
+        public_attrs: [attr("description")],
+        binding_assignments: [assignment("description", "description")]
+      )
+
+    canonical = valid(doc, decisions)
+    assert canonical.binding_assignments == decisions.binding_assignments
+    assert canonical.render_placements == []
+  end
+
   test "source node disposition decision is accepted without inspecting the design target" do
     disposition = decision("target_not_in_document", ["review-ref"])
     canonical = valid(document(), input_with_dispositions(input(), [disposition]))

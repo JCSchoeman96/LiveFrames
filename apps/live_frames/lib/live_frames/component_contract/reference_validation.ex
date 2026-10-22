@@ -382,7 +382,9 @@ defmodule LiveFrames.ComponentContract.ReferenceValidation do
 
   defp scalar_attr_ir(p, path, binding, node_ok, attrs_by_name) do
     cond do
-      binding.value_kind != :field or binding.scope != :site or
+      binding.value_kind != :field or
+        (binding.scope != :site and
+           not (binding.scope == :current_entity and binding.target_kind == :rich_text)) or
           binding.collection_binding_id != nil ->
         [
           err_at(

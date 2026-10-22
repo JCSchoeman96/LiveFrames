@@ -9,6 +9,7 @@ defmodule LiveFrames.IRTest do
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.Interaction
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR.ValueModifier
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.StyleValue
@@ -95,11 +96,68 @@ defmodule LiveFrames.IRTest do
   end
 
   test "exposes the current supported IR version and uses it by default" do
-    assert DesignDocument.current_ir_version() == "4.0.0"
+    assert DesignDocument.current_ir_version() == "5.0.0"
     assert IR.current_ir_version() == DesignDocument.current_ir_version()
     assert DesignDocument.new().ir_version == IR.current_ir_version()
     assert DesignDocument.new().collection_bindings == %{}
     assert DesignDocument.new().value_bindings == %{}
+  end
+
+  test "accepts current entity rich text field bindings" do
+    node = %DesignNode{node_id: "node_000001", semantic_type: "rich_text"}
+
+    binding = %ValueBinding{
+      value_binding_id: "value_001",
+      target_node_id: node.node_id,
+      target_kind: :rich_text,
+      value_kind: :field,
+      scope: :current_entity,
+      value_key: "commerce.product.full_description",
+      modifier: %ValueModifier.None{}
+    }
+
+    document = %DesignDocument{
+      root_nodes: [node],
+      value_bindings: %{binding.value_binding_id => binding}
+    }
+
+    assert IR.validate(document) == :ok
+
+    assert document
+           |> IR.encode!()
+           |> Jason.decode!()
+           |> get_in(["value_bindings", "value_001", "target_kind"]) == "rich_text"
+  end
+
+  test "rejects current entity fields without a key or with a collection id" do
+    node = %DesignNode{node_id: "node_000001", semantic_type: "rich_text"}
+
+    base = %ValueBinding{
+      target_node_id: node.node_id,
+      target_kind: :rich_text,
+      value_kind: :field,
+      scope: :current_entity,
+      value_key: "x",
+      value_binding_id: "value_001",
+      modifier: %ValueModifier.None{}
+    }
+
+    document = %DesignDocument{root_nodes: [node], value_bindings: %{"value_001" => base}}
+
+    assert {:error, diagnostics} =
+             IR.validate(%{document | value_bindings: %{"value_001" => %{base | value_key: nil}}})
+
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.value_key_missing"))
+
+    assert {:error, diagnostics} =
+             IR.validate(%{
+               document
+               | value_bindings: %{
+                   "value_001" => %{base | collection_binding_id: "collection_001"}
+                 }
+             })
+
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.collection_present"))
   end
 
   test "validation rejects non-empty unsupported IR versions" do
@@ -363,7 +421,7 @@ defmodule LiveFrames.IRTest do
     assert first == second
 
     decoded = Jason.decode!(first)
-    assert decoded["ir_version"] == "4.0.0"
+    assert decoded["ir_version"] == "5.0.0"
     assert decoded["collection_bindings"] == %{}
     assert decoded["value_bindings"] == %{}
 

@@ -5,7 +5,7 @@ defmodule LiveFrames.Behavior.DesignDocumentIdentity do
 
   alias LiveFrames.IR.Identity
 
-  @supported_ir_versions ["3.0.0", "4.0.0"]
+  @supported_ir_versions ["3.0.0", "4.0.0", "5.0.0"]
   @canonicalization_id "lf-ir-serializer-v1"
   @digest_algorithm "sha-256"
   @digest_pattern ~r/\A[0-9a-f]{64}\z/

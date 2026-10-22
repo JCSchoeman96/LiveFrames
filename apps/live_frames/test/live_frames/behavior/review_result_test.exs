@@ -54,14 +54,24 @@ defmodule LiveFrames.Behavior.ReviewResultTest do
     assert {:ok, @golden_id} = ReviewResult.id(review)
   end
 
-  test "accepts IR4 identities while keeping Behavior review structure fixed" do
+  test "accepts IR4 and IR5 identities while keeping Behavior review structure fixed" do
     ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
     ir4_review = review(design_document_identity: ir4_identity)
 
     assert ReviewResult.validate(ir4_review) == :ok
-    assert {:ok, _bytes} = ReviewResult.encode(ir4_review)
 
-    for version <- ["1.0.0", "2.0.0", "5.0.0", "future"] do
+    expected_ir4_bytes =
+      ~S|{"behavior_contract_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","behavior_contract_digest_algorithm":"lf-behavior-v1-jcs-sha256","decision":"approved","design_document_identity":{"canonicalization_id":"lf-ir-serializer-v1","digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","digest_algorithm":"sha-256","ir_version":"4.0.0"},"evidence_refs":["evidence:a","evidence:z"],"review_format_version":"1.0.0","review_note":"Reviewed for exact behavior evidence.","reviewed_at":"2026-10-10T12:34:56.123456Z","reviewer_identity":"reviewer:example"}|
+
+    assert {:ok, ^expected_ir4_bytes} = ReviewResult.encode(ir4_review)
+
+    assert {:ok, "brv_9e337df03af98de854b169713964b50191d290831d93a088abb3aeeeb00cd640"} =
+             ReviewResult.id(ir4_review)
+
+    ir5_identity = %Identity{@identity | ir_version: "5.0.0"}
+    assert ReviewResult.validate(review(design_document_identity: ir5_identity)) == :ok
+
+    for version <- ["1.0.0", "2.0.0", "future"] do
       identity = %Identity{@identity | ir_version: version}
       assert invalid_code(review(design_document_identity: identity)) == "behavior.review.invalid"
     end
@@ -100,7 +110,6 @@ defmodule LiveFrames.Behavior.ReviewResultTest do
       Map.put(@identity, :extra_field, true),
       %Identity{@identity | ir_version: "1.0.0"},
       %Identity{@identity | ir_version: "2.0.0"},
-      %Identity{@identity | ir_version: "5.0.0"},
       %Identity{@identity | ir_version: "not-a-version"},
       %Identity{@identity | canonicalization_id: "unknown"},
       %Identity{@identity | digest_algorithm: "sha-512"},

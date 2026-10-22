@@ -16,16 +16,24 @@ defmodule LiveFrames.IR.IdentityTest do
   end
 
   test "derives identity metadata and preserves the baseline digest" do
-    document = valid_document()
+    document = %{valid_document() | ir_version: "4.0.0"}
 
     assert Identity.canonicalization_id() == "lf-ir-serializer-v1"
     assert Identity.digest_algorithm() == "sha-256"
+
+    digest =
+      :crypto.hash(:sha256, LiveFrames.IR.Serializer.encode!(document))
+      |> Base.encode16(case: :lower)
+
+    assert digest == @baseline_golden_digest
+    assert digest =~ ~r/\A[0-9a-f]{64}\z/
+  end
+
+  test "current IR5 identity is stable for repeated encodes" do
+    document = valid_document()
     assert {:ok, identity} = Identity.from_document(document)
-    assert identity.ir_version == "4.0.0"
-    assert identity.canonicalization_id == "lf-ir-serializer-v1"
-    assert identity.digest_algorithm == "sha-256"
-    assert identity.digest == @baseline_golden_digest
-    assert identity.digest =~ ~r/\A[0-9a-f]{64}\z/
+    assert identity.ir_version == "5.0.0"
+    assert {:ok, ^identity} = Identity.from_document(document)
   end
 
   test "hashes the exact existing IR encoding and is deterministic" do
@@ -49,12 +57,12 @@ defmodule LiveFrames.IR.IdentityTest do
     assert original_identity.digest != changed_identity.digest
   end
 
-  test "includes the v4 modifier in the canonical document identity" do
+  test "includes the v5 modifier in the canonical document identity" do
     node_id = DesignNode.deterministic_id([1])
 
     document_with_modifier = fn modifier ->
       map = %{
-        "ir_version" => "4.0.0",
+        "ir_version" => "5.0.0",
         "source_metadata" => %{},
         "token_set" => %{},
         "root_nodes" => [
@@ -109,8 +117,8 @@ defmodule LiveFrames.IR.IdentityTest do
 
     assert {:ok, none_identity} = Identity.from_document(none)
     assert {:ok, resolved_identity} = Identity.from_document(resolved)
-    assert none_identity.ir_version == "4.0.0"
-    assert resolved_identity.ir_version == "4.0.0"
+    assert none_identity.ir_version == "5.0.0"
+    assert resolved_identity.ir_version == "5.0.0"
     assert none_identity.digest != resolved_identity.digest
   end
 

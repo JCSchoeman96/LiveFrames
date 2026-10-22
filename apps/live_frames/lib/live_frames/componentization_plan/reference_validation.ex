@@ -2157,6 +2157,23 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   end
 
   defp validate_native_generation(plan, contract, indexes, consumed_node_ids, diagnostics) do
+    diagnostics =
+      Enum.reduce(indexes.value_bindings, diagnostics, fn {id, %ValueBinding{} = binding}, acc ->
+        if binding.target_kind == :rich_text and
+             MapSet.member?(indexes.boundary_ids, binding.target_node_id) do
+          add(
+            acc,
+            error_at(
+              "componentization_plan.binding.rich_text_trust_required",
+              "in-boundary rich_text binding has no trusted rendering authority",
+              "value_bindings[#{id}]"
+            )
+          )
+        else
+          acc
+        end
+      end)
+
     {roles, diagnostics} =
       Enum.reduce(contract.binding_projections, {%{}, diagnostics}, fn projection, {roles, acc} ->
         node = Map.get(indexes.nodes_by_id, projection.target_node_id)
@@ -2327,6 +2344,9 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     case {projection.projection_kind, binding.scope, binding.value_kind, binding.target_kind,
           semantic} do
       {:scalar_attr, :site, :field, :text, kind} when kind in ~w(heading paragraph rich_text) ->
+        :text_content
+
+      {:scalar_attr, :current_entity, :field, :rich_text, "rich_text"} ->
         :text_content
 
       {:scalar_attr, :site, :field, :asset, "image"} ->

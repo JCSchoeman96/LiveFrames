@@ -566,6 +566,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
   defp value_target_kind("text"), do: :text
   defp value_target_kind("asset"), do: :asset
   defp value_target_kind("link_url"), do: :link_url
+  defp value_target_kind("rich_text"), do: :rich_text
   defp value_target_kind(_other), do: :__invalid_enum__
 
   defp value_kind("field"), do: :field
@@ -575,6 +576,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
   defp value_scope("collection_item"), do: :collection_item
   defp value_scope("site"), do: :site
   defp value_scope("collection"), do: :collection
+  defp value_scope("current_entity"), do: :current_entity
   defp value_scope(_other), do: :__invalid_enum__
 
   defp value_normalization_status("normalized"), do: :normalized

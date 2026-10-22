@@ -1,5 +1,5 @@
 defmodule LiveFrames.IR.ValueModifier do
-  @moduledoc "Closed ValueBinding modifier variants for Design IR 4.0.0."
+  @moduledoc "Closed ValueBinding modifier variants for Design IR 5.0.0."
 
   defmodule None do
     @moduledoc false

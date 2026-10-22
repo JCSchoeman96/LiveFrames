@@ -305,6 +305,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         context.document.adapter_version
       )
 
+    trace_index = apply_frontend_trace_overrides(trace_index, frontend_bindings.node_actions)
+
     source_diagnostics =
       context.source_diagnostics
       |> reconcile_frontend_binding_diagnostics(frontend_bindings)
@@ -362,6 +364,19 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
 
     validate_and_serialize(document)
+  end
+
+  defp apply_frontend_trace_overrides(trace_index, node_actions) do
+    Enum.reduce(node_actions, trace_index, fn
+      {source_id, %{source_trace: %SourceTrace{} = source_trace}}, acc ->
+        case Map.get(acc, source_id) do
+          %{trace: _trace} = entry -> Map.put(acc, source_id, %{entry | trace: source_trace})
+          nil -> acc
+        end
+
+      {_source_id, _actions}, acc ->
+        acc
+    end)
   end
 
   defp generic_custom_css_owners(context) do
@@ -607,6 +622,17 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp reconcile_frontend_binding_diagnostics(diagnostics, frontend_bindings) do
     Enum.reject(diagnostics, fn
+      %BricksDiagnostic{code: "bricks.element.unsupported", source_id: source_id} ->
+        get_in(frontend_bindings.node_actions, [source_id, :suppress_unsupported_diagnostic]) ==
+          true
+
+      %BricksDiagnostic{
+        code: "bricks.setting.unsupported",
+        source_id: source_id
+      } ->
+        get_in(frontend_bindings.node_actions, [source_id, :suppress_unsupported_diagnostic]) ==
+          true
+
       %BricksDiagnostic{
         code: "bricks.runtime.unsupported",
         source_id: source_id,
@@ -751,12 +777,13 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp build_node(source_id, path, context) do
     element = Map.fetch!(context.tree.elements, source_id)
     resolved = Map.fetch!(context.resolved.elements, source_id)
-    trace = context.trace_index[source_id].trace
+    source_trace = context.trace_index[source_id].trace
     static_semantics = Map.fetch!(context.static_semantics, source_id)
     static_navigation = Map.fetch!(context.static_navigation, source_id)
 
     style_result = Map.fetch!(context.dependencies.style_results, source_id)
     node_actions = Map.get(context.frontend_bindings.node_actions, source_id, %{})
+    trace = node_actions[:source_trace] || source_trace
 
     children =
       context.tree.children_by_id
@@ -772,7 +799,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       |> apply_static_navigation(static_navigation, static_semantics)
 
     semantic_type =
-      static_navigation[:semantic_type_override] ||
+      node_actions[:semantic_type_override] ||
+        static_navigation[:semantic_type_override] ||
         semantic_type(element, static_semantics)
 
     DesignNode.new(path,
@@ -2089,7 +2117,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         "class_dependencies" => context.dependencies.class_dependencies,
         "variables" => context.dependencies.variables,
         "runtime_dependencies" => context.dependencies.runtime_dependencies,
-        "unsupported_settings" => context.dependencies.unsupported_settings
+        "unsupported_settings" => retained_unsupported_settings(context)
       },
       "normalization_lifecycle" => @lifecycle,
       "normalization_status" => "serialized",
@@ -2097,6 +2125,15 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     }
     |> maybe_put_fragment_source_shape(context.document.source_shape)
     |> json_safe()
+  end
+
+  defp retained_unsupported_settings(context) do
+    Enum.reject(context.dependencies.unsupported_settings, fn setting ->
+      source_id = Map.get(setting, :source_id)
+
+      get_in(context.frontend_bindings.node_actions, [source_id, :suppress_unsupported_diagnostic]) ==
+        true
+    end)
   end
 
   defp maybe_put_fragment_source_shape(metadata, :component_fragment),

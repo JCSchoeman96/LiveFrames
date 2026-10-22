@@ -159,6 +159,62 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
     }
   end
 
+  defp rich_text_generation_fixture(location \\ :inside) do
+    design_document = document()
+    [boundary, outside] = design_document.root_nodes
+    [heading | tail] = boundary.children
+
+    {target_id, roots} =
+      case location do
+        :inside ->
+          {@heading_id,
+           [%{boundary | children: [%{heading | semantic_type: "rich_text"} | tail]}, outside]}
+
+        :outside ->
+          {@outside_id, [boundary, %{outside | semantic_type: "rich_text"}]}
+      end
+
+    binding =
+      value_binding("vb_description", target_id,
+        target_kind: :rich_text,
+        scope: :current_entity,
+        value_key: "commerce.product.full_description"
+      )
+
+    design_document = %{
+      design_document
+      | root_nodes: roots,
+        value_bindings: %{binding.value_binding_id => binding}
+    }
+
+    projection = %BindingProjection{
+      source_binding_kind: :value,
+      source_binding_id: binding.value_binding_id,
+      projection_kind: :scalar_attr,
+      public_attr_name: "description",
+      target_node_id: target_id
+    }
+
+    component_contract =
+      contract(
+        public_attrs: if(location == :inside, do: [attr("description")], else: []),
+        binding_projections: if(location == :inside, do: [projection], else: [])
+      )
+
+    component_plan = plan(component_contract, design_document)
+    {component_plan, component_contract, design_document}
+  end
+
+  defp empty_behavior_authority(design_document) do
+    {:ok, identity} = Identity.from_document(design_document)
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{design_document_identity: identity, bindings: []})
+
+    {:ok, digest} = BehaviorSerializer.digest(behavior_contract)
+    {behavior_contract, approved_review(identity, digest)}
+  end
+
   defp navigable_heading_document(options \\ []) do
     attributes =
       if Keyword.get(options, :navigable?, true) do
@@ -2347,6 +2403,52 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
              blocked_diagnostics,
              &(&1.code == "componentization_plan.generation_blocked")
            )
+  end
+
+  test "generation blocks current-entity rich-text bindings through both plan APIs" do
+    {component_plan, component_contract, design_document} = rich_text_generation_fixture()
+    {behavior_contract, review} = empty_behavior_authority(design_document)
+
+    assert component_plan.render_projections == []
+    assert length(component_contract.binding_projections) == 1
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+
+    for result <- [
+          ComponentizationPlan.validate_for_generation(
+            component_plan,
+            component_contract,
+            design_document
+          ),
+          ComponentizationPlan.validate_for_generation_with_behavior_authority(
+            component_plan,
+            component_contract,
+            design_document,
+            behavior_contract,
+            review
+          )
+        ] do
+      assert {:error, diagnostics} = result
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "componentization_plan.binding.rich_text_trust_required"
+             end)
+    end
+  end
+
+  test "out-of-boundary rich-text bindings do not block selected component generation" do
+    {component_plan, component_contract, design_document} =
+      rich_text_generation_fixture(:outside)
+
+    assert ComponentizationPlan.validate_for_generation(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
   end
 
   test "generation blocks navigable headings with whitespace-only static text" do

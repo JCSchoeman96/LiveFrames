@@ -9,6 +9,7 @@ defmodule LiveFrames.BricksDesignIRTest do
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StyleValue
+  alias LiveFrames.IR.ValueBinding
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
@@ -505,7 +506,7 @@ defmodule LiveFrames.BricksDesignIRTest do
       )
 
     owner = hd(document.root_nodes)
-    assert document.ir_version == "4.0.0"
+    assert document.ir_version == "5.0.0"
 
     assert %LiveFrames.IR.ResponsiveOverride{min_width: 767.0, max_width: nil} =
              owner.responsive["custom_min_767"]
@@ -636,7 +637,7 @@ defmodule LiveFrames.BricksDesignIRTest do
     document = document()
 
     assert IR.validate(document) == :ok
-    assert document.ir_version == "4.0.0"
+    assert document.ir_version == "5.0.0"
     assert length(document.root_nodes) == 1
 
     nodes = flatten(document.root_nodes)
@@ -2199,6 +2200,33 @@ defmodule LiveFrames.BricksDesignIRTest do
 
     assert small.metadata["css_expression"] ==
              "clamp(0.875rem, calc(0.0994035785vw + 0.8526341948rem), 0.9375rem)"
+  end
+
+  test "Design IR stores executable-source semantics without the PHP bytes" do
+    sentinel = "PRIVATE_DESIGN_IR_SENTINEL_8be31a"
+
+    source_code =
+      "<?php /* #{sentinel} */ $product = wc_get_product(get_the_ID()); " <>
+        "if ($product) { $description = $product->get_description(); " <>
+        "echo $description; } ?>"
+
+    source =
+      synthetic_source([
+        source_element("php-code", "code", 0, %{"executeCode" => true, "code" => source_code})
+      ])
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    assert map_size(document.value_bindings) == 1
+    assert %ValueBinding{} = binding = document.value_bindings |> Map.values() |> hd()
+    assert binding.target_kind == :rich_text
+    assert binding.scope == :current_entity
+    assert binding.value_key == "commerce.product.full_description"
+
+    encoded = IR.encode!(document)
+    refute encoded =~ sentinel
+    refute encoded =~ source_code
   end
 
   @tag :cta_tango_private_reference

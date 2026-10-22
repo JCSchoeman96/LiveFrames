@@ -598,6 +598,18 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
        do: Map.has_key?(i.attrs, d.public_attr_name)
 
   defp assignment_valid?(
+         %{assignment_kind: :scalar_attr, source_binding_kind: :value} = d,
+         %{
+           value_kind: :field,
+           scope: :current_entity,
+           target_kind: :rich_text,
+           collection_binding_id: nil
+         },
+         i
+       ),
+       do: Map.has_key?(i.attrs, d.public_attr_name)
+
+  defp assignment_valid?(
          %{assignment_kind: :slot, source_binding_kind: :value} = d,
          %{value_kind: :field, scope: :site, collection_binding_id: nil},
          i
