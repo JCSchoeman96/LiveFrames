@@ -396,4 +396,167 @@ defmodule LiveFrames.TokensTest do
     assert decoded["tokens"]["button.primary.background"]["references"] == ["color.primary"]
     refute Tokens.encode!(first) =~ "__struct__"
   end
+
+  @fluid_domain_path "layout.fluid.viewport.default"
+  @fluid_scale_path "typography.scale.primary"
+  @fluid_value_path "spacing.fluid.gap"
+  @fluid_step_path "typography.heading.h1"
+
+  @fluid_domain %{
+    "type" => "fluid_domain",
+    "format_version" => "1.0.0",
+    "input" => "viewport_width",
+    "start" => %{"value" => 500, "unit" => "px"},
+    "end" => %{"value" => 1000, "unit" => "px"},
+    "clamp_policy" => "bounded"
+  }
+
+  @fluid_value %{
+    "type" => "fluid_value",
+    "format_version" => "1.0.0",
+    "domain_ref" => @fluid_domain_path,
+    "start_value" => %{"value" => 1.0, "unit" => "rem"},
+    "end_value" => %{"value" => 1.125, "unit" => "rem"},
+    "interpolation" => "linear"
+  }
+
+  @fluid_scale %{
+    "type" => "fluid_scale",
+    "format_version" => "1.0.0",
+    "domain_ref" => @fluid_domain_path,
+    "base_start" => %{"value" => 1.0, "unit" => "rem"},
+    "base_end" => %{"value" => 1.125, "unit" => "rem"},
+    "ratio_start" => 1.2,
+    "ratio_end" => 1.414
+  }
+
+  @fluid_step %{
+    "type" => "fluid_scale_step",
+    "format_version" => "1.0.0",
+    "scale_ref" => @fluid_scale_path,
+    "power" => 4
+  }
+
+  test "valid Fluid authority graph validates under the unchanged TokenSet contract" do
+    token_set = with_tokens(fluid_graph())
+
+    assert Tokens.validate(token_set) == :ok
+
+    decoded = token_set |> Tokens.encode!() |> Jason.decode!()
+    assert decoded["token_set_version"] == "1.0.0"
+    assert Tokens.current_token_set_version() == "1.0.0"
+  end
+
+  test "invalid Fluid intrinsic shape reports a Fluid semantic diagnostic" do
+    graph =
+      replace_fluid(fluid_graph(), @fluid_value_path,
+        resolved_value: Map.put(@fluid_value, "interpolation", "cubic")
+      )
+
+    assert {:error, diagnostics} = Tokens.validate(with_tokens(graph))
+
+    assert_fluid_diagnostic(
+      diagnostics,
+      "fluid.semantic.invalid",
+      :value,
+      @fluid_value_path
+    )
+  end
+
+  test "wrong Fluid reference list reports a Fluid reference diagnostic" do
+    graph = replace_fluid(fluid_graph(), @fluid_value_path, references: [])
+
+    assert {:error, diagnostics} = Tokens.validate(with_tokens(graph))
+
+    assert_fluid_diagnostic(
+      diagnostics,
+      "fluid.reference.invalid",
+      :reference,
+      @fluid_value_path
+    )
+  end
+
+  test "wrong Fluid target semantic type reports a type-mismatch diagnostic" do
+    graph =
+      replace_fluid(fluid_graph(), @fluid_value_path,
+        resolved_value: Map.put(@fluid_value, "domain_ref", @fluid_scale_path),
+        references: [@fluid_scale_path]
+      )
+
+    token_set = with_tokens(graph)
+
+    assert {:error, diagnostics} = Tokens.validate(token_set)
+
+    assert_fluid_diagnostic(
+      diagnostics,
+      "fluid.reference.type_mismatch",
+      :reference,
+      @fluid_value_path
+    )
+
+    assert {:error, repeated_diagnostics} = Tokens.validate(token_set)
+    assert diagnostics == repeated_diagnostics
+  end
+
+  test "missing Fluid target keeps using the existing missing-reference authority" do
+    graph = Map.delete(fluid_graph(), @fluid_domain_path)
+
+    assert {:error, diagnostics} = Tokens.validate(with_tokens(graph))
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.reference.missing"))
+    refute Enum.any?(diagnostics, &String.starts_with?(&1.code, "fluid."))
+  end
+
+  test "Fluid cycles keep using the existing TokenSet cycle authority" do
+    graph = replace_fluid(fluid_graph(), @fluid_domain_path, references: [@fluid_value_path])
+
+    assert {:error, diagnostics} = Tokens.validate(with_tokens(graph))
+
+    assert Enum.any?(diagnostics, &(&1.code == "tokens.reference.cycle"))
+
+    refute Enum.any?(diagnostics, fn diagnostic ->
+             String.starts_with?(diagnostic.code, "fluid.") and
+               String.contains?(diagnostic.code, "cycle")
+           end)
+  end
+
+  defp fluid_graph do
+    %{
+      @fluid_domain_path => fluid_token(@fluid_domain_path, :layout, @fluid_domain, []),
+      @fluid_value_path =>
+        fluid_token(@fluid_value_path, :spacing, @fluid_value, [@fluid_domain_path]),
+      @fluid_scale_path =>
+        fluid_token(@fluid_scale_path, :typography, @fluid_scale, [@fluid_domain_path]),
+      @fluid_step_path =>
+        fluid_token(@fluid_step_path, :typography, @fluid_step, [@fluid_scale_path])
+    }
+  end
+
+  defp fluid_token(path, category, resolved_value, references) do
+    %Token{
+      path: path,
+      category: category,
+      value: nil,
+      resolved_value: resolved_value,
+      resolution_status: :resolved,
+      references: references
+    }
+  end
+
+  defp with_tokens(tokens) do
+    token_set = valid_token_set()
+    %{token_set | tokens: Map.merge(token_set.tokens, tokens)}
+  end
+
+  defp replace_fluid(graph, path, attrs) do
+    Map.update!(graph, path, &struct!(&1, attrs))
+  end
+
+  defp assert_fluid_diagnostic(diagnostics, code, category, path) do
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == code and diagnostic.category == category and
+               diagnostic.path == path
+           end),
+           inspect(Enum.map(diagnostics, &{&1.code, &1.path}))
+  end
 end

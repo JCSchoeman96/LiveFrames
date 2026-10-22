@@ -6,6 +6,7 @@ defmodule LiveFrames.Tokens.Validation do
   requirement failures as deterministic diagnostics.
   """
 
+  alias LiveFrames.Styling.Fluid.Validation, as: FluidValidation
   alias LiveFrames.Tokens.Diagnostic
   alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Tokens.Json
@@ -52,6 +53,7 @@ defmodule LiveFrames.Tokens.Validation do
 
     diagnostics = validate_references(tokens_by_path, diagnostics)
     diagnostics = validate_cycles(tokens_by_path, diagnostics)
+    diagnostics = validate_fluid_authority(tokens_by_path, diagnostics)
     diagnostics = validate_required(tokens_by_path, opts, diagnostics)
     finish(diagnostics)
   end
@@ -804,6 +806,10 @@ defmodule LiveFrames.Tokens.Validation do
       end)
 
     diagnostics
+  end
+
+  defp validate_fluid_authority(tokens_by_path, diagnostics) do
+    Enum.reduce(FluidValidation.validate_registry(tokens_by_path), diagnostics, &add(&2, &1))
   end
 
   defp detect_cycles(path, graph, stack, {visited, diagnostics, cycles}) do
