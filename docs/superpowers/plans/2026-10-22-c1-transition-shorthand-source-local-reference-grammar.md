@@ -432,24 +432,67 @@ Preserves:
 
 ## Bounded production resolver acceptance
 
-Complete this step after Task 2 and before the full repository gates. Use the ordinary synthetic normalizer integration tests already planned; add no implementation file, production instrumentation, logging, or separate resolver. The tests must prove that every occurrence produced for these declarations traverses and correlates through the production shared resolver path by using distinct synthetic local values and checking the emitted literal contains each resolved value in occurrence order. Pair that output assertion with the parser occurrence cardinality. Do not infer success from parser output alone.
+Complete this step after Task 2 and before the full repository gates. Use the ordinary synthetic normalizer integration tests already planned; add no implementation file, production instrumentation, logging, mock, counter, or separate resolver. Prove required occurrence participation from parser cardinality plus successful and negative production-path outcomes. Do not claim direct observation of internal resolver result counts unless an existing test-visible interface exposes them. In particular, timing references must use distinct local names but may resolve only to the one authorized successful terminal, `ease-in-out`.
+
+### One-spec proof
+
+Use distinct local names for duration and timing, a distinct valid duration terminal such as `250ms`, and `ease-in-out` as the timing terminal. Assert parser occurrence cardinality and slots, then exercise the ordinary normalizer path:
+
+~~~text
+parser occurrences=2
+duration occurrence slot=:transition_duration_operand
+timing occurrence slot=:juxtaposition_right_operand
+
+successful normalizer result contains:
+  chosen duration terminal
+  ease-in-out
+
+no var( remains
+literal StyleValue emitted
+~~~
+
+Run independent negative controls for a missing duration definition, an invalid duration terminal, a missing timing definition, and an invalid timing terminal. Each must produce the existing `unresolved_value` result. The positive output plus these controls proves both references are required without widening either terminal contract.
+
+### Two-spec proof
+
+Use four distinct local reference names and two distinct valid duration terminals. Both timing definitions resolve to `ease-in-out`:
+
+~~~text
+--duration-a
+--timing-a
+--duration-b
+--timing-b
+~~~
+
+Assert the parser yields four occurrences in this exact correlation order:
+
+~~~text
+occurrence 0 = duration-a
+occurrence 1 = timing-a
+occurrence 2 = duration-b
+occurrence 3 = timing-b
+~~~
+
+The ordinary normalizer path must emit a literal containing duration A, `ease-in-out`, duration B, and `ease-in-out` in canonical spec order, with no residual `var(`. Run independent negative controls showing that a missing or invalid `timing-a` makes the whole declaration `unresolved_value`; do the same for `timing-b`. Also make either duration occurrence missing or invalid and require fail-closed `unresolved_value`. This establishes that all four references are required while both timing slots retain the single approved terminal.
 
 ~~~text
 PUBLIC_SYNTHETIC_PRODUCTION_RESOLVER_PROOF=PASS
 
 ONE_SPEC_TRANSITION:
   produced_occurrences=2
-  correlated_local_results=2
+  required_occurrences_proven=2
   emitted_literal=YES
 
 TWO_SPEC_TRANSITION:
   produced_occurrences=4
-  correlated_local_results=4
+  required_occurrences_proven=4
   emitted_literal=YES
 
-RESOLVER_CALL_MODEL=
-  EXISTING_SHARED_PER_PROVENANCE_BATCH
+TIMING_TERMINAL_DISTINCT_VALUES_REQUIRED=NO
+TIMING_REFERENCE_NAMES_DISTINCT=YES
+TIMING_OCCURRENCE_NEGATIVE_CONTROLS=PASS
 
+RESOLVER_CALL_MODEL=EXISTING_SHARED_PER_PROVENANCE_BATCH
 SECOND_RESOLVER=NO
 PRIVATE_SOURCE_USED=NO
 ~~~
@@ -618,9 +661,10 @@ TIMING_SLOT_REUSED=
 
 PUBLIC_SYNTHETIC_PRODUCTION_RESOLVER_PROOF=
 ONE_SPEC_OCCURRENCES=
-ONE_SPEC_CORRELATED_RESULTS=
+ONE_SPEC_REQUIRED_OCCURRENCES_PROVEN=
 TWO_SPEC_OCCURRENCES=
-TWO_SPEC_CORRELATED_RESULTS=
+TWO_SPEC_REQUIRED_OCCURRENCES_PROVEN=
+TIMING_OCCURRENCE_NEGATIVE_CONTROLS=
 
 SHARED_RESOLVER_BATCH_REUSED=
 SHARED_REFERENCE_BUDGET_REUSED=
@@ -710,9 +754,11 @@ Do not spend more than one reconciliation cycle on moving `main`.
 
 ## Pull request gate
 
-This document is a proposed implementation plan for owner review. Its PR must contain only this file, use one signed commit, run exact-head CI, and remain open and unmerged. Approval of this plan is separate from authorization to implement C1.
+This document is a proposed implementation plan for owner review. Its PR must contain only this file, run exact-head CI, and remain open and unmerged.
 
 ~~~text
+PLAN_PR_SIGNED_HISTORY_REQUIRED=YES
+PLAN_PR_UNSIGNED_COMMITS_ALLOWED=NO
 PLAN_STATUS=PROPOSED_FOR_REVIEW
 C1_IMPLEMENTATION_AUTHORIZED=NO
 FRAME_D_IMPLEMENTATION_AUTHORIZED=NO
@@ -721,3 +767,5 @@ C3B_IMPLEMENTATION_AUTHORIZED=NO
 PRIVATE_SOURCE_ACCESSED=NO
 PRIVATE_SOURCE_LEAK=NO
 ~~~
+
+Every commit in the plan PR must be validly signed, and signed history from the PR base through the approved head must verify. Review corrections may be separate signed commits. Do not squash or rewrite history merely to force the PR into one commit. Approval of this plan is separate from authorization to implement C1.
