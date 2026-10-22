@@ -2286,6 +2286,64 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert trace.metadata["effective_settings"]["code"] == "plain-setting"
   end
 
+  test "blocking class-authority error results keep execution-enabled source out of diagnostics" do
+    sentinel = "PRIVATE_BLOCKING_ERROR_SENTINEL_0f6d13"
+    source_code = "<?php echo '#{sentinel}'; ?>"
+
+    source =
+      synthetic_source([
+        source_element("php-blocking", "code", 0, %{
+          "executeCode" => true,
+          "noRoot" => true,
+          "code" => source_code,
+          "_cssGlobalClasses" => ["opaque-class-id"]
+        })
+      ])
+
+    # Two external authorities define the referenced class differently. The
+    # class resolver returns a usable resolved tree with an :error diagnostic,
+    # and dependency extraction still runs before the blocking decision.
+    alpha = %{
+      id: "alpha-site-classes",
+      global_classes: [
+        %{
+          "id" => "opaque-class-id",
+          "name" => "alpha-class",
+          "settings" => %{"_width" => "100px"}
+        }
+      ]
+    }
+
+    zeta = %{
+      id: "zeta-site-classes",
+      global_classes: [
+        %{
+          "id" => "opaque-class-id",
+          "name" => "alpha-class",
+          "settings" => %{"_width" => "200px"}
+        }
+      ]
+    }
+
+    assert {:error, diagnostics} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set(),
+               external_class_authorities: [zeta, alpha]
+             )
+
+    assert conflict = Enum.find(diagnostics, &(&1.code == "bricks.class.authority_conflict"))
+    assert conflict.severity == :error
+
+    assert code_diagnostic = Enum.find(diagnostics, &(&1.code == "bricks.setting.unsupported"))
+
+    assert sentinel_paths(diagnostics, sentinel) == []
+    assert sentinel_paths(diagnostics, source_code) == []
+    refute inspect(diagnostics) =~ sentinel
+
+    assert code_diagnostic.metadata["raw_value_redacted"] == true
+  end
+
   defp sentinel_paths(term, needle, path \\ [])
 
   defp sentinel_paths(term, needle, path) when is_binary(term) do

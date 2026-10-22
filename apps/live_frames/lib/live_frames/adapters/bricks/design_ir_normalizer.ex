@@ -163,6 +163,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           static_diagnostics ++
           navigation_diagnostics
 
+      # Redact before the success/error fork: the blocking error result is an
+      # ordinary API result and must not carry execution-enabled source bodies.
+      diagnostics = redact_executable_source_diagnostics(diagnostics, %{tree: tree})
+
       if blocking?(diagnostics) do
         {:error, to_ir_diagnostics(diagnostics)}
       else
@@ -2213,11 +2217,16 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp to_ir_diagnostics(diagnostics, context \\ nil) when is_list(diagnostics) do
     diagnostics
-    |> Enum.map(&redact_executable_source_diagnostic(&1, context))
+    |> redact_executable_source_diagnostics(context)
     |> Enum.map(&to_ir_diagnostic(&1, context))
     |> Enum.sort_by(fn diagnostic ->
       {diagnostic.code || "", trace_sort_key(diagnostic.source_trace), diagnostic.message || ""}
     end)
+  end
+
+  defp redact_executable_source_diagnostics(diagnostics, context) do
+    bodies = executable_source_bodies(context)
+    Enum.map(diagnostics, &redact_executable_source_diagnostic(&1, bodies))
   end
 
   # An unsupported `code` setting diagnostic carries the raw setting value. When
@@ -2225,10 +2234,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   # only its code and path.
   defp redact_executable_source_diagnostic(
          %BricksDiagnostic{code: "bricks.setting.unsupported", source_path: "code"} = diagnostic,
-         context
+         bodies
        )
-       when is_binary(diagnostic.raw_value) and is_map(context) do
-    if MapSet.member?(executable_source_bodies(context), diagnostic.raw_value) do
+       when is_binary(diagnostic.raw_value) do
+    if MapSet.member?(bodies, diagnostic.raw_value) do
       %{
         diagnostic
         | raw_value: nil,
@@ -2239,7 +2248,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
-  defp redact_executable_source_diagnostic(diagnostic, _context), do: diagnostic
+  defp redact_executable_source_diagnostic(diagnostic, _bodies), do: diagnostic
 
   defp executable_source_bodies(%{tree: %{elements: elements}}) do
     elements
