@@ -104,7 +104,7 @@ Private measurement values and names remain unpublished:
 ```text
 PRIVATE_MEASUREMENT_RAW_VALUES_PUBLISHED=NO
 PRIVATE_MEASUREMENT_NAMES_PUBLISHED=NO
-PRIVATE_MEASUREMENT_HASHES_ONLY=YES
+PRIVATE_MEASUREMENT_DISCLOSURE=SANITIZED_CLASSES_COUNTS_HASHES_ONLY
 ```
 
 Candidate terminal classes (owner-scoped, every candidate of each name):
@@ -212,9 +212,9 @@ The transition-specific entity is `TransitionShorthandCandidate`: a `transition`
 | `GRAMMAR_CLASSIFIED` | Exactly one authorized production matched within limits. |
 | `LOCAL_REFERENCES_COLLECTED` | Valid, bounded occurrence records are ready for the shared batch. |
 | `LOCAL_REFERENCES_RESOLVED` | The shared batch returned one correlated result per occurrence. |
-| `TERMINALS_VALIDATED` | Every correlated result is `{:ok, terminal}`. Exact slot checks are the next guard. |
-| `TRANSITION_RECONSTRUCTED` | Every terminal passed its exact slot contract and the canonical string is built. |
-| `CSS_REVALIDATED` | The canonical string passed resolved transition-production revalidation, contains no `var()`, and remains bounded. CSS safety is the next guard. |
+| `TERMINALS_VALIDATED` | Every correlated result is `{:ok, terminal}` and every duration/timing terminal passed its exact slot contract. |
+| `TRANSITION_RECONSTRUCTED` | The canonical string is built from the validated terminals. |
+| `CSS_REVALIDATED` | The canonical string passed resolved transition-production revalidation and CSS safety validation, contains no `var()`, and remains bounded. |
 | `EMITTED` | CSS safety succeeded and the existing caller emitted the literal `StyleValue` under whole-rule atomicity. |
 | `FAIL_CLOSED_RESIDUAL` | A guard failed; the candidate cannot emit. |
 
@@ -225,10 +225,10 @@ The conceptual state names identify checkpoints. The explicit guards define whic
 | `DISCOVERED` | Exactly one authorized production matches; byte, token and production limits pass. | `GRAMMAR_CLASSIFIED` |
 | `GRAMMAR_CLASSIFIED` | Occurrence structure is valid and bounded. | `LOCAL_REFERENCES_COLLECTED` |
 | `LOCAL_REFERENCES_COLLECTED` | The shared resolver batch returns one correlated result per occurrence. | `LOCAL_REFERENCES_RESOLVED` |
-| `LOCAL_REFERENCES_RESOLVED` | Every result is `{:ok, terminal}`. | `TERMINALS_VALIDATED` |
-| `TERMINALS_VALIDATED` | Every duration/timing terminal passes its exact slot contract; canonical reconstruction succeeds. | `TRANSITION_RECONSTRUCTED` |
-| `TRANSITION_RECONSTRUCTED` | The canonical resolved form passes transition-production revalidation, contains no `var()`, and remains within bounds. | `CSS_REVALIDATED` |
-| `CSS_REVALIDATED` | `safe_declaration_value("transition", reconstructed, :source_resolver)` / `CSSDeclaration` validation succeeds; the existing caller permits selector-rule emission under whole-rule atomicity. | `EMITTED` |
+| `LOCAL_REFERENCES_RESOLVED` | Every result is `{:ok, terminal}` and every duration/timing terminal passes its exact slot contract. | `TERMINALS_VALIDATED` |
+| `TERMINALS_VALIDATED` | Canonical reconstruction succeeds using the validated terminals. | `TRANSITION_RECONSTRUCTED` |
+| `TRANSITION_RECONSTRUCTED` | The canonical resolved form passes transition-production revalidation, contains no `var()`, remains within bounds, and passes `safe_declaration_value("transition", reconstructed, :source_resolver)` / `CSSDeclaration` validation. | `CSS_REVALIDATED` |
+| `CSS_REVALIDATED` | The existing caller permits selector-rule emission under whole-rule atomicity. | `EMITTED` |
 
 Any failed guard goes to `FAIL_CLOSED_RESIDUAL`. Nothing leaves either terminal state. `EMITTED` is reached through the existing caller only when whole-rule atomicity permits the selector rule to emit. If another declaration fails later, the caller discards the whole selector rule. It does not mutate the already-evaluated transition candidate into a new semantic result.
 
@@ -241,7 +241,7 @@ The mapping below is separate from the authoritative lifecycle. It describes cur
 | `LOCAL_REFERENCES_COLLECTED` | `LOCAL_REFERENCES_COLLECTED` |
 | `LOCAL_REFERENCES_RESOLVED`, `TERMINALS_VALIDATED` | Parts of `LOCAL_REFERENCES_RESOLVED` |
 | `TRANSITION_RECONSTRUCTED` | `TERMINAL_RECONSTRUCTED` |
-| `CSS_REVALIDATED` | Resolved-form check before the existing CSS safety checkpoint |
+| `CSS_REVALIDATED` | `CSS_REVALIDATED`, after resolved-form and CSS safety checks |
 | `EMITTED` | `EMITTED`, subject to caller atomicity |
 | `FAIL_CLOSED_RESIDUAL` | `FAIL_CLOSED_RESIDUAL` |
 
