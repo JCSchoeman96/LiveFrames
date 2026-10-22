@@ -30,7 +30,7 @@ A hash proves identity only. It creates no redistribution authority. No private 
 - Two independent captures produced identical per-residual analysis output (76 rows, byte-identical).
 - Declaration shapes below are token-class signatures only (identifiers, numbers, `var()` spans). No names or values are recorded.
 
-Evidence is not written to disk. Raw trace files were removed after analysis.
+Diagnostic files were created transiently in temporary storage during analysis, deleted afterward, and not committed. None remain.
 
 ## Target Set
 
@@ -90,9 +90,11 @@ The SOURCE_LOCAL_VARIABLE label is not a terminal cause. Eight of the twelve LOC
 
 - TRANSITION_GRAMMAR_NO_MATCH: 20 of 20 required frames contain it. 12 as primary, 8 as dependency.
 - FRAME_D_NESTED_LOCAL_REFERENCE: 8 frames contain it. 8 as primary, 8 as dependency (inset-inline-end in 4 LOCAL frames, padding in 4 COMPOUND frames).
-- GAP_COMPOUND_GRAMMAR: 4 frames (the COMPOUND background-image frames). Parse-level `unsupported_grammar`. Its only referenced name has no source-local definition in the batch, so the local resolver is not the authority for it.
+- GAP_COMPOUND_GRAMMAR (the C3 tail, split below as C3A and C3B): 4 frames (the COMPOUND background-image frames). The `gap` value has the token-class shape `calc(@ / #)` (one variable divided by one number). Two separate blockers:
+  - C3A=BOUNDED_CALC_DIVISION_COMPOUND_GRAMMAR: the compound parser rejects this shape at parse level (`unsupported_grammar`).
+  - C3B=NONLOCAL_TOKEN_AUTHORITY_OR_RESOLUTION: the referenced name has no source-local definition in the batch (`no_local_definition`), so it needs token authority or resolution outside the source-local resolver.
 
-Dependency totals: TRANSITION 8, FRAME_D 8, GAP 4.
+Dependency totals: TRANSITION 8, FRAME_D 8, GAP 4 (C3A and C3B together).
 
 ## FRAME D Test
 
@@ -123,17 +125,18 @@ Direct unlock means every blocker of the finding is covered by that capability a
 | --- | --- | --- | --- | --- |
 | C1 TRANSITION_SHORTHAND_SOURCE_LOCAL_REFERENCE_GRAMMAR | 12 (8 LOCAL, 4 COMPOUND) | 12 | 20 of 20 | Hypothetical resolution of both transition references: 2/2 `ok` in all 12 measurable frames. Resolved classes: one time-like operand, one easing-keyword operand. Grammar acceptance is not measured. |
 | C2 FRAME_D_BOUNDED_NESTED_LOCAL_RESOLUTION | 0 | 4 (LOCAL, after C1) | 8 of 20 | Single-hop passthrough only. |
-| C3 COMPOUND_CALC_GRID_GAP_GRAMMAR_WITH_EXTERNAL_TOKEN | 0 | 4 (COMPOUND background-image frames, after C1 and C2) | 4 of 20 | Requires token authority, not the source-local resolver. |
+| C3A BOUNDED_CALC_DIVISION_COMPOUND_GRAMMAR | 0 | 4 together with C3B (COMPOUND background-image frames, after C1 and C2) | 4 of 20 | Parse-level rejection of the one-variable, one-number calc-division shape. Alone it unlocks nothing: the same frames also need C3B. |
+| C3B NONLOCAL_TOKEN_AUTHORITY_OR_RESOLUTION | 0 | 4 together with C3A (same frames, after C1 and C2) | 4 of 20 | The referenced name has no source-local definition. Requires token authority or resolution outside the source-local resolver. |
 
 Ranking (by direct unlock, then marginal unlock):
 
 1. C1 (12 direct unlocks, present in 20 of 20 frames)
 2. C2 (0 direct; 4 marginal after C1)
-3. C3 (0 direct; 4 marginal after C1 and C2)
+3. C3A and C3B together (0 direct each; 4 marginal together after C1 and C2)
 
-The 20 required findings are fully unlocked only when all three are applied (12 + 4 + 4).
+The 20 required findings are fully unlocked only when C1, C2, and C3A with C3B are all applied (12 + 4 + 4).
 
-MULTIPLE_INDEPENDENT_CAPABILITIES=NO. The three candidates form a dependency chain.
+The ranking above is a measured marginal-unlock order: it reflects which blockers the measured frames share. It does not claim that the capabilities depend on one another architecturally; each can be designed and reviewed separately. Only C1 is recommended next.
 
 ## Next Generic Capability
 
