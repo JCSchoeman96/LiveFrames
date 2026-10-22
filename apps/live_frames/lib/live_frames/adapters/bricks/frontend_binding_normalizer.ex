@@ -8,6 +8,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
 
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Element
+  alias LiveFrames.Adapters.Bricks.ExecutableSourceSemanticTranslator
+  alias LiveFrames.Adapters.Bricks.PhpSemanticRecognizer
   alias LiveFrames.Adapters.Bricks.Tree
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.SourceTrace
@@ -226,6 +228,26 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
          trace_index,
          adapter_version
        ) do
+    if element.name == "code" do
+      classify_executable_source(element, trace_index)
+    else
+      classify_regular_element_values(
+        element,
+        collection_id,
+        collection_by_source,
+        trace_index,
+        adapter_version
+      )
+    end
+  end
+
+  defp classify_regular_element_values(
+         element,
+         collection_id,
+         collection_by_source,
+         trace_index,
+         adapter_version
+       ) do
     {text_candidates, clear_content?, text_diagnostics} =
       classify_text(
         element,
@@ -258,6 +280,68 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       dynamic_url?: dynamic_url?,
       normalized_site_url?: normalized_site_url?,
       diagnostics: text_diagnostics ++ image_diagnostics ++ url_diagnostics ++ alt_diagnostics
+    }
+  end
+
+  defp classify_executable_source(%Element{settings: settings} = element, trace_index) do
+    source_bytes = Map.get(settings, "code")
+
+    if Map.get(settings, "executeCode") == true and is_binary(source_bytes) do
+      trace_entry = Map.fetch!(trace_index, element.id)
+
+      candidate = %{
+        element: element,
+        target_node_id: trace_entry.node_id,
+        source_bytes: source_bytes,
+        execution_enabled: true,
+        source_trace: trace_entry.trace
+      }
+
+      recognition = PhpSemanticRecognizer.recognize(source_bytes)
+
+      case ExecutableSourceSemanticTranslator.translate(candidate, recognition) do
+        {:ok, binding_candidate, diagnostic} ->
+          source_trace = binding_candidate.source_trace
+
+          candidate = %{
+            target_node_id: binding_candidate.target_node_id,
+            target_kind: binding_candidate.target_kind,
+            source_path: source_trace.source_path,
+            raw_expression: binding_candidate.value_key,
+            discriminator: "executable_source.current_entity_full_description",
+            binding_fields: Map.delete(binding_candidate, :target_node_id)
+          }
+
+          %{
+            candidates: [candidate],
+            node_actions: %{
+              clear_content: true,
+              semantic_type_override: "rich_text",
+              source_trace: source_trace,
+              suppress_unsupported_diagnostic: true
+            },
+            dynamic_image?: false,
+            dynamic_url?: false,
+            normalized_site_url?: false,
+            diagnostics: [diagnostic]
+          }
+
+        {:unsupported, diagnostic} ->
+          empty_element_classification([diagnostic])
+      end
+    else
+      empty_element_classification([])
+    end
+  end
+
+  defp empty_element_classification(diagnostics) do
+    %{
+      candidates: [],
+      node_actions: %{},
+      dynamic_image?: false,
+      dynamic_url?: false,
+      normalized_site_url?: false,
+      diagnostics: diagnostics
     }
   end
 

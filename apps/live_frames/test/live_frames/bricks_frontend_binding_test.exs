@@ -7,6 +7,12 @@ defmodule LiveFrames.BricksFrontendBindingTest do
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR
+  alias LiveFrames.IR.Identity
+
+  @private_php_sentinel "PRIVATE_TRANSLATION_SENTINEL_dcb17f"
+  @full_description_source "<?php /* #{@private_php_sentinel} */ $product = wc_get_product(get_the_ID()); " <>
+                             "$description = $product->get_description(); if ($product) { echo $description; } ?>"
 
   @token_fixture_path Path.expand(
                         "../../../../fixtures/automatic_css/acss_settings.json",
@@ -813,5 +819,107 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     assert Map.keys(first.value_bindings) == Map.keys(second.value_bindings)
     assert Enum.map(first.diagnostics, & &1.code) == Enum.map(second.diagnostics, & &1.code)
     assert LiveFrames.IR.encode!(first) == LiveFrames.IR.encode!(second)
+  end
+
+  test "execution-enabled Bricks code becomes one redacted current-entity binding" do
+    settings = %{"executeCode" => true, "code" => @full_description_source}
+
+    assert {:ok, document} = to_ir([source_element("php-code", "code", 0, settings)])
+
+    assert %ValueBinding{} = binding = binding_for(document, "php-code")
+    node = node_by_source_id(document, "php-code")
+
+    assert binding.target_node_id == node.node_id
+    assert binding.value_binding_id == "vb_#{node.node_id}_rich_text_000001"
+    assert binding.target_kind == :rich_text
+    assert binding.value_kind == :field
+    assert binding.scope == :current_entity
+    assert binding.value_key == "commerce.product.full_description"
+    assert binding.collection_binding_id == nil
+    assert binding.normalization_status == :normalized
+    assert node.semantic_type == "rich_text"
+    assert node.content == nil
+    assert node.source_trace == binding.source_trace
+    assert binding.source_trace.source_settings == %{}
+    assert binding.source_trace.source_id == "php-code"
+    assert binding.source_trace.source_path =~ "elements[0]"
+    assert binding.source_trace.metadata["execution_enabled"] == true
+
+    assert binding.source_trace.metadata["recognized_semantic"] ==
+             "commerce.product.full_description"
+
+    assert binding.source_trace.metadata["translation_status"] == "normalized"
+
+    assert String.match?(
+             binding.source_trace.metadata["source_fingerprint"],
+             ~r/\A[0-9a-f]{64}\z/
+           )
+
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.executable_source.translated"))
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.element.unsupported" and
+               diagnostic.source_trace.source_id == "php-code"
+           end)
+
+    encoded = IR.encode!(document)
+    refute encoded =~ @private_php_sentinel
+    refute encoded =~ @full_description_source
+
+    assert {:ok, identity} = Identity.from_document(document)
+    assert {:ok, repeated} = to_ir([source_element("php-code", "code", 0, settings)])
+    assert {:ok, repeated_identity} = Identity.from_document(repeated)
+    assert identity == repeated_identity
+
+    changed_comment =
+      String.replace(@full_description_source, @private_php_sentinel, "OTHER_COMMENT")
+
+    assert {:ok, changed} =
+             to_ir([
+               source_element("php-code", "code", 0, %{
+                 "executeCode" => true,
+                 "code" => changed_comment
+               })
+             ])
+
+    assert binding_for(changed, "php-code").value_binding_id == binding.value_binding_id
+  end
+
+  test "unsupported, mixed, disabled, CODE1-like, and CODE2-like code stays unsupported" do
+    unsupported_sources = [
+      {"unknown", "<?php echo unknown_function(); ?>"},
+      {"unsafe", "<?php eval($payload); ?>"},
+      {"mixed", "<?php $product = wc_get_product(get_the_ID()); ?>inline html"},
+      {"code1", "<?php $fields = get_post_meta(get_the_ID()); echo $fields; ?>"},
+      {"code2",
+       "<?php $product = wc_get_product(get_the_ID()); $price = $product->get_price(); if ($product) { echo $price; } ?>"}
+    ]
+
+    for {source_id, source} <- unsupported_sources do
+      assert {:ok, document} =
+               to_ir([
+                 source_element(source_id, "code", 0, %{"executeCode" => true, "code" => source})
+               ])
+
+      node = node_by_source_id(document, source_id)
+      assert node.semantic_type == "unsupported"
+      assert document.value_bindings == %{}
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.element.unsupported" and
+                 diagnostic.source_trace.source_id == source_id
+             end)
+    end
+
+    assert {:ok, disabled} =
+             to_ir([
+               source_element("disabled", "code", 0, %{
+                 "executeCode" => false,
+                 "code" => @full_description_source
+               })
+             ])
+
+    assert disabled.value_bindings == %{}
+    assert node_by_source_id(disabled, "disabled").semantic_type == "unsupported"
   end
 end
