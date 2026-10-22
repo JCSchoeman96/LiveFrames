@@ -40,20 +40,27 @@ defmodule LiveFrames.Styling.Fluid.Validation do
   defp order_diagnostics([]), do: []
   defp order_diagnostics(diagnostics), do: Enum.sort_by(diagnostics, &{&1.path, &1.code})
 
-  defp validate_token(
-         path,
-         %Token{resolved_value: %{"type" => type} = semantic} = token,
-         registry
-       )
-       when is_binary(type) do
-    if String.starts_with?(type, @fluid_prefix) do
-      validate_semantic(path, type, semantic, token.references, registry)
-    else
-      []
+  defp validate_token(path, %Token{resolved_value: semantic} = token, registry) do
+    case dispatch_type(semantic) do
+      type when is_binary(type) ->
+        if String.starts_with?(type, @fluid_prefix) do
+          validate_semantic(path, type, semantic, token.references, registry)
+        else
+          []
+        end
+
+      _ ->
+        []
     end
   end
 
   defp validate_token(_path, _token, _registry), do: []
+
+  # Recognize TokenSet JSON-key identity only for dispatch. Intrinsic validators
+  # receive the original map and retain their string-key shape requirements.
+  defp dispatch_type(%{"type" => type}), do: type
+  defp dispatch_type(%{type: type}), do: type
+  defp dispatch_type(_semantic), do: nil
 
   # Unsupported fluid-prefixed tags fail closed here: they never fall through
   # to ordinary semantic maps.
@@ -120,19 +127,14 @@ defmodule LiveFrames.Styling.Fluid.Validation do
   end
 
   defp semantic_type_label(resolved_value) do
-    case Enum.find(@semantic_modules, fn {_tag, module} -> module.type?(resolved_value) end) do
-      {tag, _module} ->
-        tag
+    type = dispatch_type(resolved_value)
 
-      nil ->
-        if fluid_prefixed?(resolved_value), do: "unrecognized_fluid", else: "non_fluid"
+    cond do
+      List.keymember?(@semantic_modules, type, 0) -> type
+      is_binary(type) and String.starts_with?(type, @fluid_prefix) -> "unrecognized_fluid"
+      true -> "non_fluid"
     end
   end
-
-  defp fluid_prefixed?(%{"type" => type}) when is_binary(type),
-    do: String.starts_with?(type, @fluid_prefix)
-
-  defp fluid_prefixed?(_resolved_value), do: false
 
   defp semantic_invalid(path) do
     Diagnostic.new(

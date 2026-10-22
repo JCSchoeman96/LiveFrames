@@ -537,6 +537,31 @@ defmodule LiveFrames.TokensTest do
     )
   end
 
+  test "TokenSet rejects atom type Fluid maps before serialization can canonicalize them" do
+    for semantic <- [
+          @fluid_domain,
+          @fluid_value,
+          @fluid_scale,
+          @fluid_step,
+          %{"type" => "fluid_unknown"}
+        ] do
+      atom_keyed = semantic |> Map.delete("type") |> Map.put(:type, semantic["type"])
+      graph = %{@fluid_value_path => fluid_token(@fluid_value_path, :spacing, atom_keyed, [])}
+      token_set = with_tokens(graph)
+
+      assert {:error, diagnostics} = Tokens.validate(token_set)
+      assert_fluid_diagnostic(diagnostics, "fluid.semantic.invalid", :value, @fluid_value_path)
+    end
+  end
+
+  test "TokenSet accepts atom keyed derived semantics as non Fluid" do
+    graph = %{
+      @fluid_value_path => fluid_token(@fluid_value_path, :spacing, %{type: "derived"}, [])
+    }
+
+    assert Tokens.validate(with_tokens(graph)) == :ok
+  end
+
   defp fluid_graph do
     %{
       @fluid_domain_path => fluid_token(@fluid_domain_path, :layout, @fluid_domain, []),

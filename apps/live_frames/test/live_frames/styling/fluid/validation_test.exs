@@ -278,6 +278,48 @@ defmodule LiveFrames.Styling.Fluid.ValidationTest do
     assert Validation.validate_registry(registry) == first
   end
 
+  test "atom type keys dispatch original Fluid maps to intrinsic validation" do
+    for semantic <- [@domain, @value, @scale, @step, %{"type" => "fluid_unknown"}] do
+      atom_keyed = semantic |> Map.delete("type") |> Map.put(:type, semantic["type"])
+      registry = %{@value_path => token(@value_path, :spacing, atom_keyed, [])}
+
+      assert [diagnostic] = Validation.validate_registry(registry)
+      assert_diagnostic(diagnostic, "fluid.semantic.invalid", :value, @value_path)
+    end
+  end
+
+  test "atom type keys classify Fluid targets without normalizing their shape" do
+    for {tag, label} <- [
+          {"fluid_domain", "fluid_domain"},
+          {"fluid_scale", "fluid_scale"},
+          {"fluid_unknown", "unrecognized_fluid"},
+          {"derived", "non_fluid"}
+        ] do
+      registry =
+        valid_graph()
+        |> Map.take([@value_path, @domain_path])
+        |> replace(@domain_path, resolved_value: %{type: tag})
+
+      diagnostics = Validation.validate_registry(registry)
+
+      if tag == "fluid_domain" do
+        refute Enum.any?(diagnostics, &(&1.path == @value_path))
+      else
+        diagnostic = Enum.find(diagnostics, &(&1.path == @value_path))
+        assert diagnostic.code == "fluid.reference.type_mismatch"
+        assert diagnostic.metadata["actual_type"] == label
+      end
+
+      assert Enum.any?(diagnostics, &(&1.code == "fluid.semantic.invalid")) ==
+               String.starts_with?(tag, "fluid_")
+    end
+  end
+
+  test "atom keyed derived maps remain non Fluid" do
+    registry = %{@value_path => token(@value_path, :spacing, %{type: "derived"}, [])}
+    assert Validation.validate_registry(registry) == []
+  end
+
   defp valid_graph do
     %{
       @domain_path => token(@domain_path, :layout, @domain, []),
