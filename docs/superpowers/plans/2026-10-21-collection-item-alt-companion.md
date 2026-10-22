@@ -14,7 +14,10 @@
 
 - Keep `ComponentContract`, `ComponentizationPlan`, and `SemanticInput` serialized schemas and format versions unchanged.
 - Keep `ItemFieldDecision` and `ImageAccessibilityDecision` shapes unchanged. Add no decision family, marker field, RenderProjection role, binding kind, runtime helper, or dependency.
-- Ordinary item fields remain binding/projection driven. Only a companion named by a valid consumer-supplied image source may have zero BindingProjections.
+- Ordinary binding-backed item fields remain binding/projection driven.
+- An ordinary zero-reference unbound ItemField may have zero BindingProjections, but it remains static/unbound customization and `STATIC_COLLECTION_ITEM_RULE` applies -> `:needs_review`.
+- Only a validated named `UNBOUND_ACCESSIBILITY_COMPANION` may have zero BindingProjections without independently triggering `STATIC_COLLECTION_ITEM_RULE`.
+- `ZERO_BINDING_PROJECTIONS != COMPANION_IDENTITY`. Zero-reference ordinary unbound field: no companion inference, may have zero BindingProjections, `:needs_review`. Validated named unbound companion: zero BindingProjections, static-item exemption, may reach `:proposed`.
 - For the unbound path, every eligible consumer-supplied image-source ItemField names exactly one same-collection companion candidate. Each named candidate is referenced by exactly one eligible image source. `N` sources require `N` distinct companions. Multiple distinct pairs are allowed in one CollectionInput and one ComponentContract. A candidate named by two or more sources is shared and blocked.
 - An unbound ItemField named by zero eligible image sources is not a companion candidate. It is an ordinary static/unbound ItemField and is governed by `STATIC_COLLECTION_ITEM_RULE` (`:needs_review`). Companion intent is never inferred from shape, name, `semantic_purpose`, provenance, collection membership, or the presence of another image field.
 - The companion has `type: :string`, `required: false`, `default: nil`, no BindingProjection, no RenderProjection, and no BindingAssignmentDecision. Its value is conditionally required only when its source is present.
