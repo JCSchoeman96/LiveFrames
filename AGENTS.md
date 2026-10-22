@@ -2,6 +2,12 @@
 
 These rules apply to this repository. Direct user instructions take precedence.
 
+## Local WP Site Info - localhost:10049
+- /home/jcschoeman96/Local Sites/danbricks/app/public/
+- /home/jcschoeman96/Local Sites/danbricks/app/sql/
+- Xdebug is on
+- PHP 8.5.3
+
 ## Scope
 
 - Work only on the requested change.
