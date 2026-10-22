@@ -14,8 +14,12 @@
 
 - Keep `ComponentContract`, `ComponentizationPlan`, and `SemanticInput` serialized schemas and format versions unchanged.
 - Keep `ItemFieldDecision` and `ImageAccessibilityDecision` shapes unchanged. Add no decision family, marker field, RenderProjection role, binding kind, runtime helper, or dependency.
-- Ordinary item fields remain binding/projection driven. Only a companion named by a valid consumer-supplied image source may have zero BindingProjections.
-- For the unbound path, every image-source ItemField names exactly one same-collection companion. Every companion belongs to exactly one such source. `N` sources require `N` distinct companions. Multiple distinct pairs are allowed in one CollectionInput and one ComponentContract. No shared or orphan companion is allowed.
+- Ordinary binding-backed item fields remain binding/projection driven.
+- An ordinary zero-reference unbound ItemField may have zero BindingProjections, but it remains static/unbound customization and `STATIC_COLLECTION_ITEM_RULE` applies -> `:needs_review`.
+- Only a validated named `UNBOUND_ACCESSIBILITY_COMPANION` may have zero BindingProjections without independently triggering `STATIC_COLLECTION_ITEM_RULE`.
+- `ZERO_BINDING_PROJECTIONS != COMPANION_IDENTITY`. Zero-reference ordinary unbound field: no companion inference, may have zero BindingProjections, `:needs_review`. Validated named unbound companion: zero BindingProjections, static-item exemption, may reach `:proposed`.
+- For the unbound path, every eligible consumer-supplied image-source ItemField names exactly one same-collection companion candidate. Each named candidate is referenced by exactly one eligible image source. `N` sources require `N` distinct companions. Multiple distinct pairs are allowed in one CollectionInput and one ComponentContract. A candidate named by two or more sources is shared and blocked.
+- An unbound ItemField named by zero eligible image sources is not a companion candidate. It is an ordinary static/unbound ItemField and is governed by `STATIC_COLLECTION_ITEM_RULE` (`:needs_review`). Companion intent is never inferred from shape, name, `semantic_purpose`, provenance, collection membership, or the presence of another image field.
 - The companion has `type: :string`, `required: false`, `default: nil`, no BindingProjection, no RenderProjection, and no BindingAssignmentDecision. Its value is conditionally required only when its source is present.
 - Keep `VALUE_BINDING_COVERAGE_RULE`: every real in-boundary ValueBinding still requires its ordinary projection.
 - Preserve the legacy same-node binding-backed alt path without behavior changes. Do not infer alt text or classify an image decorative.
@@ -27,19 +31,19 @@
 
 ## Review Focus
 
-- One source with one companion passes; two sources with two distinct companions pass; a shared or orphan companion fails. Pin this in Task 1 and Task 2.
+- One source with one companion passes; two sources with two distinct companions pass; a companion named by two sources fails. A zero-reference unbound ItemField is ordinary (not a candidate) and is not rejected for having no source. Pin this in Task 1 and Task 2.
 - One unbound ItemField cannot bypass ordinary projection rules unless exactly one consumer-supplied image source names it. Pin this in Task 1 and Task 2.
 - The legacy binding-backed same-node alt path keeps passing. Pin this in Task 2 and Task 3.
 - Each image reads its own companion. Present sources reject nil or empty alt; absent optional sources omit the image without requiring alt. Pin this in Task 3.
 - The candidate passes every ordinary approval and generation gate without disposition authority. Pin this in Task 4.
-- A valid companion reaches `:proposed`. An arbitrary unbound collection ItemField, an invalid, shared, or orphan companion, and a legacy static collection ItemField remain `:needs_review` or blocked. Pin this in Task 2.5.
+- A valid companion reaches `:proposed`. A zero-reference unbound collection ItemField, an invalid or shared named companion, and a legacy static collection ItemField remain `:needs_review` or blocked. Pin this in Task 2.5.
 
 ---
 
 ## Files and responsibilities
 
 - `apps/live_frames/lib/live_frames/componentization_proposer/semantic_input/validation.ex` validates decision relationships and one-to-one cardinality before construction.
-- `apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex` validates the public contract and plan XOR paths and rejects orphan or shared unbound fields.
+- `apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex` validates the public contract and plan XOR paths and rejects shared or malformed named companion candidates.
 - `apps/live_frames/lib/live_frames/componentization_proposer.ex` classifies a validated unbound accessibility companion as outside static-item review (Task 2.5). It does not change construction.
 - `apps/live_frames/lib/live_frames/native_generator/renderer.ex` resolves the current source's exact companion through the existing collection-item accessor.
 - `apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs` and `apps/live_frames/test/live_frames/componentization_proposer_test.exs` prove the semantic input relationship and construction output.
@@ -73,21 +77,21 @@ Write and run Task 4's full-gate regression before implementing Tasks 1–3. Its
 **Interfaces:**
 
 - **Consumes:** `SemanticInput.validate/2`, `ItemFieldDecision`, `BindingAssignmentDecision`, `ImageAccessibilityDecision`, and the supplied DesignDocument. `SemanticInput.validate/2` returns `{:ok, validated_input}` or `{:error, diagnostics}`.
-- **Produces:** validation that accepts each valid per-source pair, rejects shared and orphan companions, and lets the existing constructor emit an ordinary ItemField with no BindingProjection.
+- **Produces:** validation that accepts each valid per-source pair, rejects shared and invalid named companions, accepts zero-reference ordinary unbound ItemFields, and lets the existing constructor emit an ordinary ItemField with no BindingProjection.
 
 - [ ] **Step 1: Add the valid cardinality tests.** Add `accepts one unbound image alt companion` and `accepts two distinct unbound image alt companions in one collection`. Assert SemanticInput validation passes. Propose each valid input and assert the companion ItemFields are present with no BindingProjection. The proposal may remain `:needs_review` until Task 2.
-- [ ] **Step 2: Add the rejection tests.** Add `rejects an unbound companion shared by two image sources` and `rejects an orphan unbound item field`. Also cover a missing companion, a companion in another collection, non-string type, `required: true`, non-nil default, and an assignment to a would-be companion that does not satisfy the legacy binding-backed sibling path. Keep the valid legacy path as a passing regression.
+- [ ] **Step 2: Add the rejection tests.** Add `rejects an unbound companion shared by two image sources` and `accepts an ordinary unbound item field with zero source references`. The zero-reference case must pass SemanticInput validation; its `:needs_review` outcome is pinned in Task 2.5. Also cover a missing companion, a companion in another collection, non-string type, `required: true`, non-nil default, and an assignment to a named candidate that does not satisfy the legacy binding-backed sibling path. Keep the valid legacy path as a passing regression.
 - [ ] **Step 3: Run the focused tests to verify RED.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs apps/live_frames/test/live_frames/componentization_proposer_test.exs`
 
-  Expected: the command exits non-zero because the current validator accepts the shared and orphan relationships. The new rejection assertions receive `{:ok, validated_input}` instead of `{:error, diagnostics}`. Existing binding-backed tests continue to pass.
-- [ ] **Step 4: Add the closed relationship validation.** Build the source-to-companion and companion-to-source indexes once. Require every source to name one existing same-collection companion, every unassigned ItemFieldDecision to be named by exactly one source, and each source to have a distinct companion. Do not change SemanticInput structs or proposer construction.
+  Expected: the command exits non-zero because the current validator accepts the shared relationship. The new shared and malformed rejection assertions receive `{:ok, validated_input}` instead of `{:error, diagnostics}`. The zero-reference acceptance assertion must already pass. Existing binding-backed tests continue to pass.
+- [ ] **Step 4: Add the closed relationship validation.** Build the source-to-companion and companion-to-source indexes once. Require every source to name one existing same-collection companion, each named unassigned candidate to be referenced by exactly one eligible source, and each source to have a distinct companion. An unassigned ItemFieldDecision named by zero eligible sources is an ordinary field and is not rejected here. Do not change SemanticInput structs or proposer construction.
 - [ ] **Step 5: Run the focused tests to verify GREEN.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs apps/live_frames/test/live_frames/componentization_proposer_test.exs`
 
-  Expected: exit zero. One-to-one and two-pair inputs pass; shared, orphan, missing, mismatched, assigned, and malformed companions fail with `invalid_input`; legacy inputs pass; construction emits no BindingProjection for a companion.
+  Expected: exit zero. One-to-one and two-pair inputs pass; shared, missing, mismatched, non-conforming assigned, and malformed named candidates fail with `invalid_input`; zero-reference ordinary unbound fields pass; legacy inputs pass; construction emits no BindingProjection for a companion.
 
 If a RED test proves construction cannot materialize the ItemField without a binding assignment, stop with `STOP=UNEXPECTED_PROPOSER_CONSTRUCTION_CHANGE_REQUIRED`. Do not change the construction module in this plan. Task 2.5 changes outcome classification only, so it does not count as a construction change.
 
@@ -101,21 +105,21 @@ If a RED test proves construction cannot materialize the ItemField without a bin
 **Interfaces:**
 
 - **Consumes:** `ComponentizationPlan.validate_references/3`, the ComponentContract, the DesignDocument, existing field and projection indexes, and the SemanticInput guarantees from Task 1.
-- **Produces:** `:ok` for either valid XOR branch; blocking diagnostics for malformed, shared, or orphan unbound companions.
+- **Produces:** `:ok` for either valid XOR branch; blocking diagnostics for malformed or shared named companion candidates. A zero-reference ordinary unbound ItemField is not a candidate and is not blocked here.
 
 - [ ] **Step 1: Add passing-path tests.** Add `preserves the binding-backed same-node image alt path`, `allows one unbound alt companion`, and `allows two distinct unbound alt companions in one collection`.
-- [ ] **Step 2: Add negative-path tests.** Add `rejects a companion with any projection`, `rejects an orphan unbound item field`, and `rejects a shared companion`. Also prove rejection for wrong type, `required: true`, non-nil default, and cross-collection ownership. Keep the decorative policy unchanged.
+- [ ] **Step 2: Add negative-path tests.** Add `rejects a companion with any projection`, `accepts a zero-reference ordinary unbound item field at this layer`, and `rejects a shared companion`. Also prove rejection for wrong type, `required: true`, non-nil default, and cross-collection ownership. Keep the decorative policy unchanged.
 - [ ] **Step 3: Run the reference tests to verify RED.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
 
   Expected: exit non-zero. The current validator blocks the zero-projection path with the existing alt-projection mismatch diagnostic. Existing legacy-path tests pass.
-- [ ] **Step 4: Implement the XOR validator.** Reuse field and projection indexes. Build a reverse companion-reference index once, check both cardinality directions, reject every orphan unbound ItemField, and preserve `VALUE_BINDING_COVERAGE_RULE`. Do not scan the whole contract or DesignDocument once per image source.
+- [ ] **Step 4: Implement the XOR validator.** Reuse field and projection indexes. Build a reverse companion-reference index once, check both cardinality directions for named candidates, block any candidate referenced by two or more eligible sources, and preserve `VALUE_BINDING_COVERAGE_RULE`. Do not reject zero-reference unbound ItemFields here. Do not scan the whole contract or DesignDocument once per image source.
 - [ ] **Step 5: Run the reference tests to verify GREEN.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
 
-  Expected: exit zero. Both XOR branches pass under their own rules; two distinct pairs pass; shared and orphan companions fail; malformed projections fail; decorative and ValueBinding coverage behavior is unchanged.
+  Expected: exit zero. Both XOR branches pass under their own rules; two distinct pairs pass; shared companions fail; zero-reference ordinary unbound fields pass this layer; malformed projections fail; decorative and ValueBinding coverage behavior is unchanged.
 
 ### Task 2.5: Exempt only validated accessibility companions from static-item review
 
@@ -130,9 +134,9 @@ This task was added by the G2-A2 authority correction. The stale `STATIC_COLLECT
 **Interfaces:**
 
 - **Consumes:** the constructed ComponentContract and ComponentizationPlan, the BindingProjection-derived coverage of collection ItemFields, and each consumer-supplied image source's `accessibility["alt_item_field_name"]`.
-- **Produces:** outcome classification in which a companion named by a consumer-supplied image source does not trigger static-item review. Ordinary unbound ItemFields still trigger review. Reference diagnostics still block malformed, shared, and orphan companions.
+- **Produces:** outcome classification in which a companion named by a consumer-supplied image source does not trigger static-item review. Ordinary unbound ItemFields still trigger review. Reference diagnostics still block malformed and shared named companion candidates.
 
-- [ ] **Step 1: Add the classification tests.** In `componentization_proposer_test.exs`, add `valid unbound accessibility companion reaches proposed`, `arbitrary unbound collection item still needs review`, `invalid unbound companion does not gain exemption`, `shared unbound companion does not gain exemption`, `orphan unbound companion does not gain exemption`, and `legacy static collection item still needs review`. The valid case asserts `outcome: :proposed` and that `ComponentizationPlan.validate_references/3` returns `:ok`. For malformed, shared, and orphan companions, assert that the result is blocked by an earlier layer: `invalid_input` from SemanticInput when the decision shape is invalid, or `:needs_review` with the reference diagnostic when the constructed pair still carries the defect. The classifier must never turn these into `:proposed`.
+- [ ] **Step 1: Add the classification tests.** In `componentization_proposer_test.exs`, add `valid unbound accessibility companion reaches proposed`, `zero-reference unbound collection item still needs review`, `invalid unbound companion does not gain exemption`, `shared unbound companion does not gain exemption`, and `legacy static collection item still needs review`. The valid case asserts `outcome: :proposed` and that `ComponentizationPlan.validate_references/3` returns `:ok`. For malformed and shared named candidates, assert that the result is blocked by an earlier layer: `invalid_input` from SemanticInput when the decision shape is invalid, or `:needs_review` with the reference diagnostic when the constructed pair still carries the defect. The classifier must never turn these into `:proposed`.
 - [ ] **Step 2: Run the focused tests to verify RED.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/component_review_test.exs`
@@ -143,12 +147,12 @@ This task was added by the G2-A2 authority correction. The stale `STATIC_COLLECT
   - covered by an ordinary BindingProjection-derived coverage entry, nor
   - named by the `accessibility["alt_item_field_name"]` of an ItemField whose `accessibility["image_alt_policy"] == "consumer_supplied"`.
 
-  Build the named-companion set once from the contract's ItemFields. Its cost is linear in contract public members and projections. Do not scan the contract per ItemField. Do not duplicate `SemanticInput` or reference validation logic. The classifier runs alongside reference diagnostics, so a malformed companion stays blocked by its reference diagnostic.
+  Build the named-companion set once from the contract's ItemFields. A named candidate that is also shared or malformed still receives its reference diagnostic, so the exemption cannot make it `:proposed`. Its cost is linear in contract public members and projections. Do not scan the contract per ItemField. Do not duplicate `SemanticInput` or reference validation logic. The classifier runs alongside reference diagnostics, so a malformed companion stays blocked by its reference diagnostic.
 - [ ] **Step 4: Run the focused tests to verify GREEN.**
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/component_review_test.exs`
 
-  Expected: exit zero. The valid companion reaches `:proposed` with no static-item trigger. Ordinary unbound, malformed, shared, orphan, and legacy static cases keep the outcomes from Step 1.
+  Expected: exit zero. The valid companion reaches `:proposed` with no static-item trigger. Zero-reference ordinary unbound, malformed, shared, and legacy static cases keep the outcomes from Step 1.
 - [ ] **Step 5: Stop on any scope breach.** If the exemption requires duplicating the full SemanticInput or ReferenceValidation algorithm, stop with `STOP=PROPOSER_VALIDATION_DUPLICATION_REQUIRED`. If any generic unbound-ItemField exemption is required, stop with `STOP=GENERIC_STATIC_ITEM_EXEMPTION_REQUIRED`. If a legacy static collection ItemField changes from `:needs_review`, stop with `STOP=LEGACY_STATIC_ITEM_REVIEW_REGRESSION`.
 
 ### Task 3: Render each companion through `lf_item_field/3`

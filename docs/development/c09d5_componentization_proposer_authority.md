@@ -4,7 +4,7 @@
 
 **Plan ID:** C09D5-A
 
-**Plan version:** v5
+**Plan version:** v6
 
 **Scope:** freeze explicit semantic-decision input model and proposer construction
 rules; no proposer production code in this slice
@@ -22,7 +22,7 @@ non-authoritative examples only.
 
 **Post-merge CI:** run `37034504527`, conclusion `success` (C09D4 / PR #121)
 
-**Last updated:** 2026-10-02
+**Last updated:** 2026-10-22
 
 ### Revision log
 
@@ -43,6 +43,11 @@ non-authoritative examples only.
   longer forces `needs_review` for a validated unbound accessibility companion
   when no other section 16.4 trigger or blocking diagnostic exists. Semantic
   input shapes and proposer construction are unchanged (2026-10-22)
+- `v6` G2-A3 companion cardinality clarification: the unbound companion rules
+  apply per named candidate, not per unassigned ItemField. A zero-reference
+  unbound ItemField is ordinary static (`needs_review`), not an orphan
+  companion; a shared candidate is invalid. No schema, decision family,
+  marker, or construction change (2026-10-22)
 
 ---
 
@@ -472,14 +477,40 @@ UNBOUND_ACCESSIBILITY_COMPANION_SEMANTIC_INPUT_RULE =
     companion.default = nil
     no BindingAssignmentDecision targets the companion
     exactly one consumer_supplied image-source ItemFieldDecision references it
+      (two or more eligible references = shared candidate -> invalid_input)
+
+  UNBOUND_ACCESSIBILITY_COMPANION_CANDIDATE_RULE =
+    candidates are derived only from alt_item_field_name references of eligible
+    consumer_supplied image-source ItemFieldDecisions (image source membership
+    per IMAGE_SOURCE_MEMBER_RULE)
+    a named ItemFieldDecision that is unassigned is an unbound candidate
+    a named ItemFieldDecision with a BindingAssignmentDecision follows the
+    binding-backed sibling path; a non-conforming assigned candidate is invalid
+    a named field missing from the same CollectionInput is invalid_input
+
+  ZERO_REFERENCE_UNBOUND_ITEM_RULE =
+    an unassigned collection ItemFieldDecision named by zero eligible image
+    sources is NOT a companion candidate
+    it is an ordinary static/unbound ItemField; it may materialize without a
+    BindingProjection; STATIC_COLLECTION_ITEM_RULE applies -> needs_review
+
+  NO_ORPHAN_COMPANION_INFERENCE_RULE =
+    no orphan-companion state exists in the proposer or the SemanticInput
+    companion intent is never inferred from field shape, name, semantic_purpose,
+    provenance, collection membership, or presence of another image field
+    no marker field, decision family, nested-list exemption, or
+    collection-has-image heuristic is introduced
 
   UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
     each consumer_supplied image-source ItemFieldDecision using the unbound
-    path names exactly one companion through its alt_item_field_name
-    each unassigned ItemFieldDecision is referenced by exactly one such source
+    path names exactly one candidate through its alt_item_field_name
+    each candidate is referenced by exactly one eligible image-source
+    ItemFieldDecision
     N unbound companion image sources require N distinct ItemFieldDecisions
     multiple distinct companions may exist in one CollectionInput or contract
-    a companion cannot be shared and no companion may exist without a source
+    a candidate referenced by two or more image sources is shared -> invalid_input
+    an unassigned ItemFieldDecision with zero eligible references is not a
+    cardinality violation (ZERO_REFERENCE_UNBOUND_ITEM_RULE)
     this is per-source cardinality, not one global companion per contract
 
   build source-to-companion and companion-to-source indexes once during
@@ -1008,13 +1039,14 @@ PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_OUTCOME_RULE =
   then:
     the companion is compatible with outcome = :proposed
 
-  an arbitrary unbound collection ItemField keeps the mandatory
+  an unassigned collection ItemField named by zero eligible image sources
+  (ZERO_REFERENCE_UNBOUND_ITEM_RULE) keeps the mandatory
   STATIC_COLLECTION_ITEM_RULE review trigger and is not exempt
 
   any other section 16.4 trigger, or any blocking reference diagnostic,
   still applies
 
-  malformed, invalid, orphan, shared, or projected candidates receive no
+  malformed, invalid, shared, or projected named candidates receive no
   exemption; their terminal outcome is governed by the next rule
 ```
 
@@ -1024,8 +1056,8 @@ PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_FAILURE_RULE =
   only an exact valid UNBOUND_ACCESSIBILITY_COMPANION receives the
   STATIC_COLLECTION_ITEM_RULE exemption
 
-  malformed, invalid, orphan, shared, projected, or otherwise
-  non-conforming candidates do not receive the exemption
+  malformed, invalid, shared, projected, or otherwise non-conforming
+  named candidates do not receive the exemption
 
   this G2-A2 rule does NOT reclassify their terminal outcome
 
@@ -1395,6 +1427,14 @@ STATIC_PROMOTION_INPUT_RULE = promotion requires Public*Decision or explicit
 IMAGE_SOURCE_MEMBER_RULE = §6.3.1
 
 IMAGE_ACCESSIBILITY_DECISION_CONSISTENCY_RULE = §6.3.1
+
+UNBOUND_ACCESSIBILITY_COMPANION_CANDIDATE_RULE = §6.3.1 (candidates derive only
+  from eligible consumer-supplied alt_item_field_name references)
+
+ZERO_REFERENCE_UNBOUND_ITEM_RULE = §6.3.1 (zero-reference unbound ItemField is
+  ordinary; not a candidate; needs_review)
+
+NO_ORPHAN_COMPANION_INFERENCE_RULE = §6.3.1 (no orphan state; no inference)
 
 IMAGE_ACCESSIBILITY_INPUT_RULE = §6.3.1; D3 closed maps only
 
