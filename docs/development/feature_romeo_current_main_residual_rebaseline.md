@@ -117,17 +117,23 @@ The custom-CSS diagnostics mirror the residual set. They are not counted again. 
 
 ## Required-set carry-forward
 
-Because the residual content is identical to the accepted baseline, the accepted requirement classification carries forward unchanged. This run did not re-derive those classifications.
+Because the residual content is identical to the accepted baseline, the accepted requirement classification carries forward. This run did not re-derive those classifications, and it did not perform a per-finding causal decomposition.
 
 ```text
+REQUIREMENT_CLASSIFICATION_CARRY_FORWARD=YES
 CONFIRMED_REQUIRED_RESIDUAL_COUNT=20
 CONFIRMED_REQUIRED_LOCAL_PROPERTY_COUNT=12
 CONFIRMED_REQUIRED_COMPOUND_COUNT=8
 UNKNOWN_REQUIREMENT_RESIDUAL_COUNT=20
-UNEXPLAINED_CURRENT_REQUIRED_FINDINGS=0 (inherited from accepted gap decomposition)
+
+CURRENT_CAUSAL_DECOMPOSITION_RUN=NO
+CURRENT_REQUIRED_PRIMARY_CAUSES_CLASSIFIED=0
+CURRENT_REQUIRED_FINDINGS_PENDING_CAUSAL_DECOMPOSITION=20
 ```
 
-The explanations for these findings remain in `feature_romeo_canonical_gap_decomposition.md` and `feature_romeo_post_compound_css_canonical_rerun.md`.
+The 20 requirement classifications are inherited from accepted authority, and their source and requirement lane descriptions remain accepted. The current terminal compiler cause for each of the 20 findings has not been established by this record. The twenty findings are requirement-classified but causally undecomposed. They are not unexplained in the requirement sense.
+
+The accepted requirement classifications and lane descriptions remain in `feature_romeo_canonical_gap_decomposition.md` and `feature_romeo_post_compound_css_canonical_rerun.md`. They do not record a current per-finding compiler cause. Selecting the next generic capability therefore remains a separate gate.
 
 ## Movement classification
 
@@ -143,7 +149,7 @@ An attempted resolver call trace during the interrupted run was not used as evid
 
 ## Next gate
 
-No next capability is selected in this record. The current evidence does not establish which required finding class is the dominant shared causal blocker, so selecting the next capability needs its own decomposition.
+No next capability is selected in this record. The per-finding terminal compiler cause for the 20 confirmed-required findings is still undecomposed. The current evidence does not establish which required finding class is the dominant shared causal blocker. Selecting the next generic capability therefore needs a separate causal decomposition gate.
 
 ## Verification
 
