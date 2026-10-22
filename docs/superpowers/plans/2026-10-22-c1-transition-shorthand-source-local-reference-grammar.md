@@ -1,6 +1,9 @@
 # C1 transition shorthand source-local reference grammar implementation plan
 
-> **For agentic workers:** This plan does not authorize implementation. After explicit owner authorization, follow the tasks in order and use test-driven development. Steps use checkbox syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL:
+> Use superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task.
+> This plan does not authorize implementation until owner approval.
 
 **Goal:** Add the bounded, property-scoped transition shorthand production that resolves local duration and timing references through the existing compound pipeline.
 
@@ -56,6 +59,8 @@ PRIVATE_ROMEO_RERUN_REQUIRED_FOR_PLANNING=NO
 
 PR #292 merged at `2bdb005d9c1900d4853a2d34d863e84c0bc62853`. One docs-only commit, PR #293, followed it on `main`. A fresh fetch confirmed that none of the C1 parser, normalizer, resolver, CSS safety, or test files changed after the authority merge. The plan uses the current `main` SHA and tree above.
 
+These SHA and tree values record the plan-authoring base only. They are not the permanent implementation base. The implementation must use the fresh `origin/main` selected by the execution preflight below, after this plan PR has merged.
+
 The predicted causal result after implementation and the separate canonical rerun remains a prediction:
 
 ~~~text
@@ -65,9 +70,11 @@ POST_IMPLEMENTATION_CANONICAL_RERUN=REQUIRED
 POST_IMPLEMENTATION_EXPECTED_C1_UNLOCK=12
 POST_IMPLEMENTATION_EXPECTED_REQUIRED_REMAINDER=8
 C1_PRODUCTION_RESOLVER_OUTCOME=MUST_BE_MEASURED_AFTER_IMPLEMENTATION
+C1_CANONICAL_ROMEO_RERUN=REQUIRED_AFTER_IMPLEMENTATION
+CANONICAL_ROMEO_RERUN_AUTHORIZED_BY_IMPLEMENTATION_PLAN=NO
 ~~~
 
-Do not encode these counts as tests. Measure the production resolver outcome after implementation with synthetic public integration fixtures, then run the canonical rerun as a separate post-implementation evidence gate. Do not access or rerun private source evidence while implementing C1.
+Do not encode these counts as tests. The production resolver outcome is a separate implementation acceptance obligation: complete the bounded synthetic production-path proof below without instrumentation. The canonical rerun is a separate post-implementation evidence gate and is not authorized by this plan. Do not access or rerun private source evidence while implementing C1.
 
 ## Implementation file boundary
 
@@ -172,12 +179,73 @@ PROPERTY SP DURATION SP TIMING, SP PROPERTY SP DURATION SP TIMING
 
 Use one ASCII space between each property, terminal, and timing value, and exactly comma plus one space between specs. Do not retain source newline, indentation, or other whitespace runs. Preserve property identifiers, property order, spec order, and reference occurrence order. Revalidate the resolved transition form under `:transition_shorthand`, reject any remaining `var(`, then continue through the existing CSS safety path. Legacy juxtaposition reconstruction remains source-preserving.
 
+## Implementation execution preflight
+
+The values below distinguish the base used to author this plan from the implementation base selected after the plan is approved and merged:
+
+~~~text
+PLAN_AUTHORING_BASE=c6e689353ce4a26263fcbe10bd77c08ba403d115
+ACCEPTED_C1_IMPLEMENTATION_BASELINE=c6e689353ce4a26263fcbe10bd77c08ba403d115
+IMPLEMENTATION_BASE=fresh origin/main at the moment implementation begins
+PLAN_PR_MERGE_MUST_BE_IN_IMPLEMENTATION_BASE_ANCESTRY=YES
+~~~
+
+Before Task 1, the implementation agent must:
+
+1. Fetch `origin` and record the fresh `origin/main` SHA and tree as `MAIN_SHA` and `MAIN_TREE`.
+2. Verify PR #296 is merged. Record its final approved head and merge commit. Verify the merge commit is an ancestor of `origin/main`, and verify the plan file blob at the approved PR head is byte-identical to the plan file blob at `origin/main`. The approved plan merge must be in the implementation base ancestry.
+3. Compare movement from `ACCEPTED_C1_IMPLEMENTATION_BASELINE` to the fresh implementation base, including changed paths and the listed material surfaces. The expected addition of this approved plan file is accepted only when its blob identity matches the merged PR bytes in step 2.
+4. Perform at most one bounded reconciliation. If movement is docs-only or unrelated and no other material C1 surface changed, record it and continue from the fresh implementation base. If any material C1 implementation or authority surface changed, or the approved plan bytes do not match, stop for owner review. Do not silently rebase architectural assumptions or repeat reconciliation.
+
+The material surfaces are:
+
+~~~text
+apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex
+apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex
+apps/live_frames/lib/live_frames/adapters/bricks/source_local_custom_property_resolver.ex
+LiveFrames.Fidelity.CSSDeclaration implementation
+relevant custom-CSS parsing
+compound residual/error semantics
+docs/development/transition_shorthand_source_local_reference_grammar_authority.md
+this approved implementation plan
+~~~
+
+The expected plan-file addition from PR #296 is accepted only after the approved blob check above. Any other change to a material C1 surface, or a plan blob that differs from the approved PR bytes, requires:
+
+~~~text
+STOP=C1_IMPLEMENTATION_BASELINE_CHANGED
+~~~
+
 ## Task 1: bounded transition parser and reconstruction
 
 **Files:**
 
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex`
 - Test `apps/live_frames/test/live_frames/bricks_compound_css_value_test.exs`
+
+**Interfaces:**
+
+~~~text
+Consumes:
+  CompoundCssValue.parse/1
+  CompoundCssValue.reconstruct/2
+  existing Parsed representation
+  existing Occurrence representation
+
+Produces:
+  CompoundCssValue.parse_transition_shorthand/1
+
+  Parsed.production includes:
+    :transition_shorthand
+
+  Occurrence.slot_grammar includes:
+    :transition_duration_operand
+
+Preserves:
+  CompoundCssValue.parse/1 signature and behavior
+  CompoundCssValue.reconstruct/2 signature
+  all legacy production identities and slot contracts
+~~~
 
 - [ ] **Step 1: Add parser tests before production changes.** Add the following named tests. Use generic identifiers such as `opacity`, `transform`, and `unknown-property`, and generic local names such as `--duration`, `--timing`, `--duration-b`, and `--timing-b`.
 
@@ -226,6 +294,14 @@ Use one ASCII space between each property, terminal, and timing value, and exact
 
   Expected: all new transition cases and all pre-existing compound cases pass. Unauthorized grammar returns `:no_match`; only bound overflow returns `:resource_limit_exceeded`.
 
+**Task 1 completion gate:**
+
+- The compound parser test file passes.
+- No normalizer file has changed yet.
+- `parse/1` regression tests pass.
+- `git diff --check` passes for Task 1 changes.
+- Create one signed Task 1 commit. Do not require full repository CI after Task 1.
+
 ## Property-scoped normalizer routing
 
 Keep the current lifecycle and owner responsibility:
@@ -241,16 +317,44 @@ analyze_local_records
  -> whole-rule atomicity
 ~~~
 
-The normalizer currently has both declaration property and value while compound parsing receives only the value. Make its private route property-aware, preferably with `compound_route(property, value)` and `compound_analysis(property, value)`, following the existing private naming style.
+The existing `analyze_compound_values/1` already has `{property, value}`. Task 2 changes the current private one-argument helpers to exactly `compound_route(property, value)` and `compound_analysis(property, value)`. No additional routing abstraction or module is authorized.
 
-Freeze routing order:
+Freeze the exact private routing algorithm:
 
-1. A local custom-property definition stays on its existing definition path and produces no compound occurrences.
-2. An exact direct `var(--name)` stays on the existing direct path first, including for `transition`.
-3. For an already admitted var-bearing compound declaration, call `CompoundCssValue.parse/1` first. This keeps every existing generic compound production and the bare `VAR WS VAR` production unchanged.
-4. Only when `property == "transition"`, the existing `parse/1` result is `:no_match`, and the value is already in the var-bearing compound admission, call `parse_transition_shorthand/1`.
-5. No other property may call `parse_transition_shorthand/1`. If `parse/1` returns an error, do not try the transition parser. A discovered value that matches neither production remains fail-closed; it does not return to the generic path.
-6. A transition literal without `var(` remains on the ordinary generic path.
+~~~text
+compound_route(property, value):
+
+1. Trim value using the existing route behavior.
+2. Exact direct var reference:
+   -> existing direct-reference route.
+3. Existing two-dimension value:
+   -> compound_analysis(property, trimmed).
+4. Existing var-bearing OR calc-bearing compound admission:
+   -> compound_analysis(property, trimmed).
+5. Otherwise:
+   -> :generic.
+
+compound_analysis(property, value):
+
+A. Call CompoundCssValue.parse(value) first.
+
+B. {:ok, parsed}
+   -> existing compound success tuple.
+
+C. {:error, reason}
+   -> existing compound error tuple.
+   -> DO NOT call the transition parser.
+
+D. :no_match AND
+   property == "transition" AND
+   value contains "var(" case-insensitively
+   -> call CompoundCssValue.parse_transition_shorthand(value).
+
+E. Every other :no_match
+   -> existing compound :no_match tuple.
+~~~
+
+When the transition parser returns `{:ok, parsed}`, use the existing compound success tuple. Map its resource error through the existing compound error tuple. Its `:no_match` stays the existing compound `:no_match` tuple; it does not return to the generic path. Therefore the new parser is not attempted for a non-`transition` property, as recovery from a `parse/1` error, merely because `calc(` was present, or for an ordinary transition literal without `var(`. A grammar failure after compound discovery remains fail-closed.
 
 Do not route by property for the legacy production and do not narrow its existing property-agnostic behavior. Do not change occurrence records, correlation keys, resolver records, resolver result ordering, local selection, provenance, or batch count units. Four transition occurrences per declaration join the same owner/provenance `reference_count`; they do not create another counter or resolver call.
 
@@ -260,6 +364,27 @@ Do not route by property for the legacy production and do not narrow its existin
 
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex`
 - Test `apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`
+
+**Interfaces:**
+
+~~~text
+Consumes:
+  CompoundCssValue.parse/1
+  CompoundCssValue.parse_transition_shorthand/1
+  CompoundCssValue.occurrences/1
+  CompoundCssValue.reconstruct/2
+
+Produces private routing:
+  compound_route(property, value)
+  compound_analysis(property, value)
+
+Preserves:
+  compound-analysis result tuple shapes
+  reference_id correlation shape
+  shared per-provenance resolver batches
+  public residual reasons
+  literal StyleValue output path
+~~~
 
 - [ ] **Step 1: Add transition integration tests before normalizer changes.** Add the following named tests using synthetic public CSS and local definitions.
 
@@ -294,6 +419,47 @@ Do not route by property for the legacy production and do not narrow its existin
   Run: `mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`
 
   Expected: the new transition integration cases and existing normalizer cases pass. Other properties cannot reach the new parser; the direct and legacy paths retain their prior outcomes.
+
+**Task 2 completion gate:**
+
+- Both targeted test files pass.
+- Implementation scope is still exactly the four authorized files.
+- `SourceLocalCustomPropertyResolver` is unchanged.
+- `CSSDeclaration` is unchanged.
+- No private evidence was accessed.
+- `git diff --check` passes.
+- Create one signed Task 2 commit.
+
+## Bounded production resolver acceptance
+
+Complete this step after Task 2 and before the full repository gates. Use the ordinary synthetic normalizer integration tests already planned; add no implementation file, production instrumentation, logging, or separate resolver. The tests must prove that every occurrence produced for these declarations traverses and correlates through the production shared resolver path by using distinct synthetic local values and checking the emitted literal contains each resolved value in occurrence order. Pair that output assertion with the parser occurrence cardinality. Do not infer success from parser output alone.
+
+~~~text
+PUBLIC_SYNTHETIC_PRODUCTION_RESOLVER_PROOF=PASS
+
+ONE_SPEC_TRANSITION:
+  produced_occurrences=2
+  correlated_local_results=2
+  emitted_literal=YES
+
+TWO_SPEC_TRANSITION:
+  produced_occurrences=4
+  correlated_local_results=4
+  emitted_literal=YES
+
+RESOLVER_CALL_MODEL=
+  EXISTING_SHARED_PER_PROVENANCE_BATCH
+
+SECOND_RESOLVER=NO
+PRIVATE_SOURCE_USED=NO
+~~~
+
+This is a bounded implementation acceptance measurement, separate from the later canonical Romeo evidence gate. Do not encode private aggregate counts in tests. The plan does not authorize the canonical rerun:
+
+~~~text
+C1_CANONICAL_ROMEO_RERUN=REQUIRED_AFTER_IMPLEMENTATION
+CANONICAL_ROMEO_RERUN_AUTHORIZED_BY_IMPLEMENTATION_PLAN=NO
+~~~
 
 ## Resolver, safety, and failure invariants
 
@@ -409,6 +575,80 @@ No implementation test may depend on private source material. The current plan P
 
 Before later implementation tests, run `mix deps.get` if dependencies are missing or stale in the isolated checkout. This is dependency setup. The final gate list above remains the exact CI-mirroring verification set.
 
+## Implementation PR handoff
+
+After the final CI-mirroring commands pass, prepare the implementation PR with these requirements:
+
+~~~text
+IMPLEMENTATION_PR_REQUIREMENTS:
+
+- implementation branch starts from verified implementation base
+- only the four authorized implementation/test files differ
+- all implementation commits are signed
+- targeted tests pass
+- full repository gates pass
+- open PR
+- exact-head push CI SUCCESS
+- exact-head PR CI SUCCESS
+- leave PR open and unmerged
+- do NOT run the private canonical Romeo rerun as part of implementation
+  unless separately authorized
+~~~
+
+Keep the signed Task 1 and Task 2 commit boundaries in history. Signed history from the implementation base through the final PR head must verify. Do not squash away the task boundary before final review unless separately authorized.
+
+Required implementation report:
+
+~~~text
+IMPLEMENTATION_BASE_SHA=
+IMPLEMENTATION_BASE_TREE=
+PLAN_MERGE_IN_ANCESTRY=
+
+TASK1_COMMIT=
+TASK2_COMMIT=
+SIGNED_HISTORY=
+
+CHANGED_FILES=
+
+PARSE_1_UNCHANGED=
+LEGACY_JUXTAPOSITION_UNCHANGED=
+PROPERTY_SCOPED_TRANSITION_ROUTE=
+TRANSITION_DURATION_SLOT_SEPARATE=
+TIMING_SLOT_REUSED=
+
+PUBLIC_SYNTHETIC_PRODUCTION_RESOLVER_PROOF=
+ONE_SPEC_OCCURRENCES=
+ONE_SPEC_CORRELATED_RESULTS=
+TWO_SPEC_OCCURRENCES=
+TWO_SPEC_CORRELATED_RESULTS=
+
+SHARED_RESOLVER_BATCH_REUSED=
+SHARED_REFERENCE_BUDGET_REUSED=
+SOURCE_LOCAL_RESOLVER_CHANGED=NO
+CSS_DECLARATION_CHANGED=NO
+EXTERNAL_FALLBACK=NO
+
+TARGETED_TESTS=
+FULL_TEST_SUITE=
+FORMAT=
+COMPILE_WARNINGS_AS_ERRORS=
+ASSETS_BUILD=
+STYLING_DRIFT=
+UNUSED_DEPS=
+DIFF_CHECK=
+
+PR_URL=
+PR_HEAD=
+PUSH_CI=
+PR_CI=
+MERGED=NO
+
+PRIVATE_SOURCE_ACCESSED=NO
+CANONICAL_ROMEO_RERUN_PERFORMED=NO
+
+STOP=
+~~~
+
 ## Plan self-review
 
 Before any later implementation starts, verify each item against the two tasks above:
@@ -428,9 +668,45 @@ FRAME_D_IMPLEMENTATION=NO
 C3A_IMPLEMENTATION=NO
 C3B_IMPLEMENTATION=NO
 PRIVATE_SOURCE_DEPENDENCY=NO
+IMPLEMENTATION_EXECUTION_PREFLIGHT_EXPLICIT=YES
+NORMALIZER_PRIVATE_SIGNATURES_FROZEN=YES
+TASK_INTERFACES_EXPLICIT=YES
+SIGNED_TASK_COMMIT_BOUNDARIES_EXPLICIT=YES
+PRODUCTION_RESOLVER_ACCEPTANCE_EXPLICIT=YES
+IMPLEMENTATION_STOP_CONDITIONS_EXPLICIT=YES
+IMPLEMENTATION_PR_HANDOFF_EXPLICIT=YES
 ~~~
 
 Review the plan for extra abstractions. If an implementation proposal requires generic parser broadening, a second resolver, resolver contract changes, CSSDeclaration changes, external-authority fallback, a new IR shape, a new residual reason, FRAME D, C3A, C3B, private source material, or any file outside the four-file implementation boundary, stop and return for authority review.
+
+## Implementation STOP conditions
+
+Stop implementation immediately if any of these conditions occurs:
+
+~~~text
+STOP=C1_IMPLEMENTATION_BASELINE_CHANGED
+STOP=PLAN_MERGE_NOT_IN_BASE_ANCESTRY
+STOP=GENERIC_PARSE_1_CHANGE_REQUIRED
+STOP=NEW_MODULE_REQUIRED
+STOP=SECOND_RESOLVER_REQUIRED
+STOP=RESOLVER_INTERFACE_CHANGE_REQUIRED
+STOP=RESOLVER_SELECTION_CHANGE_REQUIRED
+STOP=CSS_DECLARATION_CHANGE_REQUIRED
+STOP=VARIABLE_AUTHORITY_REENTRY_REQUIRED
+STOP=EXTERNAL_AUTHORITY_FALLBACK_REQUIRED
+STOP=NEW_IR_SHAPE_REQUIRED
+STOP=NEW_RESIDUAL_REASON_REQUIRED
+STOP=FRAME_D_REQUIRED
+STOP=C3A_OR_C3B_REQUIRED
+STOP=PRIVATE_SOURCE_REQUIRED
+STOP=PRIVATE_SOURCE_LEAK
+STOP=IMPLEMENTATION_SCOPE_EXCEEDED
+STOP=TARGETED_TEST_FAILURE
+STOP=FULL_GATE_FAILURE
+STOP=UNSIGNED_HISTORY
+~~~
+
+Do not spend more than one reconciliation cycle on moving `main`.
 
 ## Pull request gate
 
