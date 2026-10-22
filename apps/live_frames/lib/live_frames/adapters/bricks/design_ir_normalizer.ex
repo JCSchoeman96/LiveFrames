@@ -163,6 +163,10 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           static_diagnostics ++
           navigation_diagnostics
 
+      # Redact before the success/error fork: the blocking error result is an
+      # ordinary API result and must not carry execution-enabled source bodies.
+      diagnostics = redact_executable_source_diagnostics(diagnostics, %{tree: tree})
+
       if blocking?(diagnostics) do
         {:error, to_ir_diagnostics(diagnostics)}
       else
@@ -685,18 +689,23 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   defp source_trace(%Element{} = element, resolved, path, context) do
     static_semantics = Map.fetch!(context.static_semantics, element.id)
 
-    trace_metadata = %{
-      "component_id" => context.component.id,
-      "source_index" => element.source_index,
-      "parent" => element.parent,
-      "children" => element.children,
-      "class_ids" => resolved.class_ids,
-      "class_names" => resolved.class_names,
-      "semantic_classes" => resolved.semantic_classes,
-      "class_refs" => simplified_class_refs(resolved.class_refs),
-      "effective_settings" => resolved.settings,
-      "ir_path" => path
-    }
+    {source_settings, effective_settings, execution_facts} =
+      redacted_trace_settings(element, resolved)
+
+    trace_metadata =
+      %{
+        "component_id" => context.component.id,
+        "source_index" => element.source_index,
+        "parent" => element.parent,
+        "children" => element.children,
+        "class_ids" => resolved.class_ids,
+        "class_names" => resolved.class_names,
+        "semantic_classes" => resolved.semantic_classes,
+        "class_refs" => simplified_class_refs(resolved.class_refs),
+        "effective_settings" => effective_settings,
+        "ir_path" => path
+      }
+      |> Map.merge(execution_facts)
 
     trace_metadata =
       trace_metadata
@@ -712,13 +721,46 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
       source_path: source_path(element, context),
       source_name: element.name,
       source_classes: resolved.class_names,
-      source_settings: json_safe(element.settings),
+      source_settings: source_settings,
       adapter: "bricks",
       adapter_version: context.document.adapter_version,
       inference: inference_for(element, static_semantics),
       metadata: json_safe(trace_metadata)
     }
   end
+
+  # Execution-enabled Bricks code keeps its raw PHP only in the inert recognizer
+  # input. The ordinary serialized trace receives a SHA-256 fingerprint instead.
+  defp redacted_trace_settings(%Element{} = element, resolved) do
+    case executable_source_bytes(element) do
+      {:ok, source_bytes} ->
+        {
+          drop_code_setting(json_safe(element.settings)),
+          drop_code_setting(resolved.settings),
+          %{
+            "execution_enabled" => true,
+            "source_fingerprint" =>
+              :crypto.hash(:sha256, source_bytes) |> Base.encode16(case: :lower)
+          }
+        }
+
+      :error ->
+        {json_safe(element.settings), resolved.settings, %{}}
+    end
+  end
+
+  defp executable_source_bytes(%Element{name: "code", settings: settings})
+       when is_map(settings) do
+    case {Map.get(settings, "executeCode"), Map.get(settings, "code")} do
+      {true, source_bytes} when is_binary(source_bytes) -> {:ok, source_bytes}
+      _other -> :error
+    end
+  end
+
+  defp executable_source_bytes(_element), do: :error
+
+  defp drop_code_setting(settings) when is_map(settings), do: Map.delete(settings, "code")
+  defp drop_code_setting(settings), do: settings
 
   defp simplified_class_refs(class_refs) do
     Enum.map(class_refs, fn ref ->
@@ -2128,13 +2170,28 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   end
 
   defp retained_unsupported_settings(context) do
-    Enum.reject(context.dependencies.unsupported_settings, fn setting ->
+    bodies = executable_source_bodies(context)
+
+    context.dependencies.unsupported_settings
+    |> Enum.reject(fn setting ->
       source_id = Map.get(setting, :source_id)
 
       get_in(context.frontend_bindings.node_actions, [source_id, :suppress_unsupported_diagnostic]) ==
         true
     end)
+    |> Enum.map(&redact_executable_source_setting(&1, bodies))
   end
+
+  defp redact_executable_source_setting(%{raw_value: raw_value} = setting, bodies)
+       when is_binary(raw_value) do
+    if MapSet.member?(bodies, raw_value) do
+      setting |> Map.put(:raw_value, nil) |> Map.put(:raw_value_redacted, true)
+    else
+      setting
+    end
+  end
+
+  defp redact_executable_source_setting(setting, _bodies), do: setting
 
   defp maybe_put_fragment_source_shape(metadata, :component_fragment),
     do: Map.put(metadata, "source_shape", "component_fragment")
@@ -2160,11 +2217,52 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp to_ir_diagnostics(diagnostics, context \\ nil) when is_list(diagnostics) do
     diagnostics
+    |> redact_executable_source_diagnostics(context)
     |> Enum.map(&to_ir_diagnostic(&1, context))
     |> Enum.sort_by(fn diagnostic ->
       {diagnostic.code || "", trace_sort_key(diagnostic.source_trace), diagnostic.message || ""}
     end)
   end
+
+  defp redact_executable_source_diagnostics(diagnostics, context) do
+    bodies = executable_source_bodies(context)
+    Enum.map(diagnostics, &redact_executable_source_diagnostic(&1, bodies))
+  end
+
+  # An unsupported `code` setting diagnostic carries the raw setting value. When
+  # that value is an execution-enabled code body, the ordinary diagnostic keeps
+  # only its code and path.
+  defp redact_executable_source_diagnostic(
+         %BricksDiagnostic{code: "bricks.setting.unsupported", source_path: "code"} = diagnostic,
+         bodies
+       )
+       when is_binary(diagnostic.raw_value) do
+    if MapSet.member?(bodies, diagnostic.raw_value) do
+      %{
+        diagnostic
+        | raw_value: nil,
+          metadata: Map.put(diagnostic.metadata || %{}, "raw_value_redacted", true)
+      }
+    else
+      diagnostic
+    end
+  end
+
+  defp redact_executable_source_diagnostic(diagnostic, _bodies), do: diagnostic
+
+  defp executable_source_bodies(%{tree: %{elements: elements}}) do
+    elements
+    |> Map.values()
+    |> Enum.flat_map(fn element ->
+      case executable_source_bytes(element) do
+        {:ok, source_bytes} -> [source_bytes]
+        :error -> []
+      end
+    end)
+    |> MapSet.new()
+  end
+
+  defp executable_source_bodies(_context), do: MapSet.new()
 
   defp to_ir_diagnostic(%Diagnostic{} = diagnostic, _context), do: diagnostic
 
