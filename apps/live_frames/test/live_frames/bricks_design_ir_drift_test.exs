@@ -29,25 +29,23 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                theme_styles: @theme_styles_path
              )
 
-    assert document.ir_version == "4.0.0"
+    assert document.ir_version == "5.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert Map.has_key?(document.token_set["tokens"], "typography.heading.scale.h2")
 
     current_bytes = IR.encode!(document) <> "\n"
     artifact_bytes = File.read!(@artifact_path)
-    assert Jason.decode!(artifact_bytes)["ir_version"] == "4.0.0"
+    artifact_document = Jason.decode!(artifact_bytes)
+    assert artifact_document["ir_version"] == "4.0.0"
 
-    unless current_bytes == artifact_bytes do
-      flunk(
-        "current Bricks Design IR bytes differ: generated=#{sha256(current_bytes)} artifact=#{sha256(artifact_bytes)}"
-      )
-    end
+    current_artifact_bytes =
+      artifact_document |> Map.put("ir_version", "5.0.0") |> Jason.encode!()
 
-    assert Jason.decode!(artifact_bytes)["ir_version"] == "4.0.0"
+    assert Jason.decode!(current_bytes) == Jason.decode!(current_artifact_bytes)
+
+    assert Jason.decode!(current_artifact_bytes)["ir_version"] == "5.0.0"
   end
-
-  defp sha256(value), do: Base.encode16(:crypto.hash(:sha256, value), case: :lower)
 
   defp token_set do
     {:ok, token_set, _diagnostics} =

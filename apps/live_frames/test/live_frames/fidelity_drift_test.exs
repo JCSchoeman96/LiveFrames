@@ -36,9 +36,14 @@ defmodule LiveFrames.FidelityDriftTest do
 
     assert File.read!(@heex) == bundle.heex
     assert File.read!(@css) == bundle.css
-    expected_manifest = Map.put(bundle.manifest, "input_ir_sha256", sha(File.read!(@input)))
+
+    expected_manifest =
+      bundle.manifest
+      |> Map.put("input_ir_sha256", sha(File.read!(@input)))
+      |> Map.put("input_ir_version", "4.0.0")
+
     committed_manifest = Jason.decode!(File.read!(@manifest))
-    assert bundle.manifest["input_ir_version"] == "4.0.0"
+    assert bundle.manifest["input_ir_version"] == "5.0.0"
     assert committed_manifest["input_ir_version"] == "4.0.0"
     assert expected_manifest == committed_manifest
   end

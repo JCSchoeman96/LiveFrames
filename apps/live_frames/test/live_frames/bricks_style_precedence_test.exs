@@ -1076,7 +1076,7 @@ defmodule LiveFrames.BricksStylePrecedenceTest do
 
   test "emits Design IR version 4.0.0" do
     document = document([], [], %{"_width" => "100px"})
-    assert document.ir_version == "4.0.0"
+    assert document.ir_version == "5.0.0"
   end
 
   test "contributor metadata survives the Design IR serializer" do

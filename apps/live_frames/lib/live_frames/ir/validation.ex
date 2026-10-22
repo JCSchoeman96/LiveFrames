@@ -59,6 +59,7 @@ defmodule LiveFrames.IR.Validation do
         collection_index,
         node_ids,
         node_paths,
+        node_semantics(document.root_nodes),
         diagnostics
       )
 
@@ -1280,6 +1281,7 @@ defmodule LiveFrames.IR.Validation do
          collection_index,
          node_ids,
          node_paths,
+         node_semantics,
          diagnostics
        )
        when is_map(bindings) and not is_struct(bindings) do
@@ -1296,7 +1298,7 @@ defmodule LiveFrames.IR.Validation do
               record.source_trace
             )
             |> validate_value_binding_combination(record, record.source_trace)
-            |> validate_value_binding_target_kind(record, record.source_trace)
+            |> validate_value_binding_target_kind(record, node_semantics, record.source_trace)
             |> validate_value_binding_containment(record, collection_index, node_paths)
 
           diagnostics
@@ -1312,6 +1314,7 @@ defmodule LiveFrames.IR.Validation do
          _collection_index,
          _node_ids,
          _node_paths,
+         _node_semantics,
          diagnostics
        ),
        do: diagnostics
@@ -1343,6 +1346,16 @@ defmodule LiveFrames.IR.Validation do
         )
         |> require_nil_collection(binding.collection_binding_id, trace)
 
+      {:field, :current_entity} ->
+        diagnostics
+        |> require_string(
+          binding.value_key,
+          "ir.value_binding.value_key_missing",
+          "field current_entity bindings require value_key",
+          trace
+        )
+        |> require_nil_collection(binding.collection_binding_id, trace)
+
       {:collection_count, :collection} ->
         diagnostics
         |> require_nil_value_key(binding.value_key, trace)
@@ -1367,7 +1380,27 @@ defmodule LiveFrames.IR.Validation do
 
   defp validate_value_binding_target_kind(
          diagnostics,
+         %{target_kind: :rich_text, value_kind: :field, target_node_id: target_id},
+         node_semantics,
+         trace
+       ) do
+    if Map.get(node_semantics, target_id) == "rich_text" do
+      diagnostics
+    else
+      error(
+        diagnostics,
+        "ir.value_binding.target_semantic_type_invalid",
+        "rich_text field bindings require a rich_text target node",
+        :schema,
+        trace
+      )
+    end
+  end
+
+  defp validate_value_binding_target_kind(
+         diagnostics,
          %{target_kind: target_kind, value_kind: value_kind},
+         _node_semantics,
          trace
        )
        when target_kind in [:asset, :link_url] and value_kind != :field do
@@ -1380,7 +1413,21 @@ defmodule LiveFrames.IR.Validation do
     )
   end
 
-  defp validate_value_binding_target_kind(diagnostics, _binding, _trace), do: diagnostics
+  defp validate_value_binding_target_kind(diagnostics, _binding, _node_semantics, _trace),
+    do: diagnostics
+
+  defp node_semantics(nodes) when is_list(nodes) do
+    Enum.reduce(nodes, %{}, fn
+      %DesignNode{} = node, acc ->
+        children = node_semantics(node.children)
+        Map.merge(Map.put(acc, node.node_id, node.semantic_type), children)
+
+      _, acc ->
+        acc
+    end)
+  end
+
+  defp node_semantics(_nodes), do: %{}
 
   defp validate_value_binding_containment(diagnostics, binding, collection_index, node_paths) do
     case {binding.value_kind, binding.scope, binding.collection_binding_id} do

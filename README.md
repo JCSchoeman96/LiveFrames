@@ -22,7 +22,7 @@ Completed foundations include:
 
 - Phoenix umbrella/library foundation, preview application, and Storybook
   foundation.
-- Design IR `4.0.0` and TokenSet `1.0.0`.
+- Design IR `5.0.0` and TokenSet `1.0.0`.
 - Automatic.css settings adapter for the current required TokenSet semantics.
 - Bricks structured adapter and Bricks → Design IR conversion.
 - Deterministic artifacts and drift verification.

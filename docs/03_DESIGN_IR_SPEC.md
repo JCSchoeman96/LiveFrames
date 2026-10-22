@@ -13,7 +13,7 @@ source plugin.
 
 ## Version
 
-The current supported contract version is `4.0.0`. `DesignDocument` owns this
+The current supported contract version is `5.0.0`. `DesignDocument` owns this
 authoritative version and exposes it through `current_ir_version/0`; the public
 `LiveFrames.IR.current_ir_version/0` helper delegates to it. Every
 `DesignDocument` carries its `ir_version`, and serialization includes that
@@ -21,10 +21,10 @@ explicit value. A change to required fields, field meaning, validation rules,
 or serialized shape requires a new IR version and an explicit migration
 decision.
 
-Writers emit `4.0.0`. Readers accept `4.0.0` directly, migrate `3.0.0`
-through `3.0.0` → `4.0.0`, migrate `2.0.0` through `2.0.0` → `3.0.0` →
-`4.0.0`, and migrate `1.0.0` through `1.0.0` → `2.0.0` → `3.0.0` →
-`4.0.0`. Any other non-empty `ir_version` is
+Writers emit `5.0.0`. Readers accept `5.0.0` directly, migrate `4.0.0` to
+`5.0.0`, migrate `3.0.0` through `3.0.0` → `4.0.0` → `5.0.0`, migrate
+`2.0.0` through `2.0.0` → `3.0.0` → `4.0.0` → `5.0.0`, and migrate
+`1.0.0` through `1.0.0` → `2.0.0` → `3.0.0` → `4.0.0` → `5.0.0`. Any other non-empty `ir_version` is
 rejected as unsupported. Missing, empty, or non-string versions produce
 distinct diagnostics from unsupported versions.
 
@@ -46,7 +46,10 @@ distinct diagnostics from unsupported versions.
   preserves normalization status, value keys, targets, collection references,
   source traces, and existing provenance. The migration records structural
   evidence and does not infer modifier semantics from a source trace.
-- `4.0.0` → `4.0.0` is identity.
+- `4.0.0` → `5.0.0` preserves represented fields and values and records a
+  structural migration with `frontend_semantics_recovered=false`. It rejects
+  v5-only `rich_text` and `current_entity` enum values in v4 bindings.
+- `5.0.0` → `5.0.0` is identity.
 - All other versions fail closed.
 
 Each transition appends evidence under the namespaced provenance key
@@ -54,8 +57,8 @@ Each transition appends evidence under the namespaced provenance key
 
 | Field | Value |
 | --- | --- |
-| `source_version` | Transition source, `1.0.0`, `2.0.0`, or `3.0.0` |
-| `target_version` | Transition target, `2.0.0`, `3.0.0`, or `4.0.0` |
+| `source_version` | Transition source, `1.0.0` through `4.0.0` |
+| `target_version` | Transition target, `2.0.0` through `5.0.0` |
 | `kind` | `structural` |
 | `frontend_semantics_recovered` | `false` |
 
@@ -97,7 +100,7 @@ with defaults.
 
 ### Generator limitation
 
-The current static Fidelity generator accepts `4.0.0` documents only when both
+The current static Fidelity generator accepts `5.0.0` documents only when both
 `collection_bindings` and `value_bindings` are empty. Non-empty registries fail
 closed with a stable diagnostic until a binding-aware generator ships.
 
@@ -267,9 +270,9 @@ caller-supplied data:
 | --- | --- | --- |
 | `value_binding_id` | non-empty string | Stable registry identity. |
 | `target_node_id` | node ID | Node receiving the bound value. |
-| `target_kind` | `text`, `asset`, or `link_url` | Frontend destination. |
+| `target_kind` | `text`, `asset`, `link_url`, or `rich_text` | Frontend destination. |
 | `value_kind` | `field` or `collection_count` | Field value or collection count. |
-| `scope` | `collection_item`, `site`, or `collection` | Caller-data scope. |
+| `scope` | `collection_item`, `site`, `collection`, or `current_entity` | Caller-data scope. |
 | `value_key` | semantic key or `nil` | Required for `field`; absent for `collection_count`. |
 | `collection_binding_id` | collection binding ID or `nil` | Required for `collection_item` and `collection` scopes. |
 | `modifier` | Required closed `ValueModifier` object | Caller-owned value transformation state. |
@@ -280,8 +283,10 @@ Valid combinations:
 
 - `field` + `collection_item` requires `collection_binding_id` and `value_key`.
 - `field` + `site` requires `value_key` and forbids `collection_binding_id`.
+- `field` + `current_entity` requires `value_key` and forbids `collection_binding_id`.
 - `collection_count` + `collection` requires `collection_binding_id`, forbids
   `value_key`, and requires `target_kind` `text`.
+- A `rich_text` field binding targets a node with semantic type `rich_text`.
 
 `target_kind` `asset` or `link_url` requires `value_kind` `field`. A
 `collection_item` target must lie within the referenced collection

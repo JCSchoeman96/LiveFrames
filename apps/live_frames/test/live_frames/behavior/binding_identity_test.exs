@@ -65,6 +65,16 @@ defmodule LiveFrames.Behavior.BindingIdentityTest do
     refute ir4_id == ir3_id
   end
 
+  test "assigns a different binding ID for an IR5 DesignDocument identity" do
+    binding = occurrence()
+    ir5_identity = %Identity{@identity | ir_version: "5.0.0", digest: String.duplicate("c", 64)}
+
+    assert {:ok, ir3_contract} = BindingIdentity.assign(contract([binding]))
+    assert {:ok, ir5_contract} = BindingIdentity.assign(contract([binding], ir5_identity))
+
+    refute hd(ir5_contract.bindings).binding_id == hd(ir3_contract.bindings).binding_id
+  end
+
   test "preserves binding list order while IDs follow semantic occurrences" do
     first = occurrence(primitive_policy_values: %{"mode" => "alpha"})
     second = occurrence(primitive_policy_values: %{"mode" => "beta"})
