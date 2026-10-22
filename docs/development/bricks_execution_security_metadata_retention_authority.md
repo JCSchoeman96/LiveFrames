@@ -18,9 +18,15 @@ BASE_CI_RESULT=success
 
 ## Decision
 
-Bricks execution signatures are source-platform execution authenticators. They
-are private source-runtime evidence. They are not LiveFrames meaning, runtime
-input, or identity.
+Bricks execution signatures are source-platform execution authenticators and
+private source-runtime evidence. They are not semantic meaning or runtime input
+for LiveFrames. They are not semantic identity, component identity, or
+standalone provenance identity.
+
+They may affect whole-source content identity only indirectly as bytes within
+the complete original imported source. That whole-source content identity is
+allowed, is not a signature fingerprint, and must never be used to validate a
+signature, compare or infer signature validity, or recover a signature.
 
 The normalizer must classify recognized execution signatures in the private
 source model, then remove them from every ordinary-consumer representation
