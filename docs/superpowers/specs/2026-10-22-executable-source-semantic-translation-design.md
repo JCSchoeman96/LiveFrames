@@ -465,6 +465,10 @@ Public diagnostics must never contain raw executable source.
 
 The raw source may remain available only in private source trace/evidence under existing privacy rules.
 
+"Private source trace/evidence" means out-of-band private source corpus or ephemeral analyzer input only. It does not mean a `LiveFrames.IR.SourceTrace` inside a DesignDocument. Serialized `LiveFrames.IR.SourceTrace` values are ordinary IR data and must never contain raw executable source. This applies to every field that the serializer emits, including `source_settings`, `metadata`, node traces, diagnostics, diagnostic traces, and provenance.
+
+Preserved unsupported executable-source elements keep safe structural provenance, not raw source bytes. Their source fingerprint, execution-enabled status, and safe non-code settings remain available. A preserved element still counts in source accounting and remains a whole-element unsupported node.
+
 ## 13. Diagnostic policy
 
 The feature needs deterministic diagnostics for at least these outcomes:
@@ -500,6 +504,8 @@ For one executable-source element, LiveFrames must either:
 2. preserve the element as unsupported.
 
 It must not translate one output fragment and silently discard another unknown output fragment.
+
+Preservation does not authorize raw executable bytes in serialized Design IR. Whether recognition normalizes an execution-enabled code element or fails and keeps it unsupported, the ordinary DesignDocument must not contain its raw source. The recognizer may read the inert bytes from the original source element only before ordinary trace construction.
 
 This is especially important for code elements containing mixed PHP and HTML.
 

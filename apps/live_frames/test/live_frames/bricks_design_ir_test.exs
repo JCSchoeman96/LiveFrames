@@ -2229,6 +2229,87 @@ defmodule LiveFrames.BricksDesignIRTest do
     refute encoded =~ source_code
   end
 
+  test "preserved unsupported executable source keeps safe provenance without raw PHP" do
+    sentinel = "PRIVATE_UNSUPPORTED_TRACE_SENTINEL_5c2a9e"
+    source_code = "<?php echo '#{sentinel}'; ?>"
+    fingerprint = :crypto.hash(:sha256, source_code) |> Base.encode16(case: :lower)
+
+    source =
+      synthetic_source([
+        source_element("php-unsupported", "code", 0, %{
+          "executeCode" => true,
+          "noRoot" => true,
+          "code" => source_code
+        })
+      ])
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    node = node_by_source_id(document, "php-unsupported")
+    assert node.semantic_type == "unsupported"
+    assert node.content == nil
+
+    trace = node.source_trace
+    refute Map.has_key?(trace.source_settings, "code")
+    assert trace.source_settings["executeCode"] == true
+    assert trace.source_settings["noRoot"] == true
+
+    refute Map.has_key?(trace.metadata["effective_settings"], "code")
+    assert trace.metadata["effective_settings"]["noRoot"] == true
+    assert trace.metadata["execution_enabled"] == true
+    assert trace.metadata["source_fingerprint"] == fingerprint
+
+    assert Enum.any?(document.diagnostics, &(&1.code == "bricks.element.unsupported"))
+
+    assert sentinel_paths(flatten(document.root_nodes), sentinel) == []
+    assert sentinel_paths(document.diagnostics, sentinel) == []
+    assert sentinel_paths(document.provenance, sentinel) == []
+    assert sentinel_paths(IR.to_map(document), sentinel) == []
+
+    encoded = IR.encode!(document)
+    refute encoded =~ sentinel
+    refute encoded =~ source_code
+  end
+
+  test "ordinary non-executable elements keep their existing safe source settings" do
+    source =
+      synthetic_source([
+        source_element("plain-div", "div", 0, %{"noRoot" => true, "code" => "plain-setting"})
+      ])
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    trace = node_by_source_id(document, "plain-div").source_trace
+    assert trace.source_settings["code"] == "plain-setting"
+    assert trace.metadata["effective_settings"]["code"] == "plain-setting"
+  end
+
+  defp sentinel_paths(term, needle, path \\ [])
+
+  defp sentinel_paths(term, needle, path) when is_binary(term) do
+    if String.contains?(term, needle), do: [path], else: []
+  end
+
+  defp sentinel_paths(%_{} = struct, needle, path),
+    do: sentinel_paths(Map.from_struct(struct), needle, path)
+
+  defp sentinel_paths(term, needle, path) when is_map(term) do
+    Enum.flat_map(term, fn {key, value} -> sentinel_paths(value, needle, path ++ [key]) end)
+  end
+
+  defp sentinel_paths(term, needle, path) when is_list(term) do
+    term
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {value, index} -> sentinel_paths(value, needle, path ++ [index]) end)
+  end
+
+  defp sentinel_paths(term, needle, path) when is_tuple(term),
+    do: sentinel_paths(Tuple.to_list(term), needle, path ++ [:tuple])
+
+  defp sentinel_paths(_term, _needle, _path), do: []
+
   @tag :cta_tango_private_reference
   test "CTA Tango R5 full style-coverage proof (read-only reference)" do
     path = cta_tango_reference_path()
