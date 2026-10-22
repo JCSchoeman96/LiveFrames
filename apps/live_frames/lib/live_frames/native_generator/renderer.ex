@@ -815,7 +815,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
           """
           <%= case #{alt_expr} do %>
             <% lf_alt when lf_alt in [nil, ""] -> %>
-              <% raise ArgumentError, "image alt is required when source is present" %>
+              <%= raise ArgumentError, "image alt is required when source is present" %>
             <% lf_alt -> %>
               <img#{img_attrs} src={#{src_var}} alt={lf_alt} />
           <% end %>
@@ -847,6 +847,10 @@ defmodule LiveFrames.NativeGenerator.Renderer do
           %BindingProjection{} = projection ->
             binding_collection_expr(indexes, projection, collection_stack)
 
+          {:unbound_item_field, cb_id, field_name} ->
+            {item_var, ordinal} = collection_item_ref(cb_id, collection_stack, indexes)
+            "lf_item_field(#{item_var}, #{ordinal}, #{inspect(field_name)})"
+
           nil ->
             "nil"
         end
@@ -863,8 +867,16 @@ defmodule LiveFrames.NativeGenerator.Renderer do
       } ->
         alt_field = collection_alt_field_name(indexes, cb_id, field_name)
 
-        Map.get(indexes.binding_projection_by_node_role, {node_id, :asset_alt}) ||
-          find_alt_field_projection(indexes, node_id, alt_field)
+        case Map.get(indexes.binding_projection_by_node_role, {node_id, :asset_alt}) ||
+               find_alt_field_projection(indexes, node_id, alt_field) do
+          %BindingProjection{} = projection ->
+            projection
+
+          nil ->
+            if Map.has_key?(Map.get(indexes.item_fields_by_collection, cb_id, %{}), alt_field) do
+              {:unbound_item_field, cb_id, alt_field}
+            end
+        end
 
       _ ->
         nil

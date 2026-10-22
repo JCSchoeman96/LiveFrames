@@ -83,6 +83,108 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
     }
   end
 
+  defp collection_image_candidate(source_pairs) do
+    design_document = document()
+    [boundary, outside] = design_document.root_nodes
+    [heading, image, actions] = boundary.children
+
+    sources =
+      Enum.with_index(source_pairs, 1)
+      |> Enum.map(fn {{source_name, alt_name}, index} ->
+        {source_name, alt_name, "vb_image_#{index}", DesignNode.deterministic_id([1, 3, index])}
+      end)
+
+    image_nodes =
+      Enum.map(sources, fn {_source, _alt, _binding_id, node_id} ->
+        %DesignNode{node_id: node_id, semantic_type: "image"}
+      end)
+
+    design_document = %{
+      design_document
+      | root_nodes: [
+          %{boundary | children: [heading, image, %{actions | children: image_nodes}]},
+          outside
+        ],
+        collection_bindings: %{
+          "cb_members" => %CollectionBinding{
+            collection_binding_id: "cb_members",
+            owner_node_id: @boundary_id,
+            repeat_root_node_id: @actions_id
+          }
+        },
+        value_bindings:
+          Map.new(sources, fn {source_name, _alt, binding_id, node_id} ->
+            {binding_id,
+             value_binding(binding_id, node_id,
+               target_kind: :asset,
+               scope: :collection_item,
+               collection_binding_id: "cb_members",
+               value_key: source_name
+             )}
+          end)
+    }
+
+    assert :ok = IR.validate(design_document)
+
+    accessibility = fn alt_name ->
+      %{
+        "image_alt_policy" => "consumer_supplied",
+        "alt_item_field_name" => alt_name,
+        "required_when_source_present" => true
+      }
+    end
+
+    source_fields =
+      Enum.map(sources, fn {source_name, alt_name, _binding_id, _node_id} ->
+        %ItemField{
+          name: source_name,
+          type: :string,
+          semantic_purpose: source_name,
+          accessibility: accessibility.(alt_name)
+        }
+      end)
+
+    alt_fields =
+      sources
+      |> Enum.map(fn {_source_name, alt_name, _binding_id, _node_id} -> alt_name end)
+      |> Enum.uniq()
+      |> Enum.map(&%ItemField{name: &1, type: :string, semantic_purpose: &1})
+
+    component_contract =
+      contract(
+        public_attrs: [attr("members", :list)],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_members",
+            public_attr_name: "members",
+            item_fields: source_fields ++ alt_fields
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_members",
+            projection_kind: :collection_attr,
+            public_attr_name: "members",
+            source_collection_binding_id: "cb_members",
+            target_node_id: @actions_id
+          }
+          | Enum.map(sources, fn {source_name, _alt, binding_id, node_id} ->
+              %BindingProjection{
+                source_binding_kind: :value,
+                source_binding_id: binding_id,
+                projection_kind: :collection_item_field,
+                source_collection_binding_id: "cb_members",
+                item_field_name: source_name,
+                target_node_id: node_id
+              }
+            end)
+        ]
+      )
+
+    {plan(component_contract, design_document), component_contract, design_document}
+  end
+
   defp role_document do
     design_document = document()
     [boundary, outside] = design_document.root_nodes
@@ -2124,13 +2226,94 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
           Enum.reject(component_contract.binding_projections, &(&1.source_binding_id == "vb_alt"))
     }
 
-    assert "componentization_plan.accessibility.alt_item_projection_mismatch" in codes(
+    assert "componentization_plan.binding.uncovered" in codes(
              ComponentizationPlan.validate_references(
                plan(missing_alt_projection, design_document),
                missing_alt_projection,
                design_document
              )
            )
+
+    unbound_document = %{
+      design_document
+      | value_bindings: Map.delete(design_document.value_bindings, "vb_alt")
+    }
+
+    unbound_companion = %{
+      component_contract
+      | binding_projections:
+          Enum.reject(component_contract.binding_projections, &(&1.source_binding_id == "vb_alt"))
+    }
+
+    assert ComponentizationPlan.validate_references(
+             plan(unbound_companion, unbound_document),
+             unbound_companion,
+             unbound_document
+           ) == :ok
+
+    ordinary_unbound = %{
+      unbound_companion
+      | collection_inputs: [
+          %{
+            hd(unbound_companion.collection_inputs)
+            | item_fields:
+                hd(unbound_companion.collection_inputs).item_fields ++
+                  [%ItemField{name: "caption", type: :string, semantic_purpose: "caption"}]
+          }
+        ]
+    }
+
+    assert ComponentizationPlan.validate_references(
+             plan(ordinary_unbound, unbound_document),
+             ordinary_unbound,
+             unbound_document
+           ) == :ok
+
+    malformed_companions = [
+      put_in(
+        unbound_companion,
+        [
+          Access.key(:collection_inputs),
+          Access.at(0),
+          Access.key(:item_fields),
+          Access.at(1),
+          Access.key(:type)
+        ],
+        :integer
+      ),
+      put_in(
+        unbound_companion,
+        [
+          Access.key(:collection_inputs),
+          Access.at(0),
+          Access.key(:item_fields),
+          Access.at(1),
+          Access.key(:required)
+        ],
+        true
+      ),
+      put_in(
+        unbound_companion,
+        [
+          Access.key(:collection_inputs),
+          Access.at(0),
+          Access.key(:item_fields),
+          Access.at(1),
+          Access.key(:default)
+        ],
+        "fallback"
+      )
+    ]
+
+    for malformed <- malformed_companions do
+      assert codes(
+               ComponentizationPlan.validate_references(
+                 plan(malformed, unbound_document),
+                 malformed,
+                 unbound_document
+               )
+             ) != []
+    end
   end
 
   test "applies collection-item image validation to nested CollectionInputs" do
@@ -2258,6 +2441,44 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
              component_contract,
              design_document
            ) == :ok
+  end
+
+  test "accepts distinct unbound companions and an unrelated zero-reference item field" do
+    {_component_plan, component_contract, design_document} =
+      collection_image_candidate([{"photo", "photo_alt"}, {"cover", "cover_alt"}])
+
+    [collection_input] = component_contract.collection_inputs
+
+    component_contract = %{
+      component_contract
+      | collection_inputs: [
+          %{
+            collection_input
+            | item_fields:
+                collection_input.item_fields ++
+                  [%ItemField{name: "caption", type: :string, semantic_purpose: "caption"}]
+          }
+        ]
+    }
+
+    assert ComponentizationPlan.validate_references(
+             plan(component_contract, design_document),
+             component_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "blocks a shared unbound collection image alt companion" do
+    {component_plan, component_contract, design_document} =
+      collection_image_candidate([{"photo", "alt"}, {"cover", "alt"}])
+
+    assert "componentization_plan.accessibility.alt_item_projection_mismatch" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
   end
 
   test "a subtree slot replaces its static subtree but cannot conceal a binding" do

@@ -1118,6 +1118,18 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
           acc
       end)
 
+    item_field_projection_count_index =
+      Enum.reduce(contract.binding_projections, %{}, fn projection, acc ->
+        case projection_item_field_identity(projection) do
+          {collection_id, field_name} = identity
+          when is_binary(collection_id) and is_binary(field_name) ->
+            Map.update(acc, identity, 1, &(&1 + 1))
+
+          _ ->
+            acc
+        end
+      end)
+
     collection_item_text_targets =
       Enum.reduce(contract.binding_projections, MapSet.new(), fn
         %BindingProjection{
@@ -1158,6 +1170,15 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     value_bindings = normalized_registry(document.value_bindings)
     collection_bindings = normalized_registry(document.collection_bindings)
 
+    companion_references_by_candidate =
+      companion_reference_index(
+        value_bindings,
+        bindings_by_source,
+        nodes_by_id,
+        tree_indexes.boundary_ids,
+        item_fields_by_collection
+      )
+
     %{
       nodes_by_id: nodes_by_id,
       boundary_ids: tree_indexes.boundary_ids,
@@ -1171,7 +1192,9 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       bindings_by_source: bindings_by_source,
       bindings_by_public_target: bindings_by_public_target,
       item_field_projection_index: item_field_projection_index,
+      item_field_projection_count_index: item_field_projection_count_index,
       collection_item_text_targets: collection_item_text_targets,
+      companion_references_by_candidate: companion_references_by_candidate,
       render_by_public_target: render_by_public_target,
       render_by_node_role: render_by_node_role,
       render_by_node: render_by_node,
@@ -1179,6 +1202,87 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       collection_bindings: collection_bindings
     }
   end
+
+  defp projection_item_field_identity(%BindingProjection{
+         projection_kind: :collection_item_field,
+         source_binding_kind: :value,
+         source_collection_binding_id: collection_id,
+         item_field_name: field_name
+       }),
+       do: {collection_id, field_name}
+
+  defp projection_item_field_identity(%BindingProjection{
+         projection_kind: :collection_item_field,
+         parent_collection_binding_id: collection_id,
+         parent_item_field_name: field_name
+       }),
+       do: {collection_id, field_name}
+
+  defp projection_item_field_identity(_projection), do: nil
+
+  defp companion_reference_index(
+         value_bindings,
+         bindings_by_source,
+         nodes_by_id,
+         boundary_ids,
+         item_fields_by_collection
+       ) do
+    Enum.reduce(value_bindings, %{}, fn
+      {id,
+       %ValueBinding{
+         value_kind: :field,
+         scope: :collection_item,
+         target_kind: :asset,
+         collection_binding_id: collection_id,
+         target_node_id: target
+       }},
+      acc
+      when is_binary(collection_id) and is_binary(target) ->
+        source_projection =
+          case Map.get(bindings_by_source, {:value, id}) do
+            [
+              %BindingProjection{
+                projection_kind: :collection_item_field,
+                source_binding_kind: :value,
+                source_collection_binding_id: ^collection_id,
+                item_field_name: source_name,
+                target_node_id: ^target
+              }
+            ] ->
+              Map.get(item_fields_by_collection, collection_id, %{})[source_name]
+
+            _ ->
+              nil
+          end
+
+        if MapSet.member?(boundary_ids, target) and
+             match?(%DesignNode{semantic_type: "image"}, Map.get(nodes_by_id, target)) do
+          add_companion_reference(acc, collection_id, source_projection)
+        else
+          acc
+        end
+
+      _other, acc ->
+        acc
+    end)
+  end
+
+  defp add_companion_reference(acc, collection_id, %ItemField{accessibility: accessibility}) do
+    with {:ok, policy} <- Json.normalize(accessibility),
+         %{
+           "image_alt_policy" => "consumer_supplied",
+           "alt_item_field_name" => alt_name,
+           "required_when_source_present" => true
+         } <- policy,
+         true <- map_size(policy) == 3,
+         true <- nonempty_string?(alt_name) do
+      Map.update(acc, {collection_id, alt_name}, 1, &(&1 + 1))
+    else
+      _ -> acc
+    end
+  end
+
+  defp add_companion_reference(acc, _collection_id, _source_projection), do: acc
 
   defp index_nodes(nodes, indexes, boundary_id, slot_targets, in_boundary?, current_slot_owner) do
     Enum.reduce(nodes, indexes, fn %DesignNode{node_id: id, children: children} = node, acc ->
@@ -2012,7 +2116,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
     case alt_field do
       %ItemField{type: :string} when is_binary(alt_name) and alt_name != "" ->
-        valid? =
+        valid_binding_backed? =
           case Map.get(indexes.item_field_projection_index, {collection_id, alt_name}) do
             {1, targets} ->
               MapSet.member?(targets, target) and
@@ -2022,7 +2126,13 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
               false
           end
 
-        if valid? and required? and exact_keys? do
+        valid_unbound? =
+          Map.get(indexes.item_field_projection_count_index, {collection_id, alt_name}, 0) == 0 and
+            alt_field.required == false and alt_field.default == nil and
+            Map.get(indexes.companion_references_by_candidate, {collection_id, alt_name}, 0) == 1 and
+            image_binding.collection_binding_id == collection_id
+
+        if (valid_binding_backed? or valid_unbound?) and required? and exact_keys? do
           {true, diagnostics}
         else
           {false,

@@ -13,6 +13,20 @@ defmodule LiveFrames.ComponentReviewTest do
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Diagnostic, as: PlanDiagnostic
   alias LiveFrames.ComponentizationPlan.NodeDisposition
+  alias LiveFrames.ComponentizationProposer
+  alias LiveFrames.ComponentizationProposer.SemanticInput, as: SemanticInput
+
+  alias LiveFrames.ComponentizationProposer.SemanticInput.{
+    BindingAssignmentDecision,
+    BoundaryDecision,
+    ClassificationDecision,
+    CollectionAdmissionDecision,
+    ContractIdentityDecision,
+    ImageAccessibilityDecision,
+    ItemFieldDecision,
+    PublicAttrDecision
+  }
+
   alias LiveFrames.ComponentReviewResult
   alias LiveFrames.Behavior.Binding, as: BehaviorBinding
   alias LiveFrames.Behavior.Binding.PrimitiveRef
@@ -20,7 +34,7 @@ defmodule LiveFrames.ComponentReviewTest do
   alias LiveFrames.Behavior.Contract, as: BehaviorContract
   alias LiveFrames.Behavior.ReviewResult
   alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
-  alias LiveFrames.IR.DesignDocument
+  alias LiveFrames.IR.{CollectionBinding, DesignDocument, ValueBinding}
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.Identity
   alias LiveFrames.IR.SourceTrace
@@ -79,6 +93,126 @@ defmodule LiveFrames.ComponentReviewTest do
       )
 
     {contract, plan, design_document}
+  end
+
+  defp unbound_alt_companion_candidate do
+    collection_id = "cb_members"
+    image_node_id = DesignNode.deterministic_id([1, 1])
+
+    accessibility = %{
+      "image_alt_policy" => "consumer_supplied",
+      "alt_item_field_name" => "alt",
+      "required_when_source_present" => true
+    }
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: @boundary_id,
+          semantic_type: "section",
+          children: [%DesignNode{node_id: image_node_id, semantic_type: "image"}]
+        }
+      ],
+      collection_bindings: %{
+        collection_id => %CollectionBinding{
+          collection_binding_id: collection_id,
+          owner_node_id: @boundary_id,
+          repeat_root_node_id: image_node_id
+        }
+      },
+      value_bindings: %{
+        "image" => %ValueBinding{
+          value_binding_id: "image",
+          target_node_id: image_node_id,
+          target_kind: :asset,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: collection_id,
+          value_key: "image",
+          normalization_status: :normalized,
+          modifier: %LiveFrames.IR.ValueModifier.None{}
+        }
+      }
+    }
+
+    semantic_input = %SemanticInput{
+      contract_identity: %ContractIdentityDecision{contract_id: "alt-companion"},
+      classification: %ClassificationDecision{
+        category: :component,
+        module_intent: "media",
+        function_intent: "gallery"
+      },
+      boundary: %BoundaryDecision{boundary_node_id: @boundary_id},
+      public_attrs: [
+        %PublicAttrDecision{
+          name: "members",
+          type: :list,
+          required: false,
+          default: nil,
+          semantic_purpose: "Image collection",
+          validation: %{},
+          accessibility: %{},
+          provenance: %{}
+        }
+      ],
+      collection_admissions: [
+        %CollectionAdmissionDecision{
+          source_collection_binding_id: collection_id,
+          public_attr_name: "members",
+          provenance: %{}
+        }
+      ],
+      item_fields: [
+        %ItemFieldDecision{
+          source_collection_binding_id: collection_id,
+          name: "photo",
+          type: :string,
+          required: false,
+          default: nil,
+          semantic_purpose: "Image source",
+          validation: %{},
+          accessibility: accessibility,
+          provenance: %{}
+        },
+        %ItemFieldDecision{
+          source_collection_binding_id: collection_id,
+          name: "alt",
+          type: :string,
+          required: false,
+          default: nil,
+          semantic_purpose: "Consumer supplied image description",
+          validation: %{},
+          accessibility: %{},
+          provenance: %{}
+        }
+      ],
+      binding_assignments: [
+        %BindingAssignmentDecision{
+          source_binding_kind: :collection,
+          source_binding_id: collection_id,
+          assignment_kind: :collection_attr,
+          public_attr_name: "members",
+          source_collection_binding_id: collection_id
+        },
+        %BindingAssignmentDecision{
+          source_binding_kind: :value,
+          source_binding_id: "image",
+          assignment_kind: :collection_item_field_value,
+          item_field_name: "photo",
+          source_collection_binding_id: collection_id
+        }
+      ],
+      image_accessibility: [
+        %ImageAccessibilityDecision{
+          target_kind: :item_field,
+          target_name: "photo",
+          source_collection_binding_id: collection_id,
+          accessibility: accessibility
+        }
+      ]
+    }
+
+    {design_document, semantic_input}
   end
 
   defp attr(name, type \\ :string, options \\ []) do
@@ -161,6 +295,50 @@ defmodule LiveFrames.ComponentReviewTest do
     assert contract.approval_status == :proposed
     assert plan == original_plan
     assert design_document == original_document
+  end
+
+  test "unbound accessibility companion passes the ordinary generation gate" do
+    {design_document, semantic_input} = unbound_alt_companion_candidate()
+
+    assert :ok = LiveFrames.IR.validate(design_document)
+    assert {:ok, _validated_input} = SemanticInput.validate(semantic_input, design_document)
+
+    proposal = ComponentizationProposer.propose(design_document, semantic_input)
+
+    assert proposal.outcome == :proposed,
+           "expected a proposed candidate, got #{inspect(proposal.plan && proposal.plan.diagnostics)}"
+
+    assert ComponentContract.validate_generation_prerequisites(
+             proposal.contract,
+             design_document
+           ) == :ok
+
+    assert ComponentizationPlan.validate_generation_prerequisites(
+             proposal.plan,
+             proposal.contract,
+             design_document
+           ) == :ok
+
+    assert ComponentReview.validate_generation_prerequisites(
+             proposal.contract,
+             proposal.plan,
+             design_document
+           ) == :ok
+
+    assert {:ok, approved} =
+             ComponentReview.approve(proposal.contract, proposal.plan, design_document)
+
+    assert approved.approval_status == :approved
+    assert ComponentContract.validate_for_generation(approved, design_document) == :ok
+
+    assert ComponentizationPlan.validate_for_generation(
+             proposal.plan,
+             approved,
+             design_document
+           ) == :ok
+
+    assert {:ok, _generated_bundle} =
+             LiveFrames.NativeGenerator.generate(approved, proposal.plan, design_document)
   end
 
   test "legacy approval blocks every plan containing a node disposition" do

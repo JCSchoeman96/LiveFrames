@@ -12,6 +12,7 @@ defmodule LiveFrames.ComponentizationProposer do
   alias LiveFrames.ComponentizationProposer.SemanticInput
   alias LiveFrames.Behavior.{ReviewResult, Serializer, Validation}
   alias LiveFrames.BehaviorAuthorityContext
+  alias LiveFrames.IR.{DesignNode, ValueBinding}
   alias LiveFrames.Responsive.DesignDocumentResolver
 
   @evidence_plan_code "componentization_plan.binding.evidence_insufficient"
@@ -247,7 +248,14 @@ defmodule LiveFrames.ComponentizationProposer do
       plan.diagnostics
       |> Kernel.++(plan_reference_diagnostics)
 
-    outcome = classify(contract, candidate_contract_diagnostics, candidate_plan_diagnostics)
+    outcome =
+      classify(
+        contract,
+        plan,
+        design_document,
+        candidate_contract_diagnostics,
+        candidate_plan_diagnostics
+      )
 
     contract = %{
       contract
@@ -315,19 +323,21 @@ defmodule LiveFrames.ComponentizationProposer do
     }
   end
 
-  defp classify(contract, contract_diagnostics, plan_diagnostics) do
+  defp classify(contract, plan, design_document, contract_diagnostics, plan_diagnostics) do
     blocking? =
       Enum.any?(contract_diagnostics ++ plan_diagnostics, fn diagnostic ->
         Map.get(diagnostic, :severity) in [:error, :fatal]
       end)
 
-    if blocking? or static_item_review?(contract), do: :needs_review, else: :proposed
+    if blocking? or static_item_review?(contract, plan, design_document),
+      do: :needs_review,
+      else: :proposed
   end
 
   defp outcome_status(:needs_review), do: :needs_review
   defp outcome_status(:proposed), do: :proposed
 
-  defp static_item_review?(contract) do
+  defp static_item_review?(contract, plan, design_document) do
     covered =
       Enum.reduce(contract.binding_projections, MapSet.new(), fn projection, identities ->
         case projection do
@@ -355,14 +365,118 @@ defmodule LiveFrames.ComponentizationProposer do
         end
       end)
 
+    projections_by_source =
+      Enum.group_by(contract.binding_projections, fn projection ->
+        {Map.get(projection, :source_binding_kind), Map.get(projection, :source_binding_id)}
+      end)
+
+    item_fields_by_identity =
+      Enum.reduce(contract.collection_inputs, %{}, fn collection_input, fields ->
+        collection_id = collection_input.source_collection_binding_id
+
+        Enum.reduce(collection_input.item_fields, fields, fn item_field, acc ->
+          Map.put(acc, {collection_id, item_field.name}, item_field)
+        end)
+      end)
+
+    nodes_by_id = index_design_nodes(design_document.root_nodes, %{})
+
+    boundary_node_ids =
+      nodes_by_id
+      |> Map.get(plan.boundary_node_id)
+      |> collect_boundary_node_ids(MapSet.new())
+
+    named_companions =
+      Enum.reduce(projections_by_source, MapSet.new(), fn
+        {{:value, binding_id}, [projection]}, identities when is_binary(binding_id) ->
+          case item_alt_companion_identity(
+                 projection,
+                 item_fields_by_identity,
+                 nodes_by_id,
+                 boundary_node_ids,
+                 design_document.value_bindings
+               ) do
+            nil -> identities
+            identity -> MapSet.put(identities, identity)
+          end
+
+        {{_kind, _id}, _projections}, identities ->
+          identities
+      end)
+
     Enum.any?(contract.collection_inputs, fn collection_input ->
       Enum.any?(collection_input.item_fields, fn item_field ->
-        not MapSet.member?(
-          covered,
-          {collection_input.source_collection_binding_id, item_field.name}
-        )
+        identity = {collection_input.source_collection_binding_id, item_field.name}
+        not MapSet.member?(covered, identity) and not MapSet.member?(named_companions, identity)
       end)
     end)
+  end
+
+  defp item_alt_companion_identity(
+         %{
+           source_binding_kind: :value,
+           source_binding_id: binding_id,
+           projection_kind: :collection_item_field,
+           source_collection_binding_id: collection_id,
+           item_field_name: source_field_name,
+           target_node_id: target_node_id
+         },
+         item_fields_by_identity,
+         nodes_by_id,
+         boundary_node_ids,
+         value_bindings
+       )
+       when is_binary(binding_id) and is_binary(collection_id) and
+              is_binary(source_field_name) and is_binary(target_node_id) do
+    with true <- MapSet.member?(boundary_node_ids, target_node_id),
+         %ValueBinding{
+           value_kind: :field,
+           scope: :collection_item,
+           target_kind: :asset,
+           collection_binding_id: ^collection_id,
+           target_node_id: ^target_node_id
+         } <- Map.get(value_bindings, binding_id),
+         %DesignNode{semantic_type: "image"} <- Map.get(nodes_by_id, target_node_id),
+         %{accessibility: accessibility} <-
+           Map.get(item_fields_by_identity, {collection_id, source_field_name}),
+         %{
+           "image_alt_policy" => "consumer_supplied",
+           "alt_item_field_name" => alt_name,
+           "required_when_source_present" => true
+         } = policy <- accessibility,
+         true <- map_size(policy) == 3,
+         true <- is_binary(alt_name) and alt_name != "" do
+      {collection_id, alt_name}
+    else
+      _ -> nil
+    end
+  end
+
+  defp item_alt_companion_identity(
+         _projection,
+         _item_fields_by_identity,
+         _nodes_by_id,
+         _boundary_node_ids,
+         _value_bindings
+       ),
+       do: nil
+
+  defp index_design_nodes(nodes, index) do
+    Enum.reduce(nodes, index, fn
+      %DesignNode{node_id: node_id, children: children} = node, acc ->
+        acc = Map.put(acc, node_id, node)
+        index_design_nodes(children, acc)
+
+      _node, acc ->
+        acc
+    end)
+  end
+
+  defp collect_boundary_node_ids(nil, node_ids), do: node_ids
+
+  defp collect_boundary_node_ids(%DesignNode{node_id: node_id, children: children}, node_ids) do
+    node_ids = MapSet.put(node_ids, node_id)
+    Enum.reduce(children, node_ids, &collect_boundary_node_ids/2)
   end
 
   defp evidence_counterparts(diagnostics) do

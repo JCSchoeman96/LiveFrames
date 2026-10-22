@@ -1,6 +1,8 @@
 defmodule LiveFrames.NativeGeneratorTest do
   use ExUnit.Case, async: true
 
+  import Phoenix.LiveViewTest
+
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentReview
   alias LiveFrames.ComponentReviewResult
@@ -77,6 +79,132 @@ defmodule LiveFrames.NativeGeneratorTest do
     ]
 
     struct!(%DesignDocument{root_nodes: roots}, overrides)
+  end
+
+  defp collection_image_companion_fixture do
+    collection_root_id = DesignNode.deterministic_id([1, 5])
+    photo_id = DesignNode.deterministic_id([1, 5, 1])
+    cover_id = DesignNode.deterministic_id([1, 5, 2])
+
+    %DesignNode{} = boundary = hd(rich_document().root_nodes)
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          boundary
+          | children:
+              boundary.children ++
+                [
+                  %DesignNode{
+                    node_id: collection_root_id,
+                    semantic_type: "container",
+                    children: [
+                      %DesignNode{node_id: photo_id, semantic_type: "image"},
+                      %DesignNode{node_id: cover_id, semantic_type: "image"}
+                    ]
+                  }
+                ]
+        }
+      ],
+      collection_bindings: %{
+        "cb_members" => %CollectionBinding{
+          collection_binding_id: "cb_members",
+          owner_node_id: @boundary_id,
+          repeat_root_node_id: collection_root_id
+        }
+      },
+      value_bindings: %{
+        "vb_photo" => %ValueBinding{
+          value_binding_id: "vb_photo",
+          target_node_id: photo_id,
+          target_kind: :asset,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_members",
+          value_key: "photo",
+          normalization_status: :normalized,
+          modifier: %LiveFrames.IR.ValueModifier.None{}
+        },
+        "vb_cover" => %ValueBinding{
+          value_binding_id: "vb_cover",
+          target_node_id: cover_id,
+          target_kind: :asset,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_members",
+          value_key: "cover",
+          normalization_status: :normalized,
+          modifier: %LiveFrames.IR.ValueModifier.None{}
+        }
+      }
+    }
+
+    photo_accessibility = %{
+      "image_alt_policy" => "consumer_supplied",
+      "alt_item_field_name" => "photo_alt",
+      "required_when_source_present" => true
+    }
+
+    cover_accessibility = %{
+      "image_alt_policy" => "consumer_supplied",
+      "alt_item_field_name" => "cover_alt",
+      "required_when_source_present" => true
+    }
+
+    component_contract =
+      contract(
+        public_attrs: [attr("members", :list)],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_members",
+            public_attr_name: "members",
+            item_fields: [
+              %ItemField{
+                name: "photo",
+                type: :string,
+                semantic_purpose: "photo",
+                accessibility: photo_accessibility
+              },
+              %ItemField{name: "photo_alt", type: :string, semantic_purpose: "photo alt"},
+              %ItemField{
+                name: "cover",
+                type: :string,
+                semantic_purpose: "cover",
+                accessibility: cover_accessibility
+              },
+              %ItemField{name: "cover_alt", type: :string, semantic_purpose: "cover alt"}
+            ]
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_members",
+            projection_kind: :collection_attr,
+            public_attr_name: "members",
+            source_collection_binding_id: "cb_members",
+            target_node_id: collection_root_id
+          },
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: "vb_photo",
+            projection_kind: :collection_item_field,
+            source_collection_binding_id: "cb_members",
+            item_field_name: "photo",
+            target_node_id: photo_id
+          },
+          %BindingProjection{
+            source_binding_kind: :value,
+            source_binding_id: "vb_cover",
+            projection_kind: :collection_item_field,
+            source_collection_binding_id: "cb_members",
+            item_field_name: "cover",
+            target_node_id: cover_id
+          }
+        ]
+      )
+
+    {component_contract, design_document}
   end
 
   defp contract(overrides \\ []) do
@@ -1207,6 +1335,56 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "case {collection_ordinal, field} do"
     refute source =~ "owner_node_id"
     refute source =~ "String.to_atom"
+  end
+
+  test "each collection image reads its own companion only when its source is present" do
+    {component_contract, design_document} = collection_image_companion_fixture()
+
+    generated =
+      generate!(component_contract, plan(component_contract, design_document), design_document)
+
+    source = elixir_artifact(generated).content
+    unique_name = "LiveFrames.GeneratedAltCompanion#{System.unique_integer([:positive])}"
+
+    compiled =
+      String.replace(source, "LiveFrames.Components.Sections.MarketingBlock", unique_name)
+
+    [{module, _binary}] = Code.compile_string(compiled)
+    render = Function.capture(module, :hero, 1)
+
+    try do
+      html =
+        render_component(render, %{
+          members: [
+            %{
+              "photo" => "/photo-a.jpg",
+              "photo_alt" => "Photo A",
+              "cover" => "/cover-a.jpg",
+              "cover_alt" => "Cover A"
+            },
+            %{photo: "/photo-b.jpg", photo_alt: "Photo B"}
+          ]
+        })
+
+      assert html =~ ~s(src="/photo-a.jpg" alt="Photo A")
+      assert html =~ ~s(src="/cover-a.jpg" alt="Cover A")
+      assert html =~ ~s(src="/photo-b.jpg" alt="Photo B")
+      refute html =~ "/cover-b.jpg"
+
+      for item <- [
+            %{"photo" => "/missing-alt.jpg"},
+            %{"photo" => "/empty-alt.jpg", "photo_alt" => ""}
+          ] do
+        assert_raise ArgumentError, "image alt is required when source is present", fn ->
+          render_component(render, %{members: [item]})
+        end
+      end
+
+      omitted = render_component(render, %{members: [%{}]})
+      refute omitted =~ "<img"
+    after
+      :code.delete(module)
+    end
   end
 
   test "deterministic bytes and artifact ordering are stable" do

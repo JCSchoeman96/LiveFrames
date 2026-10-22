@@ -218,6 +218,123 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
     {doc, decisions}
   end
 
+  defp collection_image_fixture(source_pairs \\ [{"photo", "alt"}]) do
+    boundary_id = "node_000001"
+    collection_id = "node_000001_000001"
+
+    sources =
+      Enum.with_index(source_pairs, 1)
+      |> Enum.map(fn {{source_name, alt_name}, index} ->
+        {source_name, alt_name, "vb_#{index}", DesignNode.deterministic_id([1, 1, index])}
+      end)
+
+    image_nodes =
+      Enum.map(sources, fn {_source, _alt, _binding_id, node_id} ->
+        %DesignNode{node_id: node_id, semantic_type: "image"}
+      end)
+
+    collection = %CollectionBinding{
+      collection_binding_id: "outer",
+      owner_node_id: boundary_id,
+      repeat_root_node_id: collection_id
+    }
+
+    value_bindings =
+      Map.new(sources, fn {source_name, _alt, binding_id, node_id} ->
+        {binding_id,
+         value(binding_id,
+           target_node_id: node_id,
+           target_kind: :asset,
+           scope: :collection_item,
+           collection_binding_id: "outer",
+           value_key: source_name
+         )}
+      end)
+
+    doc = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: boundary_id,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: collection_id,
+              semantic_type: "container",
+              children: image_nodes
+            }
+          ]
+        }
+      ],
+      collection_bindings: %{"outer" => collection},
+      value_bindings: value_bindings
+    }
+
+    accessibility = fn alt_name ->
+      %{
+        "image_alt_policy" => "consumer_supplied",
+        "alt_item_field_name" => alt_name,
+        "required_when_source_present" => true
+      }
+    end
+
+    source_fields =
+      Enum.map(sources, fn {source_name, alt_name, _binding_id, _node_id} ->
+        field("outer", source_name, accessibility: accessibility.(alt_name))
+      end)
+
+    alt_fields =
+      sources
+      |> Enum.map(fn {_source_name, alt_name, _binding_id, _node_id} -> alt_name end)
+      |> Enum.uniq()
+      |> Enum.map(&field("outer", &1))
+
+    root_assignment = %BindingAssignmentDecision{
+      source_binding_kind: :collection,
+      source_binding_id: "outer",
+      assignment_kind: :collection_attr,
+      public_attr_name: "entries",
+      source_collection_binding_id: "outer"
+    }
+
+    source_assignments =
+      Enum.map(sources, fn {source_name, _alt_name, binding_id, _node_id} ->
+        %BindingAssignmentDecision{
+          source_binding_kind: :value,
+          source_binding_id: binding_id,
+          assignment_kind: :collection_item_field_value,
+          item_field_name: source_name,
+          source_collection_binding_id: "outer"
+        }
+      end)
+
+    image_decisions =
+      Enum.map(sources, fn {source_name, alt_name, _binding_id, _node_id} ->
+        %ImageAccessibilityDecision{
+          target_kind: :item_field,
+          source_collection_binding_id: "outer",
+          target_name: source_name,
+          accessibility: accessibility.(alt_name)
+        }
+      end)
+
+    semantic_input =
+      input(
+        public_attrs: [attr("entries", type: :list)],
+        collection_admissions: [
+          %CollectionAdmissionDecision{
+            source_collection_binding_id: "outer",
+            public_attr_name: "entries",
+            provenance: %{}
+          }
+        ],
+        item_fields: source_fields ++ alt_fields,
+        binding_assignments: [root_assignment | source_assignments],
+        image_accessibility: image_decisions
+      )
+
+    {doc, semantic_input}
+  end
+
   test "minimal input is explicit and valid" do
     assert valid(document(), input()) == input()
     assert %Input{} = struct(Input)
@@ -915,10 +1032,200 @@ defmodule LiveFrames.ComponentizationProposerSemanticInputTest do
       decisions
       | item_fields: [
           field("outer", "children", type: :list),
-          field("outer", "source", accessibility: consumer)
+          field("outer", "source", accessibility: consumer),
+          field("outer", "alt")
         ],
         image_accessibility: [%{image | accessibility: consumer}]
     })
+  end
+
+  test "accepts one unbound image alt companion without a projection" do
+    {doc, decisions} = collection_image_fixture()
+
+    assert {:ok, _validated} = Input.validate(decisions, doc)
+
+    result = ComponentizationProposer.propose(doc, decisions)
+    assert result.contract != nil
+
+    assert [%{name: "alt"}, %{name: "photo"}] =
+             hd(result.contract.collection_inputs).item_fields
+
+    refute Enum.any?(result.contract.binding_projections, fn projection ->
+             projection.item_field_name == "alt"
+           end)
+  end
+
+  test "accepts distinct unbound companions for two image sources" do
+    {doc, decisions} = collection_image_fixture([{"photo", "photo_alt"}, {"cover", "cover_alt"}])
+
+    assert {:ok, _validated} = Input.validate(decisions, doc)
+
+    result = ComponentizationProposer.propose(doc, decisions)
+    assert result.contract != nil
+
+    fields = hd(result.contract.collection_inputs).item_fields
+    assert Enum.map(fields, & &1.name) == ["cover", "cover_alt", "photo", "photo_alt"]
+
+    projected_fields =
+      for projection <- result.contract.binding_projections,
+          projection.source_binding_kind == :value,
+          do: projection.item_field_name
+
+    assert Enum.sort(projected_fields) == ["cover", "photo"]
+  end
+
+  test "rejects a shared unbound companion candidate" do
+    {doc, decisions} = collection_image_fixture([{"photo", "alt"}, {"cover", "alt"}])
+
+    assert {:error, diagnostics} = Input.validate(decisions, doc)
+
+    assert Enum.any?(diagnostics, &(&1.code == "componentization_proposer.input.conflict"))
+  end
+
+  test "accepts an ordinary unbound item field with zero image references" do
+    {doc, decisions} = collection_image_fixture([])
+    decisions = %{decisions | item_fields: [field("outer", "caption")]}
+
+    assert {:ok, _validated} = Input.validate(decisions, doc)
+  end
+
+  test "rejects malformed named companions and preserves the assigned sibling path" do
+    {doc, decisions} = collection_image_fixture()
+    image_node_id = DesignNode.deterministic_id([1, 1, 1])
+
+    malformed = [
+      %{decisions | item_fields: Enum.reject(decisions.item_fields, &(&1.name == "alt"))},
+      %{
+        decisions
+        | item_fields:
+            Enum.map(decisions.item_fields, fn
+              %{name: "alt"} = item -> %{item | type: :integer}
+              item -> item
+            end)
+      },
+      %{
+        decisions
+        | item_fields:
+            Enum.map(decisions.item_fields, fn
+              %{name: "alt"} = item -> %{item | required: true}
+              item -> item
+            end)
+      },
+      %{
+        decisions
+        | item_fields:
+            Enum.map(decisions.item_fields, fn
+              %{name: "alt"} = item -> %{item | default: "fallback"}
+              item -> item
+            end)
+      }
+    ]
+
+    for malformed_input <- malformed do
+      assert {:error, _diagnostics} = Input.validate(malformed_input, doc)
+    end
+
+    other_root_id = DesignNode.deterministic_id([1, 2])
+
+    other_collection = %CollectionBinding{
+      collection_binding_id: "other",
+      owner_node_id: "node_000001",
+      repeat_root_node_id: other_root_id
+    }
+
+    cross_collection_doc = %{
+      doc
+      | root_nodes: [
+          %DesignNode{
+            node_id: "node_000001",
+            semantic_type: "section",
+            children: [
+              hd(hd(doc.root_nodes).children),
+              %DesignNode{node_id: other_root_id, semantic_type: "container"}
+            ]
+          }
+        ],
+        collection_bindings: Map.put(doc.collection_bindings, "other", other_collection)
+    }
+
+    cross_collection_input = %{
+      decisions
+      | public_attrs: decisions.public_attrs ++ [attr("other_entries", type: :list)],
+        collection_admissions:
+          decisions.collection_admissions ++
+            [
+              %CollectionAdmissionDecision{
+                source_collection_binding_id: "other",
+                public_attr_name: "other_entries",
+                provenance: %{}
+              }
+            ],
+        item_fields:
+          Enum.reject(decisions.item_fields, &(&1.name == "alt")) ++ [field("other", "alt")],
+        binding_assignments:
+          decisions.binding_assignments ++
+            [
+              %BindingAssignmentDecision{
+                source_binding_kind: :collection,
+                source_binding_id: "other",
+                assignment_kind: :collection_attr,
+                public_attr_name: "other_entries",
+                source_collection_binding_id: "other"
+              }
+            ]
+    }
+
+    assert {:error, _diagnostics} = Input.validate(cross_collection_input, cross_collection_doc)
+
+    assigned_doc = %{
+      doc
+      | value_bindings:
+          Map.put(
+            doc.value_bindings,
+            "vb_alt",
+            value("vb_alt",
+              target_node_id: image_node_id,
+              target_kind: :asset,
+              scope: :collection_item,
+              collection_binding_id: "outer",
+              value_key: "wrong_alt"
+            )
+          )
+    }
+
+    assigned_input = %{
+      decisions
+      | binding_assignments:
+          decisions.binding_assignments ++
+            [
+              %BindingAssignmentDecision{
+                source_binding_kind: :value,
+                source_binding_id: "vb_alt",
+                assignment_kind: :collection_item_field_value,
+                item_field_name: "alt",
+                source_collection_binding_id: "outer"
+              }
+            ]
+    }
+
+    assert {:error, _diagnostics} = Input.validate(assigned_input, assigned_doc)
+
+    valid_legacy_doc = %{
+      assigned_doc
+      | value_bindings: %{
+          "vb_1" => Map.fetch!(doc.value_bindings, "vb_1"),
+          "vb_alt" =>
+            value("vb_alt",
+              target_node_id: image_node_id,
+              target_kind: :text,
+              scope: :collection_item,
+              collection_binding_id: "outer",
+              value_key: "alt"
+            )
+        }
+    }
+
+    assert {:ok, _validated} = Input.validate(assigned_input, valid_legacy_doc)
   end
 
   test "ordinary accessibility alone does not establish image source and extra image decisions fail" do

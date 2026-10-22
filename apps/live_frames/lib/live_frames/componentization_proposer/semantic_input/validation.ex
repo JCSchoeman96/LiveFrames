@@ -24,6 +24,7 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
   alias LiveFrames.ComponentContract.{Attr, Slot, Json}
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignDocument
+  alias LiveFrames.IR.ValueBinding
 
   @singletons [
     contract_identity: ContractIdentityDecision,
@@ -474,7 +475,8 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
       Enum.flat_map(input.render_placements, &render_errors(&1, i)) ++
       Enum.flat_map(input.evidence_handling, &evidence_errors(&1, i)) ++
       Enum.flat_map(input.static_content_dispositions, &static_errors(&1, i)) ++
-      image_errors(input, i)
+      image_errors(input, i) ++
+      companion_errors(input, i)
   end
 
   defp admission_errors(d, i) do
@@ -785,6 +787,191 @@ defmodule LiveFrames.ComponentizationProposer.SemanticInput.Validation do
 
     missing ++ extra
   end
+
+  defp companion_errors(input, i) do
+    {sources, references_by_candidate} =
+      Enum.reduce(input.item_fields, {[], %{}}, fn field, {sources, references} ->
+        case consumer_alt_source(field, i) do
+          {:ok, alt_name, source_binding} ->
+            candidate = {field.source_collection_binding_id, alt_name}
+
+            source = {field, alt_name, source_binding}
+
+            {
+              [source | sources],
+              Map.update(references, candidate, 1, &(&1 + 1))
+            }
+
+          :error ->
+            {sources, references}
+        end
+      end)
+
+    Enum.flat_map(sources, fn {source, alt_name, source_binding} ->
+      collection_id = source.source_collection_binding_id
+      candidate_key = {collection_id, alt_name}
+      candidate = Map.get(i.fields, candidate_key)
+      reference_count = Map.get(references_by_candidate, candidate_key, 0)
+      assignment_target = {:item_field, collection_id, alt_name}
+      assignments = Map.get(i.assignments_by_target, assignment_target, [])
+
+      validate_companion_candidate(
+        candidate,
+        source_binding,
+        collection_id,
+        alt_name,
+        reference_count,
+        assignments,
+        i
+      )
+    end)
+  end
+
+  defp consumer_alt_source(
+         %ItemFieldDecision{
+           source_collection_binding_id: _collection_id,
+           name: _field_name,
+           accessibility:
+             %{
+               "image_alt_policy" => "consumer_supplied",
+               "alt_item_field_name" => alt_name,
+               "required_when_source_present" => true
+             } = accessibility
+         } = field,
+         i
+       )
+       when map_size(accessibility) == 3 and is_binary(alt_name) and alt_name != "" do
+    case source_image_binding(field, i) do
+      %ValueBinding{} = binding -> {:ok, alt_name, binding}
+      nil -> :error
+    end
+  end
+
+  defp consumer_alt_source(_field, _i), do: :error
+
+  defp source_image_binding(
+         %ItemFieldDecision{source_collection_binding_id: collection_id, name: name},
+         i
+       ) do
+    case Map.get(i.assignments_by_target, {:item_field, collection_id, name}) do
+      [
+        %BindingAssignmentDecision{
+          source_binding_kind: :value,
+          source_binding_id: binding_id,
+          assignment_kind: :collection_item_field_value,
+          source_collection_binding_id: ^collection_id
+        }
+      ] ->
+        case Map.get(i.values, binding_id) do
+          %ValueBinding{
+            value_kind: :field,
+            scope: :collection_item,
+            target_kind: :asset,
+            collection_binding_id: ^collection_id,
+            target_node_id: target
+          } = binding ->
+            if match?(%{semantic_type: "image"}, Map.get(i.nodes, target)), do: binding
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp validate_companion_candidate(
+         nil,
+         _source_binding,
+         collection_id,
+         alt_name,
+         _reference_count,
+         _assignments,
+         _i
+       ) do
+    [
+      companion_error(
+        collection_id,
+        alt_name,
+        "Named accessibility companion must resolve in the same collection"
+      )
+    ]
+  end
+
+  defp validate_companion_candidate(
+         candidate,
+         source_binding,
+         collection_id,
+         alt_name,
+         reference_count,
+         assignments,
+         indexes
+       ) do
+    cond do
+      reference_count != 1 ->
+        [companion_error(collection_id, alt_name, "Accessibility companion cannot be shared")]
+
+      assignments == [] and
+          (candidate.type != :string or candidate.required != false or candidate.default != nil) ->
+        [
+          companion_error(
+            collection_id,
+            alt_name,
+            "Unbound accessibility companion must be optional string with no default"
+          )
+        ]
+
+      assignments != [] and candidate.type != :string ->
+        [companion_error(collection_id, alt_name, "Assigned alt ItemField must have type string")]
+
+      assignments == [] ->
+        []
+
+      valid_binding_backed_sibling?(assignments, source_binding, collection_id, indexes) ->
+        []
+
+      true ->
+        [
+          companion_error(
+            collection_id,
+            alt_name,
+            "Assigned accessibility companion must satisfy the binding-backed sibling path"
+          )
+        ]
+    end
+  end
+
+  defp valid_binding_backed_sibling?(
+         [
+           %BindingAssignmentDecision{
+             source_binding_kind: :value,
+             source_binding_id: alt_binding_id,
+             assignment_kind: :collection_item_field_value,
+             source_collection_binding_id: collection_id
+           }
+         ],
+         %ValueBinding{target_node_id: target},
+         collection_id,
+         indexes
+       ) do
+    match?(
+      %ValueBinding{
+        value_kind: :field,
+        scope: :collection_item,
+        target_kind: :text,
+        collection_binding_id: ^collection_id,
+        target_node_id: ^target
+      },
+      Map.get(indexes.values, alt_binding_id)
+    )
+  end
+
+  defp valid_binding_backed_sibling?(_assignments, _source_binding, _collection_id, _indexes),
+    do: false
+
+  defp companion_error(collection_id, alt_name, message),
+    do: diagnostic(:conflict, "item_fields." <> collection_id <> "." <> alt_name, message)
 
   defp assignment_target(%{assignment_kind: :slot} = d, _), do: {:slot, d.public_slot_name}
 
