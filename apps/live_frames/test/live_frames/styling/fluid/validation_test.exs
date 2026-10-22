@@ -187,14 +187,52 @@ defmodule LiveFrames.Styling.Fluid.ValidationTest do
     assert diagnostic.metadata["actual_type"] == "non_fluid"
   end
 
-  test "unresolved dependencies without semantic evidence are not classified" do
+  test "fluid value fails closed when its existing target type is unavailable" do
     registry =
-      replace(valid_graph(), @domain_path,
-        resolved_value: nil,
-        resolution_status: :unresolved
-      )
+      valid_graph()
+      |> Map.take([@domain_path, @value_path])
+      |> replace(@domain_path, resolved_value: nil, resolution_status: :unresolved)
 
-    assert Validation.validate_registry(registry) == []
+    assert [diagnostic] = Validation.validate_registry(registry)
+    assert_diagnostic(diagnostic, "fluid.reference.invalid", :reference, @value_path)
+
+    assert diagnostic.metadata == %{
+             "expected_type" => "fluid_domain",
+             "reference" => @domain_path,
+             "reason" => "target_type_unavailable"
+           }
+  end
+
+  test "fluid scale fails closed when its existing target type is unavailable" do
+    registry =
+      valid_graph()
+      |> Map.take([@domain_path, @scale_path])
+      |> replace(@domain_path, resolved_value: nil, resolution_status: :unresolved)
+
+    assert [diagnostic] = Validation.validate_registry(registry)
+    assert_diagnostic(diagnostic, "fluid.reference.invalid", :reference, @scale_path)
+
+    assert diagnostic.metadata == %{
+             "expected_type" => "fluid_domain",
+             "reference" => @domain_path,
+             "reason" => "target_type_unavailable"
+           }
+  end
+
+  test "fluid scale step fails closed when its existing target type is unavailable" do
+    registry =
+      valid_graph()
+      |> Map.take([@scale_path, @step_path])
+      |> replace(@scale_path, resolved_value: nil, resolution_status: :unresolved)
+
+    assert [diagnostic] = Validation.validate_registry(registry)
+    assert_diagnostic(diagnostic, "fluid.reference.invalid", :reference, @step_path)
+
+    assert diagnostic.metadata == %{
+             "expected_type" => "fluid_scale",
+             "reference" => @scale_path,
+             "reason" => "target_type_unavailable"
+           }
   end
 
   test "missing targets are left to TokenSet reference authority" do
@@ -233,8 +271,10 @@ defmodule LiveFrames.Styling.Fluid.ValidationTest do
       |> replace(@domain_path, references: [@value_path])
 
     first = Validation.validate_registry(registry)
+    paths = Enum.map(first, & &1.path)
 
     assert first != []
+    assert paths == Enum.sort(paths)
     assert Validation.validate_registry(registry) == first
   end
 

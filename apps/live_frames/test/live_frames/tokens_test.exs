@@ -520,6 +520,23 @@ defmodule LiveFrames.TokensTest do
            end)
   end
 
+  test "resolved Fluid value pointing at an unresolved target cannot validate" do
+    graph =
+      replace_fluid(fluid_graph(), @fluid_domain_path,
+        resolved_value: nil,
+        resolution_status: :unresolved
+      )
+
+    assert {:error, diagnostics} = Tokens.validate(with_tokens(graph))
+
+    assert_fluid_diagnostic(
+      diagnostics,
+      "fluid.reference.invalid",
+      :reference,
+      @fluid_value_path
+    )
+  end
+
   defp fluid_graph do
     %{
       @fluid_domain_path => fluid_token(@fluid_domain_path, :layout, @fluid_domain, []),

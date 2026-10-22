@@ -5,7 +5,7 @@ defmodule LiveFrames.Styling.Fluid.Validation do
   Validation is pure and compile-time. Intrinsic shape rules stay owned by the
   Fluid semantic modules; this module dispatches to them, requires each
   Fluid token's declared `references` to equal its canonical semantic edge,
-  and checks the recognized semantic type of an indexed target.
+  and requires an existing indexed target to prove the required Fluid type.
 
   Missing-reference and reference-cycle diagnostics remain owned by
   `LiveFrames.Tokens.Validation`.
@@ -30,9 +30,15 @@ defmodule LiveFrames.Styling.Fluid.Validation do
   @spec validate_registry(%{optional(String.t()) => Token.t()}) :: [Diagnostic.t()]
   def validate_registry(tokens_by_path) when is_map(tokens_by_path) do
     tokens_by_path
-    |> Enum.sort_by(fn {path, _token} -> path end)
     |> Enum.flat_map(fn {path, token} -> validate_token(path, token, tokens_by_path) end)
+    |> order_diagnostics()
   end
+
+  # Each token yields at most one Fluid diagnostic, so {path, code} is unique
+  # and totally orders the output. Only the emitted set is sorted, never the
+  # registry.
+  defp order_diagnostics([]), do: []
+  defp order_diagnostics(diagnostics), do: Enum.sort_by(diagnostics, &{&1.path, &1.code})
 
   defp validate_token(
          path,
@@ -91,15 +97,16 @@ defmodule LiveFrames.Styling.Fluid.Validation do
     do: {"fluid_scale", [semantic["scale_ref"]]}
 
   # Indexed lookup only. A missing target is reported by TokenSet reference
-  # authority, and an unresolved target without semantic evidence is left to
-  # resolution rather than classified as a wrong type.
+  # authority. An existing target whose Fluid type cannot be established fails
+  # closed here, because reference_valid must hold before resolution begins.
+  # It is not reported as a wrong type, since no actual type is known.
   defp check_target_type(path, expected_type, target_ref, registry) do
     case Map.fetch(registry, target_ref) do
       :error ->
         []
 
       {:ok, %Token{resolved_value: nil}} ->
-        []
+        [type_unavailable(path, expected_type, target_ref)]
 
       {:ok, %Token{resolved_value: resolved_value}} ->
         actual_type = semantic_type_label(resolved_value)
@@ -145,6 +152,21 @@ defmodule LiveFrames.Styling.Fluid.Validation do
       message: "fluid references must exactly match the canonical semantic edge",
       path: path,
       metadata: %{"expected_references" => expected}
+    )
+  end
+
+  defp type_unavailable(path, expected_type, reference) do
+    Diagnostic.new(
+      code: "fluid.reference.invalid",
+      severity: :error,
+      category: :reference,
+      message: "fluid reference target type cannot be established",
+      path: path,
+      metadata: %{
+        "expected_type" => expected_type,
+        "reference" => reference,
+        "reason" => "target_type_unavailable"
+      }
     )
   end
 
