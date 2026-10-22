@@ -355,12 +355,27 @@ defmodule LiveFrames.ComponentizationProposer do
         end
       end)
 
+    named_companions =
+      Enum.reduce(contract.collection_inputs, MapSet.new(), fn collection_input, identities ->
+        collection_id = collection_input.source_collection_binding_id
+
+        Enum.reduce(collection_input.item_fields, identities, fn item_field, acc ->
+          accessibility = item_field.accessibility || %{}
+          alt_name = Map.get(accessibility, "alt_item_field_name")
+
+          if Map.get(accessibility, "image_alt_policy") == "consumer_supplied" and
+               is_binary(alt_name) and alt_name != "" do
+            MapSet.put(acc, {collection_id, alt_name})
+          else
+            acc
+          end
+        end)
+      end)
+
     Enum.any?(contract.collection_inputs, fn collection_input ->
       Enum.any?(collection_input.item_fields, fn item_field ->
-        not MapSet.member?(
-          covered,
-          {collection_input.source_collection_binding_id, item_field.name}
-        )
+        identity = {collection_input.source_collection_binding_id, item_field.name}
+        not MapSet.member?(covered, identity) and not MapSet.member?(named_companions, identity)
       end)
     end)
   end

@@ -18,6 +18,7 @@ defmodule LiveFrames.ComponentizationProposerTest do
     ContractIdentityDecision,
     EvidenceHandlingDecision,
     ItemFieldDecision,
+    ImageAccessibilityDecision,
     PublicAttrDecision,
     PublicSlotDecision,
     RenderPlacementDecision
@@ -91,6 +92,123 @@ defmodule LiveFrames.ComponentizationProposerTest do
       },
       overrides
     )
+  end
+
+  defp collection_image_fixture(source_pairs \\ [{"photo", "alt"}]) do
+    collection_id = DesignNode.deterministic_id([1, 1])
+
+    sources =
+      Enum.with_index(source_pairs, 1)
+      |> Enum.map(fn {{source_name, alt_name}, index} ->
+        {source_name, alt_name, "vb_#{index}", DesignNode.deterministic_id([1, 1, index])}
+      end)
+
+    image_nodes =
+      Enum.map(sources, fn {_source, _alt, _binding_id, node_id} ->
+        %DesignNode{node_id: node_id, semantic_type: "image"}
+      end)
+
+    collection = %CollectionBinding{
+      collection_binding_id: "outer",
+      owner_node_id: @boundary_id,
+      repeat_root_node_id: collection_id
+    }
+
+    value_bindings =
+      Map.new(sources, fn {source_name, _alt, binding_id, node_id} ->
+        {binding_id,
+         value(binding_id,
+           target_node_id: node_id,
+           target_kind: :asset,
+           scope: :collection_item,
+           collection_binding_id: "outer",
+           value_key: source_name
+         )}
+      end)
+
+    design_document =
+      document(
+        root_nodes: [
+          %DesignNode{
+            node_id: @boundary_id,
+            semantic_type: "section",
+            children: [
+              %DesignNode{
+                node_id: collection_id,
+                semantic_type: "container",
+                children: image_nodes
+              }
+            ]
+          }
+        ],
+        collection_bindings: %{"outer" => collection},
+        value_bindings: value_bindings
+      )
+
+    accessibility = fn alt_name ->
+      %{
+        "image_alt_policy" => "consumer_supplied",
+        "alt_item_field_name" => alt_name,
+        "required_when_source_present" => true
+      }
+    end
+
+    source_fields =
+      Enum.map(sources, fn {source_name, alt_name, _binding_id, _node_id} ->
+        field("outer", source_name, accessibility: accessibility.(alt_name))
+      end)
+
+    alt_fields =
+      sources
+      |> Enum.map(fn {_source_name, alt_name, _binding_id, _node_id} -> alt_name end)
+      |> Enum.uniq()
+      |> Enum.map(&field("outer", &1))
+
+    root_assignment = %BindingAssignmentDecision{
+      source_binding_kind: :collection,
+      source_binding_id: "outer",
+      assignment_kind: :collection_attr,
+      public_attr_name: "entries",
+      source_collection_binding_id: "outer"
+    }
+
+    source_assignments =
+      Enum.map(sources, fn {source_name, _alt_name, binding_id, _node_id} ->
+        %BindingAssignmentDecision{
+          source_binding_kind: :value,
+          source_binding_id: binding_id,
+          assignment_kind: :collection_item_field_value,
+          item_field_name: source_name,
+          source_collection_binding_id: "outer"
+        }
+      end)
+
+    image_decisions =
+      Enum.map(sources, fn {source_name, alt_name, _binding_id, _node_id} ->
+        %ImageAccessibilityDecision{
+          target_kind: :item_field,
+          source_collection_binding_id: "outer",
+          target_name: source_name,
+          accessibility: accessibility.(alt_name)
+        }
+      end)
+
+    semantic_input =
+      input(
+        public_attrs: [attr("entries", type: :list)],
+        collection_admissions: [
+          %CollectionAdmissionDecision{
+            source_collection_binding_id: "outer",
+            public_attr_name: "entries",
+            provenance: %{}
+          }
+        ],
+        item_fields: source_fields ++ alt_fields,
+        binding_assignments: [root_assignment | source_assignments],
+        image_accessibility: image_decisions
+      )
+
+    {design_document, semantic_input}
   end
 
   defp input_with_disposition do
@@ -1315,6 +1433,65 @@ defmodule LiveFrames.ComponentizationProposerTest do
 
     assert Enum.all?(result.contract.binding_projections, &(&1.source_binding_id != "label"))
     assert [%ItemField{name: "label"}] = hd(result.contract.collection_inputs).item_fields
+  end
+
+  test "valid unbound accessibility companion reaches proposed" do
+    {design_document, semantic_input} = collection_image_fixture()
+    result = ComponentizationProposer.propose(design_document, semantic_input)
+
+    assert result.outcome == :proposed
+    assert result.contract.approval_status == :proposed
+    assert_pair_valid(result)
+
+    assert ComponentizationPlan.validate_references(
+             result.plan,
+             result.contract,
+             design_document
+           ) == :ok
+
+    assert Enum.all?(result.contract.binding_projections, &(&1.item_field_name != "alt"))
+  end
+
+  test "zero-reference unbound collection item still needs review" do
+    {design_document, semantic_input} = collection_image_fixture([])
+    semantic_input = %{semantic_input | item_fields: [field("outer", "caption")]}
+
+    result = ComponentizationProposer.propose(design_document, semantic_input)
+
+    assert result.outcome == :needs_review
+    assert result.contract.approval_status == :needs_review
+    assert_pair_valid(result)
+
+    assert ComponentizationPlan.validate_references(result.plan, result.contract, design_document) ==
+             :ok
+  end
+
+  test "shared or malformed named companions do not become proposed" do
+    {design_document, shared_input} =
+      collection_image_fixture([{"photo", "alt"}, {"cover", "alt"}])
+
+    shared_result = ComponentizationProposer.propose(design_document, shared_input)
+
+    assert shared_result.outcome == :invalid_input
+    assert shared_result.contract == nil
+    assert shared_result.plan == nil
+
+    {design_document, valid_input} = collection_image_fixture()
+
+    malformed_input = %{
+      valid_input
+      | item_fields:
+          Enum.map(valid_input.item_fields, fn
+            %{name: "alt"} = item -> %{item | required: true}
+            item -> item
+          end)
+    }
+
+    malformed_result = ComponentizationProposer.propose(design_document, malformed_input)
+
+    assert malformed_result.outcome == :invalid_input
+    assert malformed_result.contract == nil
+    assert malformed_result.plan == nil
   end
 
   test "successful outcomes never set approval to approved or rejected" do
