@@ -20,6 +20,7 @@
 - Keep `VALUE_BINDING_COVERAGE_RULE`: every real in-boundary ValueBinding still requires its ordinary projection.
 - Preserve the legacy same-node binding-backed alt path without behavior changes. Do not infer alt text or classify an image decorative.
 - Build validation indexes once. Do not scan a whole contract or DesignDocument once per image source. Complexity remains bounded by input nodes, bindings, public members, and accessibility decisions.
+- Task 2.5 changes only proposer outcome classification in `componentization_proposer.ex`. It is not a construction change. Construction still emits the companion ItemField with no BindingProjection.
 - Do not change ComponentReview production code. If another production module rejects a valid unbound companion after the planned validator and renderer changes, stop and report its exact module and diagnostic.
 - Do not create Milan SemanticInput, choose Milan owner decisions, call ComponentReview for Milan, resume Task 10, or add NodeDisposition / `NativeGenerator.generate/7` to this feature.
 - Add no Redis, Postgres, PubSub, GenServer, Oban, runtime database, runtime network, or polling work.
@@ -31,6 +32,7 @@
 - The legacy binding-backed same-node alt path keeps passing. Pin this in Task 2 and Task 3.
 - Each image reads its own companion. Present sources reject nil or empty alt; absent optional sources omit the image without requiring alt. Pin this in Task 3.
 - The candidate passes every ordinary approval and generation gate without disposition authority. Pin this in Task 4.
+- A valid companion reaches `:proposed`. An arbitrary unbound collection ItemField, an invalid, shared, or orphan companion, and a legacy static collection ItemField remain `:needs_review` or blocked. Pin this in Task 2.5.
 
 ---
 
@@ -38,15 +40,27 @@
 
 - `apps/live_frames/lib/live_frames/componentization_proposer/semantic_input/validation.ex` validates decision relationships and one-to-one cardinality before construction.
 - `apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex` validates the public contract and plan XOR paths and rejects orphan or shared unbound fields.
+- `apps/live_frames/lib/live_frames/componentization_proposer.ex` classifies a validated unbound accessibility companion as outside static-item review (Task 2.5). It does not change construction.
 - `apps/live_frames/lib/live_frames/native_generator/renderer.ex` resolves the current source's exact companion through the existing collection-item accessor.
 - `apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs` and `apps/live_frames/test/live_frames/componentization_proposer_test.exs` prove the semantic input relationship and construction output.
 - `apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs` proves the reference-validation paths and cardinality.
 - `apps/live_frames/test/live_frames/native_generator_test.exs` proves public generation behavior for both sources and companion values.
 - `apps/live_frames/test/live_frames/component_review_test.exs` proves the complete ordinary approval/generation path.
 
+Production scope for this plan after the G2-A2 authority correction merges:
+
+```text
+apps/live_frames/lib/live_frames/componentization_proposer/semantic_input/validation.ex
+apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex
+apps/live_frames/lib/live_frames/componentization_proposer.ex
+apps/live_frames/lib/live_frames/native_generator/renderer.ex
+```
+
+No ComponentReview production change. No ComponentContract reference-validation change.
+
 ## TDD execution order
 
-Write and run Task 4's full-gate regression before implementing Tasks 1–3. Its initial RED proves the current proposer/reference gate rejects the unbound path. Then complete Tasks 1, 2, and 3 in order. Return to Task 4 and rerun its test for GREEN. This checks the full pipeline before and after the implementation work.
+Write and run Task 4's full-gate regression before implementing Tasks 1–3. Its initial RED proves the current proposer/reference gate rejects the unbound path. Then complete Tasks 1, 2, 2.5, and 3 in order. Return to Task 4 and rerun its test for GREEN. This checks the full pipeline before and after the implementation work.
 
 ### Task 1: Validate companion relationships in SemanticInput
 
@@ -75,7 +89,7 @@ Write and run Task 4's full-gate regression before implementing Tasks 1–3. Its
 
   Expected: exit zero. One-to-one and two-pair inputs pass; shared, orphan, missing, mismatched, assigned, and malformed companions fail with `invalid_input`; legacy inputs pass; construction emits no BindingProjection for a companion.
 
-If a RED test proves construction cannot materialize the ItemField without a binding assignment, stop with `STOP=UNEXPECTED_PROPOSER_CONSTRUCTION_CHANGE_REQUIRED`. Do not change the construction module in this plan.
+If a RED test proves construction cannot materialize the ItemField without a binding assignment, stop with `STOP=UNEXPECTED_PROPOSER_CONSTRUCTION_CHANGE_REQUIRED`. Do not change the construction module in this plan. Task 2.5 changes outcome classification only, so it does not count as a construction change.
 
 ### Task 2: Validate the XOR paths and cardinality in ReferenceValidation
 
@@ -102,6 +116,40 @@ If a RED test proves construction cannot materialize the ItemField without a bin
   Run: `mix test apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs`
 
   Expected: exit zero. Both XOR branches pass under their own rules; two distinct pairs pass; shared and orphan companions fail; malformed projections fail; decorative and ValueBinding coverage behavior is unchanged.
+
+### Task 2.5: Exempt only validated accessibility companions from static-item review
+
+This task was added by the G2-A2 authority correction. The stale `STATIC_COLLECTION_ITEM_RULE` made `static_item_review?/1` treat every collection ItemField without a BindingProjection as a review trigger. That rule must now exempt only a validated unbound accessibility companion. It must not generalize to unbound ItemFields.
+
+**Files:**
+
+- Modify: `apps/live_frames/lib/live_frames/componentization_proposer.ex`
+- Test: `apps/live_frames/test/live_frames/componentization_proposer_test.exs`
+- Test: `apps/live_frames/test/live_frames/component_review_test.exs`
+
+**Interfaces:**
+
+- **Consumes:** the constructed ComponentContract and ComponentizationPlan, the BindingProjection-derived coverage of collection ItemFields, and each consumer-supplied image source's `accessibility["alt_item_field_name"]`.
+- **Produces:** outcome classification in which a companion named by a consumer-supplied image source does not trigger static-item review. Ordinary unbound ItemFields still trigger review. Reference diagnostics still block malformed, shared, and orphan companions.
+
+- [ ] **Step 1: Add the classification tests.** In `componentization_proposer_test.exs`, add `valid unbound accessibility companion reaches proposed`, `arbitrary unbound collection item still needs review`, `invalid unbound companion does not gain exemption`, `shared unbound companion does not gain exemption`, `orphan unbound companion does not gain exemption`, and `legacy static collection item still needs review`. The valid case asserts `outcome: :proposed` and that `ComponentizationPlan.validate_references/3` returns `:ok`. For malformed, shared, and orphan companions, assert that the result is blocked by an earlier layer: `invalid_input` from SemanticInput when the decision shape is invalid, or `:needs_review` with the reference diagnostic when the constructed pair still carries the defect. The classifier must never turn these into `:proposed`.
+- [ ] **Step 2: Run the focused tests to verify RED.**
+
+  Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/component_review_test.exs`
+
+  Expected: after Tasks 1 and 2 clear the reference blockers, the valid companion case fails with `outcome: :needs_review`. The cause is the zero-projection companion matching `static_item_review?/1`. The arbitrary unbound, legacy static, and blocked malformed cases keep their expected outcomes.
+- [ ] **Step 3: Classify covered and companion ItemFields.** In `componentization_proposer.ex`, change `static_item_review?/1` so an ItemField is static-review relevant only when it is neither:
+
+  - covered by an ordinary BindingProjection-derived coverage entry, nor
+  - named by the `accessibility["alt_item_field_name"]` of an ItemField whose `accessibility["image_alt_policy"] == "consumer_supplied"`.
+
+  Build the named-companion set once from the contract's ItemFields. Its cost is linear in contract public members and projections. Do not scan the contract per ItemField. Do not duplicate `SemanticInput` or reference validation logic. The classifier runs alongside reference diagnostics, so a malformed companion stays blocked by its reference diagnostic.
+- [ ] **Step 4: Run the focused tests to verify GREEN.**
+
+  Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/component_review_test.exs`
+
+  Expected: exit zero. The valid companion reaches `:proposed` with no static-item trigger. Ordinary unbound, malformed, shared, orphan, and legacy static cases keep the outcomes from Step 1.
+- [ ] **Step 5: Stop on any scope breach.** If the exemption requires duplicating the full SemanticInput or ReferenceValidation algorithm, stop with `STOP=PROPOSER_VALIDATION_DUPLICATION_REQUIRED`. If any generic unbound-ItemField exemption is required, stop with `STOP=GENERIC_STATIC_ITEM_EXEMPTION_REQUIRED`. If a legacy static collection ItemField changes from `:needs_review`, stop with `STOP=LEGACY_STATIC_ITEM_REVIEW_REGRESSION`.
 
 ### Task 3: Render each companion through `lf_item_field/3`
 
@@ -149,7 +197,7 @@ Use the public `NativeGenerator.generate/3` path and generated component behavio
   Run: `mix test apps/live_frames/test/live_frames/component_review_test.exs`
 
   Expected: exit non-zero because the current proposer/reference-validation path does not return `outcome: :proposed` for the unbound companion candidate.
-- [ ] **Step 3: After Tasks 1–3, rerun the same test to verify GREEN.** Assert all of the following in the test:
+- [ ] **Step 3: After Tasks 1, 2, 2.5, and 3, rerun the same test to verify GREEN.** Assert all of the following in the test:
 
   - `SemanticInput.validate/2` returns `{:ok, validated_input}`.
   - `ComponentizationProposer.propose/2` returns `outcome: :proposed`.
@@ -168,7 +216,7 @@ Use the public `NativeGenerator.generate/3` path and generated component behavio
 
 ## Final verification
 
-- [ ] Run every focused suite after all four tasks:
+- [ ] Run every focused suite after all implementation tasks, including Task 2.5:
 
   Run: `mix test apps/live_frames/test/live_frames/componentization_proposer_semantic_input_test.exs apps/live_frames/test/live_frames/componentization_proposer_test.exs apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs apps/live_frames/test/live_frames/native_generator_test.exs apps/live_frames/test/live_frames/component_review_test.exs`
 
@@ -191,6 +239,9 @@ STOP=FORMAT_VERSION_CHANGE_REQUIRED
 STOP=GENERIC_UNBOUND_ITEM_FIELD_REQUIRED
 STOP=UNEXPECTED_PROPOSER_CONSTRUCTION_CHANGE_REQUIRED
 STOP=UNEXPECTED_GENERATION_GATE_CHANGE_REQUIRED
+STOP=PROPOSER_VALIDATION_DUPLICATION_REQUIRED
+STOP=GENERIC_STATIC_ITEM_EXEMPTION_REQUIRED
+STOP=LEGACY_STATIC_ITEM_REVIEW_REGRESSION
 STOP=LEGACY_BINDING_BACKED_ALT_REGRESSION
 STOP=COMPANION_CARDINALITY_REGRESSION
 STOP=NEW_RENDER_ROLE_REQUIRED

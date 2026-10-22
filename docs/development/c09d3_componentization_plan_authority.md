@@ -1023,8 +1023,30 @@ COLLECTION_RENDER_PROJECTION_RULE =
   BindingProjection only; RenderProjection is not a collection mapping mechanism
 
 STATIC_COLLECTION_ITEM_RULE =
-  static/unbound collection-item public field -> NEEDS_REVIEW; later authority required
+
+  ordinary static/unbound collection-item public field
+    -> NEEDS_REVIEW
+
+  validated UNBOUND_ACCESSIBILITY_COMPANION
+    -> NOT a STATIC_COLLECTION_ITEM_RULE trigger
+    -> eligibility is governed by the closed
+       COLLECTION_ITEM_CONSUMER_ALT_PATH rules (section 10.2)
+
+  malformed, orphan, shared, projected, wrong-shape,
+  or otherwise invalid companion
+    -> existing reference-validation diagnostics
+    -> does not receive this exemption
+
+UNBOUND_ACCESSIBILITY_COMPANION_EXEMPTION =
+  is not generic unbound ItemField support
+  applies only after the candidate satisfies the exact
+    UNBOUND_ACCESSIBILITY_COMPANION path in section 10.2
+  does not waive VALUE_BINDING_COVERAGE_RULE
+  does not waive any accessibility or reference diagnostic
 ```
+
+The historical static collection-item customization use case remains
+`NEEDS_REVIEW`. The exemption above affects only the validated companion path.
 
 Preserve C09D1/C09D2 collection rules without change.
 
@@ -1698,7 +1720,9 @@ BINDING_BACKED_SLOT_GENERATION_ELIGIBLE = no in plan 1.0.0
 COLLECTION_RENDER_PROJECTION_RULE =
   collections via bindings/projections only
 
-STATIC_COLLECTION_ITEM_RULE = NEEDS_REVIEW in 1.0.0
+STATIC_COLLECTION_ITEM_RULE = NEEDS_REVIEW in 1.0.0 for ordinary static or
+unbound item fields; a validated UNBOUND_ACCESSIBILITY_COMPANION is exempt
+under section 10.2
 
 EVIDENCE_INSUFFICIENT_RULE = fail closed; RenderProjection cannot bypass
 
