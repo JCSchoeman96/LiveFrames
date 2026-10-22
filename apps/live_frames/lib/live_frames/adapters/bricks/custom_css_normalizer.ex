@@ -484,14 +484,14 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         if local_definition_name?(property) do
           analysis
         else
-          route = compound_route(value)
+          route = compound_route(property, value)
           Map.put(analysis, {frame_rule_id(frame), property}, route)
         end
       end)
     end)
   end
 
-  defp compound_route(value) when is_binary(value) do
+  defp compound_route(property, value) when is_binary(value) do
     trimmed = String.trim(value)
     lowered = String.downcase(trimmed)
 
@@ -500,22 +500,41 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
         {:direct_reference, local_name}
 
       Regex.match?(@two_dimension_value, trimmed) ->
-        compound_analysis(trimmed)
+        compound_analysis(property, trimmed)
 
       String.contains?(lowered, "var(") or String.contains?(lowered, "calc(") ->
-        compound_analysis(trimmed)
+        compound_analysis(property, trimmed)
 
       true ->
         :generic
     end
   end
 
-  defp compound_route(_value), do: :generic
+  defp compound_route(_property, _value), do: :generic
 
-  defp compound_analysis(value) do
+  defp compound_analysis(property, value) do
     case CompoundCssValue.parse(value) do
-      {:ok, parsed} -> {:compound, {:ok, parsed, CompoundCssValue.occurrences(parsed)}}
-      result -> {:compound, result}
+      {:ok, parsed} ->
+        {:compound, {:ok, parsed, CompoundCssValue.occurrences(parsed)}}
+
+      {:error, reason} ->
+        {:compound, {:error, reason}}
+
+      :no_match when property == "transition" ->
+        if String.contains?(String.downcase(value), "var(") do
+          case CompoundCssValue.parse_transition_shorthand(value) do
+            {:ok, parsed} ->
+              {:compound, {:ok, parsed, CompoundCssValue.occurrences(parsed)}}
+
+            result ->
+              {:compound, result}
+          end
+        else
+          {:compound, :no_match}
+        end
+
+      :no_match ->
+        {:compound, :no_match}
     end
   end
 
