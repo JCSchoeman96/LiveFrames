@@ -7,7 +7,7 @@
 
 **Goal:** Add the bounded, property-scoped transition shorthand production that resolves local duration and timing references through the existing compound pipeline.
 
-**Architecture:** Keep `CompoundCssValue.parse/1` unchanged and add `parse_transition_shorthand/1` as a separate bounded production. `CustomCssNormalizer` selects that production only for an admitted `transition` declaration after the existing parser returns `:no_match`, then sends its occurrences through the current per-provenance resolver batch, reconstruction, CSS safety, and whole-rule atomicity.
+**Architecture:** Keep `CompoundCssValue.parse/1` unchanged and add `parse_transition_shorthand/1` as a separate bounded production. Declaration properties and values are normalized using CSS syntactic whitespace only. `CustomCssNormalizer` selects the new production only for an admitted `transition` declaration after the existing parser returns `:no_match`, then sends its occurrences through the current per-provenance resolver batch, reconstruction, CSS safety, and whole-rule atomicity.
 
 **Tech Stack:** Elixir umbrella application, Mix, ExUnit, `CompoundCssValue`, `CustomCssNormalizer`, `SourceLocalCustomPropertyResolver`, and `LiveFrames.Fidelity.CSSDeclaration`.
 
@@ -16,16 +16,16 @@
 ## Global Constraints
 
 - Implement C1 only after the owner approves this plan. This plan does not authorize code or test changes.
-- Keep the implementation to the existing `CompoundCssValue` and `CustomCssNormalizer` modules and their two existing test files. Do not add a module or refactor other compound productions.
+- Keep the implementation to exactly six files: the existing `CompoundCssValue` and `CustomCssNormalizer` modules and their tests, plus the bounded declaration-whitespace boundary in `CustomCssParser` and its test file. Do not add a module or refactor other compound productions.
 - Keep `CompoundCssValue.parse/1` behaviorally unchanged. The new `:transition_shorthand` production is available only through `parse_transition_shorthand/1` and the normalizer's exact-property route.
 - Preserve the existing local custom-property definition path and exact direct `var(--name)` path. Direct references continue to win before compound discovery, including on `transition`.
 - Keep the existing bare `VAR WS VAR` production property-agnostic and unchanged. C1 scopes only the new IDENT-prefixed production to `property == "transition"`.
 - Keep the existing shared `SourceLocalCustomPropertyResolver.resolve/3` pipeline, occurrence correlation, per-provenance batch, owner/provenance reference counter, and 1,024-reference limit. Do not add another resolver, budget, external fallback, or VariableAuthority re-entry.
 - Keep resolved transition values on the existing literal `StyleValue` path after reconstruction, validation against the same transition production, `safe_declaration_value("transition", reconstructed, :source_resolver)`, and CSSDeclaration validation.
 - Preserve existing whole-selector-rule atomicity and public residual reasons. Do not add a diagnostic or residual reason.
-- Do not change `SourceLocalCustomPropertyResolver`, `LiveFrames.Fidelity.CSSDeclaration`, `VariableAuthority`, CSS parsing, IR structs or schemas, `NativeGenerator`, componentization, runtime processes, FRAME D, C3A, or C3B.
+- Do not change `SourceLocalCustomPropertyResolver`, `LiveFrames.Fidelity.CSSDeclaration`, `VariableAuthority`, CSS framing, selectors, at-rule parsing, IR structs or schemas, `NativeGenerator`, componentization, runtime processes, FRAME D, C3A, or C3B. The only `CustomCssParser` change is CSS-syntactic-whitespace-only trimming at declaration property/value boundaries, as defined in Task 3.
 - Use generic public fixtures only. Add no private source names, values, selectors, paths, Romeo fixtures, fingerprints, or implementation branches.
-- If implementation needs any file or contract outside the four-file boundary, stop and return for authority review.
+- If implementation needs any file or contract outside the six-file boundary, stop and return for authority review.
 
 ## Review Focus
 
@@ -33,9 +33,10 @@
 2. Property-aware routing admits the new production only for `transition`, after the direct path and existing generic parser have had their current precedence.
 3. The grammar has one or two specs, exactly two references per spec, strict ASCII whitespace, an independent strict duration slot, and the existing timing slot.
 4. Reconstruction canonicalizes whitespace, preserves property/spec/reference order, and emits no residual `var(`.
-5. Transition records use the existing shared per-provenance resolver batch and owner reference budget, with no resolver contract or selection-rule changes.
-6. Existing CSS safety, external-authority fail-closed behavior, FRAME D behavior, and whole-rule atomicity remain in force.
-7. Every parser and normalizer test uses synthetic public values and generic local names.
+5. Declaration-boundary normalization preserves non-ASCII whitespace for grammar and safety validation; NBSP is not silently removed.
+6. Transition records use the existing shared per-provenance resolver batch and owner reference budget, with no resolver contract or selection-rule changes.
+7. Existing CSS safety, external-authority fail-closed behavior, FRAME D behavior, and whole-rule atomicity remain in force.
+8. Every parser and normalizer test uses synthetic public values and generic local names.
 
 ---
 
@@ -43,7 +44,20 @@
 
 ~~~text
 PLAN_STATUS=PROPOSED_FOR_REVIEW
-C1_IMPLEMENTATION_AUTHORIZED=NO
+C1_IMPLEMENTATION_AUTHORIZED=NO_PENDING_AUTHORITY_MERGE
+C1_WHITESPACE_BOUNDARY_CORRECTION_REQUIRED=YES
+C1_PRE_NORMALIZATION_NBSP_GAP=CONFIRMED
+ROOT_CAUSE=UNICODE_TRIM_BEFORE_C1_GRAMMAR
+AUTHORITY_CORRECTION_REQUIRED=YES
+EXISTING_TASK1_TASK2_ARCHITECTURE_CHANGED=NO
+PLAN_FILE_BOUNDARY_EXPANDED_TO_SIX=YES
+PARSER_TEST_FILE_AUTHORIZED=YES
+TASK3_BOUNDARY_CORRECTION_DEFINED=YES
+CSS_DECLARATION_SYNTACTIC_WHITESPACE=U+0020,U+0009,U+000A,U+000D,U+000C
+UNICODE_STRING_TRIM_FOR_C1_DECLARATION_BOUNDARY=FORBIDDEN
+NBSP_U+00A0_IS_CSS_SYNTACTIC_WHITESPACE=NO
+NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
+AUTHORITY_CORRECTION_STATUS=PROPOSED_FOR_REVIEW
 
 BASE_SHA=c6e689353ce4a26263fcbe10bd77c08ba403d115
 BASE_TREE=e4e02e9ea15f41cd724e17cd97851361c464cf05
@@ -78,16 +92,19 @@ Do not encode these counts as tests. The production resolver outcome is a separa
 
 ## Implementation file boundary
 
-The later C1 implementation may touch exactly these files:
+After the authority correction is accepted and merged, the later C1 implementation may touch exactly these six files:
 
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex`. Add the separate transition parser entry, production identity, duration slot, canonical transition pieces, and resolved-form validation using the existing private `Parsed`, `Occurrence`, and `reconstruct/2` machinery.
 - Test `apps/live_frames/test/live_frames/bricks_compound_css_value_test.exs`. Cover the pure grammar, slot checks, bounds, occurrence order, and canonical reconstruction with generic fixtures.
 - Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex`. Make private compound routing property-aware and pass admitted transition occurrences through the current shared pipeline.
 - Test `apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`. Cover admission, resolver integration, safety, provenance, budget, output, and rule atomicity.
+- Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_parser.ex`. At declaration property/value boundaries only, trim CSS syntactic whitespace as defined in Task 3. Preserve framing, selectors, at-rules, and unrelated parser behavior.
+- Test `apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs`. Cover CSS-whitespace boundary normalization and preservation of non-ASCII whitespace.
 
 ~~~text
-EXPECTED_PRODUCTION_FILES=2
-EXPECTED_TEST_FILES=2
+EXPECTED_PRODUCTION_FILES=3
+EXPECTED_TEST_FILES=3
+EXPECTED_TOTAL_CHANGED_FILES=6
 SOURCE_LOCAL_RESOLVER_CHANGED=NO
 CSS_DECLARATION_CHANGED=NO
 VARIABLE_AUTHORITY_CHANGED=NO
@@ -190,12 +207,23 @@ IMPLEMENTATION_BASE=fresh origin/main at the moment implementation begins
 PLAN_PR_MERGE_MUST_BE_IN_IMPLEMENTATION_BASE_ANCESTRY=YES
 ~~~
 
-Before Task 1, the implementation agent must:
+After the authority correction PR has been accepted, merged, and its post-merge CI is green, before Task 1 the implementation agent must:
 
 1. Fetch `origin` and record the fresh `origin/main` SHA and tree as `MAIN_SHA` and `MAIN_TREE`.
-2. Verify PR #296 is merged. Record its final approved head and merge commit. Verify the merge commit is an ancestor of `origin/main`, and verify the plan file blob at the approved PR head is byte-identical to the plan file blob at `origin/main`. The approved plan merge must be in the implementation base ancestry.
-3. Compare movement from `ACCEPTED_C1_IMPLEMENTATION_BASELINE` to the fresh implementation base, including changed paths and the listed material surfaces. The expected addition of this approved plan file is accepted only when its blob identity matches the merged PR bytes in step 2.
-4. Perform at most one bounded reconciliation. If movement is docs-only or unrelated and no other material C1 surface changed, record it and continue from the fresh implementation base. If any material C1 implementation or authority surface changed, or the approved plan bytes do not match, stop for owner review. Do not silently rebase architectural assumptions or repeat reconciliation.
+2. Verify PR #296 and the authority-correction PR are merged. Record both approved heads and merge commits. Verify both merge commits are ancestors of `origin/main`; verify the corrected authority and plan blobs on `origin/main` match the approved correction PR head byte-for-byte.
+3. Compare movement from `ACCEPTED_C1_IMPLEMENTATION_BASELINE` to the fresh implementation base, including changed paths and all listed material surfaces. The original plan addition and the exact authority/plan correction are accepted only when their approved blob identities match the merge.
+4. Perform at most one bounded reconciliation. If movement is limited to the exact approved authority/plan correction and unrelated work, and no other material C1 surface changed, record it and continue from fresh `origin/main`. If any additional C1 implementation or authority surface changed, or corrected document blobs do not match, stop for owner review. Do not silently rebase architectural assumptions or repeat reconciliation.
+5. Create a fresh implementation branch from the verified `origin/main`. Do not continue on or push the existing stopped implementation branch.
+6. Reapply the original signed Task 1 and Task 2 commits in order with valid signatures, record the new commit SHAs, and verify the resulting history. Preserve the original commits below as evidence; do not modify or push them.
+
+Original implementation evidence:
+
+~~~text
+TASK1_ORIGINAL_COMMIT=f474b524ce3fc1ecc49ab45813124b026264b9d9
+TASK2_ORIGINAL_COMMIT=ea194e9c2532cd06c1dff1a5a9882ed9072047fd
+EXISTING_IMPLEMENTATION_COMMITS_MODIFIED=NO
+EXISTING_IMPLEMENTATION_PUSHED=NO
+~~~
 
 The material surfaces are:
 
@@ -210,7 +238,7 @@ docs/development/transition_shorthand_source_local_reference_grammar_authority.m
 this approved implementation plan
 ~~~
 
-The expected plan-file addition from PR #296 is accepted only after the approved blob check above. Any other change to a material C1 surface, or a plan blob that differs from the approved PR bytes, requires:
+The expected plan-file addition from PR #296 and the exact authority/plan correction are accepted only after their approved blob checks above. Any other change to a material C1 surface, or a document blob that differs from its approved PR bytes, requires:
 
 ~~~text
 STOP=C1_IMPLEMENTATION_BASELINE_CHANGED
@@ -423,16 +451,91 @@ Preserves:
 **Task 2 completion gate:**
 
 - Both targeted test files pass.
-- Implementation scope is still exactly the four authorized files.
+- Implementation remains within the six-file boundary; only the Task 1/Task 2 subset has changed so far.
 - `SourceLocalCustomPropertyResolver` is unchanged.
 - `CSSDeclaration` is unchanged.
 - No private evidence was accessed.
 - `git diff --check` passes.
 - Create one signed Task 2 commit.
 
+## Task 3: C1 CSS whitespace boundary correction
+
+~~~text
+TASK3=C1_CSS_WHITESPACE_BOUNDARY_CORRECTION
+~~~
+
+Task 3 runs on the fresh post-correction implementation branch after the signed Task 1 and Task 2 commits have been reapplied. It does not redesign either task or change the transition grammar, routing order, resolver, or public error semantics.
+
+**Task 3 files:**
+
+- Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_parser.ex` only at declaration property/value normalization and blank-value checks.
+- Modify `apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex` only at `compound_route(property, value)` trimming.
+- Test `apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs`.
+- Test `apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs`.
+
+Freeze:
+
+~~~text
+CSS_DECLARATION_SYNTACTIC_WHITESPACE=U+0020,U+0009,U+000A,U+000D,U+000C
+UNICODE_STRING_TRIM_FOR_C1_DECLARATION_BOUNDARY=FORBIDDEN
+NBSP_U+00A0_IS_CSS_SYNTACTIC_WHITESPACE=NO
+NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
+~~~
+
+- [ ] **Step 1: Add declaration-parser regression tests before production changes.** Use synthetic declarations with no private source material. Cover:
+
+  - ASCII space, tab, CR, LF, and FF at property/value boundaries retain existing normalization behavior.
+  - A leading NBSP before an ordinary property is not stripped into a valid property.
+  - A trailing NBSP after an ordinary property is not stripped into a valid property.
+  - A leading NBSP in a declaration value remains in the parsed value.
+  - A trailing NBSP in a declaration value remains in the parsed value.
+  - An NBSP-only value is not classified as ordinary CSS whitespace and remains a non-empty parsed value.
+
+- [ ] **Step 2: Run the parser test file and observe the new boundary tests fail.**
+
+  Run: `mix test apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs`
+
+  Expected: current Unicode trimming removes NBSP or accepts an NBSP-padded property where the new CSS-whitespace contract requires preservation/rejection.
+
+- [ ] **Step 3: Add the C1 end-to-end regression before production changes.** In `bricks_custom_css_normalizer_test.exs`, prove leading and trailing NBSP around an otherwise valid IDENT-prefixed transition declaration fail closed with the existing `unresolved_value` residual and no emitted transition. Include a control proving ordinary ASCII boundary whitespace still normalizes and resolves through the existing production path.
+
+- [ ] **Step 4: Run the parser and normalizer test files and observe the new regressions fail.**
+
+  Run:
+
+  ~~~sh
+  mix test apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs
+  mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs
+  ~~~
+
+  Expected: the new NBSP preservation and fail-closed cases fail against current Unicode trimming; existing C1 behavior remains the baseline.
+
+- [ ] **Step 5: Implement the smallest boundary correction.** In `CustomCssParser.parse_declaration_segment/2`, use the existing bounded CSS-whitespace trim idiom, `String.trim(value, " \t\r\n\f")`, or an exactly equivalent implementation, for the property source, the returned declaration value, and the comment-stripped blank-value check. Keep the three paths on the same CSS-whitespace contract. In `CustomCssNormalizer.compound_route/2`, trim only that same ASCII set. Do not replace other `String.trim/1` call sites, change framing/selectors/at-rules, add C1-specific parsing to `CustomCssParser`, or add a helper module.
+
+- [ ] **Step 6: Re-run both targeted test files.**
+
+  Run:
+
+  ~~~sh
+  mix test apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs
+  mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs
+  ~~~
+
+  Expected: ASCII CSS whitespace retains existing normalization; NBSP is preserved for C1 validation, is rejected in property syntax, and fails closed at transition boundaries.
+
+**Task 3 completion gate:**
+
+- Both targeted parser and normalizer test files pass.
+- Task 3 changes are limited to its four listed files.
+- The combined implementation differs from its verified base in exactly the six authorized files.
+- `compound_route(property, value)` routing order and property scope are unchanged.
+- Resolver behavior, `CSSDeclaration`, residual reasons, and IR shapes are unchanged.
+- `git diff --check` passes.
+- Create one signed Task 3 commit.
+
 ## Bounded production resolver acceptance
 
-Complete this step after Task 2 and before the full repository gates. Use the ordinary synthetic normalizer integration tests already planned; add no implementation file, production instrumentation, logging, mock, counter, or separate resolver. Prove required occurrence participation from parser cardinality plus successful and negative production-path outcomes. Do not claim direct observation of internal resolver result counts unless an existing test-visible interface exposes them. In particular, timing references must use distinct local names but may resolve only to the one authorized successful terminal, `ease-in-out`.
+Complete this step after Task 3 and before the full repository gates. Use the ordinary synthetic normalizer integration tests already planned; add no implementation file, production instrumentation, logging, mock, counter, or separate resolver. Prove required occurrence participation from parser cardinality plus successful and negative production-path outcomes. Do not claim direct observation of internal resolver result counts unless an existing test-visible interface exposes them. In particular, timing references must use distinct local names but may resolve only to the one authorized successful terminal, `ease-in-out`.
 
 ### One-spec proof
 
@@ -596,6 +699,7 @@ Do not add a transition safety bypass or make raw declaration text a diagnostic 
 Run the targeted test files during the red/green steps:
 
 ~~~sh
+mix test apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs
 mix test apps/live_frames/test/live_frames/bricks_compound_css_value_test.exs
 mix test apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs
 ~~~
@@ -614,7 +718,7 @@ mix deps.unlock --check-unused
 git diff --check
 ~~~
 
-No implementation test may depend on private source material. The current plan PR is docs-only, so it requires `git diff --check` and does not require a local Mix test suite.
+No implementation test may depend on private source material. The authority-correction PR changes only the authority and plan documents, so it requires `git diff --check` and exact-head CI; local Mix tests are not required for that docs-only PR.
 
 Before later implementation tests, run `mix deps.get` if dependencies are missing or stale in the isolated checkout. This is dependency setup. The final gate list above remains the exact CI-mirroring verification set.
 
@@ -626,7 +730,7 @@ After the final CI-mirroring commands pass, prepare the implementation PR with t
 IMPLEMENTATION_PR_REQUIREMENTS:
 
 - implementation branch starts from verified implementation base
-- only the four authorized implementation/test files differ
+- exactly the six authorized implementation/test files differ
 - all implementation commits are signed
 - targeted tests pass
 - full repository gates pass
@@ -649,9 +753,13 @@ PLAN_MERGE_IN_ANCESTRY=
 
 TASK1_COMMIT=
 TASK2_COMMIT=
+TASK3_COMMIT=
 SIGNED_HISTORY=
 
 CHANGED_FILES=
+EXPECTED_PRODUCTION_FILES=3
+EXPECTED_TEST_FILES=3
+EXPECTED_TOTAL_CHANGED_FILES=6
 
 PARSE_1_UNCHANGED=
 LEGACY_JUXTAPOSITION_UNCHANGED=
@@ -695,7 +803,7 @@ STOP=
 
 ## Plan self-review
 
-Before any later implementation starts, verify each item against the two tasks above:
+Before any later implementation starts, verify each item against the three tasks above:
 
 ~~~text
 AUTHORITY_REQUIREMENTS_COVERED=YES
@@ -716,12 +824,16 @@ IMPLEMENTATION_EXECUTION_PREFLIGHT_EXPLICIT=YES
 NORMALIZER_PRIVATE_SIGNATURES_FROZEN=YES
 TASK_INTERFACES_EXPLICIT=YES
 SIGNED_TASK_COMMIT_BOUNDARIES_EXPLICIT=YES
+DECLARATION_WHITESPACE_CONTRACT_EXPLICIT=YES
+PARSER_BOUNDARY_TESTS_AUTHORIZED=YES
+TASK3_BOUNDARY_CORRECTION_DEFINED=YES
+EXACT_SIX_FILE_BOUNDARY=YES
 PRODUCTION_RESOLVER_ACCEPTANCE_EXPLICIT=YES
 IMPLEMENTATION_STOP_CONDITIONS_EXPLICIT=YES
 IMPLEMENTATION_PR_HANDOFF_EXPLICIT=YES
 ~~~
 
-Review the plan for extra abstractions. If an implementation proposal requires generic parser broadening, a second resolver, resolver contract changes, CSSDeclaration changes, external-authority fallback, a new IR shape, a new residual reason, FRAME D, C3A, C3B, private source material, or any file outside the four-file implementation boundary, stop and return for authority review.
+Review the plan for extra abstractions. If an implementation proposal requires generic parser broadening, a second resolver, resolver contract changes, CSSDeclaration changes, external-authority fallback, a new IR shape, a new residual reason, FRAME D, C3A, C3B, private source material, a raw-source reparse, or any file outside the six-file implementation boundary, stop and return for authority review.
 
 ## Implementation STOP conditions
 
@@ -745,6 +857,14 @@ STOP=C3A_OR_C3B_REQUIRED
 STOP=PRIVATE_SOURCE_REQUIRED
 STOP=PRIVATE_SOURCE_LEAK
 STOP=IMPLEMENTATION_SCOPE_EXCEEDED
+STOP=IMPLEMENTATION_BASELINE_CHANGED
+STOP=MORE_THAN_SIX_FILES_REQUIRED
+STOP=C1_ROUTING_ORDER_CHANGE_REQUIRED
+STOP=GENERIC_PARSE_1_CHANGE_REQUIRED
+STOP=RESOLVER_CHANGE_REQUIRED
+STOP=IR_CHANGE_REQUIRED
+STOP=GLOBAL_CUSTOM_CSS_TRIM_REWRITE_REQUIRED
+STOP=RAW_SOURCE_REPARSING_REQUIRED
 STOP=TARGETED_TEST_FAILURE
 STOP=FULL_GATE_FAILURE
 STOP=UNSIGNED_HISTORY
@@ -752,15 +872,41 @@ STOP=UNSIGNED_HISTORY
 
 Do not spend more than one reconciliation cycle on moving `main`.
 
+## Authority-correction STOP conditions
+
+Stop the docs-only correction if any of these conditions occurs:
+
+~~~text
+STOP=MAIN_MOVED_MATERIALLY
+STOP=AUTHORITY_CORRECTION_REQUIRES_NEW_ARCHITECTURE
+STOP=NEW_MODULE_REQUIRED
+STOP=RAW_SOURCE_REPARSING_REQUIRED
+STOP=IR_CHANGE_REQUIRED
+STOP=RESOLVER_CHANGE_REQUIRED
+STOP=CSS_DECLARATION_CHANGE_REQUIRED
+STOP=GLOBAL_CUSTOM_CSS_TRIM_REWRITE_REQUIRED
+STOP=NEW_RESIDUAL_REASON_REQUIRED
+STOP=PRIVATE_SOURCE_REQUIRED
+STOP=PRIVATE_SOURCE_LEAK
+STOP=DOCS_PR_CONTAINS_CODE
+STOP=UNSIGNED_HISTORY
+STOP=CI_FAILURE
+~~~
+
 ## Pull request gate
 
-This document is a proposed implementation plan for owner review. Its PR must contain only this file, run exact-head CI, and remain open and unmerged.
+The authority-correction PR must contain only these two documents, run exact-head push and PR CI, and remain open and unmerged:
+
+- `docs/development/transition_shorthand_source_local_reference_grammar_authority.md`
+- `docs/superpowers/plans/2026-10-22-c1-transition-shorthand-source-local-reference-grammar.md`
+
+This docs-only PR does not authorize C1 implementation. Implementation may begin only after the correction is accepted, merged, and post-merge CI is green, followed by the fresh-main preflight above.
 
 ~~~text
 PLAN_PR_SIGNED_HISTORY_REQUIRED=YES
 PLAN_PR_UNSIGNED_COMMITS_ALLOWED=NO
 PLAN_STATUS=PROPOSED_FOR_REVIEW
-C1_IMPLEMENTATION_AUTHORIZED=NO
+C1_IMPLEMENTATION_AUTHORIZED=NO_PENDING_AUTHORITY_MERGE
 FRAME_D_IMPLEMENTATION_AUTHORIZED=NO
 C3A_IMPLEMENTATION_AUTHORIZED=NO
 C3B_IMPLEMENTATION_AUTHORIZED=NO
@@ -769,3 +915,36 @@ PRIVATE_SOURCE_LEAK=NO
 ~~~
 
 Every commit in the plan PR must be validly signed, and signed history from the PR base through the approved head must verify. Review corrections may be separate signed commits. Do not squash or rewrite history merely to force the PR into one commit. Approval of this plan is separate from authorization to implement C1.
+
+Required docs-correction report:
+
+~~~text
+BASE_SHA=
+BASE_TREE=
+CURRENT_MAIN_CI=
+
+ROOT_CAUSE_CONFIRMED=
+CUSTOM_CSS_PARSER_UNICODE_TRIM_CONFIRMED=
+CUSTOM_CSS_NORMALIZER_UNICODE_TRIM_CONFIRMED=
+
+AUTHORITY_WHITESPACE_CONTRACT_CORRECTED=
+PLAN_FILE_BOUNDARY_EXPANDED_TO_SIX=
+PARSER_TEST_FILE_AUTHORIZED=
+TASK3_BOUNDARY_CORRECTION_DEFINED=
+
+TASK1_ORIGINAL_COMMIT=f474b524ce3fc1ecc49ab45813124b026264b9d9
+TASK2_ORIGINAL_COMMIT=ea194e9c2532cd06c1dff1a5a9882ed9072047fd
+EXISTING_IMPLEMENTATION_COMMITS_MODIFIED=NO
+EXISTING_IMPLEMENTATION_PUSHED=NO
+
+CHANGED_FILES=
+SIGNED_HISTORY=
+PR_URL=
+PR_HEAD=
+PUSH_CI=
+PR_CI=
+MERGED=NO
+
+C1_IMPLEMENTATION_AUTHORIZED=NO_PENDING_AUTHORITY_MERGE
+STOP=
+~~~
