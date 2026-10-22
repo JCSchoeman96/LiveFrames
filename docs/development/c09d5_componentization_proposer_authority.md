@@ -1008,14 +1008,45 @@ PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_OUTCOME_RULE =
   then:
     the companion is compatible with outcome = :proposed
 
-  the proposer still returns :needs_review for:
-    an arbitrary unbound collection ItemField
-    an invalid companion
-    an orphan companion
-    a shared companion
-    a companion with any BindingProjection or RenderProjection
-    any other mandatory review trigger
-    any blocking reference diagnostic
+  an arbitrary unbound collection ItemField keeps the mandatory
+  STATIC_COLLECTION_ITEM_RULE review trigger and is not exempt
+
+  any other section 16.4 trigger, or any blocking reference diagnostic,
+  still applies
+
+  malformed, invalid, orphan, shared, or projected candidates receive no
+  exemption; their terminal outcome is governed by the next rule
+```
+
+```text
+PROPOSER_UNBOUND_ACCESSIBILITY_COMPANION_FAILURE_RULE =
+
+  only an exact valid UNBOUND_ACCESSIBILITY_COMPANION receives the
+  STATIC_COLLECTION_ITEM_RULE exemption
+
+  malformed, invalid, orphan, shared, projected, or otherwise
+  non-conforming candidates do not receive the exemption
+
+  this G2-A2 rule does NOT reclassify their terminal outcome
+
+  terminal outcome remains owned by the existing proposer taxonomy:
+
+    SemanticInput validation failure
+      -> invalid_input
+      -> no contract/plan pair
+
+    intrinsic-valid pair with blocking contract/plan reference diagnostic
+      -> needs_review
+
+    intrinsic construction failure
+      -> construction_failed
+      -> no pair
+
+  no invalid companion may become proposed merely because outcome
+  classification recognizes an accessibility-shaped relationship
+
+  the exemption and the failure taxonomy are separate:
+    CLASSIFIER_EXEMPTION != FAILURE_RECLASSIFICATION
 ```
 
 ```text
