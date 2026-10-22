@@ -874,6 +874,41 @@ BINDING_BACKED_SIBLING =
     target_node_id = image source ValueBinding.target_node_id
   this existing path remains valid and behaviorally unchanged
 
+UNBOUND_ACCESSIBILITY_COMPANION_CANDIDATE_RULE =
+  an eligible image source is a consumer-supplied collection-item image source
+  whose source ItemField.accessibility is COLLECTION_ITEM_CONSUMER_ALT_POLICY
+  and whose image ItemField passes COLLECTION_ITEM_IMAGE_SOURCE_RULE
+
+  a candidate is an explicit same-CollectionInput ItemField named by
+  alt_item_field_name of one or more eligible image sources
+  candidates are derived only from those alt_item_field_name references
+
+  a named field that does not exist in the same CollectionInput is a missing
+  or cross-collection reference -> blocking (alt_item_field_missing)
+
+  candidate referenced by exactly one eligible image source
+    -> evaluate UNBOUND_ACCESSIBILITY_COMPANION below, if it has no assignment
+  candidate referenced by two or more eligible image sources
+    -> shared candidate -> blocking, receives no exemption
+
+  a named candidate with a BindingAssignmentDecision is judged by
+  BINDING_BACKED_SIBLING rules; it is not an unbound companion. A
+  non-conforming assigned candidate is blocking.
+
+ZERO_REFERENCE_UNBOUND_ITEM_RULE =
+  an unbound collection ItemField named by zero eligible image sources is NOT
+  a companion candidate
+  it is an ordinary static/unbound ItemField
+  it may pass reference validation (no fake projection, no synthesized binding)
+  STATIC_COLLECTION_ITEM_RULE applies -> NEEDS_REVIEW
+
+NO_ORPHAN_COMPANION_INFERENCE_RULE =
+  there is no orphan-companion state in ComponentizationPlan 1.0.0
+  companion intent is never inferred from field shape, name, semantic_purpose,
+  provenance, collection membership, or presence of another image field
+  no companion marker, schema field, decision family, version bump,
+  nested-list exemption, or collection-has-image heuristic is introduced
+
 UNBOUND_ACCESSIBILITY_COMPANION =
   image source ItemField has exactly one ordinary BindingProjection with:
     source_binding_kind = value
@@ -909,14 +944,15 @@ UNBOUND_ACCESSIBILITY_COMPANION =
   only when the image source is present.
 
 UNBOUND_ACCESSIBILITY_COMPANION_CARDINALITY_RULE =
-  each image-source ItemField using UNBOUND_ACCESSIBILITY_COMPANION names
-  exactly one companion through its exact alt_item_field_name
-  each companion is referenced by exactly one such image-source ItemField
-  N such image sources require N distinct companions
-  multiple distinct companions may exist in one CollectionInput or
+  each eligible image-source ItemField using UNBOUND_ACCESSIBILITY_COMPANION
+  names exactly one candidate through its exact alt_item_field_name
+  each candidate is referenced by exactly one eligible image source
+  N such image sources require N distinct candidates
+  multiple distinct candidates may exist in one CollectionInput or
   ComponentContract when multiple image sources require them
-  a companion cannot be shared by two image sources
-  no unbound companion ItemField is admitted without an owning image source
+  a candidate referenced by two or more image sources is shared -> blocking
+  an unbound ItemField named by zero image sources is not a candidate
+    (ZERO_REFERENCE_UNBOUND_ITEM_RULE); it is not a cardinality violation
   this is per-source cardinality, not one global companion per contract
 
 COLLECTION_ITEM_ALT_SAME_NODE_RULE =
@@ -927,9 +963,10 @@ COLLECTION_ITEM_ALT_SAME_NODE_RULE =
   Neither path creates an item-field RenderProjection.
 ```
 
-For a companion, reference validation must establish
+For a companion candidate, reference validation must establish
 `projection_count_for_alt_companion = 0`, same collection, `type = :string`,
-`required = false`, `default = nil`, and exactly one consumer-source reference.
+`required = false`, `default = nil`, and exactly one eligible consumer-source
+reference. Two or more eligible references are a shared candidate and block.
 Any projection on the companion invalidates the unbound path; validation must
 not ignore or reinterpret it. The existing `VALUE_BINDING_COVERAGE_RULE` is
 unchanged: every real in-boundary ValueBinding still requires its ordinary
@@ -968,9 +1005,9 @@ consumer-supplied path is neither one valid BINDING_BACKED_SIBLING nor one
 unbound companion has any BindingProjection or RenderProjection
 unbound companion required != false
 unbound companion default != nil
-unbound companion is referenced by zero or multiple consumer-supplied sources
-unbound ItemField is not referenced by exactly one eligible image source
-two image sources share one unbound companion
+consumer-supplied source names a missing or cross-collection candidate
+unbound companion candidate is referenced by two or more eligible image
+  sources (shared candidate)
 unbound companion is used as a nested collection, count, image source, or
   independent render target
 binding-backed sibling path has a missing or mismatched BindingProjection
@@ -980,6 +1017,11 @@ binding-backed sibling ValueBinding.target_kind != text
 binding-backed sibling ValueBinding targets a different DesignNode than source
 decorative policy contains alt_item_field_name
 ```
+
+An unbound ItemField named by zero eligible image sources is not listed above.
+It is not a companion candidate and is governed by
+`ZERO_REFERENCE_UNBOUND_ITEM_RULE` (ordinary static item -> `NEEDS_REVIEW`),
+not by invalid policy.
 
 Diagnostics (do not reuse top-level alt_attr codes for ItemField failures):
 
@@ -1032,10 +1074,13 @@ STATIC_COLLECTION_ITEM_RULE =
     -> eligibility is governed by the closed
        COLLECTION_ITEM_CONSUMER_ALT_PATH rules (section 10.2)
 
-  malformed, orphan, shared, projected, wrong-shape,
-  or otherwise invalid companion
+  malformed, shared, projected, wrong-shape, or otherwise invalid
+  named companion candidate
     -> existing reference-validation diagnostics
     -> does not receive this exemption
+
+  an unbound ItemField named by zero eligible image sources is not a
+  candidate; it is the ordinary static item case above (NEEDS_REVIEW)
 
 UNBOUND_ACCESSIBILITY_COMPANION_EXEMPTION =
   is not generic unbound ItemField support
@@ -1723,6 +1768,16 @@ COLLECTION_RENDER_PROJECTION_RULE =
 STATIC_COLLECTION_ITEM_RULE = NEEDS_REVIEW in 1.0.0 for ordinary static or
 unbound item fields; a validated UNBOUND_ACCESSIBILITY_COMPANION is exempt
 under section 10.2
+
+UNBOUND_ACCESSIBILITY_COMPANION_CANDIDATE_RULE = section 10.2 (candidates
+derive only from eligible consumer-supplied alt_item_field_name references)
+
+ZERO_REFERENCE_UNBOUND_ITEM_RULE = section 10.2 (zero-reference unbound
+ItemField is ordinary; NEEDS_REVIEW; not a companion candidate)
+
+NO_ORPHAN_COMPANION_INFERENCE_RULE = section 10.2 (no orphan state; no
+inference from shape, name, semantic_purpose, provenance, collection
+membership, or other image fields)
 
 EVIDENCE_INSUFFICIENT_RULE = fail closed; RenderProjection cannot bypass
 
