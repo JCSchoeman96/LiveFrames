@@ -480,11 +480,21 @@ CSS_DECLARATION_SYNTACTIC_WHITESPACE=U+0020,U+0009,U+000A,U+000D,U+000C
 UNICODE_STRING_TRIM_FOR_C1_DECLARATION_BOUNDARY=FORBIDDEN
 NBSP_U+00A0_IS_CSS_SYNTACTIC_WHITESPACE=NO
 NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
+CSS_WHITESPACE_TRIM_IS_CHARACTER_SET_BASED=YES
+STRING_TRIM_2_WITH_MULTI_CHARACTER_ARGUMENT=FORBIDDEN
+TRIM_SPACE_ONLY=YES
+TRIM_TAB_ONLY=YES
+TRIM_CR_ONLY=YES
+TRIM_LF_ONLY=YES
+TRIM_FF_ONLY=YES
+TRIM_MIXED_ASCII_CSS_WHITESPACE_RUN=YES
+PRESERVE_NBSP=YES
 ~~~
 
 - [ ] **Step 1: Add declaration-parser regression tests before production changes.** Use synthetic declarations with no private source material. Cover:
 
-  - ASCII space, tab, CR, LF, and FF at property/value boundaries retain existing normalization behavior.
+  - Each CSS whitespace character (space, tab, CR, LF, and FF) independently at declaration property and value boundaries retains existing normalization behavior.
+  - A mixed boundary run trims any ordering of the five characters. Include a value boundary such as `\t \f\r\n<value>\n \t`; its order differs from `SPACE,TAB,CR,LF,FF` and must trim fully. This case must fail if implemented with `String.trim/2` and the multi-character argument `" \t\r\n\f"`.
   - A leading NBSP before an ordinary property is not stripped into a valid property.
   - A trailing NBSP after an ordinary property is not stripped into a valid property.
   - A leading NBSP in a declaration value remains in the parsed value.
@@ -510,7 +520,7 @@ NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
 
   Expected: the new NBSP preservation and fail-closed cases fail against current Unicode trimming; existing C1 behavior remains the baseline.
 
-- [ ] **Step 5: Implement the smallest boundary correction.** In `CustomCssParser.parse_declaration_segment/2`, use the existing bounded CSS-whitespace trim idiom, `String.trim(value, " \t\r\n\f")`, or an exactly equivalent implementation, for the property source, the returned declaration value, and the comment-stripped blank-value check. Keep the three paths on the same CSS-whitespace contract. In `CustomCssNormalizer.compound_route/2`, trim only that same ASCII set. Do not replace other `String.trim/1` call sites, change framing/selectors/at-rules, add C1-specific parsing to `CustomCssParser`, or add a helper module.
+- [ ] **Step 5: Implement the smallest boundary correction.** In `CustomCssParser.parse_declaration_segment/2`, trim leading and trailing runs consisting of any characters in exactly the five CSS syntactic whitespace characters for the property source, returned declaration value, and comment-stripped blank-value check. Keep the three paths on the same contract. In `CustomCssNormalizer.compound_route/2`, use exactly the same character-set boundary trim. The approved mechanism is an anchored bounded ASCII character-class replacement, for example `Regex.replace(~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/, value, "")`, or an exactly equivalent bounded implementation. `CSS_WHITESPACE_TRIM_IS_CHARACTER_SET_BASED=YES`; `String.trim/2` with a multi-character argument and Unicode `String.trim/1` are forbidden. Mixed runs must trim in any order; NBSP and other non-ASCII whitespace remain untouched. A private helper inside an already-authorized module is allowed only to encapsulate this exact operation, with no routing or grammar abstraction. Do not replace other trim call sites, change framing/selectors/at-rules, add C1-specific parsing to `CustomCssParser`, or add a helper module.
 
 - [ ] **Step 6: Re-run both targeted test files.**
 

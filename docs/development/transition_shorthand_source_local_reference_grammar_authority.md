@@ -227,9 +227,11 @@ CSS_DECLARATION_SYNTACTIC_WHITESPACE=
 UNICODE_STRING_TRIM_FOR_C1_DECLARATION_BOUNDARY=FORBIDDEN
 NBSP_U+00A0_IS_CSS_SYNTACTIC_WHITESPACE=NO
 NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
+CSS_WHITESPACE_TRIM_IS_CHARACTER_SET_BASED=YES
+STRING_TRIM_2_WITH_MULTI_CHARACTER_ARGUMENT=FORBIDDEN
 ```
 
-Use the repository's bounded CSS-whitespace trim idiom, `String.trim(value, " \t\r\n\f")`, or an exactly equivalent implementation. Apply it only to declaration property/value normalization in `CustomCssParser` and to `compound_route/2` in `CustomCssNormalizer`. The parser remains responsible for declaration framing and whitespace normalization only; it does not select or implement C1 grammar. The normalizer remains responsible for the property-scoped grammar route.
+Trim boundary runs consisting of any characters in the five-character CSS-whitespace set. Do not use Unicode `String.trim/1` or `String.trim/2` with a multi-character argument; that argument does not provide character-set semantics. The smallest approved mechanism is an anchored bounded ASCII character-class replacement, for example `Regex.replace(~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/, value, "")`, or an exactly equivalent bounded implementation. Apply it only to declaration property/value normalization in `CustomCssParser` and to `compound_route/2` in `CustomCssNormalizer`. The parser remains responsible for declaration framing and whitespace normalization only; it does not select or implement C1 grammar. The normalizer remains responsible for the property-scoped grammar route.
 
 After CSS-syntax-whitespace-only declaration normalization, a leading or trailing NBSP in an ordinary property name remains present and fails the existing property-name validation. A leading or trailing NBSP in a declaration value remains present for downstream grammar and safety checks. An NBSP-only value is not treated as empty CSS whitespace. Do not pass raw-source metadata through IR, reparse `frame.raw`, add C1-specific parsing to `CustomCssParser`, add a module, or broaden CSS tokenization.
 
