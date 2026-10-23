@@ -158,10 +158,14 @@ end
 defmodule LiveFrames.Styling.TokenBridge do
   @moduledoc false
 
+  alias LiveFrames.Styling.Fluid.CSSSerializer
+  alias LiveFrames.Styling.Fluid.{ScaleStep, Value}
   alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
+  @progress_supports "(opacity: progress(1px, 0px, 1px))"
+  @fluid_outputs [:legacy, :progressive]
   @supported_schema_version "1.0.0"
   @css_variable ~r/^--lf-[a-z0-9]+(?:-[a-z0-9]+)*$/
   @unsafe_value ~r/[{};\\]/
@@ -211,23 +215,54 @@ defmodule LiveFrames.Styling.TokenBridge do
 
   @spec generate(TokenSet.t(), map() | [map()]) :: {:ok, String.t()} | {:error, term()}
   def generate(%TokenSet{} = token_set, mappings) when is_list(mappings) do
-    with {:ok, entries} <- validate_mapping_layers(token_set, mappings),
-         :ok <- validate_cross_layer_duplicates(entries) do
-      generate_entries(token_set, entries)
-    end
+    generate(token_set, mappings, [])
   end
 
   def generate(%TokenSet{} = token_set, mapping) when is_map(mapping) do
-    with :ok <- validate_mapping(token_set, mapping) do
-      generate_entries(token_set, mapping["entries"])
+    generate(token_set, mapping, [])
+  end
+
+  @spec generate(TokenSet.t(), map() | [map()], keyword()) :: {:ok, String.t()} | {:error, term()}
+  def generate(%TokenSet{} = token_set, mappings, options)
+      when is_list(mappings) and is_list(options) do
+    with {:ok, fluid_output} <- fluid_output_from_options(options),
+         {:ok, entries} <- validate_mapping_layers(token_set, mappings, fluid_output),
+         :ok <- validate_cross_layer_duplicates(entries) do
+      generate_entries(token_set, entries, fluid_output)
     end
   end
 
-  defp generate_entries(token_set, entries) do
+  def generate(%TokenSet{} = token_set, mapping, options)
+      when is_map(mapping) and is_list(options) do
+    with {:ok, fluid_output} <- fluid_output_from_options(options),
+         :ok <- validate_mapping(token_set, mapping, fluid_output) do
+      generate_entries(token_set, mapping["entries"], fluid_output)
+    end
+  end
+
+  defp fluid_output_from_options(options) do
+    case Keyword.get(options, :fluid_output, :legacy) do
+      output when output in @fluid_outputs -> {:ok, output}
+      output -> {:error, {:invalid_fluid_output, output}}
+    end
+  end
+
+  defp generate_entries(token_set, entries, fluid_output) do
+    sorted = Enum.sort_by(entries, &entry_sort_key/1)
+
+    case fluid_output do
+      :legacy ->
+        generate_legacy_entries(token_set, sorted)
+
+      :progressive ->
+        generate_progressive_entries(token_set, sorted)
+    end
+  end
+
+  defp generate_legacy_entries(token_set, entries) do
     entries
-    |> Enum.sort_by(&entry_sort_key/1)
     |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
-      case declaration_for(entry, token_set) do
+      case declaration_for(entry, token_set, :legacy, nil) do
         {:error, _} = error -> {:halt, error}
         line -> {:cont, {:ok, [line | acc]}}
       end
@@ -238,9 +273,115 @@ defmodule LiveFrames.Styling.TokenBridge do
     end
   end
 
-  defp validate_mapping_layers(token_set, mappings) do
+  defp generate_progressive_entries(token_set, entries) do
+    fluid_paths = fluid_materialization_paths(token_set, entries)
+
+    with {:ok, plan} <- fluid_plan(token_set, fluid_paths),
+         :ok <- validate_progressive_variable_collisions(entries, plan) do
+      entries
+      |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
+        case declaration_for(entry, token_set, :progressive, plan) do
+          {:error, _} = error -> {:halt, error}
+          line -> {:cont, {:ok, [line | acc]}}
+        end
+      end)
+      |> case do
+        {:error, _} = error ->
+          error
+
+        {:ok, value_lines} ->
+          with {:ok, dependency_lines} <- progressive_dependency_lines(plan),
+               {:ok, modern_lines} <- progressive_modern_lines(plan) do
+            {:ok,
+             format_progressive_stylesheet(
+               dependency_lines,
+               Enum.reverse(value_lines),
+               modern_lines
+             )}
+          end
+      end
+    end
+  end
+
+  defp validate_progressive_variable_collisions(entries, plan) do
+    generated =
+      plan.fallback_dependencies
+      |> Enum.map(& &1.name)
+      |> MapSet.new()
+
+    collisions =
+      entries
+      |> Enum.map(& &1["css_variable"])
+      |> Enum.filter(&MapSet.member?(generated, &1))
+      |> Enum.sort()
+
+    case collisions do
+      [] -> :ok
+      dupes -> {:error, {:duplicate_css_variables, dupes}}
+    end
+  end
+
+  defp progressive_dependency_lines(plan) do
+    plan.fallback_dependencies
+    |> Enum.sort_by(& &1.name)
+    |> Enum.reduce_while({:ok, []}, fn %{name: name, expression: expression}, {:ok, acc} ->
+      case safe_declaration_line(name, expression) do
+        {:error, _} = error -> {:halt, error}
+        line -> {:cont, {:ok, [line | acc]}}
+      end
+    end)
+    |> case do
+      {:ok, lines} -> {:ok, Enum.reverse(lines)}
+      error -> error
+    end
+  end
+
+  defp progressive_modern_lines(plan) do
+    plan.modern_overrides
+    |> Enum.sort_by(& &1.name)
+    |> Enum.reduce_while({:ok, []}, fn %{name: name, expression: expression}, {:ok, acc} ->
+      case safe_declaration_line(name, expression) do
+        {:error, _} = error -> {:halt, error}
+        line -> {:cont, {:ok, [line | acc]}}
+      end
+    end)
+    |> case do
+      {:ok, lines} -> {:ok, Enum.reverse(lines)}
+      error -> error
+    end
+  end
+
+  defp fluid_materialization_paths(token_set, entries) do
+    entries
+    |> Enum.flat_map(fn
+      %{"token_set_path" => path} when is_binary(path) ->
+        if fluid_materialization_path?(token_set, path), do: [path], else: []
+
+      _ ->
+        []
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp fluid_plan(_token_set, []),
+    do: {:ok, %{fallback_dependencies: [], modern_overrides: [], values: []}}
+
+  defp fluid_plan(token_set, paths), do: CSSSerializer.plan(token_set, paths)
+
+  defp fluid_materialization_path?(token_set, path) do
+    case Map.fetch(token_set.tokens, path) do
+      {:ok, %Token{resolution_status: :resolved, resolved_value: semantic}} ->
+        Value.type?(semantic) or ScaleStep.type?(semantic)
+
+      _ ->
+        false
+    end
+  end
+
+  defp validate_mapping_layers(token_set, mappings, fluid_output) do
     Enum.reduce_while(mappings, {:ok, []}, fn mapping, {:ok, acc} ->
-      case validate_mapping(token_set, mapping) do
+      case validate_mapping(token_set, mapping, fluid_output) do
         :ok -> {:cont, {:ok, acc ++ mapping["entries"]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -264,7 +405,7 @@ defmodule LiveFrames.Styling.TokenBridge do
     mapping
   end
 
-  defp validate_mapping(token_set, mapping) do
+  defp validate_mapping(token_set, mapping, fluid_output) do
     entries = mapping["entries"] || []
 
     with :ok <- validate_mapping_header(mapping),
@@ -272,7 +413,7 @@ defmodule LiveFrames.Styling.TokenBridge do
          :ok <- validate_duplicate_paths(entries),
          :ok <- validate_duplicate_css_variables(entries),
          :ok <- validate_duplicate_tailwind_aliases(entries) do
-      validate_entries_resolvable(token_set, entries)
+      validate_entries_resolvable(token_set, entries, fluid_output)
     end
   end
 
@@ -366,7 +507,26 @@ defmodule LiveFrames.Styling.TokenBridge do
     end
   end
 
-  defp validate_entries_resolvable(token_set, entries) do
+  defp progressive_deferred_fluid_entry?(token_set, %{"token_set_path" => path}) do
+    fluid_materialization_path?(token_set, path)
+  end
+
+  defp progressive_deferred_fluid_entry?(_token_set, _entry), do: false
+
+  defp validate_entries_resolvable(token_set, entries, :progressive) do
+    Enum.reduce_while(entries, :ok, fn entry, :ok ->
+      if progressive_deferred_fluid_entry?(token_set, entry) do
+        {:cont, :ok}
+      else
+        case resolve_entry(entry, token_set) do
+          {:ok, _name, _value} -> {:cont, :ok}
+          {:error, _} = error -> {:halt, error}
+        end
+      end
+    end)
+  end
+
+  defp validate_entries_resolvable(token_set, entries, :legacy) do
     Enum.reduce_while(entries, :ok, fn entry, :ok ->
       case resolve_entry(entry, token_set) do
         {:ok, _name, _value} -> {:cont, :ok}
@@ -375,16 +535,50 @@ defmodule LiveFrames.Styling.TokenBridge do
     end)
   end
 
+  defp declaration_for(entry, token_set, :legacy, _plan), do: declaration_for(entry, token_set)
+
+  defp declaration_for(%{"compose" => _} = entry, token_set, :progressive, _plan) do
+    declaration_for(entry, token_set)
+  end
+
+  defp declaration_for(
+         %{"token_set_path" => path, "css_variable" => name} = entry,
+         token_set,
+         :progressive,
+         _plan
+       ) do
+    if fluid_materialization_path?(token_set, path) do
+      with {:ok, %Token{} = token} <- Map.fetch(token_set.tokens, path),
+           {:ok, expression} <- CSSValue.candidate(token_set, token, fluid_target: :fallback) do
+        safe_declaration_line(name, expression)
+      else
+        :error -> {:error, {:missing_token, path}}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      declaration_for(entry, token_set)
+    end
+  end
+
+  defp declaration_for(entry, token_set, :progressive, _plan) do
+    declaration_for(entry, token_set)
+  end
+
   defp declaration_for(entry, token_set) do
     case resolve_entry(entry, token_set) do
       {:ok, name, value} ->
-        case safe_css_value?(value) do
-          true -> "  #{name}: #{value};"
-          false -> {:error, {:unsafe_css_value, name, value}}
-        end
+        safe_declaration_line(name, value)
 
       {:error, _} = error ->
         error
+    end
+  end
+
+  defp safe_declaration_line(name, value) do
+    if safe_css_value?(value) do
+      "  #{name}: #{value};"
+    else
+      {:error, {:unsafe_css_value, name, value}}
     end
   end
 
@@ -502,6 +696,44 @@ defmodule LiveFrames.Styling.TokenBridge do
     header = "/* Generated by LiveFrames.Styling.TokenBridge — do not edit. */\n"
     body = Enum.join(lines, "\n")
     header <> ":root {\n" <> body <> "\n}\n"
+  end
+
+  defp format_progressive_stylesheet(dependency_lines, value_lines, modern_lines) do
+    header = "/* Generated by LiveFrames.Styling.TokenBridge — do not edit. */\n"
+
+    fallback_body =
+      sort_declaration_lines(dependency_lines) ++ sort_declaration_lines(value_lines)
+
+    root_block = header <> ":root {\n" <> Enum.join(fallback_body, "\n") <> "\n}\n"
+
+    case modern_lines do
+      [] ->
+        root_block
+
+      lines ->
+        modern_body = sort_declaration_lines(lines)
+
+        nested_modern =
+          modern_body
+          |> Enum.map(fn line -> "  " <> line end)
+          |> Enum.join("\n")
+
+        root_block <>
+          "\n" <>
+          "@supports #{@progress_supports} {\n" <>
+          "  :root {\n" <>
+          nested_modern <>
+          "\n  }\n}\n"
+    end
+  end
+
+  defp sort_declaration_lines(lines) do
+    Enum.sort_by(lines, fn line ->
+      case Regex.run(~r/^\s*(--[^:\s]+):/, line) do
+        [_, name] -> name
+        _ -> line
+      end
+    end)
   end
 
   defp format_float(value) when is_float(value) do

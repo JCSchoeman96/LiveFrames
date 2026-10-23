@@ -562,4 +562,720 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     assert {:error, {:invalid_mapping_entry, _entry}} =
              LiveFrames.Styling.TokenBridge.PackageMappingIndex.build(mappings)
   end
+
+  describe "progressive fluid_output" do
+    alias LiveFrames.Tokens.CSSValue
+
+    @domain_path "layout.fluid.viewport.default"
+    @underscore_domain_path "layout.fluid.viewport_default"
+    @value_path "spacing.fluid.gap"
+    @second_value_path "typography.fluid.body"
+    @scale_path "typography.scale.primary"
+    @second_scale_path "spacing.scale.primary"
+    @step_path "typography.heading.h1"
+    @second_step_path "typography.heading.h2"
+    @fallback_progress "clamp(0, tan(atan2(calc(100vw - 500px), calc(1000px - 500px))), 1)"
+    @domain_progress_var "--lf-fluid-domain-layout-fluid-viewport-default-progress"
+    @underscore_domain_progress_var "--lf-fluid-domain-layout-fluid-viewport_default-progress"
+    @progress_supports_condition "(opacity: progress(1px, 0px, 1px))"
+    @supports_query "@supports #{@progress_supports_condition}"
+
+    defp progressive_mapping(entries) do
+      %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "progressive_fixture",
+        "entries" => entries
+      }
+    end
+
+    defp progressive_token_set(extra_tokens \\ %{}) do
+      domain = %{
+        "type" => "fluid_domain",
+        "format_version" => "1.0.0",
+        "input" => "viewport_width",
+        "start" => %{"value" => 500, "unit" => "px"},
+        "end" => %{"value" => 1000, "unit" => "px"},
+        "clamp_policy" => "bounded"
+      }
+
+      value = %{
+        "type" => "fluid_value",
+        "format_version" => "1.0.0",
+        "domain_ref" => @domain_path,
+        "start_value" => %{"value" => 1, "unit" => "rem"},
+        "end_value" => %{"value" => 1.125, "unit" => "rem"},
+        "interpolation" => "linear"
+      }
+
+      scale = %{
+        "type" => "fluid_scale",
+        "format_version" => "1.0.0",
+        "domain_ref" => @domain_path,
+        "base_start" => %{"value" => 1, "unit" => "rem"},
+        "base_end" => %{"value" => 1.125, "unit" => "rem"},
+        "ratio_start" => 1.2,
+        "ratio_end" => 1.414
+      }
+
+      step = %{
+        "type" => "fluid_scale_step",
+        "format_version" => "1.0.0",
+        "scale_ref" => @scale_path,
+        "power" => 4
+      }
+
+      second_value =
+        Map.put(value, "start_value", %{"value" => 0.875, "unit" => "rem"})
+
+      second_step = Map.put(step, "power", 2)
+
+      second_scale = %{
+        "type" => "fluid_scale",
+        "format_version" => "1.0.0",
+        "domain_ref" => @domain_path,
+        "base_start" => %{"value" => 0.5, "unit" => "rem"},
+        "base_end" => %{"value" => 1, "unit" => "rem"},
+        "ratio_start" => 1.1,
+        "ratio_end" => 1.25
+      }
+
+      underscore_domain = Map.put(domain, "start", %{"value" => 400, "unit" => "px"})
+
+      base = %{
+        @domain_path =>
+          Token.new(path: @domain_path, resolution_status: :resolved, resolved_value: domain),
+        @value_path =>
+          Token.new(path: @value_path, resolution_status: :resolved, resolved_value: value),
+        @second_value_path =>
+          Token.new(
+            path: @second_value_path,
+            resolution_status: :resolved,
+            resolved_value: second_value
+          ),
+        @scale_path =>
+          Token.new(path: @scale_path, resolution_status: :resolved, resolved_value: scale),
+        @second_scale_path =>
+          Token.new(
+            path: @second_scale_path,
+            resolution_status: :resolved,
+            resolved_value: second_scale
+          ),
+        @step_path =>
+          Token.new(path: @step_path, resolution_status: :resolved, resolved_value: step),
+        @second_step_path =>
+          Token.new(
+            path: @second_step_path,
+            resolution_status: :resolved,
+            resolved_value: second_step
+          ),
+        @underscore_domain_path =>
+          Token.new(
+            path: @underscore_domain_path,
+            resolution_status: :resolved,
+            resolved_value: underscore_domain
+          ),
+        "color.primary" =>
+          Token.new(
+            path: "color.primary",
+            resolution_status: :resolved,
+            resolved_value: "#336699"
+          )
+      }
+
+      %TokenSet{tokens: Map.merge(base, extra_tokens), source_metadata: %{}, diagnostics: []}
+    end
+
+    defp supports_block(css) do
+      case :binary.split(css, @supports_query) do
+        [_, rest] -> @supports_query <> rest
+        _ -> ""
+      end
+    end
+
+    defp domain_progress_declarations(css, domain_progress_var) do
+      length(:binary.matches(css, domain_progress_var <> ":"))
+    end
+
+    defp count_declarations(css, variable_prefix) do
+      Regex.scan(~r/^\s*(#{Regex.escape(variable_prefix)}[^:]*):/m, css) |> length()
+    end
+
+    defp root_body_lines(root_block) do
+      root_block
+      |> String.split("\n}\n", parts: 2)
+      |> hd()
+      |> String.split("\n", trim: true)
+    end
+
+    test "legacy generate/2 bytes match explicit fluid_output: :legacy" do
+      token_set = hero_token_set()
+      mapping = TokenBridge.load_mapping!(@mapping)
+
+      assert {:ok, legacy} = TokenBridge.generate(token_set, mapping)
+      assert {:ok, explicit} = TokenBridge.generate(token_set, mapping, fluid_output: :legacy)
+      assert legacy == explicit
+    end
+
+    test "rejects unknown fluid_output values" do
+      token_set = progressive_token_set()
+      mapping = progressive_mapping([])
+
+      assert {:error, {:invalid_fluid_output, :experimental}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :experimental)
+    end
+
+    test "progressive output matches legacy bytes for ordinary mappings only" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => "color.primary", "css_variable" => "--lf-color-primary"}
+        ])
+
+      assert {:ok, legacy} = TokenBridge.generate(token_set, mapping)
+
+      assert {:ok, progressive} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      assert progressive == legacy
+      refute progressive =~ "@supports"
+      refute progressive =~ "--lf-fluid-"
+    end
+
+    test "native hero generate/2 bytes stay unchanged while progressive mode remains available" do
+      token_set = hero_token_set()
+      mapping = TokenBridge.load_mapping!(@mapping)
+
+      assert {:ok, legacy} = TokenBridge.generate(token_set, mapping)
+
+      assert {:ok, progressive} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      assert progressive == legacy
+      assert legacy =~ "--lf-space-gutter:"
+    end
+
+    test "layered shared and hero generate/2 bytes stay unchanged" do
+      token_set = hero_token_set()
+      shared = TokenBridge.load_mapping!(@shared_mapping)
+      hero = TokenBridge.load_mapping!(@mapping)
+
+      assert {:ok, legacy} = TokenBridge.generate(token_set, [shared, hero])
+
+      assert {:ok, progressive} =
+               TokenBridge.generate(token_set, [shared, hero], fluid_output: :progressive)
+
+      assert progressive == legacy
+    end
+
+    test "keeps fallback dependencies before mapped package declarations" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-aaa-mapped-first-lexically"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      [_, root_block | _] = :binary.split(css, ":root {\n", [])
+
+      root_lines =
+        root_body_lines(root_block)
+        |> Enum.reject(&(String.starts_with?(&1, "@supports") or &1 == "}"))
+
+      assert hd(root_lines) =~ "#{@domain_progress_var}:"
+      assert List.last(root_lines) =~ "--lf-aaa-mapped-first-lexically:"
+    end
+
+    test "progressive generation invokes CSSValue.candidate/3 for each mapped Fluid root" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"}
+        ])
+
+      {calls, result} =
+        trace_candidate3_calls(fn ->
+          TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+        end)
+
+      assert {:ok, _css} = result
+
+      paths =
+        calls
+        |> Enum.map(fn {_token_set, token, _options} -> token.path end)
+        |> Enum.sort()
+
+      assert paths == Enum.sort([@value_path, @step_path])
+
+      assert Enum.all?(calls, fn {_token_set, _token, options} ->
+               Keyword.get(options, :fluid_target) == :fallback
+             end)
+    end
+
+    test "contextual Fluid semantics ignore metadata css_expression and match fallback candidates" do
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), @value_path, Access.key!(:metadata)],
+          %{"css_expression" => "999px"}
+        )
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"}
+        ])
+
+      token = Map.fetch!(token_set.tokens, @value_path)
+
+      assert {:ok, expected} = CSSValue.candidate(token_set, token, fluid_target: :fallback)
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      refute css =~ "999px"
+      assert css =~ "--lf-space-fluid-gap: #{expected};"
+    end
+
+    test "uses a valid progress feature query for progressive enhancement" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert css =~ "@supports #{@progress_supports_condition}"
+      refute css =~ "width: progress"
+      refute css =~ "progress(0%, 0px, 1px)"
+    end
+
+    test "emits the exact approved progressive FluidValue stylesheet" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      assert css ==
+               "/* Generated by LiveFrames.Styling.TokenBridge — do not edit. */\n" <>
+                 ":root {\n" <>
+                 "  #{@domain_progress_var}: #{@fallback_progress};\n" <>
+                 "  --lf-space-fluid-gap: calc(1rem + ((1.125rem - 1rem) * var(#{@domain_progress_var})));\n" <>
+                 "}\n\n" <>
+                 "#{@supports_query} {\n" <>
+                 "  :root {\n" <>
+                 "    #{@domain_progress_var}: progress(100vw, 500px, 1000px);\n" <>
+                 "  }\n}\n"
+    end
+
+    test "materializes a progressive FluidScaleStep with deduplicated scale dependencies" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-base") == 1
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-ratio") == 1
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+
+      block = supports_block(css)
+      refute block =~ "--lf-fluid-scale-typography-scale-primary-base"
+      refute block =~ "--lf-type-heading-h1"
+    end
+
+    test "deduplicates one domain across multiple FluidValues" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => @second_value_path, "css_variable" => "--lf-type-fluid-body"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+      assert count_declarations(css, "--lf-space-fluid-gap") == 1
+      assert count_declarations(css, "--lf-type-fluid-body") == 1
+    end
+
+    test "deduplicates one scale across multiple FluidScaleSteps" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"},
+          %{"token_set_path" => @second_step_path, "css_variable" => "--lf-type-heading-h2"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-base") == 1
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-ratio") == 1
+      assert count_declarations(css, "--lf-type-heading-h1") == 1
+      assert count_declarations(css, "--lf-type-heading-h2") == 1
+    end
+
+    test "deduplicates one domain across two scales" do
+      spacing_step = %{
+        "type" => "fluid_scale_step",
+        "format_version" => "1.0.0",
+        "scale_ref" => @second_scale_path,
+        "power" => 1
+      }
+
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), "spacing.step.primary"],
+          Token.new(
+            path: "spacing.step.primary",
+            resolution_status: :resolved,
+            resolved_value: spacing_step
+          )
+        )
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"},
+          %{
+            "token_set_path" => "spacing.step.primary",
+            "css_variable" => "--lf-space-step-primary"
+          }
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-base") == 1
+      assert count_declarations(css, "--lf-fluid-scale-spacing-scale-primary-base") == 1
+      assert count_declarations(css, "--lf-fluid-scale-typography-scale-primary-ratio") == 1
+      assert count_declarations(css, "--lf-fluid-scale-spacing-scale-primary-ratio") == 1
+    end
+
+    test "deduplicates shared domain dependencies across mixed FluidValue and FluidScaleStep mappings" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"}
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+
+      reversed =
+        progressive_mapping([
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"},
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"}
+        ])
+
+      assert {:ok, reversed_css} =
+               TokenBridge.generate(token_set, reversed, fluid_output: :progressive)
+
+      assert reversed_css == css
+    end
+
+    test "emits both mapped declarations when the same Fluid path appears across layers" do
+      token_set = progressive_token_set()
+
+      first_layer = %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "fluid_layer_a",
+        "entries" => [
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap-a"}
+        ]
+      }
+
+      second_layer = %{
+        "schema_version" => "1.0.0",
+        "mapping_version" => "fluid_layer_b",
+        "entries" => [
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap-b"}
+        ]
+      }
+
+      assert {:ok, css} =
+               TokenBridge.generate(token_set, [first_layer, second_layer],
+                 fluid_output: :progressive
+               )
+
+      assert domain_progress_declarations(css, @domain_progress_var) == 2
+      assert count_declarations(css, "--lf-space-fluid-gap-a") == 1
+      assert count_declarations(css, "--lf-space-fluid-gap-b") == 1
+    end
+
+    test "rejects mapped variables that collide with generated Fluid dependencies" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => @domain_progress_var}
+        ])
+
+      assert {:error, {:duplicate_css_variables, [@domain_progress_var]}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "preserves underscore segments in generated Fluid domain variable names" do
+      underscore_value = %{
+        "type" => "fluid_value",
+        "format_version" => "1.0.0",
+        "domain_ref" => @underscore_domain_path,
+        "start_value" => %{"value" => 1, "unit" => "rem"},
+        "end_value" => %{"value" => 1.25, "unit" => "rem"},
+        "interpolation" => "linear"
+      }
+
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), "spacing.fluid.underscore"],
+          Token.new(
+            path: "spacing.fluid.underscore",
+            resolution_status: :resolved,
+            resolved_value: underscore_value
+          )
+        )
+
+      mapping =
+        progressive_mapping([
+          %{
+            "token_set_path" => "spacing.fluid.underscore",
+            "css_variable" => "--lf-space-underscore"
+          }
+        ])
+
+      assert {:ok, css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert css =~ "#{@underscore_domain_progress_var}:"
+      refute css =~ "--lf-fluid-domain-layout-fluid-viewport-default-progress"
+    end
+
+    test "rejects direct FluidDomain mappings" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @domain_path, "css_variable" => "--lf-fluid-domain-direct"}
+        ])
+
+      assert {:error, {:non_serializable_resolved_value, @domain_path}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "rejects direct FluidScale mappings" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @scale_path, "css_variable" => "--lf-fluid-scale-direct"}
+        ])
+
+      assert {:error, {:non_serializable_resolved_value, @scale_path}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "preserves missing token errors in progressive mode" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => "spacing.missing.token", "css_variable" => "--lf-space-missing"}
+        ])
+
+      assert {:error, {:missing_token, "spacing.missing.token"}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "preserves unresolved token errors in progressive mode" do
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), "color.secondary"],
+          Token.new(path: "color.secondary", resolution_status: :unresolved, resolved_value: nil)
+        )
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => "color.secondary", "css_variable" => "--lf-color-secondary"}
+        ])
+
+      assert {:error, {:unresolved_token, "color.secondary", :unresolved}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "rejects mixed progressive Fluid and unsafe ordinary mappings" do
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), "color.secondary"],
+          Token.new(
+            path: "color.secondary",
+            resolution_status: :resolved,
+            resolved_value: "red; } body { color: red"
+          )
+        )
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => "color.secondary", "css_variable" => "--lf-color-secondary"}
+        ])
+
+      assert {:error, {:unsafe_css_value, "--lf-color-secondary", _}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    test "progressive output is deterministic" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"}
+        ])
+
+      assert {:ok, first} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert {:ok, second} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert first == second
+    end
+
+    test "does not mutate the TokenSet during progressive generation" do
+      token_set = progressive_token_set()
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"}
+        ])
+
+      before = token_set
+      assert {:ok, _css} = TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+      assert before == token_set
+    end
+
+    test "keeps fluid_px_pair compose mappings unchanged in progressive mode" do
+      token_set =
+        progressive_token_set()
+        |> put_in(
+          [Access.key!(:tokens), "spacing.gutter.min"],
+          Token.new(
+            path: "spacing.gutter.min",
+            resolution_status: :resolved,
+            resolved_value: "16px"
+          )
+        )
+        |> put_in(
+          [Access.key!(:tokens), "spacing.gutter.max"],
+          Token.new(
+            path: "spacing.gutter.max",
+            resolution_status: :resolved,
+            resolved_value: "32px"
+          )
+        )
+        |> put_in(
+          [Access.key!(:tokens), "layout.viewport.min"],
+          Token.new(
+            path: "layout.viewport.min",
+            resolution_status: :resolved,
+            resolved_value: "768px"
+          )
+        )
+        |> put_in(
+          [Access.key!(:tokens), "layout.viewport.max"],
+          Token.new(
+            path: "layout.viewport.max",
+            resolution_status: :resolved,
+            resolved_value: "1200px"
+          )
+        )
+
+      mapping =
+        progressive_mapping([
+          %{
+            "compose" => %{
+              "type" => "fluid_px_pair",
+              "min" => "spacing.gutter.min",
+              "max" => "spacing.gutter.max",
+              "viewport_min" => "layout.viewport.min",
+              "viewport_max" => "layout.viewport.max"
+            },
+            "css_variable" => "--lf-space-gutter"
+          }
+        ])
+
+      assert {:ok, progressive_css} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+
+      assert {:ok, legacy_css} = TokenBridge.generate(token_set, mapping, fluid_output: :legacy)
+      assert progressive_css == legacy_css
+    end
+
+    test "still rejects unsafe css values in progressive mode" do
+      token_set =
+        put_in(
+          progressive_token_set(),
+          [Access.key!(:tokens), "color.primary"],
+          Token.new(
+            path: "color.primary",
+            resolution_status: :resolved,
+            resolved_value: "red; background: url(javascript:alert(1))"
+          )
+        )
+
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => "color.primary", "css_variable" => "--lf-color-primary"}
+        ])
+
+      assert {:error, {:unsafe_css_value, "--lf-color-primary", _}} =
+               TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    defp trace_candidate3_calls(fun) do
+      test_pid = self()
+      tracer = spawn_link(fn -> candidate3_tracer(test_pid, []) end)
+
+      :erlang.trace_pattern({CSSValue, :candidate, 3}, true, [:global])
+      :erlang.trace(self(), true, [:call, {:tracer, tracer}])
+
+      try do
+        result = fun.()
+        :erlang.trace(self(), false, [:call])
+        delivered = :erlang.trace_delivered(self())
+        assert_receive({:trace_delivered, _, ^delivered})
+        send(tracer, :report)
+        assert_receive({:candidate3_calls, calls})
+        {calls, result}
+      after
+        :erlang.trace(self(), false, [:call])
+        :erlang.trace_pattern({CSSValue, :candidate, 3}, false, [:global])
+        send(tracer, :stop)
+      end
+    end
+
+    defp candidate3_tracer(test_pid, acc) do
+      receive do
+        {:trace, _pid, :call, {CSSValue, :candidate, [token_set, token, options]}} ->
+          candidate3_tracer(test_pid, [{token_set, token, options} | acc])
+
+        {:trace, _pid, :call, _} ->
+          candidate3_tracer(test_pid, acc)
+
+        :report ->
+          send(test_pid, {:candidate3_calls, Enum.reverse(acc)})
+          candidate3_tracer(test_pid, acc)
+
+        :stop ->
+          :ok
+      end
+    end
+  end
 end
