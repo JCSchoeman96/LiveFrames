@@ -654,51 +654,49 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          external_collisions,
          outcomes
        ) do
-    cond do
-      MapSet.member?(external_collisions, b_name) ->
-        {:error, :external_authority_collision}
+    target_path = Enum.reverse(a_reversed_path)
 
-      true ->
-        target_path = Enum.reverse(a_reversed_path)
+    case find_dependency_definition(base_definitions, b_name, a_reversed_path) do
+      nil ->
+        trie = Map.get(tries_by_name, b_name, empty_path_trie())
 
-        case find_dependency_definition(base_definitions, b_name, a_reversed_path) do
-          nil ->
-            trie = Map.get(tries_by_name, b_name, empty_path_trie())
+        if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
+          {:error, :resource_limit_exceeded}
+        else
+          {:error, :no_local_definition}
+        end
 
-            if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
-              {:error, :resource_limit_exceeded}
+      {_b_name, b_reversed_path} ->
+        b_key = {b_name, b_reversed_path, {:base, nil}}
+
+        case Map.fetch(base_definitions, {b_name, b_reversed_path}) do
+          {:ok, {:error, reason}} ->
+            {:error, reason}
+
+          {:ok, {:ok, _terminal}} ->
+            if MapSet.member?(external_collisions, b_name) do
+              {:error, :external_authority_collision}
             else
-              {:error, :no_local_definition}
+              case Map.get(outcomes, b_key) do
+                {:terminal, terminal} ->
+                  {:passthrough, terminal}
+
+                {:passthrough, _} ->
+                  {:error, :unsupported_nested_reference}
+
+                {:error, reason} ->
+                  {:error, reason}
+
+                {:passthrough_pending, _} ->
+                  {:error, :unsupported_nested_reference}
+
+                _ ->
+                  {:error, :no_local_definition}
+              end
             end
 
-          {_b_name, b_reversed_path} ->
-            b_key = {b_name, b_reversed_path, {:base, nil}}
-
-            case Map.fetch(base_definitions, {b_name, b_reversed_path}) do
-              {:ok, {:error, reason}} ->
-                {:error, reason}
-
-              {:ok, {:ok, _terminal}} ->
-                case Map.get(outcomes, b_key) do
-                  {:terminal, terminal} ->
-                    {:passthrough, terminal}
-
-                  {:passthrough, _} ->
-                    {:error, :unsupported_nested_reference}
-
-                  {:error, reason} ->
-                    {:error, reason}
-
-                  {:passthrough_pending, _} ->
-                    {:error, :unsupported_nested_reference}
-
-                  _ ->
-                    {:error, :no_local_definition}
-                end
-
-              :error ->
-                {:error, :no_local_definition}
-            end
+          :error ->
+            {:error, :no_local_definition}
         end
     end
   end

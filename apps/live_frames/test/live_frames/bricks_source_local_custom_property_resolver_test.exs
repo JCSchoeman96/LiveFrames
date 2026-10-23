@@ -832,6 +832,108 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              )
   end
 
+  test "responsive-only nested B with an external collision remains missing" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    path = [11, 22]
+
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", path),
+                 definition("--b", "12px", path,
+                   viewport_scope: {:responsive_source_key, "tablet-b"}
+                 )
+               ],
+               [reference("--a", path)],
+               authority_index: authority_index
+             )
+  end
+
+  test "sibling-only nested B with an external collision remains missing" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    a_path = [31, 32]
+
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", a_path),
+                 definition("--b", "12px", [31, 33])
+               ],
+               [reference("--a", a_path)],
+               authority_index: authority_index
+             )
+  end
+
+  test "nested B beyond 64 hops keeps the resource failure with an external collision" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    a_path = Enum.to_list(401..466)
+
+    assert length(a_path) - 1 == 65
+
+    assert {:ok, [{:error, :resource_limit_exceeded}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", a_path),
+                 definition("--b", "12px", [401])
+               ],
+               [reference("--a", a_path)],
+               authority_index: authority_index
+             )
+  end
+
+  test "eligible same-path nested B still checks external collision" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    path = [51, 52]
+
+    assert {:ok, [{:error, :external_authority_collision}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", path),
+                 definition("--b", "12px", path)
+               ],
+               [reference("--a", path)],
+               authority_index: authority_index
+             )
+  end
+
+  test "ambiguous eligible nested B takes precedence over external collision" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    path = [61, 62]
+
+    assert {:ok, [{:error, :ambiguous_definition}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", path),
+                 definition("--b", "12px", path, selector_identity: :selector_a),
+                 definition("--b", "12px", path, selector_identity: :selector_b)
+               ],
+               [reference("--a", path)],
+               authority_index: authority_index
+             )
+  end
+
+  test "conflicting eligible nested B takes precedence over external collision" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+    path = [71, 72]
+
+    assert {:ok, [{:error, :conflicting_source_order}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", path),
+                 definition("--b", "12px", path,
+                   selector_identity: :selector_b,
+                   source_order: 1
+                 ),
+                 definition("--b", "14px", path,
+                   selector_identity: :selector_b,
+                   source_order: 2
+                 )
+               ],
+               [reference("--a", path)],
+               authority_index: authority_index
+             )
+  end
+
   test "distinguishes 64-hop success from beyond-64 failure with non-palindromic paths" do
     dependency_path = [101]
     target_path_at_64 = Enum.to_list(101..165)
