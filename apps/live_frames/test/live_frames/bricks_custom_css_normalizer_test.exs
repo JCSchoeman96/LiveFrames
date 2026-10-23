@@ -765,6 +765,17 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert hd(result.residuals_by_source_id[@owner])["reason"] == "unsupported_declaration"
   end
 
+  test "resolves an exact passthrough through the normalizer flow" do
+    result = run(".owner { --b: 12px; --a: var(--b); color: var(--a); }")
+
+    assert %StyleValue{kind: :literal, value: "12px"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    refute Map.has_key?(result.styles_by_source_id[@owner], "--a")
+    refute Map.has_key?(result.styles_by_source_id[@owner], "--b")
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
   test "resolves a direct local custom property without emitting its definition" do
     result = run(".owner { --local-space: 12px; color: var(--local-space); }")
 

@@ -230,11 +230,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
     references = [reference("--root", [1]), reference("--a", [1])]
 
-    assert {:ok,
-            [
-              {:error, :unsupported_nested_reference},
-              {:error, :cycle}
-            ]} = resolve(definitions, references)
+    assert {:ok, [{:error, :cycle}, {:error, :cycle}]} = resolve(definitions, references)
   end
 
   test "allows exactly 256 definitions and rejects 257 at batch level" do
@@ -615,7 +611,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
                [reference("--local-name", [1])]
              )
 
-    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+    assert {:ok, [{:error, :no_local_definition}]} =
              resolve(
                [definition("--local-name", "var(--nested-name)", [1])],
                [reference("--local-name", [1])]
@@ -667,5 +663,251 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
   test "returns no local definition for an ordinary miss" do
     assert {:ok, [{:error, :no_local_definition}]} =
              resolve([], [reference("--missing", [1])])
+  end
+
+  test "resolves an exact passthrough to a same-path base terminal" do
+    definitions = [
+      definition("--b", "12px", [1]),
+      definition("--a", "var(--b)", [1])
+    ]
+
+    assert {:ok, [{:ok, "12px"}]} =
+             resolve(definitions, [reference("--a", [1])])
+  end
+
+  test "rejects a second dependency hop without expanding it" do
+    definitions = [
+      definition("--c", "12px", [1]),
+      definition("--b", "var(--c)", [1]),
+      definition("--a", "var(--b)", [1])
+    ]
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve(definitions, [reference("--a", [1])])
+  end
+
+  test "selects the nearest base ancestor for a passthrough dependency" do
+    definitions = [
+      definition("--b", "ancestor", [1]),
+      definition("--b", "direct", [1, 2]),
+      definition("--a", "var(--b)", [1, 2, 3])
+    ]
+
+    assert {:ok, [{:ok, "direct"}]} =
+             resolve(definitions, [reference("--a", [1, 2, 3])])
+  end
+
+  test "same-path dependency wins over an eligible ancestor" do
+    definitions = [
+      definition("--b", "ancestor", [1]),
+      definition("--b", "same-path", [1, 2, 3]),
+      definition("--a", "var(--b)", [1, 2, 3])
+    ]
+
+    assert {:ok, [{:ok, "same-path"}]} =
+             resolve(definitions, [reference("--a", [1, 2, 3])])
+  end
+
+  test "keeps nested dependency failures within the existing closed taxonomy" do
+    cases = [
+      {[definition("--a", "var(--a)", [1])], :self_reference},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "var(--a)", [1])
+       ], :cycle},
+      {[definition("--a", "var(--b, 4px)", [1])], :unsupported_fallback},
+      {[definition("--a", "var(--missing)", [1])], :no_local_definition}
+    ]
+
+    for {definitions, expected} <- cases do
+      assert {:ok, [{:error, ^expected}]} =
+               resolve(definitions, [reference("--a", [1])])
+    end
+  end
+
+  test "keeps ineligible nested dependency definitions out of the base lookup" do
+    responsive_scope = {:responsive_source_key, "tablet-source"}
+    other_provenance = {"owner", :global_class, "class-b", :local, ["auth-a"], 0}
+
+    cases = [
+      {[definition("--a", "var(--b)", [1])], [1]},
+      {[
+         definition("--a", "var(--b)", [1, 2]),
+         definition("--b", "12px", [1, 3])
+       ], [1, 2]},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "12px", [1], effective_provenance_identity: other_provenance)
+       ], [1]},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "12px", [1], viewport_scope: responsive_scope)
+       ], [1]},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "12px", [1], state_scope: :hover)
+       ], [1]}
+    ]
+
+    for {definitions, target_path} <- cases do
+      assert {:ok, [{:error, :no_local_definition}]} =
+               resolve(definitions, [reference("--a", target_path)])
+    end
+  end
+
+  test "preserves downstream definition failures for a passthrough" do
+    cases = [
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "var(--c, 4px)", [1])
+       ], :unsupported_fallback},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "var(--b)", [1])
+       ], :self_reference},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "var(--c)", [1]),
+         definition("--c", "var(--b)", [1])
+       ], :cycle},
+      {[
+         definition("--a", "var(--b)", [1]),
+         definition("--b", "calc(var(--c))", [1]),
+         definition("--c", "12px", [1])
+       ], :unsupported_nested_reference}
+    ]
+
+    for {definitions, expected} <- cases do
+      assert {:ok, [{:error, ^expected}]} =
+               resolve(definitions, [reference("--a", [1])])
+    end
+  end
+
+  test "rejects foreign-owner and malformed-path nested dependency batches" do
+    foreign_definitions = [
+      definition("--a", "var(--b)", [1]),
+      definition("--b", "12px", [1], owner_source_id: "another-owner")
+    ]
+
+    assert {:ok, [{:error, :cross_owner_reference}]} =
+             resolve(foreign_definitions, [reference("--a", [1])])
+
+    for target_path <- [nil, :malformed] do
+      assert {:ok, [{:error, :unsupported_inheritance}]} =
+               resolve(
+                 [definition("--b", "12px", [1]), definition("--a", "var(--b)", [1])],
+                 [reference("--a", target_path)]
+               )
+    end
+  end
+
+  test "preserves ambiguous and conflicting selection outcomes for nested dependencies" do
+    ambiguous = [
+      definition("--a", "var(--b)", [1]),
+      definition("--b", "12px", [1], selector_identity: :selector_a),
+      definition("--b", "12px", [1], selector_identity: :selector_b)
+    ]
+
+    assert {:ok, [{:error, :ambiguous_definition}]} =
+             resolve(ambiguous, [reference("--a", [1])])
+
+    conflicting = [
+      definition("--a", "var(--b)", [1]),
+      definition("--b", "12px", [1], selector_identity: :selector_b, source_order: 1),
+      definition("--b", "14px", [1], selector_identity: :selector_b, source_order: 2)
+    ]
+
+    assert {:ok, [{:error, :conflicting_source_order}]} =
+             resolve(conflicting, [reference("--a", [1])])
+  end
+
+  test "checks external authority collisions on passthrough dependencies" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}}}
+
+    assert {:ok, [{:error, :external_authority_collision}]} =
+             resolve(
+               [definition("--a", "var(--b)", [1]), definition("--b", "12px", [1])],
+               [reference("--a", [1])],
+               authority_index: authority_index
+             )
+  end
+
+  test "distinguishes 64-hop success from beyond-64 failure with non-palindromic paths" do
+    dependency_path = [101]
+    target_path_at_64 = Enum.to_list(101..165)
+
+    assert length(target_path_at_64) - length(dependency_path) == 64
+
+    assert {:ok, [{:ok, "12px"}]} =
+             resolve(
+               [
+                 definition("--b", "12px", dependency_path),
+                 definition("--a", "var(--b)", target_path_at_64)
+               ],
+               [reference("--a", target_path_at_64)]
+             )
+
+    target_path_at_65 = Enum.to_list(101..166)
+
+    assert length(target_path_at_65) - length(dependency_path) == 65
+
+    assert {:ok, [{:error, :resource_limit_exceeded}]} =
+             resolve(
+               [
+                 definition("--b", "12px", dependency_path),
+                 definition("--a", "var(--b)", target_path_at_65)
+               ],
+               [reference("--a", target_path_at_65)]
+             )
+  end
+
+  test "enforces terminal byte bounds on the selected passthrough dependency" do
+    terminal_at_limit = String.duplicate("x", 4096)
+    terminal_over_limit = String.duplicate("x", 4097)
+
+    assert {:ok, [{:ok, ^terminal_at_limit}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", [1]),
+                 definition("--b", terminal_at_limit, [1])
+               ],
+               [reference("--a", [1])]
+             )
+
+    assert {:ok, [{:error, :resource_limit_exceeded}]} =
+             resolve(
+               [
+                 definition("--a", "var(--b)", [1]),
+                 definition("--b", terminal_over_limit, [1])
+               ],
+               [reference("--a", [1])]
+             )
+  end
+
+  test "resolves one nested definition across the maximum ordered reference batch" do
+    definitions = [
+      definition("--a", "var(--b)", [1]),
+      definition("--b", "12px", [1]),
+      definition("--direct", "8px", [1])
+    ]
+
+    references =
+      for index <- 1..1024 do
+        if rem(index, 2) == 1 do
+          reference("--a", [1])
+        else
+          reference("--direct", [1])
+        end
+      end
+
+    assert {:ok, results} = resolve(definitions, references)
+    assert length(results) == 1024
+
+    expected_results =
+      Enum.map(1..1024, fn index ->
+        if rem(index, 2) == 1, do: {:ok, "12px"}, else: {:ok, "8px"}
+      end)
+
+    assert results == expected_results
   end
 end

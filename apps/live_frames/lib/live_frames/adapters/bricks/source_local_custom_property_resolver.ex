@@ -168,13 +168,18 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       |> Enum.filter(&external_candidate?(authority_index, &1))
       |> MapSet.new()
 
-    with {:ok, dependency_states} <- build_dependency_states(selected_by_path_scope) do
+    with {:ok, dependency_outcomes} <-
+           build_dependency_outcomes(
+             selected_by_path_scope,
+             tries_by_name,
+             external_collisions
+           ) do
       {:ok,
        %{
          by_name_and_path: selected_by_path,
          tries_by_name: tries_by_name,
          external_collisions: external_collisions,
-         dependency_states: dependency_states
+         dependency_outcomes: dependency_outcomes
        }}
     end
   end
@@ -318,7 +323,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
                 scope_selections,
                 local_name,
                 candidate_path,
-                index.dependency_states
+                index.dependency_outcomes
               )
             end
 
@@ -345,7 +350,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
           scope_selections,
           local_name,
           candidate_path,
-          index.dependency_states
+          index.dependency_outcomes
         )
 
       :none ->
@@ -492,7 +497,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          scope_selections,
          local_name,
          reversed_path,
-         dependency_states
+         dependency_outcomes
        ) do
     case Map.fetch(scope_selections, {:base, nil}) do
       :error ->
@@ -501,13 +506,12 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       {:ok, {:error, _state} = error} ->
         error
 
-      {:ok, {:ok, terminal}} ->
-        dependency_state = Map.get(dependency_states, {local_name, reversed_path, {:base, nil}})
-
-        if dependency_state do
-          {:error, dependency_state}
-        else
-          {:ok, terminal}
+      {:ok, {:ok, _terminal}} ->
+        case Map.get(dependency_outcomes, {local_name, reversed_path, {:base, nil}}) do
+          {:terminal, resolved} -> {:ok, resolved}
+          {:passthrough, resolved} -> {:ok, resolved}
+          {:error, reason} -> {:error, reason}
+          _ -> {:error, :unsupported_nested_reference}
         end
     end
   end
@@ -522,7 +526,11 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
 
   defp external_candidate?(_authority_index, _local_name), do: true
 
-  defp build_dependency_states(selected_by_path_scope) do
+  defp build_dependency_outcomes(
+         selected_by_path_scope,
+         tries_by_name,
+         external_collisions
+       ) do
     case collect_dependency_data(selected_by_path_scope) do
       {:error, :resource_limit_exceeded} ->
         {:error, :resource_limit_exceeded}
@@ -559,28 +567,139 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
 
         cyclic_definitions = dependency_cycle_members(dependency_graph)
 
-        dependency_states =
-          Map.new(dependency_data, fn
-            {{local_name, reversed_path, {:base, nil}} = key,
-             %{names: names, fallback?: fallback?}} ->
-              state =
-                batch_definition_dependency_failure(
-                  local_name,
-                  names,
-                  fallback?,
-                  cyclic_definitions,
-                  {local_name, reversed_path}
-                )
+        initial_outcomes =
+          Map.new(selected_by_path_scope, fn
+            {{local_name, reversed_path, {:base, nil}} = key, {:ok, terminal}} ->
+              data =
+                Map.get(dependency_data, key, %{
+                  names: [],
+                  fallback?: false,
+                  local_name: local_name
+                })
 
-              {key, state}
+              names = data.names
+              fallback? = data.fallback?
 
-            {key, _data} ->
+              outcome =
+                case batch_definition_dependency_failure(
+                       local_name,
+                       terminal,
+                       names,
+                       fallback?,
+                       cyclic_definitions,
+                       {local_name, reversed_path}
+                     ) do
+                  nil ->
+                    case exact_passthrough_name(terminal) do
+                      {:ok, b_name} -> {:passthrough_pending, b_name}
+                      :no_match -> {:terminal, terminal}
+                    end
+
+                  failure ->
+                    {:error, failure}
+                end
+
+              {key, outcome}
+
+            {key, _selection} ->
               {key, nil}
           end)
-          |> Enum.reject(fn {_key, state} -> is_nil(state) end)
+          |> Enum.reject(fn {_key, outcome} -> is_nil(outcome) end)
           |> Map.new()
 
-        {:ok, dependency_states}
+        dependency_outcomes =
+          resolve_passthrough_outcomes(
+            initial_outcomes,
+            base_definitions,
+            tries_by_name,
+            external_collisions
+          )
+
+        {:ok, dependency_outcomes}
+    end
+  end
+
+  defp resolve_passthrough_outcomes(
+         outcomes,
+         base_definitions,
+         tries_by_name,
+         external_collisions
+       ) do
+    Map.new(outcomes, fn
+      {key, {:passthrough_pending, b_name}} ->
+        {_local_name, reversed_path, _scope} = key
+
+        outcome =
+          resolve_passthrough_dependency(
+            b_name,
+            reversed_path,
+            base_definitions,
+            tries_by_name,
+            external_collisions,
+            outcomes
+          )
+
+        {key, outcome}
+
+      {key, outcome} ->
+        {key, outcome}
+    end)
+  end
+
+  defp resolve_passthrough_dependency(
+         b_name,
+         a_reversed_path,
+         base_definitions,
+         tries_by_name,
+         external_collisions,
+         outcomes
+       ) do
+    cond do
+      MapSet.member?(external_collisions, b_name) ->
+        {:error, :external_authority_collision}
+
+      true ->
+        target_path = Enum.reverse(a_reversed_path)
+
+        case find_dependency_definition(base_definitions, b_name, a_reversed_path) do
+          nil ->
+            trie = Map.get(tries_by_name, b_name, empty_path_trie())
+
+            if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
+              {:error, :resource_limit_exceeded}
+            else
+              {:error, :no_local_definition}
+            end
+
+          {_b_name, b_reversed_path} ->
+            b_key = {b_name, b_reversed_path, {:base, nil}}
+
+            case Map.fetch(base_definitions, {b_name, b_reversed_path}) do
+              {:ok, {:error, reason}} ->
+                {:error, reason}
+
+              {:ok, {:ok, _terminal}} ->
+                case Map.get(outcomes, b_key) do
+                  {:terminal, terminal} ->
+                    {:passthrough, terminal}
+
+                  {:passthrough, _} ->
+                    {:error, :unsupported_nested_reference}
+
+                  {:error, reason} ->
+                    {:error, reason}
+
+                  {:passthrough_pending, _} ->
+                    {:error, :unsupported_nested_reference}
+
+                  _ ->
+                    {:error, :no_local_definition}
+                end
+
+              :error ->
+                {:error, :no_local_definition}
+            end
+        end
     end
   end
 
@@ -638,6 +757,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
 
   defp batch_definition_dependency_failure(
          local_name,
+         terminal_text,
          names,
          fallback?,
          cyclic_definitions,
@@ -653,11 +773,16 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       MapSet.member?(cyclic_definitions, cycle_key) ->
         :cycle
 
-      names != [] ->
-        :unsupported_nested_reference
-
       true ->
-        nil
+        case exact_passthrough_name(terminal_text) do
+          {:ok, captured} ->
+            if names == [captured], do: nil, else: :unsupported_nested_reference
+
+          :no_match ->
+            if names != [] or malformed_nbsp_passthrough?(terminal_text),
+              do: :unsupported_nested_reference,
+              else: nil
+        end
     end
   end
 
