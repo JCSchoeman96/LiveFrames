@@ -615,11 +615,10 @@ defmodule LiveFrames.Adapters.Bricks.Loader do
       [] ->
         {:ok, %{}}
 
-      value ->
+      _ ->
         {:error,
          diagnostic("bricks.setting.invalid", "Bricks settings must be an object",
-           source_path: path_for(path, "settings"),
-           raw_value: value
+           source_path: path_for(path, "settings")
          )}
     end
   end

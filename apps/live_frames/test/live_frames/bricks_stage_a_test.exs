@@ -77,6 +77,32 @@ defmodule LiveFrames.BricksStageATest do
     })
   end
 
+  defp marker_count(term, marker) when is_binary(term),
+    do: length(:binary.matches(term, marker))
+
+  defp marker_count(%_{} = struct, marker),
+    do: struct |> Map.from_struct() |> marker_count(marker)
+
+  defp marker_count(term, marker) when is_map(term) do
+    Enum.reduce(term, 0, fn {key, value}, count ->
+      count + marker_count(key, marker) + marker_count(value, marker)
+    end)
+  end
+
+  defp marker_count(term, marker) when is_list(term),
+    do: Enum.reduce(term, 0, &(marker_count(&1, marker) + &2))
+
+  defp marker_count(term, marker) when is_tuple(term),
+    do: term |> Tuple.to_list() |> marker_count(marker)
+
+  defp marker_count(_term, _marker), do: 0
+
+  defp diagnostic_field_hits(diagnostics, field, marker) do
+    Enum.reduce(diagnostics, 0, fn diagnostic, count ->
+      count + marker_count(Map.get(diagnostic, field), marker)
+    end)
+  end
+
   defp external_class_authority do
     %{
       id: "synthetic-site-classes",
@@ -84,6 +110,49 @@ defmodule LiveFrames.BricksStageATest do
         %{"id" => "opaque-class-id", "name" => "synthetic-class", "settings" => %{}}
       ]
     }
+  end
+
+  test "characterizes marker retention in pre-sanitization Loader errors" do
+    body_marker = "TASK0_SYNTHETIC_BODY_MARKER_6f7c31"
+    signature_marker = "TASK0_SYNTHETIC_SIGNATURE_MARKER_a2048d"
+
+    source =
+      copied_elements_source()
+      |> put_in(
+        ["components", Access.at(0), "elements", Access.at(0), "settings"],
+        [body_marker, signature_marker]
+      )
+
+    result = StageA.generate(source, component_id: "component-a")
+
+    assert if(match?({:error, _}, result), do: 1, else: 0) == 1
+    {:error, diagnostics} = result
+
+    observed_counts = %{
+      result_body: marker_count(result, body_marker),
+      result_signature: marker_count(result, signature_marker),
+      raw_value_body: diagnostic_field_hits(diagnostics, :raw_value, body_marker),
+      raw_value_signature: diagnostic_field_hits(diagnostics, :raw_value, signature_marker),
+      metadata_body: diagnostic_field_hits(diagnostics, :metadata, body_marker),
+      metadata_signature: diagnostic_field_hits(diagnostics, :metadata, signature_marker),
+      message_body: diagnostic_field_hits(diagnostics, :message, body_marker),
+      message_signature: diagnostic_field_hits(diagnostics, :message, signature_marker),
+      source_path_body: diagnostic_field_hits(diagnostics, :source_path, body_marker),
+      source_path_signature: diagnostic_field_hits(diagnostics, :source_path, signature_marker)
+    }
+
+    assert observed_counts == %{
+             result_body: 0,
+             result_signature: 0,
+             raw_value_body: 0,
+             raw_value_signature: 0,
+             metadata_body: 0,
+             metadata_signature: 0,
+             message_body: 0,
+             message_signature: 0,
+             source_path_body: 0,
+             source_path_signature: 0
+           }
   end
 
   test "Stage A accepts informational and warning TokenSet diagnostics" do
@@ -167,6 +236,40 @@ defmodule LiveFrames.BricksStageATest do
     assert class_dependency["resolution_status"] == "external_resolved"
     assert class_dependency["authority_ids"] == ["synthetic-site-classes"]
     assert Jason.decode!(result.artifacts["report.json"]) == result.report
+  end
+
+  test "keeps the harmless raw value on an unrelated copied-elements envelope error" do
+    source_marker = "synthetic-unrecognized-source-marker"
+    source = Map.put(copied_elements_source(), "source", source_marker)
+
+    assert {:error, [diagnostic]} = StageA.generate(source, component_id: "component-a")
+    assert diagnostic.code == "bricks.source.invalid"
+    assert diagnostic.raw_value == source_marker
+  end
+
+  test "treats empty-list settings as equivalent to empty-object settings" do
+    source_with_settings = fn settings ->
+      copied_elements_source()
+      |> put_in(["components", Access.at(0), "elements", Access.at(0), "settings"], settings)
+    end
+
+    assert {:ok, empty_list_result} =
+             StageA.generate(source_with_settings.([]), component_id: "component-a")
+
+    assert {:ok, empty_object_result} =
+             StageA.generate(source_with_settings.(%{}), component_id: "component-a")
+
+    assert empty_list_result.status == :completed
+    assert empty_object_result.status == :completed
+
+    assert hd(empty_list_result.document.components["component-a"].elements).settings == %{}
+    assert hd(empty_object_result.document.components["component-a"].elements).settings == %{}
+
+    assert empty_list_result.artifacts["index.html"] ==
+             empty_object_result.artifacts["index.html"]
+
+    assert empty_list_result.artifacts["styles.css"] ==
+             empty_object_result.artifacts["styles.css"]
   end
 
   test "rejects a structurally invalid supplied TokenSet deterministically" do
