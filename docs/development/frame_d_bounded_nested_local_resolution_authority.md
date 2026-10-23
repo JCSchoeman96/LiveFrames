@@ -20,6 +20,46 @@ C2 adds one bounded source-local passthrough hop to the existing
 SourceLocalCustomPropertyResolver. It does not create another resolver or a
 general CSS custom-property engine.
 
+## Authority precedence and C2 supersession
+
+When this authority is independently accepted and merged, it supersedes the
+older FRAME-D depth-one prohibition only for the exact C2 production defined
+here. Until then, the accepted prior authority remains in force and C2
+implementation remains unauthorized.
+
+~~~text
+C2_SUPERSEDES_PRIOR_FRAME_D_DEPTH_CONTRACT=YES
+SUPERSEDED_PRIOR_RULES_ONLY_FOR_EXACT_C2_PASSTHROUGH=
+  MAX_LOCAL_SUBSTITUTION_DEPTH=1
+  unsupported_nested_reference for the exact admitted SINGLE_VAR_PASSTHROUGH
+SUPERSEDED_SOURCE_SHAPE=
+  consumer -> A
+  A -> exact var(B)
+  B -> terminal
+
+ALL_OTHER_CSS_LOCAL_CUSTOM_PROPERTY_AUTHORITY_REMAINS_IN_FORCE=YES
+ALL_OTHER_BOUNDED_COMPOUND_AUTHORITY_REMAINS_IN_FORCE=YES
+SUPERSESSION_EFFECTIVE_AFTER=INDEPENDENT_AUTHORITY_ACCEPTANCE_AND_MERGE
+~~~
+
+The narrow superseded case is a consumer reference to A, where A's entire
+definition is exactly var(B) and B's selected definition is terminal. This is
+the same single-hop shape shown as consumer -> var(A), A -> var(B), B -> terminal
+in the sanitized evidence. The supersession does not apply to arbitrary nested
+references, fallback, self-reference, cycles, value composition, external
+fallback, scope, ownership, provenance, or resource limits. It does not
+supersede the prior authority for other FRAME-D forms or other compound-value
+contracts. No older authority document is edited by this PR.
+
+The superseded FRAME-D statements are the depth-one or
+unsupported_nested_reference prohibitions in:
+
+- docs/development/css_local_custom_property_resolution_authority.md
+- docs/development/bounded_compound_css_value_authority.md
+- docs/development/transition_shorthand_source_local_reference_grammar_authority.md
+
+Those documents remain in force for every case outside the exact C2 production.
+
 ## Entry evidence
 
 The authority is based on the accepted C1 merge and canonical post-C1
@@ -196,6 +236,11 @@ with the existing dependency lookup rules:
 - Otherwise use the nearest accepted ancestor of that path.
 - A sibling or foreign owner, component, or provenance is ineligible.
 - The existing maximum of 64 owner ancestry hops remains in force.
+- Dependency selection is base-only. A responsive-only or state-scoped B is
+  not eligible for this lookup.
+- If no B is found within 64 hops, use the existing bounded base-scope path
+  trie to distinguish no eligible B from an otherwise eligible B that exists
+  only beyond the cap. Do not walk ancestry beyond the cap.
 - Existing deterministic selection, ambiguity, duplicate, and conflict rules
   apply to B.
 - The selected B definition must be terminal. It must not require another
@@ -228,18 +273,48 @@ guard rejects the exact passthrough before batch resolution.
 
 ~~~text
 EXACT_ONE_HOP_PASSTHROUGH_DEFINITION_COMPILER_INPUT=SUPPORTED
-FALLBACK=UNSUPPORTED
-SELF_REFERENCE=UNSUPPORTED
-CYCLE=UNSUPPORTED
-MULTI_HOP=UNSUPPORTED
-ARBITRARY_VAR_BEARING_VALUE=UNSUPPORTED
+FALLBACK=UNSUPPORTED_IN_GUARD_AND_BATCH
+SELF_REFERENCE=DIRECT_SELF_ONLY_UNSUPPORTED_IN_GUARD
+CYCLE=BATCH_RESOLVER_ONLY
+MULTI_HOP=BATCH_RESOLVER_FAILS_CLOSED
+ARBITRARY_VAR_BEARING_VALUE=FAIL_CLOSED
 ~~~
 
-The guard accepts only the entire exact passthrough production above. It
-classifies syntax for the existing batch resolver; it does not select B or
-resolve a value itself. Batch resolution remains responsible for B's
-existence, selection, scope, collision, cycle, terminal, and resource checks.
-No normalizer bypass or pre-expansion is authorized.
+The guard continues to accept existing dependency-free terminal values
+unchanged. Among values containing a dependency, C2 newly admits only the exact
+single-var passthrough. It classifies syntax for the existing batch resolver;
+it does not select B or resolve a value itself.
+
+~~~text
+EXISTING_DEPENDENCY_FREE_TERMINAL_INPUT=UNCHANGED_SUPPORTED
+NEW_VAR_BEARING_COMPILER_INPUT_ACCEPTANCE=
+  EXACT_SINGLE_VAR_PASSTHROUGH_ONLY
+OTHER_VAR_BEARING_COMPILER_INPUTS=FAIL_CLOSED
+
+DEFINITION_COMPILER_INPUT_GUARD_OWNS=
+  syntax admission
+  local-name validation
+  terminal byte/resource syntax bounds
+  direct self-reference recognition
+  fallback rejection
+
+BATCH_RESOLVER_OWNS=
+  dependency definition existence
+  dependency target/ancestor selection
+  ambiguity
+  conflicting source order
+  external-authority collision
+  multi-definition cycle detection
+  multi-hop rejection
+  scope/provenance resolution
+~~~
+
+The isolated guard preserves ordinary dependency-free terminals such as
+literal, dimension, and keyword values exactly as today. It can recognize a
+direct self-reference and reject a fallback, but it cannot establish whether
+B exists, select B, or detect a two-node or larger cycle. The batch resolver
+owns those graph and scope decisions. No normalizer bypass or pre-expansion is
+authorized.
 
 ## Failure taxonomy
 
@@ -251,13 +326,45 @@ Preserve the existing fail-closed resolver outcomes:
 | A -> B -> A | cycle |
 | A -> var(B, fallback) | unsupported_fallback |
 | A -> B -> C | unsupported_nested_reference |
-| B has no eligible local definition | no_local_definition |
+| No eligible base B at the target or an accepted ancestor, and no eligible B exists beyond the cap | no_local_definition |
+| The only B definition is in another effective provenance identity | no_local_definition |
 | B has multiple distinct eligible selector identities | ambiguous_definition |
 | B has conflicting definitions for one selector identity | conflicting_source_order |
-| B requires a responsive or state-scoped definition outside the accepted scope rules | unsupported_scope |
+| B exists only as a responsive-scoped definition | no_local_definition |
+| B exists only as a state-scoped definition | no_local_definition |
 | A or B collides with an exact name in external authority | external_authority_collision |
-| Foreign owner data or unproven ancestry | existing cross_owner_reference or unsupported_inheritance outcome |
+| Foreign-owner record supplied in the owner batch | cross_owner_reference |
+| Malformed or non-list consumer reference target path | unsupported_inheritance |
+| Eligible base B exists only beyond 64 owner ancestry hops | resource_limit_exceeded |
+| B exists only on a sibling or otherwise ineligible path | no_local_definition |
 | Definition, reference, dependency-edge, ancestry, or terminal-byte cap exceeded | resource_limit_exceeded |
+
+~~~text
+FOREIGN_OWNER_BATCH_DATA=cross_owner_reference
+MALFORMED_OR_NONLIST_TARGET_PATH=unsupported_inheritance
+NO_ELIGIBLE_DEPENDENCY_DEFINITION_AT_SAME_OR_ACCEPTED_ANCESTOR=no_local_definition
+CROSS_PROVENANCE_DEPENDENCY_DEFINITION=no_local_definition
+ELIGIBLE_DEPENDENCY_DEFINITION_ONLY_BEYOND_MAX_OWNER_ANCESTRY_HOPS=resource_limit_exceeded
+
+DEPENDENCY_SELECTION_SCOPE=BASE_ONLY
+RESPONSIVE_ONLY_DEPENDENCY_DEFINITION=NOT_ELIGIBLE_FOR_C2_DEPENDENCY_SELECTION; no_local_definition
+STATE_SCOPED_DEPENDENCY_DEFINITION=NOT_ELIGIBLE_FOR_C2_DEPENDENCY_SELECTION; no_local_definition
+~~~
+
+The nested dependency lookup considers base definitions only. Responsive-only
+and state-scoped B definitions are not candidates; C2 does not scan those
+scopes to manufacture a different failure reason. A missing B, B available
+only in another provenance, or B on a sibling path therefore returns
+no_local_definition. If the existing bounded path index proves an otherwise
+eligible base B exists only beyond the 64-hop limit, return
+resource_limit_exceeded. Reuse the existing base-scope path trie for that
+distinction; do not perform an unbounded ancestry walk.
+
+A malformed or non-list consumer reference target path is rejected as
+unsupported_inheritance before dependency lookup. Ordinary valid paths with no
+eligible same-target or accepted-ancestor B are not inheritance failures.
+Unsupported scope on the consumer reference remains governed by the existing
+root-reference rules and does not change the C2 base-only dependency outcome.
 
 An ordinary direct local reference continues to use its existing behavior.
 Malformed passthroughs, unsupported value composition, and any downstream
@@ -271,6 +378,7 @@ Carry forward Policy P1, the transparent source-syntax policy, for C2.
 
 ~~~text
 C2_POLICY=P1_TRANSPARENT_SOURCE_SYNTAX_CARRY_FORWARD
+P1_TRANSPARENT_SOURCE_SYNTAX_CARRY_FORWARD=YES
 REQUIREMENT_GATING=NO
 ROMEO_SPECIFIC_BRANCHING=NO
 GENERIC_SIDE_EFFECT=ACCEPTED_ONLY_IF_EXPLICITLY_RECORDED_BY_C2_AUTHORITY
@@ -419,6 +527,8 @@ Use source-neutral synthetic records. The focused tests must prove:
 - The definition compiler-input guard accepts the exact passthrough and
   rejects prefix, suffix, calc composition, multiple references, comments, and
   NBSP whitespace forms.
+- Existing dependency-free literal, dimension, and keyword compiler inputs
+  remain accepted unchanged.
 - Self-reference, a two-node cycle, and fallback fail closed with the existing
   outcomes.
 - A missing B, ambiguous B, and conflicting B fail closed with the existing
@@ -426,9 +536,16 @@ Use source-neutral synthetic records. The focused tests must prove:
 - A downstream external-authority collision fails closed and never substitutes
   the external candidate.
 - Cross-owner and cross-provenance dependencies fail closed.
+- Foreign-owner batch data returns cross_owner_reference; a malformed or
+  non-list consumer reference target path returns unsupported_inheritance.
+- A missing, cross-provenance, or sibling-only B returns no_local_definition.
+- A responsive-only or state-scoped B returns no_local_definition without a
+  new scope scan.
+- A nested B at 64 accepted ancestry hops from A's selected definition path
+  remains eligible; a B found only beyond 64 hops returns
+  resource_limit_exceeded.
 - Unsupported state scope fails closed, and unsupported responsive definition
-  scope remains unchanged.
-- The 64-hop ancestry boundary remains unchanged.
+  scope remains unchanged for existing root-reference behavior.
 - Dependency-edge, definition, reference, and terminal-byte caps remain
   enforced.
 - A resolved terminal still passes consumer-specific CSS safety.
