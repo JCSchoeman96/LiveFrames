@@ -5,6 +5,8 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
   alias LiveFrames.Adapters.AutomaticCSS.FluidClamp
   alias LiveFrames.Adapters.AutomaticCSS.IconTokens
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
+  alias LiveFrames.Styling.Fluid.Domain
+  alias LiveFrames.Styling.Fluid.Value
   alias LiveFrames.Tokens
   alias LiveFrames.Tokens.VariableAuthority
 
@@ -14,6 +16,98 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
   defp fixture_settings do
     Jason.decode!(File.read!(fixture_path()))
+  end
+
+  defp accepted_fixture_token_set do
+    {:ok, token_set, _diagnostics} =
+      AutomaticCSS.from_file(fixture_path(),
+        strict: true,
+        profile: :hero_foundation,
+        source_version: "4.0.1",
+        source_version_status: "fixture_reference"
+      )
+
+    token_set
+  end
+
+  defp viewport_samples(viewport_min, viewport_max) do
+    span = viewport_max - viewport_min
+
+    [
+      viewport_min - 1,
+      viewport_min,
+      viewport_min + span * 0.25,
+      viewport_min + span * 0.5,
+      viewport_min + span * 0.75,
+      viewport_max,
+      viewport_max + 1
+    ]
+  end
+
+  defp bounded_linear_value(start_value, end_value, viewport_min, viewport_max, viewport) do
+    progress = (viewport - viewport_min) / (viewport_max - viewport_min)
+    progress = progress |> max(0.0) |> min(1.0)
+    start_value + (end_value - start_value) * progress
+  end
+
+  defp projected_value_at(projection, viewport_min, viewport_max, viewport) do
+    bounded_linear_value(
+      projection["start_value"]["value"],
+      projection["end_value"]["value"],
+      viewport_min,
+      viewport_max,
+      viewport
+    )
+  end
+
+  defp assert_fluid_projection(projection, start_px, end_px) do
+    assert projection["type"] == "fluid_value"
+    assert projection["format_version"] == "1.0.0"
+    assert projection["domain_ref"] == "layout.fluid.viewport.default"
+    assert projection["interpolation"] == "linear"
+    assert projection["start_value"]["unit"] == "px"
+    assert projection["end_value"]["unit"] == "px"
+    assert_in_delta projection["start_value"]["value"], start_px, 1.0e-9
+    assert_in_delta projection["end_value"]["value"], end_px, 1.0e-9
+    assert Value.validate(projection) == :ok
+    refute projection["type"] in ["fluid_scale", "fluid_scale_step"]
+    refute Map.has_key?(projection, "scale_ref")
+    refute Map.has_key?(projection, "power")
+  end
+
+  defp assert_curve_equivalence(projection, start_px, end_px, viewport_min, viewport_max) do
+    assert Domain.validate(%{
+             "type" => "fluid_domain",
+             "format_version" => "1.0.0",
+             "input" => "viewport_width",
+             "start" => %{"value" => viewport_min, "unit" => "px"},
+             "end" => %{"value" => viewport_max, "unit" => "px"},
+             "clamp_policy" => "bounded"
+           }) == :ok
+
+    max_error =
+      viewport_samples(viewport_min, viewport_max)
+      |> Enum.map(fn viewport ->
+        expected = bounded_linear_value(start_px, end_px, viewport_min, viewport_max, viewport)
+        actual = projected_value_at(projection, viewport_min, viewport_max, viewport)
+        abs(actual - expected)
+      end)
+      |> Enum.max()
+
+    assert max_error <= 1.0e-9
+    max_error
+  end
+
+  defp token_identity(token) do
+    %{
+      value: token.value,
+      resolved_value: token.resolved_value,
+      source_expression: token.source_expression,
+      metadata: token.metadata,
+      references: token.references,
+      provenance: token.provenance,
+      resolution_status: token.resolution_status
+    }
   end
 
   defp authority(token, variable, kind) do
@@ -294,6 +388,141 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
     assert token_set.tokens["spacing.scale.xs"].metadata["css_expression"] ==
              "clamp(0.8333333333rem, calc(-0.0172384889vw + 0.8480506933rem), 0.8441720333rem)"
+  end
+
+  test "projects accepted space-xl endpoints and its bounded linear curve to FluidValue" do
+    token_set = accepted_fixture_token_set()
+    token = token_set.tokens["spacing.scale.xl"]
+    settings = fixture_settings()
+    viewport_min = settings["vp-min"]
+    viewport_max = settings["vp-max"]
+
+    start_px = settings["base-space-min"] * :math.pow(settings["mob-space-scale"], 2)
+    end_px = settings["base-space"] * :math.pow(settings["space-scale"], 2)
+
+    assert token.resolved_value["recipe"] == "acss.clamp"
+    assert token.resolved_value["variable"] == "space-xl"
+    assert {:ok, projection} = FluidClamp.semantic_value(token.resolved_value)
+
+    assert_fluid_projection(projection, start_px, end_px)
+
+    assert_curve_equivalence(projection, start_px, end_px, viewport_min, viewport_max)
+  end
+
+  test "projects accepted h2 endpoints and its bounded linear curve to FluidValue" do
+    token_set = accepted_fixture_token_set()
+    token = token_set.tokens["typography.heading.scale.h2"]
+    inputs = token.resolved_value["inputs"]
+
+    assert inputs == %{
+             "calculation_group" => "headings",
+             "desktop_base" => 20,
+             "desktop_scale" => 1.333,
+             "mobile_base" => 18,
+             "mobile_scale" => 1.2,
+             "viewport_max" => 1366,
+             "viewport_min" => 360
+           }
+
+    start_px = inputs["mobile_base"] * :math.pow(inputs["mobile_scale"], 2)
+    end_px = inputs["desktop_base"] * :math.pow(inputs["desktop_scale"], 2)
+
+    assert {:ok, projection} = FluidClamp.semantic_value(token.resolved_value)
+
+    assert_fluid_projection(projection, start_px, end_px)
+
+    assert_curve_equivalence(
+      projection,
+      start_px,
+      end_px,
+      inputs["viewport_min"],
+      inputs["viewport_max"]
+    )
+  end
+
+  test "preserves descending space-xs endpoints across the bounded linear curve" do
+    token_set = accepted_fixture_token_set()
+    token = token_set.tokens["spacing.scale.xs"]
+    settings = fixture_settings()
+    viewport_min = settings["vp-min"]
+    viewport_max = settings["vp-max"]
+
+    start_px = settings["base-space-min"] * :math.pow(settings["mob-space-scale"], -2)
+    end_px = settings["base-space"] * :math.pow(settings["space-scale"], -2)
+
+    assert start_px > end_px
+    assert {:ok, projection} = FluidClamp.semantic_value(token.resolved_value)
+
+    assert_fluid_projection(projection, start_px, end_px)
+
+    values =
+      viewport_samples(viewport_min, viewport_max)
+      |> Enum.map(&projected_value_at(projection, viewport_min, viewport_max, &1))
+
+    assert_in_delta hd(values), start_px, 1.0e-9
+    assert_in_delta List.last(values), end_px, 1.0e-9
+
+    values
+    |> Enum.drop(1)
+    |> Enum.take(5)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.each(fn [left, right] -> assert left > right end)
+
+    assert_curve_equivalence(projection, start_px, end_px, viewport_min, viewport_max)
+  end
+
+  test "semantic projection distinguishes unsupported inputs from invalid supported inputs" do
+    token_set = accepted_fixture_token_set()
+    value = token_set.tokens["spacing.scale.xl"].resolved_value
+    inputs = value["inputs"]
+
+    assert {:error, :unsupported_projection} = FluidClamp.semantic_value(nil)
+
+    assert {:error, :unsupported_projection} =
+             FluidClamp.semantic_value(Map.put(value, "recipe", "other.recipe"))
+
+    assert {:error, :unsupported_projection} =
+             FluidClamp.semantic_value(Map.put(value, "variable", "unknown-size"))
+
+    assert {:error, :invalid_projection} =
+             FluidClamp.semantic_value(Map.delete(value, "inputs"))
+
+    for invalid_inputs <- [
+          Map.put(inputs, "mobile_base", "not-a-number"),
+          Map.put(inputs, "mobile_scale", 0),
+          Map.put(inputs, "desktop_scale", -1),
+          Map.put(inputs, "viewport_max", inputs["viewport_min"]),
+          inputs |> Map.put("mobile_base", 1.0e308) |> Map.put("mobile_scale", 1.0e308)
+        ] do
+      assert {:error, :invalid_projection} =
+               FluidClamp.semantic_value(Map.put(value, "inputs", invalid_inputs))
+    end
+  end
+
+  test "projection leaves accepted ACSS token fields and serialized bytes unchanged" do
+    token_set = accepted_fixture_token_set()
+    paths = ["spacing.scale.xl", "spacing.scale.xs", "typography.heading.scale.h2"]
+    before_fields = Map.new(paths, &{&1, token_identity(token_set.tokens[&1])})
+    before_bytes = Tokens.encode!(token_set)
+
+    for path <- paths do
+      assert {:ok, projection} =
+               FluidClamp.semantic_value(token_set.tokens[path].resolved_value)
+
+      assert Value.validate(projection) == :ok
+    end
+
+    after_fields = Map.new(paths, &{&1, token_identity(token_set.tokens[&1])})
+
+    assert after_fields == before_fields
+    assert Tokens.encode!(token_set) == before_bytes
+    assert Tokens.encode!(accepted_fixture_token_set()) == before_bytes
+    refute Map.has_key?(token_set.tokens, "layout.fluid.viewport.default")
+
+    for path <- paths do
+      assert token_set.tokens[path].metadata["css_expression"] ==
+               before_fields[path].metadata["css_expression"]
+    end
   end
 
   test "css_expression fails closed on arithmetic and formatting overflow" do

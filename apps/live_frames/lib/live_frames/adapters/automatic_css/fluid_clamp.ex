@@ -1,4 +1,7 @@
 defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
+  alias LiveFrames.Styling.Fluid.Domain
+  alias LiveFrames.Styling.Fluid.Value
+
   @moduledoc """
   Evaluates Automatic.css `fluidClamp` / `fluid` relationships from proven
   TokenSet derived inputs.
@@ -9,6 +12,25 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
   """
 
   @root_px 16.0
+  @domain_ref "layout.fluid.viewport.default"
+  @supported_variables [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "text-m",
+    "text-l",
+    "text-s",
+    "space-xs",
+    "space-s",
+    "space-m",
+    "space-l",
+    "space-xl",
+    "space-xxl",
+    "section-space-m"
+  ]
+
+  @type reason :: :unsupported_projection | :invalid_projection
 
   @spec css_expression(map()) :: String.t() | nil
   def css_expression(%{"recipe" => "acss.clamp", "variable" => variable, "inputs" => inputs})
@@ -23,6 +45,18 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
   end
 
   def css_expression(_value), do: nil
+
+  @spec semantic_value(map()) :: {:ok, map()} | {:error, reason()}
+  def semantic_value(%{"recipe" => "acss.clamp", "variable" => variable} = value)
+      when is_binary(variable) do
+    if variable in @supported_variables do
+      project_semantics(variable, Map.get(value, "inputs"))
+    else
+      {:error, :unsupported_projection}
+    end
+  end
+
+  def semantic_value(_value), do: {:error, :unsupported_projection}
 
   @spec from_px_pair(number(), number(), number(), number()) :: String.t() | nil
   def from_px_pair(min_px, max_px, viewport_min_px, viewport_max_px)
@@ -48,6 +82,63 @@ defmodule LiveFrames.Adapters.AutomaticCSS.FluidClamp do
   defp range("space-xxl", inputs), do: spaced(inputs, 3)
   defp range("section-space-m", inputs), do: section_pair(inputs)
   defp range(_variable, _inputs), do: :error
+
+  defp project_semantics(variable, inputs) when is_map(inputs) and not is_struct(inputs) do
+    with :ok <- validate_projection_inputs(variable, inputs),
+         {:ok, start_px, end_px} <- range(variable, inputs),
+         projection <- fluid_value(start_px, end_px),
+         :ok <- Value.validate(projection) do
+      {:ok, projection}
+    else
+      _ -> {:error, :invalid_projection}
+    end
+  rescue
+    _error -> {:error, :invalid_projection}
+  end
+
+  defp project_semantics(_variable, _inputs), do: {:error, :invalid_projection}
+
+  defp validate_projection_inputs(variable, inputs) do
+    with :ok <- Domain.validate(viewport_domain(inputs)),
+         true <- valid_projection_scales?(variable, inputs) do
+      :ok
+    else
+      _ -> {:error, :invalid_projection}
+    end
+  end
+
+  defp viewport_domain(inputs) do
+    %{
+      "type" => "fluid_domain",
+      "format_version" => "1.0.0",
+      "input" => "viewport_width",
+      "start" => %{"value" => inputs["viewport_min"], "unit" => "px"},
+      "end" => %{"value" => inputs["viewport_max"], "unit" => "px"},
+      "clamp_policy" => "bounded"
+    }
+  end
+
+  defp valid_projection_scales?("section-space-m", _inputs), do: true
+
+  defp valid_projection_scales?(variable, inputs) when variable in @supported_variables do
+    with {:ok, mobile_scale} <- number(inputs["mobile_scale"]),
+         {:ok, desktop_scale} <- number(inputs["desktop_scale"]) do
+      mobile_scale > 0 and desktop_scale > 0
+    else
+      _ -> false
+    end
+  end
+
+  defp fluid_value(start_px, end_px) do
+    %{
+      "type" => "fluid_value",
+      "format_version" => "1.0.0",
+      "domain_ref" => @domain_ref,
+      "start_value" => %{"value" => start_px, "unit" => "px"},
+      "end_value" => %{"value" => end_px, "unit" => "px"},
+      "interpolation" => "linear"
+    }
+  end
 
   defp scaled_heading(inputs, power) do
     with {:ok, mobile_base, desktop_base, mobile_scale, desktop_scale} <- scales(inputs) do
