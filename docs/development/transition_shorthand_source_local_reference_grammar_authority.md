@@ -14,6 +14,11 @@ ROMEO_COMPONENTIZATION_AUTHORIZED=NO
 ROMEO_NATIVE_GENERATION_AUTHORIZED=NO
 PRODUCTION_FILES_CHANGED=NO
 TEST_FILES_CHANGED=NO
+C1_PRE_NORMALIZATION_NBSP_GAP=CONFIRMED
+ROOT_CAUSE=UNICODE_TRIM_BEFORE_C1_GRAMMAR
+C1_WHITESPACE_BOUNDARY_CORRECTION_REQUIRED=YES
+AUTHORITY_CORRECTION_REQUIRED=YES
+EXISTING_TASK1_TASK2_ARCHITECTURE_CHANGED=NO
 ```
 
 Programme records: [required residual causal decomposition](feature_romeo_required_residual_causal_decomposition.md), [bounded compound CSS value authority](bounded_compound_css_value_authority.md), [CSS local custom-property resolution authority](css_local_custom_property_resolution_authority.md).
@@ -165,7 +170,7 @@ SECOND_LOCAL_RESOLVER=NO
 
 The admission decision is made by the normalizer, which knows the declaration property. The pure compound module knows only the value.
 
-- **Option A, selected.** `CustomCssNormalizer` routes a declaration to the transition production only when its property is exactly `transition` after the existing parser normalization. The pure module exposes one additional entry, `CompoundCssValue.parse_transition_shorthand/1`. `parse/1` is unchanged, and no caller other than the property-scoped route can reach the transition production.
+- **Option A, selected.** `CustomCssNormalizer` routes a declaration to the transition production only when its property is exactly `transition` after CSS-syntax-whitespace-only declaration normalization. The pure module exposes one additional entry, `CompoundCssValue.parse_transition_shorthand/1`. `parse/1` is unchanged, and no caller other than the property-scoped route can reach the transition production.
 - **Option B, rejected.** `parse(value, grammar: :transition_shorthand)` lets any caller select a grammar through an option. The grammar would then be chosen by data at a call site instead of by the declaration's property. A separately named entry point keeps selection explicit.
 - **Option C, rejected.** Teaching `parse/1` the IDENT-prefixed shape would admit it for every property. The canonical evidence shows only `transition` uses the shape, so no property-neutral justification exists.
 
@@ -198,6 +203,37 @@ DISCOVERED_TRANSITION_FALLBACK_TO_EXTERNAL_AUTHORITY=NO
 LEGACY_JUXTAPOSITION_PROPERTY_BREADTH=PRE_EXISTING_NOT_CHANGED_BY_C1
 LEGACY_JUXTAPOSITION_NARROWING_DECISION=DEFERRED_SEPARATE_OWNER_DECISION
 ```
+
+## CSS declaration whitespace boundary
+
+The C1 review regression and code inspection confirmed a pre-normalization gap: `CustomCssParser` trims declaration property/value boundaries with Unicode-aware `String.trim/1` before the C1 route receives them, and `CustomCssNormalizer.compound_route/2` applies Unicode-aware trimming again. A leading or trailing NBSP can therefore be erased before the strict transition grammar validates the declaration. The C1 grammar itself correctly rejects NBSP as a separator; the loss happens at the declaration boundaries.
+
+Freeze the declaration-boundary whitespace contract:
+
+```text
+C1_PRE_NORMALIZATION_NBSP_GAP=CONFIRMED
+ROOT_CAUSE=UNICODE_TRIM_BEFORE_C1_GRAMMAR
+C1_WHITESPACE_BOUNDARY_CORRECTION_REQUIRED=YES
+AUTHORITY_CORRECTION_REQUIRED=YES
+EXISTING_TASK1_TASK2_ARCHITECTURE_CHANGED=NO
+
+CSS_DECLARATION_SYNTACTIC_WHITESPACE=
+  U+0020 SPACE
+  U+0009 TAB
+  U+000A LF
+  U+000D CR
+  U+000C FF
+
+UNICODE_STRING_TRIM_FOR_C1_DECLARATION_BOUNDARY=FORBIDDEN
+NBSP_U+00A0_IS_CSS_SYNTACTIC_WHITESPACE=NO
+NBSP_MUST_NOT_BE_ERASED_BEFORE_C1_GRAMMAR_VALIDATION=YES
+CSS_WHITESPACE_TRIM_IS_CHARACTER_SET_BASED=YES
+STRING_TRIM_2_WITH_MULTI_CHARACTER_ARGUMENT=FORBIDDEN
+```
+
+Trim boundary runs consisting of any characters in the five-character CSS-whitespace set. Do not use Unicode `String.trim/1` or `String.trim/2` with a multi-character argument; that argument does not provide character-set semantics. The smallest approved mechanism is an anchored bounded ASCII character-class replacement, for example `Regex.replace(~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/, value, "")`, or an exactly equivalent bounded implementation. Apply it only to declaration property/value normalization in `CustomCssParser` and to `compound_route/2` in `CustomCssNormalizer`. The parser remains responsible for declaration framing and whitespace normalization only; it does not select or implement C1 grammar. The normalizer remains responsible for the property-scoped grammar route.
+
+After CSS-syntax-whitespace-only declaration normalization, a leading or trailing NBSP in an ordinary property name remains present and fails the existing property-name validation. A leading or trailing NBSP in a declaration value remains present for downstream grammar and safety checks. An NBSP-only value is not treated as empty CSS whitespace. Do not pass raw-source metadata through IR, reparse `frame.raw`, add C1-specific parsing to `CustomCssParser`, add a module, or broaden CSS tokenization.
 
 ## Lifecycle
 
@@ -487,7 +523,7 @@ EXTERNAL_COLLISION=FAIL_CLOSED
 
 ## Module boundary
 
-Recommended implementation boundary, not authorized here:
+Corrected implementation boundary, proposed for owner review:
 
 ```text
 apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex
@@ -500,9 +536,15 @@ apps/live_frames/lib/live_frames/adapters/bricks/compound_css_value.ex
 apps/live_frames/lib/live_frames/adapters/bricks/custom_css_normalizer.ex
   + compound routing receives the property
   + transition route, used only when property == "transition" and parse/1 returns :no_match
+  + compound_route/2 trims only CSS syntactic whitespace
+
+apps/live_frames/lib/live_frames/adapters/bricks/custom_css_parser.ex
+  + declaration property/value normalization trims only CSS syntactic whitespace
+  + framing, selectors, at-rule preludes, and unrelated parser behavior unchanged
 
 apps/live_frames/test/live_frames/bricks_compound_css_value_test.exs
 apps/live_frames/test/live_frames/bricks_custom_css_normalizer_test.exs
+apps/live_frames/test/live_frames/bricks_custom_css_parser_test.exs
 ```
 
 A new module is not justified. The transition route shares `Parsed`, `Occurrence`, reconstruction and terminal-validation machinery. It reuses the public timing slot contract and adds its own strict duration slot contract. A separate module would require exporting those private helpers or duplicating them. No Romeo-specific module, name, fixture, or fingerprint branch is permitted.
@@ -526,7 +568,9 @@ A new module is not justified. The transition route shares `Parsed`, `Occurrence
 14. RESOLVER_REUSE=UNCHANGED_PUBLIC_CONTRACT_NO_TRANSITION_AWARENESS
 15. EXTERNAL_AUTHORITY_POLICY=NO_FALLBACK
 16. RESOURCE_LIMITS=TABLE_ABOVE
-17. MODULE_BOUNDARY=COMPOUND_CSS_VALUE_AND_CUSTOM_CSS_NORMALIZER_ONLY
+17. MODULE_BOUNDARY=COMPOUND_CSS_VALUE_CUSTOM_CSS_NORMALIZER_WITH_BOUNDED_DECLARATION_WHITESPACE_NORMALIZATION
+18. DECLARATION_WHITESPACE_NORMALIZATION=CSS_SYNTAX_WHITESPACE_ONLY
+19. NBSP_PRESERVED_FOR_C1_GRAMMAR_AND_SAFETY_VALIDATION=YES
 ```
 
 ## Stated evidence boundary
@@ -577,7 +621,7 @@ REFERENCE_ACCOUNTING=FROZEN
 RECONSTRUCTION_POLICY=FROZEN
 POST_SUBSTITUTION_VALIDATION=FROZEN
 FAIL_CLOSED_POLICY=FROZEN
-PRE_IMPLEMENTATION_PLAN_BLOCKERS=NONE
+PRE_IMPLEMENTATION_PLAN_BLOCKERS=CSS_WHITESPACE_BOUNDARY_AUTHORITY_CORRECTION_REVIEW_AND_MERGE_REQUIRED
 ```
 
 ### Deferred, non-blocking
@@ -596,7 +640,7 @@ C1_PRODUCTION_RESOLVER_OUTCOME=MUST_BE_MEASURED_AFTER_IMPLEMENTATION
 C1_CANONICAL_ROMEO_RERUN=REQUIRED_AFTER_IMPLEMENTATION
 ```
 
-The production resolver measurement requires the production grammar to emit transition reference records. It is an implementation acceptance criterion, not a pre-plan blocker. These corrections do not authorize implementation or a private evidence rerun.
+The production resolver measurement requires the production grammar to emit transition reference records. It is an implementation acceptance criterion. The CSS-whitespace boundary correction must be accepted, merged, and pass post-merge CI before implementation continues. These corrections do not authorize implementation during the docs-only review or a private evidence rerun.
 
 ### Out of scope
 
@@ -608,6 +652,5 @@ NativeGenerator work does not block the C1 implementation plan.
 
 ## Gates
 
-- `git diff --check`: run on the authority commit.
-- `mix format --check-formatted`: run on the authority commit.
-- Mix compile, assets, test, and dependency checks: skipped for this documentation-only change, which touches no code, tests, assets, or dependencies. Full repository gates run in CI on the pull request.
+- `git diff --check`: run on the docs-only authority correction.
+- Local Mix format, compile, assets, test, and dependency checks: skipped because the correction changes only the authority and implementation-plan documents. Exact-head push and PR CI are required.
