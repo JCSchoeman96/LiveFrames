@@ -1,8 +1,9 @@
 # Bricks execution-security metadata retention authority
 
 **Date:** 2026-10-22
-**Status:** Accepted by the owner on 2026-10-22. No implementation is authorized.
-**Scope:** Authority and specification only
+**Status:** Accepted by the owner on 2026-10-22. Implementation is authorized only under the published bounded sanitization plan:
+docs/superpowers/plans/2026-10-22-bricks-execution-security-sanitization.md.
+**Scope:** Authority and specification, with bounded sanitization implementation authorization only.
 
 ~~~~text
 AUTHORITY_STATUS=ACCEPTED
@@ -11,7 +12,19 @@ ACCEPTED_HEAD=18cf188b368b877972ac41126adc960f6d2bf3a8
 ACCEPTED_MERGE_SHA=c6e689353ce4a26263fcbe10bd77c08ba403d115
 ACCEPTED_POST_MERGE_CI_RUN=39819732247
 ACCEPTED_POST_MERGE_CI_RESULT=success
-IMPLEMENTATION_AUTHORIZED=NO
+IMPLEMENTATION_AUTHORIZED=YES
+PROGRAMME_IMPLEMENTATION_AUTHORIZED=YES
+IMPLEMENTATION_AUTHORIZATION_SCOPE=TASKS_1_TO_4_ONLY
+IMPLEMENTATION_AUTHORIZATION_PLAN=docs/superpowers/plans/2026-10-22-bricks-execution-security-sanitization.md
+IMPLEMENTATION_AUTHORIZATION_DATE=2026-10-23
+IMPLEMENTATION_AUTHORIZATION_EFFECTIVE_AFTER_PLAN_ACCEPTANCE=YES
+TASK1_EXECUTION_AFTER_PLAN_ACCEPTANCE=YES
+TASK2_EXECUTION_REQUIRES_TASK1_MERGED_GREEN=YES
+TASK3_EXECUTION_REQUIRES_TASK2_MERGED_GREEN=YES
+TASK4_EXECUTION_REQUIRES_TASK3_MERGED_GREEN=YES
+IMPLEMENTATION_PREREQUISITE_PR307_APPROVED_HEAD=6bf0beff1e485c2ab75f9420b3f510bc84203b19
+IMPLEMENTATION_PREREQUISITE_PR307_MERGE_SHA=0ea7af94e044525b91bccba0967f248b3ea2b6a8
+IMPLEMENTATION_PREREQUISITE_PR307_POST_MERGE_CI=39949991798 success
 COMPONENTIZATION_AUTHORIZED=NO
 TEMPLATE_124_CANONICAL_INGESTION_PUBLICATION_AUTHORIZED=NO
 
@@ -422,8 +435,9 @@ PRIVATE_TEMPLATE_FIXTURE_ADDED_TO_REPO=NO
 
 ## Future TDD acceptance contract
 
-This section defines future implementation evidence only. It does not authorize
-production or test changes. Implementation must use red/green TDD.
+This section defines required implementation evidence under the published
+bounded sanitization plan. It does not authorize work outside Tasks 1 through
+4. Implementation must use red/green TDD.
 
 | Check | Required proof |
 | --- | --- |
@@ -525,10 +539,9 @@ No execution signature may become globally addressable state.
 
 ## Scope exclusions
 
-This authority excludes:
+This authority excludes work outside the published bounded sanitization plan,
+including:
 
-- production implementation;
-- test implementation;
 - WordPress signature validation;
 - PHP execution;
 - Query Editor execution;
@@ -541,11 +554,12 @@ This authority excludes:
 
 ## Stop conditions
 
-Stop without implementation if any of these conditions applies:
+Stop implementation if any of these conditions applies:
 
 ~~~~text
 STOP=MAIN_MOVED_WITH_RELEVANT_OVERLAP
 STOP=GOVERNING_AUTHORITY_CONFLICT
+STOP=AUTHORITY_CONFLICT
 STOP=SIGNATURE_SEMANTIC_CLASSIFICATION_NO_LONGER_PROVEN
 STOP=NON_SECURITY_SIGNATURE_COLLISION_REQUIRES_BROADER_POLICY
 STOP=SOURCE_IDENTITY_REQUIRES_SANITIZED_BYTES
@@ -557,11 +571,12 @@ STOP=SOURCE_HASH_POLICY_CONTRADICTION
 STOP=ADDITIONAL_BRICKS_CONTEXT_SHAPE_ASSUMED
 STOP=FABRICATED_ORDINARY_SIGNATURE_SCHEMA
 STOP=PRIVATE_TEMPLATE_SOURCE_ADDED_TO_REPOSITORY
-STOP=AUTHORITY_AUTHORIZES_IMPLEMENTATION
 STOP=AUTHORITY_AUTHORIZES_COMPONENTIZATION
 ~~~~
 
-The draft may not authorize production implementation, test implementation,
-componentization, NativeGenerator, or publication of the canonical-ingestion
-draft. Owner review and explicit authorization are required before production
-or test implementation begins.
+Implementation is authorized only for Tasks 1 through 4 in the published
+bounded sanitization plan. Task 1 may begin after that plan is reviewed,
+merged, and its post-merge CI is green. Each later task requires its
+predecessor to merge with green post-merge CI. This authority does not authorize
+componentization, NativeGenerator work, or publication of the canonical-
+ingestion draft.
