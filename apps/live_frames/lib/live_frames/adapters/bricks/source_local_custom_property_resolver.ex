@@ -76,7 +76,12 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             {:error, :resource_limit_exceeded}
 
           {:ok, names, fallback?} ->
-            case isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+            case isolated_definition_compiler_input_failure(
+                   local_name,
+                   terminal_text,
+                   names,
+                   fallback?
+                 ) do
               nil -> :ok
               failure -> {:error, failure}
             end
@@ -610,7 +615,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end)
   end
 
-  defp isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+  defp isolated_definition_compiler_input_failure(local_name, terminal_text, names, fallback?) do
     cond do
       fallback? ->
         :unsupported_fallback
@@ -618,11 +623,16 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       Enum.any?(names, &(&1 == local_name)) ->
         :self_reference
 
-      names != [] ->
-        :unsupported_nested_reference
-
       true ->
-        nil
+        case exact_passthrough_name(terminal_text) do
+          {:ok, captured} ->
+            if names == [captured], do: nil, else: :unsupported_nested_reference
+
+          :no_match ->
+            if names != [] or malformed_nbsp_passthrough?(terminal_text),
+              do: :unsupported_nested_reference,
+              else: nil
+        end
     end
   end
 
@@ -848,6 +858,113 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     do: byte in ?a..?z or byte in ?A..?Z or byte in ?0..?9 or byte in [?-, ?_] or byte >= 0x80
 
   defp css_whitespace?(byte), do: byte in [9, 10, 12, 13, 32]
+
+  defp exact_passthrough_name(text) when is_binary(text),
+    do: do_exact_passthrough_name(text, 0)
+
+  defp exact_passthrough_name(_text), do: :no_match
+
+  defp malformed_nbsp_passthrough?(text) do
+    case :binary.match(text, <<0xC2, 0xA0>>) do
+      :nomatch ->
+        false
+
+      _match ->
+        normalized = :binary.replace(text, <<0xC2, 0xA0>>, " ", [:global])
+        match?({:ok, _local_name}, exact_passthrough_name(normalized))
+    end
+  end
+
+  defp do_exact_passthrough_name(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+
+    with {:ok, offset} <- match_exact_var_open(text, offset),
+         {:ok, offset, local_name} <- match_exact_var_local_name(text, offset),
+         {:ok, offset} <- match_exact_var_close(text, offset),
+         {:ok, final_offset} <- skip_css_syntactic_whitespace_end(text, offset) do
+      if final_offset == byte_size(text) do
+        if valid_local_name?(local_name), do: {:ok, local_name}, else: :no_match
+      else
+        :no_match
+      end
+    else
+      _ -> :no_match
+    end
+  end
+
+  defp skip_css_syntactic_whitespace_forward(text, offset) when offset >= byte_size(text),
+    do: offset
+
+  defp skip_css_syntactic_whitespace_forward(text, offset) do
+    if css_whitespace?(:binary.at(text, offset)),
+      do: skip_css_syntactic_whitespace_forward(text, offset + 1),
+      else: offset
+  end
+
+  defp skip_css_syntactic_whitespace_end(text, offset) when offset >= byte_size(text),
+    do: {:ok, offset}
+
+  defp skip_css_syntactic_whitespace_end(text, offset) do
+    if css_whitespace?(:binary.at(text, offset)),
+      do: skip_css_syntactic_whitespace_end(text, offset + 1),
+      else: {:ok, offset}
+  end
+
+  defp match_exact_var_open(text, offset) do
+    if offset + 3 < byte_size(text) and
+         binary_part(text, offset, 4) == "var(" do
+      {:ok, offset + 4}
+    else
+      :no_match
+    end
+  end
+
+  defp match_exact_var_close(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+
+    if offset < byte_size(text) and :binary.at(text, offset) == ?) do
+      {:ok, offset + 1}
+    else
+      :no_match
+    end
+  end
+
+  defp match_exact_var_local_name(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+    name_end = offset
+
+    if name_end >= byte_size(text) or :binary.at(text, name_end) != ?- or
+         name_end + 1 >= byte_size(text) or :binary.at(text, name_end + 1) != ?- do
+      :no_match
+    else
+      consume_exact_local_name(text, name_end)
+    end
+  end
+
+  defp consume_exact_local_name(text, offset) do
+    consume_exact_local_name(text, offset, offset)
+  end
+
+  defp consume_exact_local_name(text, offset, _start) when offset >= byte_size(text) do
+    :no_match
+  end
+
+  defp consume_exact_local_name(text, offset, start) do
+    byte = :binary.at(text, offset)
+
+    if css_whitespace?(byte) or byte == ?) do
+      local_name = binary_part(text, start, offset - start)
+
+      if byte_size(local_name) >= 2 do
+        {:ok, offset, local_name}
+      else
+        :no_match
+      end
+    else
+      consume_exact_local_name(text, offset + 1, start)
+    end
+  end
+
   defp hex_byte?(byte), do: byte in ?0..?9 or byte in ?a..?f or byte in ?A..?F
   defp hex_value(byte) when byte in ?0..?9, do: byte - ?0
   defp hex_value(byte) when byte in ?a..?f, do: byte - ?a + 10

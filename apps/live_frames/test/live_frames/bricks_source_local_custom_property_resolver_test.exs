@@ -187,13 +187,16 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
   end
 
   test "does not treat var text inside a quoted terminal as a dependency" do
-    quoted_terminal = "\"var(--hidden)\""
+    nbsp = <<0xC2, 0xA0>>
+    quoted_terminals = ["\"var(--hidden)\"", "\"var(#{nbsp}--hidden)\""]
 
-    assert {:ok, [{:ok, ^quoted_terminal}]} =
-             resolve(
-               [definition("--local-name", quoted_terminal, [1])],
-               [reference("--local-name", [1])]
-             )
+    for quoted_terminal <- quoted_terminals do
+      assert {:ok, [{:ok, ^quoted_terminal}]} =
+               resolve(
+                 [definition("--local-name", quoted_terminal, [1])],
+                 [reference("--local-name", [1])]
+               )
+    end
   end
 
   test "fails closed on an escaped var function spelling" do
@@ -465,7 +468,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
                "12px"
              )
 
-    assert {:error, :unsupported_nested_reference} =
+    assert :ok =
              SourceLocalCustomPropertyResolver.definition_compiler_input_state(
                "--local-name",
                "var(--nested-name)"
@@ -487,6 +490,121 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
              SourceLocalCustomPropertyResolver.definition_compiler_input_state(
                "--local-name",
                "var(color)"
+             )
+  end
+
+  test "admits only an exact single-var passthrough compiler input" do
+    assert :ok =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state("--a", "var(--b)")
+
+    for terminal <- ["12px", "0.5", "auto"] do
+      assert :ok =
+               SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+                 "--local-name",
+                 terminal
+               )
+    end
+
+    assert {:error, :unsupported_fallback} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(--b, 4px)"
+             )
+
+    assert {:error, :self_reference} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--local-name",
+               "var(--local-name)"
+             )
+  end
+
+  test "uses only the five CSS whitespace bytes in passthrough syntax" do
+    whitespace_bytes = [" ", "\t", "\n", "\r", "\f"]
+
+    for whitespace <- whitespace_bytes,
+        terminal <- [
+          whitespace <> "var(--b)",
+          "var(" <> whitespace <> "--b)",
+          "var(--b" <> whitespace <> ")",
+          "var(--b)" <> whitespace
+        ] do
+      assert :ok =
+               SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+                 "--a",
+                 terminal
+               )
+    end
+
+    assert :ok =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--a",
+               " \tvar(\n\f--b\r )\t "
+             )
+
+    nbsp = <<0xC2, 0xA0>>
+
+    for terminal <- [
+          nbsp <> "var(--b)",
+          "var(" <> nbsp <> "--b)",
+          "var(--b" <> nbsp <> ")",
+          "var(--b)" <> nbsp
+        ] do
+      assert {:error, :unsupported_nested_reference} =
+               SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+                 "--a",
+                 terminal
+               )
+    end
+  end
+
+  test "rejects non-exact passthrough compiler inputs" do
+    unsupported_terminals = [
+      "/* comment */ var(--b)",
+      "prefix var(--b)",
+      "var(--b) suffix",
+      "calc(var(--b))",
+      "var(--b) var(--c)",
+      "VAR(--b)",
+      "VaR(--b)",
+      "v\\61 r(--b)",
+      "var(--escaped\\2dname)"
+    ]
+
+    for terminal <- unsupported_terminals do
+      assert {:error, :unsupported_nested_reference} =
+               SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+                 "--a",
+                 terminal
+               ),
+             inspect(terminal)
+    end
+  end
+
+  test "preserves compiler-input name and byte boundaries" do
+    assert {:error, :invalid_local_name} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state("color", "12px")
+
+    for terminal <- ["var(color)", "var(--bad name)"] do
+      assert {:error, :unsupported_nested_reference} =
+               SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+                 "--a",
+                 terminal
+               )
+    end
+
+    terminal_at_limit = String.duplicate("x", 4096)
+    terminal_over_limit = String.duplicate("x", 4097)
+
+    assert :ok =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--a",
+               terminal_at_limit
+             )
+
+    assert {:error, :resource_limit_exceeded} =
+             SourceLocalCustomPropertyResolver.definition_compiler_input_state(
+               "--a",
+               terminal_over_limit
              )
   end
 
