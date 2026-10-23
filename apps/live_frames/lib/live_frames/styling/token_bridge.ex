@@ -545,11 +545,11 @@ defmodule LiveFrames.Styling.TokenBridge do
          %{"token_set_path" => path, "css_variable" => name} = entry,
          token_set,
          :progressive,
-         plan
+         _plan
        ) do
     if fluid_materialization_path?(token_set, path) do
       with {:ok, %Token{} = token} <- Map.fetch(token_set.tokens, path),
-           {:ok, expression} <- progressive_fluid_expression(token_set, token, plan, path) do
+           {:ok, expression} <- CSSValue.candidate(token_set, token, fluid_target: :fallback) do
         safe_declaration_line(name, expression)
       else
         :error -> {:error, {:missing_token, path}}
@@ -579,13 +579,6 @@ defmodule LiveFrames.Styling.TokenBridge do
       "  #{name}: #{value};"
     else
       {:error, {:unsafe_css_value, name, value}}
-    end
-  end
-
-  defp progressive_fluid_expression(token_set, token, _plan, path) do
-    case CSSValue.candidate(token_set, token, fluid_target: :fallback) do
-      {:ok, expression} -> {:ok, expression}
-      {:error, _reason} -> {:error, {:non_serializable_resolved_value, path}}
     end
   end
 

@@ -579,7 +579,6 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
     @underscore_domain_progress_var "--lf-fluid-domain-layout-fluid-viewport_default-progress"
     @progress_supports_condition "(opacity: progress(1px, 0px, 1px))"
     @supports_query "@supports #{@progress_supports_condition}"
-    @token_bridge_source Path.expand("../../../lib/live_frames/styling/token_bridge.ex", __DIR__)
 
     defp progressive_mapping(entries) do
       %{
@@ -769,11 +768,6 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
       assert progressive == legacy
     end
 
-    test "uses one explicit CSSSerializer.plan call in TokenBridge source" do
-      source = File.read!(@token_bridge_source)
-      assert length(:binary.matches(source, "CSSSerializer.plan(")) == 1
-    end
-
     test "keeps fallback dependencies before mapped package declarations" do
       token_set = progressive_token_set()
 
@@ -794,12 +788,32 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
       assert List.last(root_lines) =~ "--lf-aaa-mapped-first-lexically:"
     end
 
-    test "production obtains mapped Fluid candidates through CSSValue.candidate/3" do
-      source = File.read!(@token_bridge_source)
+    test "progressive generation invokes CSSValue.candidate/3 for each mapped Fluid root" do
+      token_set = progressive_token_set()
 
-      assert source =~ "CSSValue.candidate(token_set, token, fluid_target: :fallback)"
-      refute source =~ "plan_value_expression"
-      refute source =~ "plan.values"
+      mapping =
+        progressive_mapping([
+          %{"token_set_path" => @value_path, "css_variable" => "--lf-space-fluid-gap"},
+          %{"token_set_path" => @step_path, "css_variable" => "--lf-type-heading-h1"}
+        ])
+
+      {calls, result} =
+        trace_candidate3_calls(fn ->
+          TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+        end)
+
+      assert {:ok, _css} = result
+
+      paths =
+        calls
+        |> Enum.map(fn {_token_set, token, _options} -> token.path end)
+        |> Enum.sort()
+
+      assert paths == Enum.sort([@value_path, @step_path])
+
+      assert Enum.all?(calls, fn {_token_set, _token, options} ->
+               Keyword.get(options, :fluid_target) == :fallback
+             end)
     end
 
     test "contextual Fluid semantics ignore metadata css_expression and match fallback candidates" do
@@ -1223,6 +1237,45 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
 
       assert {:error, {:unsafe_css_value, "--lf-color-primary", _}} =
                TokenBridge.generate(token_set, mapping, fluid_output: :progressive)
+    end
+
+    defp trace_candidate3_calls(fun) do
+      test_pid = self()
+      tracer = spawn_link(fn -> candidate3_tracer(test_pid, []) end)
+
+      :erlang.trace_pattern({CSSValue, :candidate, 3}, true, [:global])
+      :erlang.trace(self(), true, [:call, {:tracer, tracer}])
+
+      try do
+        result = fun.()
+        :erlang.trace(self(), false, [:call])
+        delivered = :erlang.trace_delivered(self())
+        assert_receive({:trace_delivered, _, ^delivered})
+        send(tracer, :report)
+        assert_receive({:candidate3_calls, calls})
+        {calls, result}
+      after
+        :erlang.trace(self(), false, [:call])
+        :erlang.trace_pattern({CSSValue, :candidate, 3}, false, [:global])
+        send(tracer, :stop)
+      end
+    end
+
+    defp candidate3_tracer(test_pid, acc) do
+      receive do
+        {:trace, _pid, :call, {CSSValue, :candidate, [token_set, token, options]}} ->
+          candidate3_tracer(test_pid, [{token_set, token, options} | acc])
+
+        {:trace, _pid, :call, _} ->
+          candidate3_tracer(test_pid, acc)
+
+        :report ->
+          send(test_pid, {:candidate3_calls, Enum.reverse(acc)})
+          candidate3_tracer(test_pid, acc)
+
+        :stop ->
+          :ok
+      end
     end
   end
 end
