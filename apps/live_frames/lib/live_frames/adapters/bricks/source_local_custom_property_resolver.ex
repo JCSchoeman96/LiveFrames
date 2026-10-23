@@ -76,7 +76,12 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             {:error, :resource_limit_exceeded}
 
           {:ok, names, fallback?} ->
-            case isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+            case isolated_definition_compiler_input_failure(
+                   local_name,
+                   terminal_text,
+                   names,
+                   fallback?
+                 ) do
               nil -> :ok
               failure -> {:error, failure}
             end
@@ -163,13 +168,18 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       |> Enum.filter(&external_candidate?(authority_index, &1))
       |> MapSet.new()
 
-    with {:ok, dependency_states} <- build_dependency_states(selected_by_path_scope) do
+    with {:ok, dependency_outcomes} <-
+           build_dependency_outcomes(
+             selected_by_path_scope,
+             tries_by_name,
+             external_collisions
+           ) do
       {:ok,
        %{
          by_name_and_path: selected_by_path,
          tries_by_name: tries_by_name,
          external_collisions: external_collisions,
-         dependency_states: dependency_states
+         dependency_outcomes: dependency_outcomes
        }}
     end
   end
@@ -313,7 +323,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
                 scope_selections,
                 local_name,
                 candidate_path,
-                index.dependency_states
+                index.dependency_outcomes
               )
             end
 
@@ -340,7 +350,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
           scope_selections,
           local_name,
           candidate_path,
-          index.dependency_states
+          index.dependency_outcomes
         )
 
       :none ->
@@ -487,7 +497,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          scope_selections,
          local_name,
          reversed_path,
-         dependency_states
+         dependency_outcomes
        ) do
     case Map.fetch(scope_selections, {:base, nil}) do
       :error ->
@@ -496,13 +506,12 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       {:ok, {:error, _state} = error} ->
         error
 
-      {:ok, {:ok, terminal}} ->
-        dependency_state = Map.get(dependency_states, {local_name, reversed_path, {:base, nil}})
-
-        if dependency_state do
-          {:error, dependency_state}
-        else
-          {:ok, terminal}
+      {:ok, {:ok, _terminal}} ->
+        case Map.get(dependency_outcomes, {local_name, reversed_path, {:base, nil}}) do
+          {:terminal, resolved} -> {:ok, resolved}
+          {:passthrough, resolved} -> {:ok, resolved}
+          {:error, reason} -> {:error, reason}
+          _ -> {:error, :unsupported_nested_reference}
         end
     end
   end
@@ -517,7 +526,11 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
 
   defp external_candidate?(_authority_index, _local_name), do: true
 
-  defp build_dependency_states(selected_by_path_scope) do
+  defp build_dependency_outcomes(
+         selected_by_path_scope,
+         tries_by_name,
+         external_collisions
+       ) do
     case collect_dependency_data(selected_by_path_scope) do
       {:error, :resource_limit_exceeded} ->
         {:error, :resource_limit_exceeded}
@@ -554,28 +567,137 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
 
         cyclic_definitions = dependency_cycle_members(dependency_graph)
 
-        dependency_states =
-          Map.new(dependency_data, fn
-            {{local_name, reversed_path, {:base, nil}} = key,
-             %{names: names, fallback?: fallback?}} ->
-              state =
-                batch_definition_dependency_failure(
-                  local_name,
-                  names,
-                  fallback?,
-                  cyclic_definitions,
-                  {local_name, reversed_path}
-                )
+        initial_outcomes =
+          Map.new(selected_by_path_scope, fn
+            {{local_name, reversed_path, {:base, nil}} = key, {:ok, terminal}} ->
+              data =
+                Map.get(dependency_data, key, %{
+                  names: [],
+                  fallback?: false,
+                  local_name: local_name
+                })
 
-              {key, state}
+              names = data.names
+              fallback? = data.fallback?
 
-            {key, _data} ->
+              outcome =
+                case batch_definition_dependency_failure(
+                       local_name,
+                       terminal,
+                       names,
+                       fallback?,
+                       cyclic_definitions,
+                       {local_name, reversed_path}
+                     ) do
+                  nil ->
+                    case exact_passthrough_name(terminal) do
+                      {:ok, b_name} -> {:passthrough_pending, b_name}
+                      :no_match -> {:terminal, terminal}
+                    end
+
+                  failure ->
+                    {:error, failure}
+                end
+
+              {key, outcome}
+
+            {key, _selection} ->
               {key, nil}
           end)
-          |> Enum.reject(fn {_key, state} -> is_nil(state) end)
+          |> Enum.reject(fn {_key, outcome} -> is_nil(outcome) end)
           |> Map.new()
 
-        {:ok, dependency_states}
+        dependency_outcomes =
+          resolve_passthrough_outcomes(
+            initial_outcomes,
+            base_definitions,
+            tries_by_name,
+            external_collisions
+          )
+
+        {:ok, dependency_outcomes}
+    end
+  end
+
+  defp resolve_passthrough_outcomes(
+         outcomes,
+         base_definitions,
+         tries_by_name,
+         external_collisions
+       ) do
+    Map.new(outcomes, fn
+      {key, {:passthrough_pending, b_name}} ->
+        {_local_name, reversed_path, _scope} = key
+
+        outcome =
+          resolve_passthrough_dependency(
+            b_name,
+            reversed_path,
+            base_definitions,
+            tries_by_name,
+            external_collisions,
+            outcomes
+          )
+
+        {key, outcome}
+
+      {key, outcome} ->
+        {key, outcome}
+    end)
+  end
+
+  defp resolve_passthrough_dependency(
+         b_name,
+         a_reversed_path,
+         base_definitions,
+         tries_by_name,
+         external_collisions,
+         outcomes
+       ) do
+    target_path = Enum.reverse(a_reversed_path)
+
+    case find_dependency_definition(base_definitions, b_name, a_reversed_path) do
+      nil ->
+        trie = Map.get(tries_by_name, b_name, empty_path_trie())
+
+        if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
+          {:error, :resource_limit_exceeded}
+        else
+          {:error, :no_local_definition}
+        end
+
+      {_b_name, b_reversed_path} ->
+        b_key = {b_name, b_reversed_path, {:base, nil}}
+
+        case Map.fetch(base_definitions, {b_name, b_reversed_path}) do
+          {:ok, {:error, reason}} ->
+            {:error, reason}
+
+          {:ok, {:ok, _terminal}} ->
+            if MapSet.member?(external_collisions, b_name) do
+              {:error, :external_authority_collision}
+            else
+              case Map.get(outcomes, b_key) do
+                {:terminal, terminal} ->
+                  {:passthrough, terminal}
+
+                {:passthrough, _} ->
+                  {:error, :unsupported_nested_reference}
+
+                {:error, reason} ->
+                  {:error, reason}
+
+                {:passthrough_pending, _} ->
+                  {:error, :unsupported_nested_reference}
+
+                _ ->
+                  {:error, :no_local_definition}
+              end
+            end
+
+          :error ->
+            {:error, :no_local_definition}
+        end
     end
   end
 
@@ -610,7 +732,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     end)
   end
 
-  defp isolated_definition_compiler_input_failure(local_name, names, fallback?) do
+  defp isolated_definition_compiler_input_failure(local_name, terminal_text, names, fallback?) do
     cond do
       fallback? ->
         :unsupported_fallback
@@ -618,16 +740,22 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       Enum.any?(names, &(&1 == local_name)) ->
         :self_reference
 
-      names != [] ->
-        :unsupported_nested_reference
-
       true ->
-        nil
+        case exact_passthrough_name(terminal_text) do
+          {:ok, captured} ->
+            if names == [captured], do: nil, else: :unsupported_nested_reference
+
+          :no_match ->
+            if names != [] or malformed_nbsp_passthrough?(terminal_text),
+              do: :unsupported_nested_reference,
+              else: nil
+        end
     end
   end
 
   defp batch_definition_dependency_failure(
          local_name,
+         terminal_text,
          names,
          fallback?,
          cyclic_definitions,
@@ -643,11 +771,16 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
       MapSet.member?(cyclic_definitions, cycle_key) ->
         :cycle
 
-      names != [] ->
-        :unsupported_nested_reference
-
       true ->
-        nil
+        case exact_passthrough_name(terminal_text) do
+          {:ok, captured} ->
+            if names == [captured], do: nil, else: :unsupported_nested_reference
+
+          :no_match ->
+            if names != [] or malformed_nbsp_passthrough?(terminal_text),
+              do: :unsupported_nested_reference,
+              else: nil
+        end
     end
   end
 
@@ -848,6 +981,113 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
     do: byte in ?a..?z or byte in ?A..?Z or byte in ?0..?9 or byte in [?-, ?_] or byte >= 0x80
 
   defp css_whitespace?(byte), do: byte in [9, 10, 12, 13, 32]
+
+  defp exact_passthrough_name(text) when is_binary(text),
+    do: do_exact_passthrough_name(text, 0)
+
+  defp exact_passthrough_name(_text), do: :no_match
+
+  defp malformed_nbsp_passthrough?(text) do
+    case :binary.match(text, <<0xC2, 0xA0>>) do
+      :nomatch ->
+        false
+
+      _match ->
+        normalized = :binary.replace(text, <<0xC2, 0xA0>>, " ", [:global])
+        match?({:ok, _local_name}, exact_passthrough_name(normalized))
+    end
+  end
+
+  defp do_exact_passthrough_name(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+
+    with {:ok, offset} <- match_exact_var_open(text, offset),
+         {:ok, offset, local_name} <- match_exact_var_local_name(text, offset),
+         {:ok, offset} <- match_exact_var_close(text, offset),
+         {:ok, final_offset} <- skip_css_syntactic_whitespace_end(text, offset) do
+      if final_offset == byte_size(text) do
+        if valid_local_name?(local_name), do: {:ok, local_name}, else: :no_match
+      else
+        :no_match
+      end
+    else
+      _ -> :no_match
+    end
+  end
+
+  defp skip_css_syntactic_whitespace_forward(text, offset) when offset >= byte_size(text),
+    do: offset
+
+  defp skip_css_syntactic_whitespace_forward(text, offset) do
+    if css_whitespace?(:binary.at(text, offset)),
+      do: skip_css_syntactic_whitespace_forward(text, offset + 1),
+      else: offset
+  end
+
+  defp skip_css_syntactic_whitespace_end(text, offset) when offset >= byte_size(text),
+    do: {:ok, offset}
+
+  defp skip_css_syntactic_whitespace_end(text, offset) do
+    if css_whitespace?(:binary.at(text, offset)),
+      do: skip_css_syntactic_whitespace_end(text, offset + 1),
+      else: {:ok, offset}
+  end
+
+  defp match_exact_var_open(text, offset) do
+    if offset + 3 < byte_size(text) and
+         binary_part(text, offset, 4) == "var(" do
+      {:ok, offset + 4}
+    else
+      :no_match
+    end
+  end
+
+  defp match_exact_var_close(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+
+    if offset < byte_size(text) and :binary.at(text, offset) == ?) do
+      {:ok, offset + 1}
+    else
+      :no_match
+    end
+  end
+
+  defp match_exact_var_local_name(text, offset) do
+    offset = skip_css_syntactic_whitespace_forward(text, offset)
+    name_end = offset
+
+    if name_end >= byte_size(text) or :binary.at(text, name_end) != ?- or
+         name_end + 1 >= byte_size(text) or :binary.at(text, name_end + 1) != ?- do
+      :no_match
+    else
+      consume_exact_local_name(text, name_end)
+    end
+  end
+
+  defp consume_exact_local_name(text, offset) do
+    consume_exact_local_name(text, offset, offset)
+  end
+
+  defp consume_exact_local_name(text, offset, _start) when offset >= byte_size(text) do
+    :no_match
+  end
+
+  defp consume_exact_local_name(text, offset, start) do
+    byte = :binary.at(text, offset)
+
+    if css_whitespace?(byte) or byte == ?) do
+      local_name = binary_part(text, start, offset - start)
+
+      if byte_size(local_name) >= 2 do
+        {:ok, offset, local_name}
+      else
+        :no_match
+      end
+    else
+      consume_exact_local_name(text, offset + 1, start)
+    end
+  end
+
   defp hex_byte?(byte), do: byte in ?0..?9 or byte in ?a..?f or byte in ?A..?F
   defp hex_value(byte) when byte in ?0..?9, do: byte - ?0
   defp hex_value(byte) when byte in ?a..?f, do: byte - ?a + 10

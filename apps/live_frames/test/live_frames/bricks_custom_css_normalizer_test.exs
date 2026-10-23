@@ -765,6 +765,17 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert hd(result.residuals_by_source_id[@owner])["reason"] == "unsupported_declaration"
   end
 
+  test "resolves an exact passthrough through the normalizer flow" do
+    result = run(".owner { --b: 12px; --a: var(--b); color: var(--a); }")
+
+    assert %StyleValue{kind: :literal, value: "12px"} =
+             result.styles_by_source_id[@owner]["color"]
+
+    refute Map.has_key?(result.styles_by_source_id[@owner], "--a")
+    refute Map.has_key?(result.styles_by_source_id[@owner], "--b")
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
   test "resolves a direct local custom property without emitting its definition" do
     result = run(".owner { --local-space: 12px; color: var(--local-space); }")
 
@@ -791,7 +802,9 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
   end
 
   test "a definition with an unsupported terminal dependency remains a whole-rule residual" do
-    css = ".owner { --theme-token: var(--external-space); }"
+    css =
+      ".owner { --theme-token: var(--external-space); color: var(--theme-token); }"
+
     result = run(css)
 
     assert result.styles_by_source_id == %{}
@@ -807,7 +820,7 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
 
   test "resolving a direct local consumer does not drop a failed definition rule" do
     css =
-      ".owner { --theme-token: var(--external-space); }\n" <>
+      ".owner { --theme-token: var(--external-space); color: var(--theme-token); }\n" <>
         ".owner { --local-space: 12px; width: var(--local-space); }"
 
     result = run(css)
@@ -1657,11 +1670,26 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
   end
 
-  test "keeps nested local-reference definitions fail closed for transition" do
+  test "resolves a one-hop nested local definition for transition" do
     result =
       run(
         transition_css(
           "--base-duration: 250ms; --duration: var(--base-duration); --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "keeps a multi-hop nested local definition fail closed for transition" do
+    result =
+      run(
+        transition_css(
+          "--base-duration: 250ms; --mid-duration: var(--base-duration); --duration: var(--mid-duration); --timing: ease-in-out;",
           "opacity var(--duration) var(--timing)"
         )
       )
@@ -1872,5 +1900,64 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
 
     assert [%{"reason" => "unresolved_value"}] = malformed.residuals_by_source_id[@owner]
     assert [%{"reason" => "unresolved_value"}] = unresolved.residuals_by_source_id[@owner]
+  end
+
+  test "keeps fallback and missing downstream definitions fail closed" do
+    for definitions <- [
+          "--a: var(--b, 4px);",
+          "--a: var(--missing);"
+        ] do
+      result = run(".owner { #{definitions} color: var(--a); }")
+
+      assert result.styles_by_source_id == %{}
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    end
+  end
+
+  test "applies consumer declaration safety to a one-hop terminal" do
+    result =
+      run(".owner { --b: url(https://example.test/a.png); --a: var(--b); color: var(--a); }")
+
+    assert result.styles_by_source_id == %{}
+    assert [%{"reason" => "unsafe_declaration"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "does not use external authority to rescue a failed local chain" do
+    authority_index = %VariableAuthority{by_variable: %{"--b" => %{}, "--c" => %{}}}
+
+    result =
+      run(
+        ".owner { --c: 12px; --b: var(--c); --a: var(--b); color: var(--a); }",
+        opts: [authority_index: authority_index]
+      )
+
+    assert result.styles_by_source_id == %{}
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "applies the same passthrough syntax across synthetic source metadata" do
+    cases = [
+      {"owner-a", "owner-a", "color", "component-a", "fingerprint-a", :unknown},
+      {"owner-b", "owner-b", "width", "component-b", "fingerprint-b", :required}
+    ]
+
+    for {source_id, class_name, property, component_id, fingerprint, classification} <- cases do
+      css = ".#{class_name} { --b: 12px; --a: var(--b); #{property}: var(--a); }"
+
+      source_owner =
+        owner(css, source_id: source_id)
+        |> Map.put(:component_id, component_id)
+        |> Map.put(:residual_fingerprint, fingerprint)
+        |> Map.put(:requirement_classification, classification)
+
+      nodes = %{source_id => node(source_id, [class_name], [1])}
+
+      result = CustomCssNormalizer.normalize([source_owner], nodes, %{}, MapSet.new())
+
+      assert %StyleValue{kind: :literal, value: "12px"} =
+               result.styles_by_source_id[source_id][property]
+
+      assert result.residuals_by_source_id[source_id] == []
+    end
   end
 end
