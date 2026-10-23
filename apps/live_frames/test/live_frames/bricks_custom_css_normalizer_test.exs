@@ -2,6 +2,7 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
   use ExUnit.Case, async: true
 
   alias LiveFrames.Adapters.Bricks.CustomCssNormalizer
+  alias LiveFrames.Adapters.Bricks.CompoundCssValue
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.IR.ResponsiveOverride
   alias LiveFrames.IR.SourceTrace
@@ -176,6 +177,9 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     {nodes, %{@owner => children}}
   end
 
+  defp transition_css(definitions, value),
+    do: ".owner { #{definitions} transition: #{value}; }"
+
   test "relocates a safe conditionless rule to its target node" do
     result = run(".owner { color: red; }")
 
@@ -233,9 +237,9 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     end
   end
 
-  test "trims outer declaration whitespace before compound parsing" do
+  test "trims ASCII CSS whitespace before compound parsing" do
     result =
-      run(".owner { --measure: 12px; width: \u00a0calc(var(--measure) * 2)\u00a0; }")
+      run(".owner { --measure: 12px; width: \t \f\r\ncalc(var(--measure) * 2)\n \t; }")
 
     assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
              result.styles_by_source_id[@owner]["width"]
@@ -1458,5 +1462,415 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     assert Enum.map(rules_b, & &1["target_node_id"]) == ["node_2_1"]
     refute String.contains?(inspect(result.custom_css_by_source_id["owner-a"].value), @token)
     refute String.contains?(inspect(result.custom_css_by_source_id["owner-b"].value), @token)
+  end
+
+  test "resolves a one-spec transition shorthand to a literal StyleValue" do
+    expression = "opacity var(--duration) var(--timing)"
+    css = transition_css("--duration: 250ms; --timing: ease-in-out;", expression)
+
+    assert {:ok, parsed} = CompoundCssValue.parse_transition_shorthand(expression)
+
+    assert [
+             %{
+               occurrence_index: 0,
+               local_name: "--duration",
+               slot_grammar: :transition_duration_operand
+             },
+             %{
+               occurrence_index: 1,
+               local_name: "--timing",
+               slot_grammar: :juxtaposition_right_operand
+             }
+           ] = CompoundCssValue.occurrences(parsed)
+
+    result = run(css)
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    refute result.styles_by_source_id[@owner]["transition"].value =~ "var("
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "resolves a two-spec transition shorthand with canonical whitespace" do
+    expression =
+      "opacity var(--duration-a) var(--timing-a),\n  transform var(--duration-b) var(--timing-b)"
+
+    definitions =
+      "--duration-a: 250ms; --timing-a: ease-in-out; " <>
+        "--duration-b: 1.5s; --timing-b: ease-in-out;"
+
+    assert {:ok, parsed} = CompoundCssValue.parse_transition_shorthand(expression)
+
+    assert Enum.map(CompoundCssValue.occurrences(parsed), &{&1.occurrence_index, &1.local_name}) ==
+             [
+               {0, "--duration-a"},
+               {1, "--timing-a"},
+               {2, "--duration-b"},
+               {3, "--timing-b"}
+             ]
+
+    result = run(transition_css(definitions, expression))
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "opacity 250ms ease-in-out, transform 1.5s ease-in-out"
+           } = result.styles_by_source_id[@owner]["transition"]
+
+    refute result.styles_by_source_id[@owner]["transition"].value =~ "var("
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "fails closed for a leading NBSP at a transition value boundary" do
+    nbsp = <<0xC2, 0xA0>>
+
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          nbsp <> "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Map.has_key?(styles, "transition")
+           end)
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "fails closed for a trailing NBSP at a transition value boundary" do
+    nbsp = <<0xC2, 0xA0>>
+
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)" <> nbsp
+        )
+      )
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Map.has_key?(styles, "transition")
+           end)
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "resolves transition values surrounded by ordinary ASCII CSS whitespace" do
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          "\t \f\r\nopacity var(--duration) var(--timing)\n \t"
+        )
+      )
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "keeps transition literals without var on the ordinary generic path" do
+    result = run(".owner { transition: opacity 250ms ease-in-out; }")
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "keeps bare transition var juxtaposition on the existing path" do
+    result =
+      run(
+        ".owner { --duration: 250ms; --timing: ease-in-out; " <>
+          "transition: var(--duration) var(--timing); }"
+      )
+
+    assert %StyleValue{kind: :literal, value: "250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "does not route IDENT-prefixed references on non-transition properties" do
+    result =
+      run(
+        ".owner { --duration: 250ms; --timing: ease-in-out; " <>
+          "width: opacity var(--duration) var(--timing); }"
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "width")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "maps malformed transition shorthand to unresolved_value" do
+    definitions = "--duration: 250ms; --timing: ease-in-out;"
+
+    for expression <- [
+          ", opacity var(--duration) var(--timing)",
+          "opacity var(--duration) var(--timing),",
+          "opacity var(--duration) var(--timing),, transform var(--duration) var(--timing)",
+          "opacity var(--duration)",
+          "opacity var(--duration) var(--timing) extra",
+          "opacity var(--duration invalid) var(--timing)",
+          "opacity var(--duration, 250ms) var(--timing)"
+        ] do
+      result = run(transition_css(definitions, expression))
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+      refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    end
+  end
+
+  test "keeps a missing transition local definition fail closed" do
+    for definitions <- [
+          "--timing: ease-in-out;",
+          "--duration: 250ms;"
+        ] do
+      result =
+        run(
+          transition_css(
+            definitions,
+            "opacity var(--duration) var(--timing)"
+          )
+        )
+
+      refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+      assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+    end
+  end
+
+  test "does not rescue transition references through external-only authority" do
+    authority_index = variable_authority("--external-duration", "motion.duration")
+
+    result =
+      run(
+        transition_css(
+          "--timing: ease-in-out;",
+          "opacity var(--external-duration) var(--timing)"
+        ),
+        opts: [authority_index: authority_index]
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "keeps nested local-reference definitions fail closed for transition" do
+    result =
+      run(
+        transition_css(
+          "--base-duration: 250ms; --duration: var(--base-duration); --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "preserves existing local resolver selection and scope for transition references" do
+    nearest =
+      run(
+        ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
+          ".owner .child { --duration: 500ms; " <>
+          "transition: opacity var(--duration) var(--timing); }"
+      )
+
+    assert %StyleValue{kind: :literal, value: "opacity 500ms ease-in-out"} =
+             nearest.styles_by_source_id[@child]["transition"]
+
+    ambiguous_css =
+      ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
+        ".owner.child { --duration: 250ms; --timing: ease-in-out; }\n" <>
+        ".owner { transition: opacity var(--duration) var(--timing); }"
+
+    ambiguous =
+      run_sources(
+        [{ambiguous_css, "_cssCustom", :base}],
+        owner_classes: ["owner", "child"]
+      )
+
+    refute Map.has_key?(Map.get(ambiguous.styles_by_source_id, @owner, %{}), "transition")
+    assert [%{"reason" => "unresolved_value"}] = ambiguous.residuals_by_source_id[@owner]
+  end
+
+  test "keeps a transition timing-slot mismatch fail closed" do
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: linear;",
+          "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "keeps a transition duration-slot mismatch fail closed" do
+    result =
+      run(
+        transition_css(
+          "--duration: 250; --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "fails closed when any two-spec transition reference is missing or invalid" do
+    expression =
+      "opacity var(--duration-a) var(--timing-a), transform var(--duration-b) var(--timing-b)"
+
+    definitions = %{
+      "--duration-a" => "250ms",
+      "--timing-a" => "ease-in-out",
+      "--duration-b" => "1.5s",
+      "--timing-b" => "ease-in-out"
+    }
+
+    for local_name <- Map.keys(definitions) do
+      missing_definitions =
+        definitions
+        |> Map.delete(local_name)
+        |> Enum.map_join(" ", fn {name, value} -> "#{name}: #{value};" end)
+
+      missing = run(transition_css(missing_definitions, expression))
+      refute Map.has_key?(Map.get(missing.styles_by_source_id, @owner, %{}), "transition")
+      assert [%{"reason" => "unresolved_value"}] = missing.residuals_by_source_id[@owner]
+
+      invalid_terminal =
+        if String.starts_with?(local_name, "--duration"), do: "250", else: "linear"
+
+      invalid_definitions =
+        definitions
+        |> Map.put(local_name, invalid_terminal)
+        |> Enum.map_join(" ", fn {name, value} -> "#{name}: #{value};" end)
+
+      invalid = run(transition_css(invalid_definitions, expression))
+      refute Map.has_key?(Map.get(invalid.styles_by_source_id, @owner, %{}), "transition")
+      assert [%{"reason" => "unresolved_value"}] = invalid.residuals_by_source_id[@owner]
+    end
+  end
+
+  test "keeps an unsafe sibling declaration atomic with a transition declaration" do
+    result =
+      run(
+        ".owner { --duration: 250ms; --timing: ease-in-out; " <>
+          "transition: opacity var(--duration) var(--timing); " <>
+          "background: url(https://example.test/image.png); }"
+      )
+
+    assert [%{"reason" => "unsafe_declaration"}] = result.residuals_by_source_id[@owner]
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "transition")
+    refute Map.has_key?(Map.get(result.styles_by_source_id, @owner, %{}), "background")
+  end
+
+  test "reconstructs transition values deterministically for multiple target nodes" do
+    nodes = %{
+      @owner => node(@owner, ["owner"], [1]),
+      "first-item" => node("first-item", ["item"], [1, 1], parent_id: @owner),
+      "second-item" => node("second-item", ["item"], [1, 2], parent_id: @owner)
+    }
+
+    result =
+      normalize_tree(
+        ".owner { --duration: 250ms; --timing: ease-in-out; }\n" <>
+          ".owner .item { transition: opacity var(--duration) var(--timing); }",
+        nodes,
+        %{@owner => ["first-item", "second-item"]}
+      )
+
+    for source_id <- ["first-item", "second-item"] do
+      assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+               result.styles_by_source_id[source_id]["transition"]
+    end
+  end
+
+  test "preserves base and responsive provenance for transition resolution" do
+    source_key = "_cssCustom:mobile_portrait"
+
+    result =
+      run_sources(
+        [
+          {".owner { --duration: 250ms; --timing: ease-in-out; " <>
+             "transition: opacity var(--duration) var(--timing); }", "_cssCustom", :base},
+          {".owner .child { transition: transform var(--duration) var(--timing); }", source_key,
+           {:responsive_source_key, source_key}}
+        ],
+        owner_responsive: %{
+          "mobile_portrait" => responsive_custom_css_override(source_key)
+        }
+      )
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
+    assert %StyleValue{kind: :literal, value: "transform 250ms ease-in-out"} =
+             result.responsive_by_source_id[@child]["mobile_portrait"].styles["transition"]
+  end
+
+  test "shares the owner reference budget across direct and four-reference transition values" do
+    definitions =
+      "--color: red; --duration-a: 250ms; --timing-a: ease-in-out; " <>
+        "--duration-b: 1.5s; --timing-b: ease-in-out;"
+
+    css =
+      ".owner { #{definitions} color: var(--color); background-color: var(--color); " <>
+        "border-color: var(--color); outline-color: var(--color); }\n" <>
+        ".owner .child { transition: opacity var(--duration-a) var(--timing-a), " <>
+        "transform var(--duration-b) var(--timing-b); }"
+
+    {nodes_at_limit, children_at_limit} = wide_tree(255)
+    at_limit = normalize_tree(css, nodes_at_limit, children_at_limit)
+
+    assert %StyleValue{
+             kind: :literal,
+             value: "opacity 250ms ease-in-out, transform 1.5s ease-in-out"
+           } =
+             at_limit.styles_by_source_id["child-1"]["transition"]
+
+    for property <- ["color", "background-color", "border-color", "outline-color"] do
+      assert %StyleValue{kind: :literal, value: "red"} =
+               at_limit.styles_by_source_id[@owner][property]
+    end
+
+    assert Enum.all?(at_limit.residuals_by_source_id, fn {_source_id, residuals} ->
+             residuals == []
+           end)
+
+    {nodes_over_limit, children_over_limit} = wide_tree(256)
+    over_limit = normalize_tree(css, nodes_over_limit, children_over_limit)
+
+    assert over_limit.styles_by_source_id == %{}
+
+    assert Enum.any?(over_limit.residuals_by_source_id, fn {_source_id, residuals} ->
+             Enum.any?(residuals, &(&1["reason"] == "resource_limit_exceeded"))
+           end)
+  end
+
+  test "keeps transition failures within existing public residual reasons" do
+    malformed =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing) extra"
+        )
+      )
+
+    unresolved =
+      run(
+        transition_css(
+          "--timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    assert [%{"reason" => "unresolved_value"}] = malformed.residuals_by_source_id[@owner]
+    assert [%{"reason" => "unresolved_value"}] = unresolved.residuals_by_source_id[@owner]
   end
 end

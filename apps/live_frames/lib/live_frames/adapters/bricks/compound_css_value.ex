@@ -6,8 +6,15 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   @max_tokens 32
   @max_refs 16
   @ascii_trim ~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/
+  @ascii_trim_left ~r/\A[\x20\t\r\n\f]+/
+  @ascii_trim_right ~r/[\x20\t\r\n\f]+\z/
   @local_var ~r/var\([\x20\t\r\n\f]*(--[A-Za-z0-9_-]+)[\x20\t\r\n\f]*\)/
   @dimension ~r/^-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|fr|deg|%)$/
+  @transition_reserved_properties ~w(inherit initial unset revert revert-layer none all)
+  @transition_spec ~r/\A([a-z][a-z0-9]*(?:-[a-z0-9]+)*)[\x20\t\r\n\f]+(var\([\x20\t\r\n\f]*(--[A-Za-z0-9_-]+)[\x20\t\r\n\f]*\))[\x20\t\r\n\f]+(var\([\x20\t\r\n\f]*(--[A-Za-z0-9_-]+)[\x20\t\r\n\f]*\))\z/
+  @transition_property_identifier ~r/\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z/
+  @transition_duration ~r/\A(?:\d+(?:\.\d+)?|\.\d+)(?:s|ms)\z/
+  @resolved_transition_spec ~r/\A([a-z][a-z0-9]*(?:-[a-z0-9]+)*) ([^\x20\t\r\n\f]+) ([^\x20\t\r\n\f]+)\z/
 
   defmodule Occurrence do
     @moduledoc false
@@ -19,6 +26,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
             slot_grammar:
               :gradient_stop_atom
               | :calc_operand
+              | :transition_duration_operand
               | :juxtaposition_left_operand
               | :juxtaposition_right_operand
           }
@@ -29,7 +37,11 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     defstruct [:production, :function_name, :pieces, :occurrences]
 
     @type t :: %__MODULE__{
-            production: :function_call | :multi_token_value | :var_reference_with_operation,
+            production:
+              :function_call
+              | :multi_token_value
+              | :transition_shorthand
+              | :var_reference_with_operation,
             function_name: :linear_gradient | :calc | nil,
             pieces: [binary() | {:occurrence, non_neg_integer()}],
             occurrences: [Occurrence.t()]
@@ -53,6 +65,40 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   end
 
   def parse(_), do: :no_match
+
+  @spec parse_transition_shorthand(binary()) ::
+          {:ok, Parsed.t()} | :no_match | {:error, :resource_limit_exceeded}
+  def parse_transition_shorthand(value) when is_binary(value) do
+    if byte_size(value) > @max_bytes do
+      resource()
+    else
+      case String.split(value, ",", trim: false) do
+        [single] ->
+          with {:ok, spec} <- parse_transition_spec(single) do
+            build_transition([spec])
+          else
+            _ -> :no_match
+          end
+
+        [first, second] ->
+          first = Regex.replace(@ascii_trim_right, first, "")
+          second = Regex.replace(@ascii_trim_left, second, "")
+
+          with {:ok, first_spec} <- parse_transition_spec(first),
+               {:ok, second_spec} <- parse_transition_spec(second),
+               false <- elem(first_spec, 0) == elem(second_spec, 0) do
+            build_transition([first_spec, second_spec])
+          else
+            _ -> :no_match
+          end
+
+        _ ->
+          :no_match
+      end
+    end
+  end
+
+  def parse_transition_shorthand(_), do: :no_match
 
   @spec occurrences(Parsed.t()) :: [Occurrence.t()]
   def occurrences(%Parsed{occurrences: items}), do: items
@@ -208,6 +254,65 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     end
   end
 
+  defp parse_transition_spec(value) do
+    case Regex.run(@transition_spec, value, capture: :all_but_first) do
+      [property, duration_ref, duration_name, timing_ref, timing_name] ->
+        if valid_transition_property_identifier?(property) do
+          {:ok, {property, duration_ref, duration_name, timing_ref, timing_name}}
+        else
+          :no_match
+        end
+
+      _ ->
+        :no_match
+    end
+  end
+
+  defp valid_transition_property_identifier?(property),
+    do:
+      Regex.match?(@transition_property_identifier, property) and
+        property not in @transition_reserved_properties
+
+  defp build_transition(specs) do
+    occurrences =
+      specs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {{_property, _duration_ref, duration_name, _timing_ref, timing_name},
+                           index} ->
+        [
+          %Occurrence{
+            occurrence_index: index * 2,
+            local_name: duration_name,
+            slot_grammar: :transition_duration_operand
+          },
+          %Occurrence{
+            occurrence_index: index * 2 + 1,
+            local_name: timing_name,
+            slot_grammar: :juxtaposition_right_operand
+          }
+        ]
+      end)
+
+    pieces =
+      specs
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {{property, _duration_ref, _duration_name, _timing_ref, _timing_name},
+                           index} ->
+        suffix = if index < length(specs) - 1, do: [", "], else: []
+
+        [property <> " ", {:occurrence, index * 2}, " ", {:occurrence, index * 2 + 1}] ++
+          suffix
+      end)
+
+    {:ok,
+     %Parsed{
+       production: :transition_shorthand,
+       function_name: nil,
+       pieces: pieces,
+       occurrences: occurrences
+     }}
+  end
+
   defp build(production, function_name, source, slot_refs) do
     if length(slot_refs) > @max_refs do
       resource()
@@ -326,8 +431,21 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
       Regex.match?(~r/^(?:\d+(?:\.\d+)?|\.\d+)(?:s|ms)$/, value) and
         finite_nonnegative?(String.replace(value, ~r/(?:s|ms)$/, ""))
 
+  defp valid_slot?(:transition_duration_operand, value) when is_binary(value),
+    do: valid_transition_duration?(value)
+
   defp valid_slot?(:juxtaposition_right_operand, "ease-in-out"), do: true
   defp valid_slot?(_, _), do: false
+
+  defp valid_transition_duration?(value) do
+    if Regex.match?(@transition_duration, value) do
+      unit_size = if String.ends_with?(value, "ms"), do: 2, else: 1
+      number = binary_part(value, 0, byte_size(value) - unit_size)
+      finite_nonnegative?(number)
+    else
+      false
+    end
+  end
 
   defp valid_rgb?(value) do
     case Regex.run(~r/^(rgb|rgba)\((.*)\)$/i, value, capture: :all_but_first) do
@@ -394,6 +512,9 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   defp resolved_valid?(%Parsed{production: :var_reference_with_operation}, value),
     do: juxtaposition_valid?(value)
 
+  defp resolved_valid?(%Parsed{production: :transition_shorthand}, value),
+    do: transition_resolved_valid?(value)
+
   defp resolved_valid?(%Parsed{function_name: :calc}, value), do: calc_resolved_valid?(value)
 
   defp resolved_valid?(%Parsed{function_name: :linear_gradient}, value),
@@ -446,6 +567,40 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
 
       _ ->
         false
+    end
+  end
+
+  defp transition_resolved_valid?(value) do
+    case String.split(value, ", ", trim: false) do
+      [single] ->
+        match?({:ok, _property}, parse_resolved_transition_spec(single))
+
+      [first, second] ->
+        with {:ok, first_property} <- parse_resolved_transition_spec(first),
+             {:ok, second_property} <- parse_resolved_transition_spec(second) do
+          first_property != second_property
+        else
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp parse_resolved_transition_spec(value) do
+    case Regex.run(@resolved_transition_spec, value, capture: :all_but_first) do
+      [property, duration, timing] ->
+        if valid_transition_property_identifier?(property) and
+             valid_slot?(:transition_duration_operand, duration) and
+             valid_slot?(:juxtaposition_right_operand, timing) do
+          {:ok, property}
+        else
+          :no_match
+        end
+
+      _ ->
+        :no_match
     end
   end
 

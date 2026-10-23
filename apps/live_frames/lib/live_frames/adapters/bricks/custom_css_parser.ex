@@ -1,6 +1,8 @@
 defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
   @moduledoc false
 
+  @declaration_whitespace_trim ~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/
+
   @max_finite_float 1.7976931348623157e308
   @property_name ~r/\A(?:--[A-Za-z0-9_-]+|-?[A-Za-z_][A-Za-z0-9_-]*)\z/
 
@@ -225,11 +227,11 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
 
     with {:ok, property_source} <- strip_comments(property_source),
          {:ok, value_without_comments} <- strip_comments(value_source) do
-      property = String.trim(property_source)
-      value = String.trim(value_source)
+      property = trim_declaration_whitespace(property_source)
+      value = trim_declaration_whitespace(value_source)
 
       cond do
-        property == "" or String.trim(value_without_comments) == "" ->
+        property == "" or trim_declaration_whitespace(value_without_comments) == "" ->
           {:error, :invalid_declaration}
 
         true ->
@@ -242,6 +244,9 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssParser do
       {:error, _reason} -> {:error, :invalid_declaration}
     end
   end
+
+  defp trim_declaration_whitespace(value),
+    do: Regex.replace(@declaration_whitespace_trim, value, "")
 
   defp strip_comments(text) do
     strip_comments(text, 0, 0, [])
