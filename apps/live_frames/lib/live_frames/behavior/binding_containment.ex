@@ -16,6 +16,12 @@ defmodule LiveFrames.Behavior.BindingContainment do
 
   defmodule Context do
     @moduledoc false
+
+    @type t :: %__MODULE__{
+            node_index: map(),
+            candidate_nodes: MapSet.t(String.t())
+          }
+
     defstruct [:node_index, :candidate_nodes]
   end
 
