@@ -17,7 +17,7 @@ Also consult:
 
 ## Scope and prerequisites
 
-This plan covers the bounded sanitization programme in Tasks 1 through 4. Do not begin Task 1 until this plan is reviewed, merged, and its post-merge CI is green. Do not combine Tasks 1 through 4 into one implementation PR. Do not implement any task during this docs-only publication.
+This plan covers the bounded sanitization programme in Tasks 1 through 4. Repository code implementation is limited to Tasks 1 through 3. Task 4 is verification and private out-of-band acceptance only. Do not begin Task 1 until this plan is reviewed, merged, and its post-merge CI is green. Do not combine Tasks 1 through 3 into one implementation PR. Do not implement any task during this docs-only publication.
 
 Before each implementation task, fetch origin/main and verify that the accepted authority and relevant Bricks production or test files have not changed since the task's authorized base. If main moved, inspect the delta. Stop with STOP=MAIN_MOVED_WITH_RELEVANT_OVERLAP if it touches any of these paths:
 
@@ -389,11 +389,16 @@ Also prove that identity still uses the original unmodified source bytes and tha
 - [ ] **Step 4: Rerun the Stage A tests and confirm GREEN.** Run the same two test files. Confirm both success and blocking/error results omit the admitted fields while identity still uses the original bytes.
 - [ ] **Step 5: Run applicable repository gates and review the exact diff.** Keep the PR limited to Stage A integration and its tests. Create a signed Task 3 PR, then require exact-head independent review, merge authorization, merge, and green post-merge CI.
 
-## Task 4: final gates and private acceptance
+## Task 4: final verification and private acceptance
 
-Plan this as a separate implementation PR after Task 3 has merged with green post-merge CI.
+Run Task 4 only after Task 3 has merged with green post-merge CI.
 
-Run the repository gates:
+Task 4 is verification and private out-of-band acceptance only. It authorizes no production changes, test changes, repository fixture changes, commit, or implementation PR.
+
+### Task 4 execution checklist
+
+- [ ] **Step 1: Verify exact current main and green CI.** Fetch origin/main, confirm the current head and its successful CI, and inspect any movement against the overlap stop conditions in this plan. Stop with STOP=TASK4_MAIN_NOT_GREEN if current-main CI is not green.
+- [ ] **Step 2: Run all repository gates.** From the umbrella root, run:
 
 ~~~~sh
 mix format --check-formatted
@@ -404,7 +409,10 @@ mix deps.unlock --check-unused
 git diff --check
 ~~~~
 
-After those gates pass, run the private Template 124 acceptance out of band. Do not add its source to the repository or execute imported source:
+  If a gate fails, stop with STOP=TASK4_REPOSITORY_GATE_FAILED. If a gate fails because of the Bricks execution-security implementation, report STOP=TASK4_REPOSITORY_REGRESSION_REQUIRES_CORRECTION_PR. Do not fix that failure inside Task 4. Any correction requires a separately scoped implementation correction, fresh TDD where applicable, a signed PR, exact-head review, merge authorization, merge, and green post-merge CI before Task 4 is rerun.
+- [ ] **Step 3: Require a clean worktree before private acceptance.** Confirm git status is clean and Task 4 has changed no repository files. Otherwise stop with STOP=TASK4_WORKTREE_NOT_CLEAN.
+- [ ] **Step 4: Run private Template 124 acceptance out of band.** Use the private source only outside the repository. Do not add a fixture, copy source bytes into tracked files, or execute imported source.
+- [ ] **Step 5: Recheck every private acceptance value and source identity.** Require:
 
 ~~~~text
 PRIVATE_SIGNATURE_COUNT=4
@@ -420,16 +428,69 @@ CODE3=NORMALIZED
 
 SOURCE_CODE_EXECUTED=NO
 QUERY_EDITOR_BODY_ORDINARY_HITS=0
+SOURCE_HASH_INPUT=ORIGINAL_UNMODIFIED_SOURCE_BYTES
 ~~~~
 
-Do not pin the historical DesignDocument digest. Privacy sanitization intentionally changes diagnostics, provenance, and serialized bytes. Only after this private acceptance passes may the blocked canonical-ingestion authority be revisited.
+  Stop with STOP=PRIVATE_ACCEPTANCE_IDENTITY_MISMATCH if source identity differs from the original bytes. If any other listed acceptance value fails, stop and report the failed field without changing repository files. Do not pin the historical DesignDocument digest because privacy sanitization intentionally changes diagnostics, provenance, and serialized bytes.
+- [ ] **Step 6: Return the evidence report and stop.** Record:
 
-### Task 4 execution checklist
+~~~~text
+TASK4_CLASS=VERIFICATION_AND_PRIVATE_ACCEPTANCE_GATE
+TASK4_CODE_AUTHORIZED=NO
+TASK4_REPOSITORY_FIX_SCOPE=NONE
+TASK4_REPOSITORY_FILES_CHANGED=NO
+TASK4_COMMIT_CREATED=NO
+TASK4_PR_CREATED=NO
+~~~~
 
-- [ ] **Step 1: Run every repository gate.** Run each command in the gate block above from the umbrella root and record its exit result. Fix failures only within Task 4 scope.
-- [ ] **Step 2: Run the private acceptance out of band.** Verify each listed count, body-privacy assertion, Code disposition, and no-execution assertion against the private source without copying that source into the repository.
-- [ ] **Step 3: Recheck the privacy and identity invariants.** Confirm the ordinary IR has zero raw signature hits, Query Editor body hits remain zero, and the source hash uses original bytes.
-- [ ] **Step 4: Review the exact diff and create a signed Task 4 PR.** Do not pin the historical DesignDocument digest or publish the blocked canonical-ingestion authority as part of this PR. Require exact-head independent review, merge authorization, merge, and green post-merge CI.
+  After successful Task 4, retain:
+
+~~~~text
+CANONICAL_INGESTION_PUBLICATION_AUTHORIZED=NO
+COMPONENTIZATION_AUTHORIZED=NO
+NEXT=CANONICAL_INGESTION_AUTHORITY_REVIEW
+~~~~
+
+  A separate owner and reviewer decision is required before the blocked canonical-ingestion draft may be updated or published.
+
+Task 4 stop conditions:
+
+~~~~text
+STOP=TASK4_MAIN_NOT_GREEN
+STOP=TASK4_REPOSITORY_GATE_FAILED
+STOP=TASK4_REPOSITORY_REGRESSION_REQUIRES_CORRECTION_PR
+STOP=TASK4_WORKTREE_NOT_CLEAN
+STOP=PRIVATE_ACCEPTANCE_IDENTITY_MISMATCH
+STOP=PRIVATE_TEMPLATE_SOURCE_ADDED_TO_REPOSITORY
+STOP=SOURCE_EXECUTION_REQUIRED
+STOP=CANONICAL_INGESTION_PUBLICATION_STARTED
+STOP=COMPONENTIZATION_STARTED
+~~~~
+
+Hard stop conditions:
+
+~~~~text
+STOP=TASK4_CODE_SCOPE_INTRODUCED
+STOP=TASK4_IMPLEMENTATION_PR_RETAINED
+STOP=TASK4_FAILURE_FIX_AUTHORIZED_INLINE
+
+STOP=CLASSIFIER_SCOPE_CHANGED
+STOP=SOURCE_IDENTITY_POLICY_CHANGED
+STOP=SIGNATURE_RETENTION_POLICY_CHANGED
+STOP=TASK1_SCOPE_CHANGED
+STOP=TASK2_SCOPE_CHANGED
+STOP=TASK3_SCOPE_CHANGED
+
+STOP=COMPONENTIZATION_AUTHORIZED
+STOP=CANONICAL_INGESTION_PUBLICATION_AUTHORIZED
+
+STOP=PRODUCTION_OR_TEST_FILE_CHANGED
+STOP=HISTORY_REWRITTEN
+STOP=UNSIGNED_CORRECTION
+
+STOP=EXECUTION_SECURITY_PLAN_CORRECTED_CI_PENDING
+STOP=EXECUTION_SECURITY_PLAN_CORRECTED_CI_NOT_GREEN
+~~~~
 
 ## Sequential authorization and PR gates
 
@@ -437,27 +498,32 @@ Freeze these dependencies:
 
 ~~~~text
 PROGRAMME_IMPLEMENTATION_AUTHORIZED=YES
+IMPLEMENTATION_CODE_SCOPE=TASKS_1_TO_3_ONLY
 
 TASK1_EXECUTION_AFTER_PLAN_ACCEPTANCE=YES
 
 TASK2_EXECUTION_REQUIRES_TASK1_MERGED_GREEN=YES
 TASK3_EXECUTION_REQUIRES_TASK2_MERGED_GREEN=YES
 TASK4_EXECUTION_REQUIRES_TASK3_MERGED_GREEN=YES
+TASK4_CLASS=VERIFICATION_AND_PRIVATE_ACCEPTANCE_GATE
+TASK4_CODE_AUTHORIZED=NO
+TASK4_REPOSITORY_FIX_SCOPE=NONE
+TASK4_PR_REQUIRED=NO
 
 COMPONENTIZATION_AUTHORIZED=NO
 CANONICAL_INGESTION_PUBLICATION_AUTHORIZED=NO
 ~~~~
 
-Do not combine Tasks 1 through 4 into one implementation PR. For every implementation task, require this sequence:
+Do not combine Tasks 1 through 3 into one implementation PR. For each repository implementation task in Tasks 1 through 3, require this sequence:
 
 1. TDD red-to-green cycles.
 2. Targeted verification, followed by every applicable repository gate.
 3. A signed PR limited to that task.
 4. Exact-head independent review.
 5. Merge authorization, then merge.
-6. Green post-merge CI before authorizing the next task.
+6. Green post-merge CI before authorizing the next code task.
 
-Task 1 must stop with its own PR open and unmerged until review and merge authorization. Do not start Task 2 before Task 1 is merged and green, or Task 3 before Task 2 is merged and green, or Task 4 before Task 3 is merged and green.
+Task 1 must stop with its own PR open and unmerged until review and merge authorization. Do not start Task 2 before Task 1 is merged and green, or Task 3 before Task 2 is merged and green. Run Task 4 only after Task 3 is merged with green post-merge CI. Task 4 changes no repository files and creates no commit or PR.
 
 ## Highest-risk failures and required tests
 

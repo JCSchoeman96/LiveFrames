@@ -14,7 +14,8 @@ ACCEPTED_POST_MERGE_CI_RUN=39819732247
 ACCEPTED_POST_MERGE_CI_RESULT=success
 IMPLEMENTATION_AUTHORIZED=YES
 PROGRAMME_IMPLEMENTATION_AUTHORIZED=YES
-IMPLEMENTATION_AUTHORIZATION_SCOPE=TASKS_1_TO_4_ONLY
+IMPLEMENTATION_AUTHORIZATION_SCOPE=TASKS_1_TO_3_CODE;TASK4_VERIFICATION_ONLY
+IMPLEMENTATION_CODE_SCOPE=TASKS_1_TO_3_ONLY
 IMPLEMENTATION_AUTHORIZATION_PLAN=docs/superpowers/plans/2026-10-22-bricks-execution-security-sanitization.md
 IMPLEMENTATION_AUTHORIZATION_DATE=2026-10-23
 IMPLEMENTATION_AUTHORIZATION_EFFECTIVE_AFTER_PLAN_ACCEPTANCE=YES
@@ -22,6 +23,10 @@ TASK1_EXECUTION_AFTER_PLAN_ACCEPTANCE=YES
 TASK2_EXECUTION_REQUIRES_TASK1_MERGED_GREEN=YES
 TASK3_EXECUTION_REQUIRES_TASK2_MERGED_GREEN=YES
 TASK4_EXECUTION_REQUIRES_TASK3_MERGED_GREEN=YES
+TASK4_CLASS=VERIFICATION_AND_PRIVATE_ACCEPTANCE_GATE
+TASK4_CODE_AUTHORIZED=NO
+TASK4_REPOSITORY_FIX_SCOPE=NONE
+TASK4_PR_REQUIRED=NO
 IMPLEMENTATION_PREREQUISITE_PR307_APPROVED_HEAD=6bf0beff1e485c2ab75f9420b3f510bc84203b19
 IMPLEMENTATION_PREREQUISITE_PR307_MERGE_SHA=0ea7af94e044525b91bccba0967f248b3ea2b6a8
 IMPLEMENTATION_PREREQUISITE_PR307_POST_MERGE_CI=39949991798 success
@@ -574,9 +579,12 @@ STOP=PRIVATE_TEMPLATE_SOURCE_ADDED_TO_REPOSITORY
 STOP=AUTHORITY_AUTHORIZES_COMPONENTIZATION
 ~~~~
 
-Implementation is authorized only for Tasks 1 through 4 in the published
-bounded sanitization plan. Task 1 may begin after that plan is reviewed,
-merged, and its post-merge CI is green. Each later task requires its
-predecessor to merge with green post-merge CI. This authority does not authorize
+Production and test implementation is authorized only for Tasks 1 through 3
+under the published bounded sanitization plan. Task 4 is a verification and
+private out-of-band acceptance gate and authorizes no repository code changes.
+Task 1 may begin after that plan is reviewed, merged, and its post-merge CI is
+green. Task 2 requires Task 1 to merge with green post-merge CI. Task 3
+requires Task 2 to merge with green post-merge CI. Task 4 may run only after
+Task 3 merges with green post-merge CI. This authority does not authorize
 componentization, NativeGenerator work, or publication of the canonical-
 ingestion draft.
