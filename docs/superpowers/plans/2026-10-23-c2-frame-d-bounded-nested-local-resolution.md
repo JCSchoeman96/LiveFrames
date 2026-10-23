@@ -57,8 +57,8 @@ This plan does not authorize implementation or code changes until it is independ
 
 - `dependency_outcomes` is computed once for each selected base definition during index construction. No consumer reference starts a graph walk.
 - A successful outcome contains either the definition's own terminal or the terminal from one exact passthrough. A passthrough can consume only a dependency outcome tagged as an ordinary terminal. This makes `A -> B -> C` fail with `:unsupported_nested_reference` even if B has its own independently valid one-hop outcome.
-- The existing `find_dependency_definition/3` selects B at A's path or its nearest accepted ancestor. `farther_ancestor_exists_in_scope?/3` distinguishes an eligible base B beyond the 64-hop cap without scanning past the cap.
-- Missing, foreign-provenance, sibling-only, responsive-only, and state-scoped B records map to `:no_local_definition`. Responsive and state records are not scanned to produce another C2 failure.
+- The existing `find_dependency_definition/3` selects B at A's path or its nearest accepted ancestor. `farther_ancestor_exists_in_scope?/3` distinguishes an eligible base B beyond the 64-hop cap without scanning past the cap. These helpers use opposite path orientations; the plan freezes the correct pairing in **Frozen path orientation**.
+- Missing, foreign-provenance, sibling-only, responsive-only, and state-scoped **nested B** records map to `:no_local_definition`. Responsive and state records are not scanned to manufacture a different C2 B failure. Existing **consumer/root-reference** scope behavior remains frozen separately in Task 2.
 - `CustomCssNormalizer` production remains unchanged. The resolver result follows its existing consumer-specific declaration safety and whole-rule residual path.
 
 ## File map
@@ -84,10 +84,34 @@ Add this private classifier in the resolver:
 
 ```elixir
 exact_passthrough_name(terminal_text) ::
-  {:ok, local_name} | :no_match | {:error, :invalid_local_name}
+  {:ok, local_name} | :no_match
 ```
 
-It recognizes the entire byte string as `CSS_WS* var( CSS_WS* LOCAL_NAME CSS_WS* ) CSS_WS*`. Use the existing `css_whitespace?/1` byte predicate, which already matches SPACE, TAB, LF, CR, and FF. Capture the candidate and validate it with `valid_local_name?/1`. Do not use `String.trim/1` for this grammar and do not add another local-name rule. Keep the existing `dependency_calls/2` scanner for edge accounting, fallback detection, and direct-self detection. The guard admits the exact syntax only; it does not look up B or resolve a value.
+It recognizes the entire byte string as the **literal** production `CSS_WS* "var(" CSS_WS* LOCAL_NAME CSS_WS* ")" CSS_WS*`. Use the existing `css_whitespace?/1` byte predicate, which already matches SPACE, TAB, LF, CR, and FF. The function name token is case-sensitive lowercase `var` only. Do not use `String.trim/1` for this grammar and do not add another local-name rule.
+
+Return `{:ok, local_name}` only when the captured candidate passes the existing `valid_local_name?/1` boundary. Any other captured candidate returns `:no_match`. The classifier determines **admission only**; it does not reclassify failures.
+
+Preserve existing compiler-input failure boundaries:
+
+```text
+INVALID_DEFINITION_LOCAL_NAME_ARGUMENT=invalid_local_name
+INVALID_CAPTURED_DEPENDENCY_NAME=unsupported_nested_reference
+```
+
+`definition_compiler_input_state/3` still rejects an invalid **definition** `local_name` argument with `:invalid_local_name` before terminal analysis. When `exact_passthrough_name/1` returns `:no_match` but `dependency_calls/2` found a dependency (including an invalid captured name converted to `nil` in the scanner list), retain the established `:unsupported_nested_reference` outcome. Do not introduce a new failure atom and do not map malformed `var(...)` syntax to `:invalid_local_name`.
+
+Keep the existing `dependency_calls/2` scanner unchanged for edge accounting, fallback detection, direct-self detection, CSS escape decoding, and ASCII case-folding of function identifiers during **discovery**. C2 admission must not inherit that broader scanner grammar:
+
+```text
+DEPENDENCY_DISCOVERY_GRAMMAR_BROADENED=NO
+C2_ADMISSION_USES_LITERAL_PRODUCTION=YES
+EXISTING_SCANNER_BEHAVIOR_CHANGED=NO
+LITERAL_VAR_CASE_SENSITIVE=YES
+ESCAPED_VAR_ADMITTED=NO
+ESCAPED_LOCAL_NAME_ADMITTED=NO
+```
+
+The guard admits the exact literal syntax only; it does not look up B or resolve a value.
 
 Replace the private `build_dependency_states/1` result with:
 
@@ -118,6 +142,23 @@ DEPENDENCY_GRAPH_WALK_PER_REFERENCE=NO
 NO_PROCESS_STATE_OR_CACHE=YES
 ```
 
+### Frozen path orientation
+
+Outcome keys, `find_dependency_definition/3`, and A's selected definition path use the **reversed** target path representation already stored in the index.
+
+```text
+A_SELECTED_PATH_INTERNAL=reversed_path
+
+DEPENDENCY_LOOKUP_PATH=reversed_path
+B_BOUNDED_LOOKUP=find_dependency_definition(base_definitions, b_name, reversed_path)
+
+FARTHER_ANCESTOR_TRIE_PATH=Enum.reverse(reversed_path)
+B_BEYOND_64_TRIE_PROBE=
+  farther_ancestor_exists_in_scope?(tries_by_name[b_name], Enum.reverse(reversed_path), {:base, nil})
+```
+
+`tries_by_name` is built from forward `target_path` values on definition records. `farther_ancestor_exists_in_scope?/3` walks that forward path trie. Never pass `reversed_path` to the trie probe. Do not add another ancestry algorithm.
+
 ## Task 1: Admit only the exact passthrough compiler input
 
 **Files:**
@@ -129,8 +170,8 @@ NO_PROCESS_STATE_OR_CACHE=YES
 
   - `"admits only an exact single-var passthrough compiler input"`: for local name `"--a"`, `"var(--b)"` returns `:ok`; `"12px"`, `"0.5"`, and `"auto"` remain `:ok`; `"var(--b, 4px)"` returns `{:error, :unsupported_fallback}`; `"var(--local-name)"` for local name `"--local-name"` returns `{:error, :self_reference}`.
   - `"uses only the five CSS whitespace bytes in passthrough syntax"`: each of SPACE, TAB, LF, CR, and FF is accepted before `var(`, after `(`, after the name, and after `)`; a mixed run in those positions is accepted. NBSP in any position returns `{:error, :unsupported_nested_reference}`.
-  - `"rejects non-exact passthrough compiler inputs"`: comments, escaped `var` spelling, a prefix token, a suffix token, `calc(var(--b))`, and two `var()` calls return `{:error, :unsupported_nested_reference}`.
-  - `"preserves compiler-input name and byte boundaries"`: an invalid definition name and an invalid captured candidate name return `{:error, :invalid_local_name}`; a dependency-free 4,096-byte value is accepted; 4,097 bytes returns `{:error, :resource_limit_exceeded}`.
+  - `"rejects non-exact passthrough compiler inputs"`: the following remain fail-closed with the existing `:unsupported_nested_reference` compiler-input outcome (not C2 admission): CSS comments; a prefix token; a suffix token; `calc(var(--b))`; two `var()` calls; case-altered function spellings `VAR(--b)` and `VaR(--b)`; escaped `var` spellings such as `v\\61 r(--b)`; escaped local names inside the argument such as `var(--escaped\\2dname)`; NBSP (U+00A0) in any syntactic-whitespace position.
+  - `"preserves compiler-input name and byte boundaries"`: an invalid **definition** `local_name` argument returns `{:error, :invalid_local_name}`; `var(color)` and other terminals whose captured dependency is not a valid local name return `{:error, :unsupported_nested_reference}`; a dependency-free 4,096-byte value is accepted; 4,097 bytes returns `{:error, :resource_limit_exceeded}`.
 
 - [ ] **Step 2: Run the focused resolver test and prove RED.**
 
@@ -138,7 +179,7 @@ NO_PROCESS_STATE_OR_CACHE=YES
 
   Expected: the new exact-passthrough assertion fails because `definition_compiler_input_state/3` currently classifies `var(--b)` as `:unsupported_nested_reference` when called for a different local name. Existing dependency-free, fallback, self-reference, invalid-name, and byte-boundary assertions remain as characterization checks.
 
-- [ ] **Step 3: Implement the minimal guard extension.** Add `exact_passthrough_name/1`; extend `isolated_definition_compiler_input_failure/3` on main to accept `terminal_text` and admit only a valid exact candidate whose `dependency_calls/2` result contains that same single dependency and no fallback. Preserve direct-self and fallback precedence. Keep the 4,096-byte check before scanning.
+- [ ] **Step 3: Implement the minimal guard extension.** Add `exact_passthrough_name/1` returning only `{:ok, valid_local_name}` or `:no_match`; extend `isolated_definition_compiler_input_failure/3` on main to accept `terminal_text` and admit only when `exact_passthrough_name/1` is `{:ok, captured}` and `dependency_calls/2` reports exactly `[captured]` with no fallback. When admission is `:no_match` but dependencies were discovered, preserve the existing `:unsupported_nested_reference` path. Preserve direct-self, invalid definition name, and fallback precedence. Keep the 4,096-byte check before scanning. Do not change `dependency_calls/2` discovery behavior.
 
 - [ ] **Step 4: Run the focused resolver test and prove GREEN.**
 
@@ -198,7 +239,7 @@ NO_PROCESS_STATE_OR_CACHE=YES
 
   Expected: the integration sentinel leaves `color` unresolved with a whole-rule residual because the current resolver rejects A's dependency.
 
-- [ ] **Step 3: Implement the outcome map with existing index mechanisms.** Replace `build_dependency_states/1` with `build_dependency_outcomes/3` and store `:dependency_outcomes`. Preserve the graph edge counter and cycle calculation. For each selected base definition, classify its own terminal or existing failure. For an exact passthrough, use `find_dependency_definition/3` from A's selected path, require a base B in the same already-filtered owner/provenance index, and check `external_collisions` for B. If no B is selected within the bound, use the existing base path trie and `farther_ancestor_exists_in_scope?/3` to return `:resource_limit_exceeded` only when an otherwise eligible base B exists beyond 64 hops; otherwise return `:no_local_definition`. Return B's terminal only when B's own outcome is `{:terminal, value}`. Propagate existing B errors. Convert a B outcome tagged `:passthrough` to `:unsupported_nested_reference` for A.
+- [ ] **Step 3: Implement the outcome map with existing index mechanisms.** Replace `build_dependency_states/1` with `build_dependency_outcomes/3` and store `:dependency_outcomes`. Preserve the graph edge counter and cycle calculation. For each selected base definition, classify its own terminal or existing failure. For an exact passthrough, use `find_dependency_definition/3` with A's **reversed** selected path, require a base B in the same already-filtered owner/provenance index, and check `external_collisions` for B. If no B is selected within the bound, call `farther_ancestor_exists_in_scope?/3` with `Enum.reverse(reversed_path)` per **Frozen path orientation** to return `:resource_limit_exceeded` only when an otherwise eligible base B exists beyond 64 hops; otherwise return `:no_local_definition`. Return B's terminal only when B's own outcome is `{:terminal, value}`. Propagate existing B errors. Convert a B outcome tagged `:passthrough` to `:unsupported_nested_reference` for A.
 
 - [ ] **Step 4: Run both focused files and prove GREEN.**
 
@@ -225,7 +266,15 @@ NO_PROCESS_STATE_OR_CACHE=YES
   | B is dependency-free and exactly 4,096 bytes | Success |
   | B is 4,097 bytes | `:resource_limit_exceeded` |
 
-  Keep existing `select_definition/2` candidate outcomes intact. Do not scan responsive or state scopes to manufacture a different B failure.
+  Add `"distinguishes 64-hop success from beyond-64 resource failure with non-palindromic paths"`: use distinct, non-palindromic synthetic path components (for example `[101, 202, 303, …]` rather than symmetric segments) so accidentally passing `reversed_path` to `farther_ancestor_exists_in_scope?/3` cannot still pass. Assert B exactly 64 ancestors from A succeeds and the same B placed only beyond 64 returns `:resource_limit_exceeded`.
+
+  Add root-reference scope characterization (existing behavior; not RED unless baseline already fails):
+
+  - `"keeps state-scoped consumer references fail closed"`: a state-scoped consumer reference returns `:unsupported_scope`.
+  - `"keeps responsive consumer references that select responsive definitions fail closed"`: a responsive consumer that would select only a responsive-scoped definition retains existing `:unsupported_scope` behavior.
+  - `"keeps responsive consumer base fallback unchanged"`: a responsive consumer with no responsive definition but an eligible base definition at the same path or accepted ancestor still resolves through base per existing rules.
+
+  Keep nested-dependency B rules unchanged: responsive-only B and state-scoped B remain `:no_local_definition`. Keep existing `select_definition/2` candidate outcomes intact. Do not scan responsive or state scopes to manufacture a different B failure.
 
 - [ ] **Step 6: Prove all resource bounds and reference ordering.** Re-run the existing exact boundary assertions: 256 definitions pass and 257 fail; 1,024 references pass and 1,025 fail; 1,024 dependency edges pass and 1,025 fail; 64 relative hops pass and a candidate found only past the bound is a resource failure; 4,096 terminal bytes pass and 4,097 fail. Add `"resolves one nested definition across the maximum ordered reference batch"` with 1,024 references alternating A and a direct terminal reference. Assert exactly 1,024 results in input order with the corresponding alternating values. Use no mocks or private-helper call counters.
 
@@ -301,6 +350,7 @@ Before implementation begins, compare this plan line-by-line with `docs/developm
 - one-hop only, base-only B, same owner, exact provenance, same-path then nearest ancestor, 64-hop distinction, external collision, ambiguity, conflict, self-reference, cycle, fallback, and multi-hop rejection are assigned to Task 1, 2, or 3;
 - dependency-free guard behavior, 256 definitions, 1,024 references, 1,024 dependency edges, 4,096 terminal bytes, cold-build performance, P1 policy, and no recursion are covered;
 - responsive-only and state-scoped B are ineligible and are not scanned for another failure reason;
+- root consumer state-scoped references, responsive-only consumer selection, and responsive consumer base fallback remain frozen by characterization tests;
 - terminal B values go through existing consumer safety and definitions stay out of emitted styles;
 - C1 transition grammar/routing (not one-hop FRAME D unlock), legacy direct resolution, compound behavior, and FRAME C remain unchanged;
 - no required behavior needs a production change outside the resolver file.
