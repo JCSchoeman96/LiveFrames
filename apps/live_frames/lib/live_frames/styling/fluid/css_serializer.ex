@@ -4,6 +4,7 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
   """
 
   alias LiveFrames.Styling.Fluid.Resolver
+  alias LiveFrames.Styling.Fluid.ScaleStep
   alias LiveFrames.Styling.Fluid.Value
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
@@ -53,19 +54,35 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
     |> Enum.uniq()
     |> Enum.sort()
     |> Enum.reduce_while({:ok, initial}, fn path, {:ok, acc} ->
-      case resolve_value(token_set, path) do
-        {:ok, %{semantic: semantic, domain: domain}} ->
-          name = domain_variable_name(semantic["domain_ref"])
-
+      case resolve_plan_root(token_set, path) do
+        {:ok, %{semantic: semantic, domain: domain} = resolved_root} ->
           next =
-            acc
-            |> add_domain_dependency(name, domain)
-            |> Map.update!(:values, fn values ->
-              Map.put(values, path, %{
-                path: path,
-                expression: value_expression(semantic, "var(#{name})")
-              })
-            end)
+            if Value.type?(semantic) do
+              name = domain_variable_name(semantic["domain_ref"])
+
+              acc
+              |> add_domain_dependency(name, domain)
+              |> Map.update!(:values, fn values ->
+                Map.put(values, path, %{
+                  path: path,
+                  expression: value_expression(semantic, "var(#{name})")
+                })
+              end)
+            else
+              %{scale: scale} = resolved_root
+              domain_name = domain_variable_name(scale["domain_ref"])
+              {base_name, ratio_name} = scale_variable_names(semantic["scale_ref"])
+
+              acc
+              |> add_domain_dependency(domain_name, domain)
+              |> add_scale_dependencies(semantic["scale_ref"], scale, domain_name)
+              |> Map.update!(:values, fn values ->
+                Map.put(values, path, %{
+                  path: path,
+                  expression: scale_step_expression(base_name, ratio_name, semantic["power"])
+                })
+              end)
+            end
 
           {:cont, {:ok, next}}
 
@@ -90,6 +107,23 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
 
       {:ok, _resolved_root} ->
         {:error, {:unsupported_realization, path}}
+
+      {:error, {:invalid_root_type, ^path} = reason} ->
+        invalid_root_result(token_set, path, reason)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp resolve_plan_root(token_set, path) do
+    case Resolver.resolve(token_set, path) do
+      {:ok, %{semantic: semantic} = resolved_root} ->
+        if Value.type?(semantic) or ScaleStep.type?(semantic) do
+          {:ok, resolved_root}
+        else
+          {:error, {:unsupported_realization, path}}
+        end
 
       {:error, {:invalid_root_type, ^path} = reason} ->
         invalid_root_result(token_set, path, reason)
@@ -125,6 +159,26 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
     |> Map.update!(:modern_overrides, &Map.put_new(&1, name, modern))
   end
 
+  defp add_scale_dependencies(acc, scale_path, scale, domain_name) do
+    {base_name, ratio_name} = scale_variable_names(scale_path)
+
+    base = %{
+      name: base_name,
+      expression: scale_base_expression(scale, "var(#{domain_name})")
+    }
+
+    ratio = %{
+      name: ratio_name,
+      expression: scale_ratio_expression(scale, "var(#{domain_name})")
+    }
+
+    Map.update!(acc, :fallback_dependencies, fn dependencies ->
+      dependencies
+      |> Map.put_new(base_name, base)
+      |> Map.put_new(ratio_name, ratio)
+    end)
+  end
+
   defp sort_plan(acc) do
     %{
       fallback_dependencies: acc.fallback_dependencies |> Map.values() |> Enum.sort_by(& &1.name),
@@ -135,6 +189,15 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
 
   defp domain_variable_name(path) do
     "--lf-fluid-domain-" <> String.replace(path, ".", "-") <> "-progress"
+  end
+
+  defp scale_variable_names(path) do
+    slug = String.replace(path, ".", "-")
+
+    {
+      "--lf-fluid-scale-" <> slug <> "-base",
+      "--lf-fluid-scale-" <> slug <> "-ratio"
+    }
   end
 
   defp fallback_progress(domain) do
@@ -156,6 +219,24 @@ defmodule LiveFrames.Styling.Fluid.CSSSerializer do
     finish = format_typed_value(semantic["end_value"])
 
     "calc(#{start} + ((#{finish} - #{start}) * #{progress}))"
+  end
+
+  defp scale_base_expression(scale, progress) do
+    start = format_typed_value(scale["base_start"])
+    finish = format_typed_value(scale["base_end"])
+
+    "calc(#{start} + ((#{finish} - #{start}) * #{progress}))"
+  end
+
+  defp scale_ratio_expression(scale, progress) do
+    start = format_number(scale["ratio_start"])
+    finish = format_number(scale["ratio_end"])
+
+    "calc(#{start} + ((#{finish} - #{start}) * #{progress}))"
+  end
+
+  defp scale_step_expression(base_name, ratio_name, power) do
+    "calc(var(#{base_name}) * pow(var(#{ratio_name}), #{power}))"
   end
 
   defp format_typed_value(value) when is_integer(value), do: format_number(value)
