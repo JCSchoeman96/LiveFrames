@@ -1,20 +1,35 @@
-STATUS=PROPOSED_FOR_REVIEW
+STATUS=ACCEPTED
 IMPLEMENTATION_AUTHORIZED=NO
 TEST_IMPLEMENTATION_AUTHORIZED=NO
 TASK_1_AUTHORIZED=NO
 COMPONENTIZATION_AUTHORIZED=NO
 CANONICAL_INGESTION_PUBLICATION_AUTHORIZED=NO
-AUTHORITY_ACCEPTANCE_AUTHORIZED=NO
+AUTHORITY_ACCEPTANCE_AUTHORIZED=YES
 
 # Bricks pre-classification Loader diagnostic privacy authority
 
 **Date:** 2026-10-23
 **Scope:** Proposed structural diagnostic hygiene for malformed Bricks settings
 
-This document is proposed for owner review. Publication of this proposal is
-authorized. Acceptance is not. It authorizes no production or test changes.
-The accepted execution-security authority and executable-source specification
-remain unchanged.
+This document records the accepted structural diagnostic hygiene authority.
+Publication of this authority is authorized. Acceptance authorizes no
+production or test changes. The accepted execution-security authority and
+executable-source specification remain unchanged.
+
+## Acceptance evidence
+
+```text
+ACCEPTED_PUBLICATION_PR=301
+ACCEPTED_PUBLICATION_HEAD=0476d1e54e41df1cdc9f90903c16c547031ab71d
+ACCEPTED_PUBLICATION_TREE=b8bfa12d8037ba74bb3c01d189388232265b2d42
+
+PUBLICATION_MERGE_SHA=92b5155da3657b3d86b1692340c89d77d9de5802
+PUBLICATION_MERGE_TREE=55b5db64f63aaea3631342ce7c32dbe2a6b87b44
+PUBLICATION_MERGE_SIGNATURE=VERIFIED
+
+POST_MERGE_CI_RUN=39906486336
+POST_MERGE_CI_RESULT=success
+```
 
 ## Evidence
 
@@ -318,8 +333,8 @@ STOP=PRODUCTION_OR_TEST_FILE_CHANGE_REQUIRED
 ## Review status
 
 ```text
-DOCUMENT_STATUS=PROPOSED_FOR_REVIEW
-OWNER_ACCEPTANCE_REQUIRED=YES
+DOCUMENT_STATUS=ACCEPTED
+OWNER_ACCEPTANCE_REQUIRED=NO
 IMPLEMENTATION_AUTHORIZED=NO
 TEST_IMPLEMENTATION_AUTHORIZED=NO
 TASK_1_AUTHORIZED=NO
