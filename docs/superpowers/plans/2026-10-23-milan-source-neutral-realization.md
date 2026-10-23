@@ -23,6 +23,8 @@
 - Do not copy source JavaScript, CSS, runtime code, or selectors into generated output.
 - Do not reproduce Tabs semantics or use server-side interaction state.
 - Do not widen ordinary generic-button generation.
+- `generate/3` receives no `NativeRealizationAuthority` and follows ordinary native rules only; `generic + tag=button` remains blocked.
+- Deriving native realization authority must not depend on native-generation eligibility that this authority is intended to grant. Any realization-specific eligibility exception depends on successfully derived transient authority.
 - Do not add a generated JavaScript artifact type.
 - Use existing dependencies except for the approved direct Phoenix ~> 1.8 package requirement.
 - Use TDD for behavior changes. Keep each slice small and focused.
@@ -59,6 +61,63 @@
 **Success**
 
 One signed docs-only commit and review PR; no production or test files changed.
+
+### Slice 0B — Correct Native Realization gate sequencing
+
+**Status:** authorized documentation-only correction. This records the stopped initial T2 attempt and corrects implementation order only; the approved A1/A2 semantics do not change.
+
+```text
+T2_INITIAL_ATTEMPT=STOPPED
+STOP=T2_EXISTING_AUTHORITY_GATE_INSUFFICIENT
+```
+
+The initial T2 sequence required `ComponentizationPlan.validate_for_generation_with_behavior_authority/5` before deriving `NativeRealizationAuthority`. That full generation gate also checks native-generation eligibility. N2 is currently `generic + tag=button`, which ordinary native-generation authority correctly rejects. `NativeRealizationAuthority` is intended to authorize only this exact Behavior-backed structural realization, so full native-generation validation cannot run before the authority is derived. This is an ordering cycle, not a defect in ordinary generation.
+
+Freeze these validation layers:
+
+**Layer A — approved contract gate**
+
+```elixir
+ComponentContract.validate_for_generation(approved_component_contract, design_document)
+```
+
+This proves the ComponentContract is approved for generation and its DesignDocument references are valid.
+
+**Layer B — plan and Behavior authority/reference gate**
+
+```elixir
+ComponentizationPlan.validate_references_with_behavior_authority(
+  plan,
+  approved_component_contract,
+  design_document,
+  behavior_contract,
+  selected_behavior_review_result
+)
+```
+
+This validates plan structure, the plan/document fingerprint and references, node-disposition authority, the exact BehaviorContract and approved BehaviorReviewResult, and Behavior reference integrity. It must not require every node to satisfy ordinary native-generation tag eligibility.
+
+**Layer C — transient native realization authority**
+
+```elixir
+NativeRealizationAuthority.derive(...)
+```
+
+This proves the exact Selection 1.0.0 topology and N2/N3 realization permission, then returns transient, source-neutral native permission.
+
+**Layer D — authority-aware native-generation eligibility (T3)**
+
+Ordinary nodes use existing native rules. Exact nodes covered by `NativeRealizationAuthority` may use bounded realization-specific rules. Everything else remains fail-closed. The exception is node-specific, Behavior-specific, plan-specific, DesignDocument-specific, and transient; it must not be semantic-type-global. Do not widen the global native-tag map.
+
+T2-R1 must pass both Layer A and Layer B before running realization-specific guards. Diagnostics from either existing gate pass through unchanged. It must not call `ComponentizationPlan.validate_for_generation_with_behavior_authority/5` before deriving realization authority, and it must not bypass either Layer A or Layer B.
+
+T2-R1 must not modify `@native_tags`, native-generation validation, NativeGenerator, Renderer, or StyleIntegration, and must not create an exception in ordinary generation.
+
+T3 generation order is: Layer A, Layer B, derive Layer C, run Layer D, pass the existing exact-authority ComponentReview gate, build `FilteredStructure`, then call `StyleIntegration(authority)` and `Renderer(authority)`. ComponentReview placement may remain consistent with its current identity responsibilities, but generation must not render unless both ComponentReview authority and native realization authority pass when the Selection exception applies.
+
+The ordinary-generation invariant remains: `generate/3` has no realization authority; `generic + tag=button` stays blocked. `generate/7` with missing or incorrect Behavior authority, or with failed realization guards, also leaves that shape blocked. Only the exact successfully derived transient authority can authorize the exceptional realization.
+
+This correction does not change Selection 1.0.0 semantics, the N2 structural div realization, the N3 heading/button carrier, `aria-pressed` policy, hidden presentation policy, timer lifecycle, picture policy, BehaviorContract, BehaviorReviewResult, DesignDocument, R1A public surface, or serialized schemas. No Behavior or review reissue is required.
 
 ## Phase 1 — Shared binding containment
 
@@ -116,6 +175,8 @@ NativeRealizationAuthority.derive(approved_component_contract, plan, design_docu
 
 The result is transient generation-time permission and is never serialized. It may identify N2 as the control owner and N3 as its heading-button activation carrier.
 
+Before realization-specific guards run, require both Layer A (`ComponentContract.validate_for_generation/2`) and Layer B (`ComponentizationPlan.validate_references_with_behavior_authority/5`) from Slice 0B to pass. Preserve diagnostics from either gate unchanged. Do not use `ComponentizationPlan.validate_for_generation_with_behavior_authority/5` as the upstream gate: its native-generation eligibility check rejects the exact generic-button shape that this authority must prove.
+
 **Exact Selection guards**
 
 Require all of the following before granting authority:
@@ -135,6 +196,7 @@ A failed guard grants no permission.
 **Tests**
 
 - [ ] Each guard can fail independently.
+- [ ] Layer A or Layer B failure returns its existing diagnostics unchanged and grants no authority.
 - [ ] An ordinary generic button receives no authority.
 - [ ] Wrong primitive, unapproved review, control-only, activate-only, split binding, outside binding, changed N3 topology, or missing heading-level projection is blocked.
 - [ ] A plan alone cannot forge authority.
@@ -158,9 +220,19 @@ A failed guard grants no permission.
 
 **Required flow**
 
-Behavior-aware generate/7 validates the existing exact Behavior gate, derives NativeRealizationAuthority, then passes it through filtered structure, StyleIntegration, renderer indexes, and rendering. Do not discard Behavior context before rendering.
+Behavior-aware generate/7 passes Layer A and Layer B from Slice 0B, derives `NativeRealizationAuthority`, then applies authority-aware native-generation eligibility before passing authority through filtered structure, StyleIntegration, renderer indexes, and rendering. The existing exact-authority ComponentReview gate must also pass before rendering. Do not discard Behavior context before rendering.
 
-Ordinary generate/3 receives empty authority and remains fail-closed. Preserve the public generate/7 signature; derive authority from its final approved inputs.
+Ordinary generate/3 receives no `NativeRealizationAuthority` and follows ordinary native rules, so generic + tag=button remains blocked. Preserve the public generate/7 signature; derive authority from its final approved inputs. Missing/wrong Behavior authority or failed realization guards must not authorize the exceptional shape. Do not modify the global native-tag map or create an ordinary-generation exception.
+
+T3 introduces only the authority-aware eligibility surface needed by this flow. The exact internal API is left to implementation review; its behavior is equivalent to:
+
+```text
+ordinary_native_eligible?(node)
+OR
+authorized_native_realization?(node, authority)
+```
+
+The realization branch requires the successfully derived exact `NativeRealizationAuthority`; all other shapes fail closed. Native realization authority derivation must not depend on the native eligibility exception it grants.
 
 **Tests**
 
