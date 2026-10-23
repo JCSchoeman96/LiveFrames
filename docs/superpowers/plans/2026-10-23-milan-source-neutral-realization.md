@@ -24,7 +24,7 @@
 - Do not reproduce Tabs semantics or use server-side interaction state.
 - Do not widen ordinary generic-button generation.
 - Do not add a generated JavaScript artifact type.
-- Use existing dependencies except for the approved direct Phoenix 1.8 package requirement.
+- Use existing dependencies except for the approved direct Phoenix ~> 1.8 package requirement.
 - Use TDD for behavior changes. Keep each slice small and focused.
 - Stop on a listed STOP condition. Report the evidence and do not work around it.
 
@@ -232,42 +232,50 @@ Use package-owned button neutralization for font and color inheritance, transpar
 
 ## Phase 5 — Selection runtime
 
-### Slice 5A — Package and host capability
+### Slice 5A — Package and build capability
 
 **Files**
 
 - Modify apps/live_frames/mix.exs.
-- Modify config/config.exs to add Mix.Project.build_path() to the host esbuild NODE_PATH alongside repository dependencies.
-- Modify apps/live_frames_preview/assets/js/app.js.
+- Modify config/config.exs.
 
 **Requirements**
 
-- Add the already-approved direct Phoenix ~> 1.8.13 requirement.
+- Add the approved direct Phoenix ~> 1.8 requirement to the reusable LiveFrames package. Do not raise the minimum to 1.8.13.
 - Retain phoenix_live_view ~> 1.2.11.
 - Enable the :phoenix_live_view compiler.
 - Add Mix.Project.build_path() to the host esbuild NODE_PATH alongside repository dependencies.
-- Import the generated colocated hook manifest in app.js and pass its hooks to LiveSocket.
-- Keep the existing generated JavaScript artifact type.
+- Keep GeneratedArtifactBundle artifact kinds unchanged: :elixir_module and :stylesheet.
+- No JavaScript artifact kind exists and none may be added.
+- The Selection hook will use LiveView component-colocated hook extraction.
 
 **Checks**
 
-- [ ] Compile the package.
-- [ ] Build preview assets and prove the hook manifest resolves.
-- [ ] Prove preview starts with hooks registered.
+- [ ] Existing package compilation succeeds.
+- [ ] The existing asset build succeeds.
+- [ ] GeneratedArtifactBundle still has exactly the :elixir_module and :stylesheet kinds, with no JavaScript kind.
 
 **STOP**
 
 - STOP=NEW_RUNTIME_DEPENDENCY_REQUIRED
-- STOP=GENERATED_JS_ARTIFACT_TYPE_REQUIRED
-- STOP=HOST_CANNOT_RESOLVE_COLOCATED_MANIFEST
+- STOP=GENERATED_JS_ARTIFACT_KIND_REQUIRED
 
-### Slice 5B — Add the colocated Selection hook
+### Slice 5B — Add and register the colocated Selection hook
 
 **Files**
 
 - Add generated hook source through apps/live_frames/lib/live_frames/native_generator/renderer.ex.
+- Modify apps/live_frames_preview/assets/js/app.js.
 - Add focused tests in apps/live_frames/test/live_frames/native_generator/milan_selection_runtime_test.exs.
 - Add browser or integration proof under the existing preview browser-test location; do not introduce a new testing framework.
+
+This is the first slice that creates and consumes a LiveFrames colocated hook.
+
+**Hook registration**
+
+- [ ] Import the phoenix-colocated/live_frames manifest in app.js.
+- [ ] Pass the manifest hooks to LiveSocket.
+- [ ] Prove the manifest resolves and the preview registers the hook.
 
 **Instance states**
 
@@ -324,9 +332,11 @@ Advance every 5000 ms with wraparound. A timer tick never changes focus. Reduced
 - [ ] Valid recovery without clamping.
 - [ ] Multiple-instance isolation.
 - [ ] Disconnect/reconnect and destroy cleanup.
+- [ ] Prove the manifest resolves and LiveSocket has the Selection hook registered.
 
 **STOP**
 
+- STOP=HOST_CANNOT_RESOLVE_COLOCATED_MANIFEST
 - STOP=SERVER_EVENT_REQUIRED
 - STOP=SERVER_STATE_REQUIRED
 - STOP=DOCUMENT_GLOBAL_SELECTOR_REQUIRED
