@@ -6,9 +6,13 @@ defmodule LiveFrames.Tokens.CSSValue do
   declaration policy to the returned candidate.
   """
 
-  alias LiveFrames.Tokens.Token
+  alias LiveFrames.Styling.Fluid.{CSSSerializer, Domain, Scale, ScaleStep, Value}
+  alias LiveFrames.Tokens.{Token, TokenSet}
 
   @type reason :: :unresolved | :resolved_value_missing | :non_serializable
+  @type contextual_reason :: reason() | CSSSerializer.reason() | {:invalid_fluid_target, term()}
+
+  @fluid_targets [:legacy, :fallback, :modern]
 
   @spec candidate(Token.t() | map()) :: {:ok, String.t()} | {:error, reason()}
   def candidate(%Token{resolution_status: :resolved} = token) do
@@ -29,6 +33,47 @@ defmodule LiveFrames.Tokens.CSSValue do
   def candidate(%{"resolution_status" => "unresolved"}), do: {:error, :unresolved}
 
   def candidate(_token), do: {:error, :unresolved}
+
+  @spec candidate(TokenSet.t(), Token.t(), keyword()) ::
+          {:ok, String.t()} | {:error, contextual_reason()}
+  def candidate(%TokenSet{} = token_set, %Token{} = token, options) when is_list(options) do
+    fluid_target = Keyword.get(options, :fluid_target, :legacy)
+
+    if fluid_target in @fluid_targets do
+      contextual_candidate(token_set, token, fluid_target)
+    else
+      {:error, {:invalid_fluid_target, fluid_target}}
+    end
+  end
+
+  defp contextual_candidate(token_set, %Token{resolution_status: :resolved} = token, fluid_target) do
+    if fluid_semantic?(token.resolved_value) do
+      fluid_candidate(token_set, token, fluid_target)
+    else
+      candidate(token)
+    end
+  end
+
+  defp contextual_candidate(_token_set, token, _fluid_target), do: candidate(token)
+
+  defp fluid_candidate(token_set, token, :legacy) do
+    CSSSerializer.legacy_value(token_set, token.path)
+  end
+
+  defp fluid_candidate(token_set, token, fluid_target)
+       when fluid_target in [:fallback, :modern] do
+    with {:ok, %{values: values}} <- CSSSerializer.plan(token_set, [token.path]) do
+      case Enum.find(values, &(&1.path == token.path)) do
+        %{expression: expression} -> {:ok, expression}
+        nil -> {:error, {:unsupported_realization, token.path}}
+      end
+    end
+  end
+
+  defp fluid_semantic?(semantic) do
+    Domain.type?(semantic) or Value.type?(semantic) or Scale.type?(semantic) or
+      ScaleStep.type?(semantic)
+  end
 
   defp candidate(:resolved, nil, _metadata, _source_expression),
     do: {:error, :resolved_value_missing}
