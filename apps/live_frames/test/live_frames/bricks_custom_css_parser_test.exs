@@ -121,6 +121,63 @@ defmodule LiveFrames.BricksCustomCssParserTest do
            }
   end
 
+  test "trims each CSS whitespace character at the declaration property boundary" do
+    for whitespace <- [" ", "\t", "\r", "\n", "\f"] do
+      frame = parse_single(".card { #{whitespace}color#{whitespace}: red; }")
+
+      assert frame.declarations == %{"color" => "red"}
+    end
+  end
+
+  test "trims each CSS whitespace character at the declaration value boundary" do
+    for whitespace <- [" ", "\t", "\r", "\n", "\f"] do
+      frame = parse_single(".card { color: #{whitespace}red#{whitespace}; }")
+
+      assert frame.declarations == %{"color" => "red"}
+    end
+  end
+
+  test "trims mixed CSS whitespace runs at both declaration boundaries" do
+    frame = parse_single(".card { \t \f\r\ncolor\n \t: \t \f\r\nred\n \t; }")
+
+    assert frame.declarations == %{"color" => "red"}
+  end
+
+  test "preserves leading NBSP at the declaration property boundary" do
+    nbsp = <<0xC2, 0xA0>>
+    css = ".card { #{nbsp}color: red; }"
+
+    assert_rejected(css, :invalid_declaration)
+  end
+
+  test "preserves trailing NBSP at the declaration property boundary" do
+    nbsp = <<0xC2, 0xA0>>
+    css = ".card { color#{nbsp}: red; }"
+
+    assert_rejected(css, :invalid_declaration)
+  end
+
+  test "preserves leading NBSP in the declaration value" do
+    nbsp = <<0xC2, 0xA0>>
+    frame = parse_single(".card { color: #{nbsp}red; }")
+
+    assert frame.declarations == %{"color" => nbsp <> "red"}
+  end
+
+  test "preserves trailing NBSP in the declaration value" do
+    nbsp = <<0xC2, 0xA0>>
+    frame = parse_single(".card { color: red#{nbsp}; }")
+
+    assert frame.declarations == %{"color" => "red" <> nbsp}
+  end
+
+  test "does not treat an NBSP-only declaration value as CSS whitespace" do
+    nbsp = <<0xC2, 0xA0>>
+    frame = parse_single(".card { color: #{nbsp}; }")
+
+    assert frame.declarations == %{"color" => nbsp}
+  end
+
   test "accepts a complete property token followed by a comment" do
     frame = parse_single(".card { color/**/: red; }")
 

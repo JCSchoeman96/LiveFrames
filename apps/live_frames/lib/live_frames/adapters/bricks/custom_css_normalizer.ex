@@ -1,6 +1,8 @@
 defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   @moduledoc false
 
+  @css_whitespace_trim ~r/\A[\x20\t\r\n\f]+|[\x20\t\r\n\f]+\z/
+
   alias LiveFrames.Adapters.Bricks.CustomCssParser
   alias LiveFrames.Adapters.Bricks.CompoundCssValue
   alias LiveFrames.Adapters.Bricks.Diagnostic
@@ -492,7 +494,7 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   end
 
   defp compound_route(property, value) when is_binary(value) do
-    trimmed = String.trim(value)
+    trimmed = trim_css_whitespace(value)
     lowered = String.downcase(trimmed)
 
     cond do
@@ -511,6 +513,8 @@ defmodule LiveFrames.Adapters.Bricks.CustomCssNormalizer do
   end
 
   defp compound_route(_property, _value), do: :generic
+
+  defp trim_css_whitespace(value), do: Regex.replace(@css_whitespace_trim, value, "")
 
   defp compound_analysis(property, value) do
     case CompoundCssValue.parse(value) do

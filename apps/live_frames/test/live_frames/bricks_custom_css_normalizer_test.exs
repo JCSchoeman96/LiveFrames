@@ -237,9 +237,9 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
     end
   end
 
-  test "trims outer declaration whitespace before compound parsing" do
+  test "trims ASCII CSS whitespace before compound parsing" do
     result =
-      run(".owner { --measure: 12px; width: \u00a0calc(var(--measure) * 2)\u00a0; }")
+      run(".owner { --measure: 12px; width: \t \f\r\ncalc(var(--measure) * 2)\n \t; }")
 
     assert %StyleValue{kind: :literal, value: "calc(12px * 2)"} =
              result.styles_by_source_id[@owner]["width"]
@@ -1518,6 +1518,57 @@ defmodule LiveFrames.BricksCustomCssNormalizerTest do
            } = result.styles_by_source_id[@owner]["transition"]
 
     refute result.styles_by_source_id[@owner]["transition"].value =~ "var("
+    assert result.residuals_by_source_id[@owner] == []
+  end
+
+  test "fails closed for a leading NBSP at a transition value boundary" do
+    nbsp = <<0xC2, 0xA0>>
+
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          nbsp <> "opacity var(--duration) var(--timing)"
+        )
+      )
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Map.has_key?(styles, "transition")
+           end)
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "fails closed for a trailing NBSP at a transition value boundary" do
+    nbsp = <<0xC2, 0xA0>>
+
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          "opacity var(--duration) var(--timing)" <> nbsp
+        )
+      )
+
+    refute Enum.any?(result.styles_by_source_id, fn {_source_id, styles} ->
+             Map.has_key?(styles, "transition")
+           end)
+
+    assert [%{"reason" => "unresolved_value"}] = result.residuals_by_source_id[@owner]
+  end
+
+  test "resolves transition values surrounded by ordinary ASCII CSS whitespace" do
+    result =
+      run(
+        transition_css(
+          "--duration: 250ms; --timing: ease-in-out;",
+          "\t \f\r\nopacity var(--duration) var(--timing)\n \t"
+        )
+      )
+
+    assert %StyleValue{kind: :literal, value: "opacity 250ms ease-in-out"} =
+             result.styles_by_source_id[@owner]["transition"]
+
     assert result.residuals_by_source_id[@owner] == []
   end
 
