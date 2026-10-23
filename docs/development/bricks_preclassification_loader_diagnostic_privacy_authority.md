@@ -9,7 +9,7 @@ AUTHORITY_ACCEPTANCE_AUTHORIZED=YES
 # Bricks pre-classification Loader diagnostic privacy authority
 
 **Date:** 2026-10-23
-**Scope:** Proposed structural diagnostic hygiene for malformed Bricks settings
+**Scope:** Structural diagnostic hygiene for malformed Bricks settings
 
 This document records the accepted structural diagnostic hygiene authority.
 Publication of this authority is authorized. Acceptance authorizes no
