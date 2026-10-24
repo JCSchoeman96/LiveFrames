@@ -132,7 +132,8 @@ defmodule LiveFrames.Behavior.NativeRealizationAuthority do
                validate_link_binding_conflicts(
                  design_document,
                  control_node_id,
-                 carrier_node_id
+                 carrier_node_id,
+                 selection_binding
                ),
              :ok <-
                validate_behavior_conflicts(
@@ -192,6 +193,9 @@ defmodule LiveFrames.Behavior.NativeRealizationAuthority do
         case PrimitiveRegistry.resolve(binding.primitive_ref) do
           {:ok, {:selection_v1, _default_position}} ->
             {[binding | selections], unsupported}
+
+          {:ok, _other_supported_primitive} ->
+            {selections, unsupported}
 
           :error ->
             {selections,
@@ -473,17 +477,18 @@ defmodule LiveFrames.Behavior.NativeRealizationAuthority do
   defp validate_link_binding_conflicts(
          %DesignDocument{value_bindings: value_bindings},
          control_node_id,
-         carrier_node_id
+         carrier_node_id,
+         %Binding{binding_id: selected_binding_id}
        ) do
     diagnostics =
       value_bindings
       |> Enum.flat_map(fn
-        {value_binding_id, %ValueBinding{target_node_id: node_id, target_kind: :link_url}}
+        {_value_binding_id, %ValueBinding{target_node_id: node_id, target_kind: :link_url}}
         when node_id in [control_node_id, carrier_node_id] ->
           [
             realization_diagnostic(
               "behavior.native_realization.link_binding_conflict",
-              value_binding_id,
+              selected_binding_id,
               node_id,
               "Selection control or activation carrier also has a link_url ValueBinding"
             )

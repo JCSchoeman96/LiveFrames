@@ -541,16 +541,26 @@ defmodule LiveFrames.Behavior.NativeRealizationAuthorityTest do
           component_contract_transform: &with_link_projection(&1, node_id)
         )
 
+      {_component_contract, _plan, _document, behavior_contract, _review} = tuple
+      [selected_binding] = behavior_contract.bindings
+
       assert {:error, diagnostics} = derive(tuple)
 
-      assert Enum.any?(
-               diagnostics,
-               &(&1.code == "behavior.native_realization.link_binding_conflict")
-             )
+      assert [diagnostic] =
+               Enum.filter(
+                 diagnostics,
+                 &(&1.code == "behavior.native_realization.link_binding_conflict")
+               )
+
+      assert diagnostic.binding_id == selected_binding.binding_id
+      assert diagnostic.node_id == node_id
+      assert diagnostic.severity == "error"
+      assert diagnostic.category == "realization"
+      assert diagnostic.source_trace == nil
     end
   end
 
-  test "another Behavior binding that directly claims N2 or N3 cannot derive authority" do
+  test "another Selection binding that claims N2 or N3 is denied as ambiguous" do
     for claimed_node <- [ids().control, ids().carrier] do
       tuple =
         valid_tuple(
