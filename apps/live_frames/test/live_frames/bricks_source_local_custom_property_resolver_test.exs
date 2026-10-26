@@ -3,6 +3,8 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
   alias LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver
   alias LiveFrames.Fidelity.CSSDeclaration
+  alias LiveFrames.Tokens.Token
+  alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Tokens.VariableAuthority
 
   @owner_source_id "owner"
@@ -58,6 +60,83 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
       effective_provenance_identity: effective_provenance_identity,
       authority_index: %VariableAuthority{}
     ]
+  end
+
+  defp external_authority_index(variable, resolved_value) do
+    index_from_tokens([authority_token(variable, "spacing.synthetic", resolved_value)])
+  end
+
+  defp ambiguous_external_authority_index(variable) do
+    index_from_tokens([
+      authority_token(variable, "spacing.first", "12px"),
+      authority_token(variable, "spacing.second", "18px")
+    ])
+  end
+
+  defp unresolved_external_authority_index(variable) do
+    index_from_tokens([
+      authority_token(variable, "spacing.unresolved", nil, :unresolved)
+    ])
+  end
+
+  defp index_from_tokens(tokens) do
+    token_set = TokenSet.new(tokens: Map.new(tokens, &{&1.path, &1}))
+    assert {:ok, index} = VariableAuthority.build(token_set)
+    index
+  end
+
+  defp authority_token(variable, path, resolved_value, status \\ :resolved) do
+    authority = %{
+      "variable" => variable,
+      "kind" => "source_output_alias",
+      "authority_id" => "synthetic:#{path}",
+      "source_key" => path,
+      "source_version" => "4.0.1"
+    }
+
+    resolved? = status == :resolved
+
+    %Token{
+      path: path,
+      category: :spacing,
+      value: if(resolved?, do: resolved_value, else: nil),
+      resolved_value: if(resolved?, do: resolved_value, else: nil),
+      source_expression: if(resolved?, do: resolved_value, else: "var(--pending)"),
+      resolution_status: status,
+      metadata: %{"variable_authorities" => [authority]}
+    }
+  end
+
+  defp missing_token_authority_index(variable) do
+    path = "spacing.missing"
+
+    authority = %{
+      "variable" => variable,
+      "kind" => "source_output_alias",
+      "authority_id" => "synthetic:#{path}",
+      "source_key" => path,
+      "source_version" => "4.0.1"
+    }
+
+    %VariableAuthority{by_variable: %{variable => %{path => [authority]}}}
+  end
+
+  defp raw_external_authority_index(variable, terminal) do
+    token = authority_token(variable, "spacing.synthetic", terminal)
+    authority = hd(token.metadata["variable_authorities"])
+
+    %VariableAuthority{
+      by_variable: %{variable => %{token.path => [authority]}},
+      tokens_by_path: %{token.path => token}
+    }
+  end
+
+  defp resolve_external_passthrough(terminal, authority_index) do
+    resolve(
+      [definition("--a", terminal, [1])],
+      [reference("--a", [1])],
+      authority_index: authority_index
+    )
   end
 
   defp resolve(definitions, references, opts \\ []) do
@@ -673,6 +752,108 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
     assert {:ok, [{:ok, "12px"}]} =
              resolve(definitions, [reference("--a", [1])])
+  end
+
+  test "passes an exact local reference through to a unique resolved external terminal" do
+    authority_index = external_authority_index("--external-b", "18px")
+
+    assert {:ok, [{:ok, "18px"}]} =
+             resolve(
+               [definition("--a", "var(--external-b)", [1])],
+               [reference("--a", [1])],
+               authority_index: authority_index
+             )
+  end
+
+  test "fails closed when external B has no authority" do
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve_external_passthrough("var(--external-b)", %VariableAuthority{})
+  end
+
+  test "fails closed when external B has ambiguous authority" do
+    authority_index = ambiguous_external_authority_index("--external-b")
+
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "fails closed when the external B candidate token is missing" do
+    authority_index = missing_token_authority_index("--external-b")
+
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "fails closed when the external B candidate token is unresolved" do
+    authority_index = unresolved_external_authority_index("--external-b")
+
+    assert {:ok, [{:error, :no_local_definition}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "rejects a non-binary external resolved value" do
+    authority_index = raw_external_authority_index("--external-b", %{"value" => "18px"})
+
+    assert {:ok, [{:error, :unsupported_terminal_value}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "rejects an external resolved value above the terminal byte limit" do
+    terminal = String.duplicate("x", 4097)
+    authority_index = raw_external_authority_index("--external-b", terminal)
+
+    assert {:ok, [{:error, :resource_limit_exceeded}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "rejects an external resolved value with an unresolved var dependency" do
+    authority_index = raw_external_authority_index("--external-b", "var(--external-c)")
+
+    assert {:ok, [{:error, :unsupported_nested_reference}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "rejects fallback syntax in an external resolved value" do
+    authority_index = raw_external_authority_index("--external-b", "var(--external-c, 18px)")
+
+    assert {:ok, [{:error, :unsupported_fallback}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "rejects external resolved values outside the existing CSS safety boundary" do
+    authority_index = raw_external_authority_index("--external-b", "18px; color: red")
+
+    assert {:ok, [{:error, :unsupported_terminal_value}]} =
+             resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "does not hand off fallback or composed A values to external authority" do
+    authority_index = external_authority_index("--external-b", "18px")
+
+    cases = [
+      {"var(--external-b, 12px)", :unsupported_fallback},
+      {"prefix var(--external-b)", :unsupported_nested_reference},
+      {"var(--external-b) 12px", :unsupported_nested_reference},
+      {"calc(var(--external-b))", :unsupported_nested_reference},
+      {"var(--external-b) var(--other)", :unsupported_nested_reference}
+    ]
+
+    for {terminal, expected} <- cases do
+      assert {:ok, [{:error, ^expected}]} =
+               resolve_external_passthrough(terminal, authority_index)
+    end
+  end
+
+  test "keeps an eligible local B and matching external authority fail-closed" do
+    authority_index = external_authority_index("--b", "18px")
+    definitions = [definition("--a", "var(--b)", [1]), definition("--b", "12px", [1])]
+
+    assert {:ok, [{:error, :external_authority_collision}]} =
+             resolve(
+               definitions,
+               [reference("--a", [1])],
+               authority_index: authority_index
+             )
   end
 
   test "rejects a second dependency hop without expanding it" do

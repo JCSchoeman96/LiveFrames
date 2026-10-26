@@ -18,6 +18,10 @@ defmodule LiveFrames.Tokens.VariableAuthority do
           resolution_status: :resolved | :unresolved | nil
         }
 
+  @type terminal_result ::
+          {:ok, candidate(), term()}
+          | {:error, :no_authority | :ambiguous_candidates | :token_missing | :token_unresolved}
+
   @type t :: %__MODULE__{
           by_variable: %{optional(String.t()) => %{optional(String.t()) => [map()]}},
           tokens_by_path: %{optional(String.t()) => Token.t()}
@@ -73,6 +77,30 @@ defmodule LiveFrames.Tokens.VariableAuthority do
       end
 
     %{state: state, variable: variable, candidates: candidates}
+  end
+
+  @doc "Returns the resolved value for one unique, present authority candidate."
+  @spec resolve_terminal(t(), String.t()) :: terminal_result()
+  def resolve_terminal(%__MODULE__{} = index, variable) when is_binary(variable) do
+    case resolve(index, variable) do
+      %{state: :no_authority} ->
+        {:error, :no_authority}
+
+      %{state: :ambiguous_candidates} ->
+        {:error, :ambiguous_candidates}
+
+      %{state: :unique_candidate, candidates: [candidate]} ->
+        case Map.fetch(index.tokens_by_path, candidate.token_path) do
+          {:ok, %Token{resolution_status: :resolved} = token} ->
+            {:ok, candidate, token.resolved_value}
+
+          {:ok, _token} ->
+            {:error, :token_unresolved}
+
+          :error ->
+            {:error, :token_missing}
+        end
+    end
   end
 
   defp candidate(index, path, authorities) do

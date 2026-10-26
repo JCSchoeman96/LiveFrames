@@ -172,7 +172,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
            build_dependency_outcomes(
              selected_by_path_scope,
              tries_by_name,
-             external_collisions
+             external_collisions,
+             authority_index
            ) do
       {:ok,
        %{
@@ -529,7 +530,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
   defp build_dependency_outcomes(
          selected_by_path_scope,
          tries_by_name,
-         external_collisions
+         external_collisions,
+         authority_index
        ) do
     case collect_dependency_data(selected_by_path_scope) do
       {:error, :resource_limit_exceeded} ->
@@ -612,7 +614,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             initial_outcomes,
             base_definitions,
             tries_by_name,
-            external_collisions
+            external_collisions,
+            authority_index
           )
 
         {:ok, dependency_outcomes}
@@ -623,7 +626,8 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          outcomes,
          base_definitions,
          tries_by_name,
-         external_collisions
+         external_collisions,
+         authority_index
        ) do
     Map.new(outcomes, fn
       {key, {:passthrough_pending, b_name}} ->
@@ -636,6 +640,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
             base_definitions,
             tries_by_name,
             external_collisions,
+            authority_index,
             outcomes
           )
 
@@ -652,6 +657,7 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
          base_definitions,
          tries_by_name,
          external_collisions,
+         authority_index,
          outcomes
        ) do
     target_path = Enum.reverse(a_reversed_path)
@@ -663,7 +669,11 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
         if farther_ancestor_exists_in_scope?(trie, target_path, {:base, nil}) do
           {:error, :resource_limit_exceeded}
         else
-          {:error, :no_local_definition}
+          if MapSet.member?(external_collisions, b_name) do
+            {:error, :no_local_definition}
+          else
+            resolve_external_terminal(authority_index, b_name)
+          end
         end
 
       {_b_name, b_reversed_path} ->
@@ -700,6 +710,45 @@ defmodule LiveFrames.Adapters.Bricks.SourceLocalCustomPropertyResolver do
         end
     end
   end
+
+  defp resolve_external_terminal(authority_index, variable) do
+    case VariableAuthority.resolve_terminal(authority_index, variable) do
+      {:ok, _candidate, terminal} ->
+        case validate_external_terminal(terminal) do
+          {:ok, validated_terminal} -> {:passthrough, validated_terminal}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, _reason} ->
+        {:error, :no_local_definition}
+    end
+  end
+
+  defp validate_external_terminal(terminal) when is_binary(terminal) do
+    cond do
+      byte_size(terminal) > @max_terminal_bytes ->
+        {:error, :resource_limit_exceeded}
+
+      not CSSDeclaration.safe_value?(terminal) ->
+        {:error, :unsupported_terminal_value}
+
+      true ->
+        case dependency_calls(terminal, @max_dependency_edges + 1) do
+          :limit ->
+            {:error, :resource_limit_exceeded}
+
+          {:ok, names, fallback?} ->
+            cond do
+              fallback? -> {:error, :unsupported_fallback}
+              names != [] -> {:error, :unsupported_nested_reference}
+              true -> {:ok, terminal}
+            end
+        end
+    end
+  end
+
+  defp validate_external_terminal(_terminal),
+    do: {:error, :unsupported_terminal_value}
 
   defp collect_dependency_data(selected_by_path_scope) do
     Enum.reduce_while(selected_by_path_scope, {:ok, %{}, 0}, fn
