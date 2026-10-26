@@ -14,6 +14,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Adapters.Bricks.Diagnostic, as: BricksDiagnostic
   alias LiveFrames.Adapters.Bricks.Document
   alias LiveFrames.Adapters.Bricks.Element
+  alias LiveFrames.Adapters.Bricks.ExecutionSecuritySanitizer
   alias LiveFrames.Adapters.Bricks.FrontendBindingNormalizer
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Resolver
@@ -130,7 +131,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
            authorize_structural_variable_authority(
              Keyword.get(opts, :structural_variable_authority)
            ),
-         {:ok, document, load_diagnostics} <- load_source(source, opts),
+         {:ok, private_document, document, load_diagnostics} <-
+           load_sanitized_source(source, opts),
          {:ok, proxy, component, resolve_diagnostics} <-
            Resolver.resolve(document,
              component_id: component_selection(document, opts)
@@ -171,6 +173,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
         {:error, to_ir_diagnostics(diagnostics)}
       else
         {theme_styles, theme_diagnostics} = load_theme_styles(Keyword.get(opts, :theme_styles))
+        private_code_sources = private_code_sources(private_document, component, tree)
 
         context = %{
           document: document,
@@ -190,7 +193,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           theme_styles: theme_styles
         }
 
-        assemble(context)
+        assemble(context, private_code_sources)
       end
     else
       {:error, diagnostics} -> {:error, to_ir_diagnostics(diagnostics)}
@@ -269,6 +272,29 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
      ]}
   end
 
+  defp load_sanitized_source(source, opts) do
+    case load_source(source, opts) do
+      {:ok, %Document{} = private_document, load_diagnostics} ->
+        case ExecutionSecuritySanitizer.sanitize(private_document) do
+          {:ok, %Document{} = ordinary_document} ->
+            {:ok, private_document, ordinary_document, load_diagnostics}
+
+          {:error, _sanitizer_diagnostics} ->
+            {:error,
+             [
+               BricksDiagnostic.new(
+                 code: "bricks.ir.execution_security.sanitization_failed",
+                 severity: :error,
+                 message: "Bricks Design IR source could not be sanitized for ordinary processing"
+               )
+             ]}
+        end
+
+      {:error, diagnostics} ->
+        {:error, diagnostics}
+    end
+  end
+
   defp component_selection(%Document{source_shape: :component_fragment}, opts) do
     case Keyword.fetch(opts, :component_id) do
       {:ok, component_id} -> component_id
@@ -299,14 +325,47 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     end
   end
 
-  defp assemble(context) do
+  defp private_code_sources(%Document{components: components}, %{id: component_id}, tree)
+       when is_map(components) and is_binary(component_id) do
+    case Map.get(components, component_id) do
+      %{elements: elements} when is_list(elements) ->
+        Enum.reduce(elements, %{}, fn
+          %Element{id: source_id, name: "code", settings: private_settings}, sources
+          when is_binary(source_id) and is_map(private_settings) ->
+            case {Map.get(private_settings, "executeCode"), Map.get(private_settings, "code"),
+                  Map.get(tree.elements, source_id)} do
+              {true, source_body, %Element{name: "code", settings: ordinary_settings}}
+              when is_binary(source_body) and is_map(ordinary_settings) ->
+                if Map.get(ordinary_settings, "executeCode") == true do
+                  Map.put(sources, source_id, source_body)
+                else
+                  sources
+                end
+
+              _other ->
+                sources
+            end
+
+          _element, sources ->
+            sources
+        end)
+
+      _component ->
+        %{}
+    end
+  end
+
+  defp private_code_sources(_private_document, _component, _tree), do: %{}
+
+  defp assemble(context, private_code_sources) do
     trace_index = build_trace_index(context)
 
     frontend_bindings =
       FrontendBindingNormalizer.normalize(
         context.tree,
         trace_index,
-        context.document.adapter_version
+        context.document.adapter_version,
+        private_code_sources
       )
 
     trace_index = apply_frontend_trace_overrides(trace_index, frontend_bindings.node_actions)

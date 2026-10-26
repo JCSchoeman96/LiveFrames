@@ -5,6 +5,10 @@ defmodule LiveFrames.BricksDesignIRTest do
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Adapters.Bricks.ClassResolver
   alias LiveFrames.Adapters.Bricks.DependencyExtractor
+  alias LiveFrames.Adapters.Bricks.ExecutionSecuritySanitizer
+  alias LiveFrames.Adapters.Bricks.Loader
+  alias LiveFrames.Adapters.Bricks.Resolver
+  alias LiveFrames.Adapters.Bricks.TreeBuilder
   alias LiveFrames.Fidelity
   alias LiveFrames.IR
   alias LiveFrames.IR.DesignNode
@@ -32,6 +36,9 @@ defmodule LiveFrames.BricksDesignIRTest do
     "a1745a",
     "be2b65"
   ]
+
+  @full_description_source "<?php /* PRIVATE_CODE_SIGNATURE_SENTINEL_1c7a */ $product = wc_get_product(get_the_ID()); " <>
+                             "if ($product) { $description = $product->get_description(); echo $description; } ?>"
 
   defp token_set do
     {:ok, token_set, _diagnostics} =
@@ -2433,13 +2440,15 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert conflict = Enum.find(diagnostics, &(&1.code == "bricks.class.authority_conflict"))
     assert conflict.severity == :error
 
-    assert code_diagnostic = Enum.find(diagnostics, &(&1.code == "bricks.setting.unsupported"))
+    refute Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.setting.unsupported" and
+               diagnostic.source_trace.source_id == "php-blocking" and
+               diagnostic.metadata["source_path"] in ["code", "signature"]
+           end)
 
     assert sentinel_paths(diagnostics, sentinel) == []
     assert sentinel_paths(diagnostics, source_code) == []
     refute inspect(diagnostics) =~ sentinel
-
-    assert code_diagnostic.metadata["raw_value_redacted"] == true
   end
 
   defp sentinel_paths(term, needle, path \\ [])
@@ -2465,6 +2474,385 @@ defmodule LiveFrames.BricksDesignIRTest do
     do: sentinel_paths(Tuple.to_list(term), needle, path ++ [:tuple])
 
   defp sentinel_paths(_term, _needle, _path), do: []
+
+  defp contains_key_recursive?(%_{} = struct, key),
+    do: struct |> Map.from_struct() |> contains_key_recursive?(key)
+
+  defp contains_key_recursive?(map, key) when is_map(map) do
+    Enum.any?(map, fn {current_key, value} ->
+      current_key == key or contains_key_recursive?(value, key)
+    end)
+  end
+
+  defp contains_key_recursive?(list, key) when is_list(list),
+    do: Enum.any?(list, &contains_key_recursive?(&1, key))
+
+  defp contains_key_recursive?(_term, _key), do: false
+
+  defp assert_sanitized_ordinary_document_and_tree(private_document, component_id) do
+    assert {:ok, ordinary_document} = ExecutionSecuritySanitizer.sanitize(private_document)
+
+    assert {:ok, _proxy, ordinary_component, _diagnostics} =
+             Resolver.resolve(ordinary_document, component_id: component_id)
+
+    assert {:ok, ordinary_tree, _diagnostics} = TreeBuilder.build(ordinary_component)
+
+    refute contains_key_recursive?(ordinary_document, "signature")
+    refute contains_key_recursive?(ordinary_tree, "signature")
+
+    refute Enum.any?(ordinary_tree.ordered_elements, fn element ->
+             Map.has_key?(element.settings, "code") or
+               Map.has_key?(get_in(element.settings, ["query"]) || %{}, "queryEditor")
+           end)
+
+    {ordinary_document, ordinary_tree}
+  end
+
+  test "T1_CODE_SIGNATURE_SUCCESS_PATH sanitizes ordinary data and preserves CODE3 recognition" do
+    signature = String.duplicate("C", 32)
+    code_body = @full_description_source
+
+    source =
+      synthetic_source([
+        source_element("php-code", "code", 0, %{
+          "executeCode" => true,
+          "code" => code_body,
+          "signature" => signature
+        })
+      ])
+
+    assert {:ok, private_document, _diagnostics} = Loader.recognize(source)
+    private_element = hd(private_document.components["component-a"].elements)
+    assert private_element.settings["code"] == code_body
+    assert private_element.settings["signature"] == signature
+
+    {ordinary_document, ordinary_tree} =
+      assert_sanitized_ordinary_document_and_tree(private_document, "component-a")
+
+    refute marker_count(ordinary_document, code_body) > 0
+    refute marker_count(ordinary_document, signature) > 0
+    refute marker_count(ordinary_tree, code_body) > 0
+    refute contains_key_recursive?(ordinary_document, "signature")
+    refute contains_key_recursive?(ordinary_tree, "signature")
+    assert private_element.settings["code"] == code_body
+    assert private_element.settings["signature"] == signature
+
+    ordinary_code = Map.fetch!(ordinary_tree.elements, "php-code")
+    assert ordinary_code.settings["executeCode"] == true
+    refute Map.has_key?(ordinary_code.settings, "code")
+    refute Map.has_key?(ordinary_code.settings, "signature")
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    assert %ValueBinding{} =
+             binding = Map.fetch!(document.value_bindings, "vb_node_000001_rich_text_000001")
+
+    assert binding.value_key == "commerce.product.full_description"
+
+    assert binding.source_trace.metadata["source_fingerprint"] ==
+             :crypto.hash(:sha256, code_body) |> Base.encode16(case: :lower)
+
+    encoded = IR.encode!(document)
+    signature_fingerprint = :crypto.hash(:sha256, signature) |> Base.encode16(case: :lower)
+
+    for ordinary_output <- [
+          document,
+          document.root_nodes,
+          document.value_bindings,
+          document.diagnostics,
+          document.provenance,
+          IR.to_map(document),
+          encoded
+        ] do
+      refute marker_count(ordinary_output, code_body) > 0
+      refute marker_count(ordinary_output, signature) > 0
+      refute marker_count(ordinary_output, signature_fingerprint) > 0
+      refute contains_key_recursive?(ordinary_output, "signature")
+      refute inspect(ordinary_output) =~ "signature"
+    end
+
+    assert document.source_metadata["source_hash"] == private_document.source_hash
+  end
+
+  test "T2_QUERY_EDITOR_SIGNATURE_SUCCESS_PATH keeps query evidence out of IR" do
+    query_body = "PRIVATE_QUERY_EDITOR_BODY_5a3d"
+    signature = String.duplicate("Q", 32)
+
+    source =
+      synthetic_source([
+        source_element("query-owner", "div", 0, %{
+          "query" => %{
+            "useQueryEditor" => true,
+            "queryEditor" => query_body,
+            "signature" => signature
+          }
+        })
+      ])
+
+    assert {:ok, private_document, _diagnostics} = Loader.recognize(source)
+    private_query = hd(private_document.components["component-a"].elements).settings["query"]
+    assert private_query["queryEditor"] == query_body
+    assert private_query["signature"] == signature
+
+    {ordinary_document, ordinary_tree} =
+      assert_sanitized_ordinary_document_and_tree(private_document, "component-a")
+
+    ordinary_settings = hd(ordinary_document.components["component-a"].elements).settings
+    assert ordinary_settings["query"]["useQueryEditor"] == true
+    refute Map.has_key?(ordinary_settings["query"], "queryEditor")
+    refute Map.has_key?(ordinary_settings["query"], "signature")
+    refute marker_count(ordinary_document, query_body) > 0
+    refute marker_count(ordinary_document, signature) > 0
+    refute marker_count(ordinary_tree, query_body) > 0
+    refute marker_count(ordinary_tree, signature) > 0
+    refute contains_key_recursive?(ordinary_document, "signature")
+    refute contains_key_recursive?(ordinary_tree, "signature")
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    assert document.collection_bindings == %{}
+    assert document.value_bindings == %{}
+
+    encoded = IR.encode!(document)
+    query_fingerprint = :crypto.hash(:sha256, query_body) |> Base.encode16(case: :lower)
+    signature_fingerprint = :crypto.hash(:sha256, signature) |> Base.encode16(case: :lower)
+
+    for ordinary_output <- [
+          document,
+          document.collection_bindings,
+          document.value_bindings,
+          document.root_nodes,
+          document.diagnostics,
+          document.provenance["dependency_summary"],
+          document.provenance,
+          document.source_metadata,
+          IR.to_map(document),
+          encoded
+        ] do
+      refute marker_count(ordinary_output, query_body) > 0
+      refute marker_count(ordinary_output, signature) > 0
+      refute marker_count(ordinary_output, query_fingerprint) > 0
+      refute marker_count(ordinary_output, signature_fingerprint) > 0
+      refute contains_key_recursive?(ordinary_output, "signature")
+      refute inspect(ordinary_output) =~ "signature"
+      refute inspect(ordinary_output) =~ "queryEditor"
+    end
+  end
+
+  test "T3_BLOCKING_ERROR_PATH returns no Code or Query Editor security evidence" do
+    code_body = "<?php /* PRIVATE_BLOCKED_CODE_BODY_65bf */ echo 'blocked'; ?>"
+    query_body = "PRIVATE_BLOCKED_QUERY_EDITOR_BODY_9d2a"
+    code_signature = String.duplicate("B", 32)
+    query_signature = String.duplicate("R", 32)
+
+    source =
+      synthetic_source([
+        source_element("php-blocked", "code", 0, %{
+          "executeCode" => true,
+          "code" => code_body,
+          "signature" => code_signature,
+          "query" => %{
+            "useQueryEditor" => true,
+            "queryEditor" => query_body,
+            "signature" => query_signature
+          },
+          "_cssGlobalClasses" => ["opaque-class-id"]
+        })
+      ])
+
+    assert {:ok, private_document, _diagnostics} = Loader.recognize(source)
+    private_settings = hd(private_document.components["component-a"].elements).settings
+    assert private_settings["code"] == code_body
+    assert private_settings["signature"] == code_signature
+    assert private_settings["query"]["queryEditor"] == query_body
+    assert private_settings["query"]["signature"] == query_signature
+
+    alpha = %{
+      id: "alpha-site-classes",
+      global_classes: [
+        %{
+          "id" => "opaque-class-id",
+          "name" => "blocked-class",
+          "settings" => %{"_width" => "100px"}
+        }
+      ]
+    }
+
+    zeta = %{
+      id: "zeta-site-classes",
+      global_classes: [
+        %{
+          "id" => "opaque-class-id",
+          "name" => "blocked-class",
+          "settings" => %{"_width" => "200px"}
+        }
+      ]
+    }
+
+    assert {:error, diagnostics} =
+             Bricks.to_ir(source,
+               component_id: "component-a",
+               token_set: token_set(),
+               external_class_authorities: [zeta, alpha]
+             )
+
+    assert Enum.any?(diagnostics, &(&1.code == "bricks.class.authority_conflict"))
+
+    secret_values = [
+      code_body,
+      query_body,
+      code_signature,
+      query_signature,
+      :crypto.hash(:sha256, code_signature) |> Base.encode16(case: :lower),
+      :crypto.hash(:sha256, query_signature) |> Base.encode16(case: :lower),
+      :crypto.hash(:sha256, query_body) |> Base.encode16(case: :lower)
+    ]
+
+    for secret <- secret_values do
+      assert marker_count(diagnostics, secret) == 0
+    end
+
+    refute contains_key_recursive?(diagnostics, "signature")
+    refute inspect(diagnostics) =~ "signature"
+    refute inspect(diagnostics) =~ "queryEditor"
+  end
+
+  test "T4_UNKNOWN_SIGNATURE_CONTEXT_FAILS_CLOSED before ordinary normalization" do
+    unknown_signature = "PRIVATE_UNKNOWN_SIGNATURE_CONTEXT_01"
+
+    source =
+      synthetic_source([
+        source_element("plain-div", "div", 0, %{"signature" => unknown_signature})
+      ])
+
+    assert {:ok, private_document, _diagnostics} = Loader.recognize(source)
+
+    assert hd(private_document.components["component-a"].elements).settings["signature"] ==
+             unknown_signature
+
+    assert {:error, [diagnostic]} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    assert diagnostic.code == "bricks.ir.execution_security.sanitization_failed"
+    refute inspect(diagnostic) =~ unknown_signature
+    refute inspect(diagnostic) =~ "signature"
+    refute contains_key_recursive?(diagnostic, "signature")
+  end
+
+  test "T6_SOURCE_IDENTITY keeps the Loader hash through sanitization" do
+    source =
+      synthetic_source([
+        source_element("php-code", "code", 0, %{
+          "executeCode" => true,
+          "code" => @full_description_source,
+          "signature" => String.duplicate("I", 32)
+        })
+      ])
+
+    assert {:ok, private_document, _diagnostics} = Loader.recognize(source)
+    assert {:ok, ordinary_document} = ExecutionSecuritySanitizer.sanitize(private_document)
+    assert ordinary_document.source_hash == private_document.source_hash
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    assert document.source_metadata["source_hash"] == private_document.source_hash
+    assert document.provenance["source_hash"] == private_document.source_hash
+  end
+
+  test "T7_DETERMINISM keeps identical private inputs byte-identical" do
+    source =
+      synthetic_source([
+        source_element("php-code", "code", 0, %{
+          "executeCode" => true,
+          "code" => @full_description_source,
+          "signature" => String.duplicate("D", 32)
+        })
+      ])
+
+    opts = [component_id: "component-a", token_set: token_set()]
+    assert {:ok, first} = Bricks.to_ir(source, opts)
+    assert {:ok, second} = Bricks.to_ir(source, opts)
+    assert IR.to_map(first) == IR.to_map(second)
+    assert IR.encode!(first) == IR.encode!(second)
+  end
+
+  test "T8_EXISTING_EXECUTABLE_BODY_PRIVACY keeps only the approved Code fingerprint" do
+    code_body = "<?php /* PRIVATE_UNSUPPORTED_CODE_BODY_40e1 */ echo 'opaque'; ?>"
+    fingerprint = :crypto.hash(:sha256, code_body) |> Base.encode16(case: :lower)
+
+    source =
+      synthetic_source([
+        source_element("unsupported-code", "code", 0, %{
+          "executeCode" => true,
+          "code" => code_body,
+          "signature" => String.duplicate("P", 32)
+        })
+      ])
+
+    assert {:ok, document} =
+             Bricks.to_ir(source, component_id: "component-a", token_set: token_set())
+
+    node = node_by_source_id(document, "unsupported-code")
+    assert node.semantic_type == "unsupported"
+    assert node.source_trace.metadata["source_fingerprint"] == fingerprint
+    assert node.source_trace.metadata["execution_enabled"] == true
+
+    for ordinary_output <- [
+          document,
+          document.root_nodes,
+          document.diagnostics,
+          document.provenance,
+          IR.to_map(document),
+          IR.encode!(document)
+        ] do
+      refute marker_count(ordinary_output, code_body) > 0
+      refute inspect(ordinary_output) =~ code_body
+    end
+  end
+
+  test "T9_CLASSIFIED_SIGNATURE_DIAGNOSTIC_SUPPRESSION removes Code and Query signature diagnostics" do
+    classified_sources = [
+      {"signed-code", "code",
+       %{
+         "executeCode" => true,
+         "code" => @full_description_source,
+         "signature" => String.duplicate("S", 32)
+       }},
+      {"signed-query", "div",
+       %{
+         "query" => %{
+           "useQueryEditor" => true,
+           "queryEditor" => "PRIVATE_QUERY_SIGNATURE_DIAGNOSTIC_BODY",
+           "signature" => String.duplicate("T", 32)
+         }
+       }}
+    ]
+
+    for {source_id, name, settings} <- classified_sources do
+      assert {:ok, document} =
+               Bricks.to_ir(
+                 synthetic_source([source_element(source_id, name, 0, settings)]),
+                 component_id: "component-a",
+                 token_set: token_set()
+               )
+
+      classified_signature_diagnostics =
+        Enum.filter(document.diagnostics, fn diagnostic ->
+          source_path = diagnostic.metadata["source_path"] || ""
+
+          diagnostic.code == "bricks.setting.unsupported" and
+            diagnostic.source_trace.source_id == source_id and
+            String.contains?(source_path, "signature")
+        end)
+
+      assert classified_signature_diagnostics == []
+      assert Enum.count(classified_signature_diagnostics) == 0
+      refute contains_key_recursive?(document.diagnostics, "signature")
+    end
+  end
 
   @tag :cta_tango_private_reference
   test "CTA Tango R5 full style-coverage proof (read-only reference)" do
