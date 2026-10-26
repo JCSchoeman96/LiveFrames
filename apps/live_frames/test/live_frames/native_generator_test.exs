@@ -2096,7 +2096,18 @@ defmodule LiveFrames.NativeGeneratorTest do
   end
 
   test "generate/7 passes an exact Selection tuple through eligibility to the renderer" do
-    tuple = selection_generation_tuple()
+    tuple =
+      selection_generation_tuple(
+        control_attributes: %{
+          "role" => "tab",
+          "aria-selected" => "true",
+          "aria-controls" => "source-panel",
+          "tabindex" => "-1",
+          "type" => "button",
+          "class" => "source-selection-class",
+          "id" => "source-selection-id"
+        }
+      )
 
     {contract, plan, document, behavior_contract, behavior_review, _component_review, _review_id} =
       tuple
@@ -2110,7 +2121,295 @@ defmodule LiveFrames.NativeGeneratorTest do
                behavior_review
              )
 
-    assert {:error, :generation_failed, [diagnostic]} = generate_selection(tuple)
+    with_compiled_selection(tuple, fn module, bundle, source ->
+      render = Function.capture(module, :selection_component, 1)
+
+      html =
+        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+
+      [control_attrs] = Regex.run(~r/<div([^>]*)>/, html, capture: :all_but_first)
+
+      assert Enum.sort(Enum.map(bundle.artifacts, & &1.kind)) ==
+               Enum.sort([:elixir_module, :stylesheet])
+
+      assert source =~ ~s(data-lf-selection-control="true")
+      assert source =~ ~s(data-lf-selection-state="unselected")
+      assert source =~ ~s(data-lf-selection-activate="true")
+      assert source =~ ~s(aria-pressed="false")
+      assert source =~ ~s(type="button")
+      assert length(:binary.matches(source, ~s|lf_item_field(lf_ci_1, 1, "title")|)) == 1
+      assert length(:binary.matches(html, "Synthetic title")) == 1
+      assert control_attrs =~ ~s(data-lf-selection-control="true")
+      assert control_attrs =~ ~s(data-lf-selection-state="unselected")
+      refute control_attrs =~ "role="
+      refute control_attrs =~ "aria-selected"
+      refute control_attrs =~ "aria-controls"
+      refute control_attrs =~ "tabindex"
+      refute control_attrs =~ "type="
+      refute source =~ "role=\"tab\""
+      refute source =~ "aria-selected"
+      refute source =~ "aria-controls"
+      refute source =~ "tabindex"
+      refute source =~ "source-selection-class"
+      refute source =~ "source-selection-id"
+
+      assert html =~
+               ~r/<h3[^>]*>\s*<button type="button" data-lf-selection-activate="true" aria-pressed="false">Synthetic title<\/button>\s*<\/h3>/
+
+      refute html =~ ~r/<button[^>]*>\s*<h[1-6]/
+      refute html =~ "role=\"tab\""
+      refute html =~ "aria-selected"
+      refute html =~ "aria-controls"
+      refute html =~ "tabindex"
+      refute source =~ ~r/role="tab(?:list|panel)?"|aria-selected|aria-controls|tabindex="-1"/
+      refute source =~ "role=\"tabpanel\""
+      refute source =~ "role=\"tablist\""
+      refute source =~ "phx-hook"
+      refute source =~ "phx-click"
+      refute source =~ "setTimeout"
+      refute source =~ "setInterval"
+      refute source =~ "hidden"
+    end)
+  end
+
+  test "authorized Selection control preserves static control content" do
+    control_content = "Authorized control companion"
+    tuple = selection_generation_tuple(control_content: control_content)
+
+    with_compiled_selection(tuple, fn module, _bundle, _source ->
+      render = Function.capture(module, :selection_component, 1)
+
+      html =
+        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+
+      [control_inner] =
+        Regex.run(
+          ~r/<div[^>]*data-lf-selection-control="true"[^>]*>(.*?)<\/div>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      [button_inner] =
+        Regex.run(
+          ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>(.*?)<\/button>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      assert length(:binary.matches(html, control_content)) == 1
+      assert length(:binary.matches(control_inner, control_content)) == 1
+      refute button_inner =~ control_content
+      assert html =~ ~r/<h3[^>]*>\s*<button[^>]*>Synthetic title<\/button>\s*<\/h3>/
+    end)
+  end
+
+  test "Selection activation button leaves carrier children inside the heading" do
+    carrier_content = "Carrier companion"
+    tuple = selection_generation_tuple(carrier_companion_content: carrier_content)
+
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _review_id} =
+      tuple
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert {:ok, %{source: source}} = render_selection_parts(tuple, authority)
+
+    with_compiled_selection_source(source, fn module ->
+      render = Function.capture(module, :selection_component, 1)
+
+      html =
+        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+
+      [heading_inner] = Regex.run(~r/<h3[^>]*>(.*?)<\/h3>/s, html, capture: :all_but_first)
+
+      [button_inner] =
+        Regex.run(
+          ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>(.*?)<\/button>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      assert button_inner =~ "Synthetic title"
+      refute button_inner =~ carrier_content
+
+      assert heading_inner =~
+               ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>Synthetic title<\/button>\s*<span>Carrier companion<\/span>/
+
+      assert length(:binary.matches(html, carrier_content)) == 1
+    end)
+  end
+
+  test "Selection heading levels 1 through 6 and default level 3 render once" do
+    tuple = selection_generation_tuple(heading_level_default?: true)
+
+    with_compiled_selection(tuple, fn module, _bundle, _source ->
+      render = Function.capture(module, :selection_component, 1)
+      items = [%{"title" => "Selection title"}]
+
+      for level <- 1..6 do
+        html = render_component(render, %{items: items, heading_level: level})
+        assert html =~ "<h#{level}"
+
+        assert html =~
+                 ~r/<h#{level}[^>]*>\s*<button[^>]*>Selection title<\/button>\s*<\/h#{level}>/
+      end
+
+      default_html = render_component(render, %{items: items})
+      assert default_html =~ ~r/<h3[^>]*>\s*<button[^>]*>Selection title<\/button>\s*<\/h3>/
+    end)
+  end
+
+  test "Selection wrapper owns source styles and drops opaque custom CSS" do
+    marker = "PRIVATE_CUSTOM_CSS_MARKER_DO_NOT_EMIT"
+
+    control_styles = %{
+      "background" => StyleValue.literal("#135724"),
+      "border-color" => StyleValue.literal("#2468ac"),
+      "border-left-width" => StyleValue.literal("7px"),
+      "border-style" => StyleValue.keyword("dotted"),
+      "display" => StyleValue.keyword("grid"),
+      "grid-template-columns" => StyleValue.literal("11px 19px"),
+      "grid-template-rows" => StyleValue.literal("23px 29px"),
+      "padding-left" => StyleValue.literal("31px"),
+      "padding-right" => StyleValue.literal("37px"),
+      "position" => StyleValue.keyword("relative"),
+      "row-gap" => StyleValue.literal("41px"),
+      "transition" => StyleValue.literal("transform 53ms linear"),
+      "custom-css" => StyleValue.complex_css(%{"opaque" => marker})
+    }
+
+    tuple = selection_generation_tuple(control_styles: control_styles)
+    {contract, _plan, _document, _behavior, _behavior_review, _component_review, _id} = tuple
+    control_class = Renderer.package_root_class(contract) <> "__n-000001-000001"
+
+    with_compiled_selection(tuple, fn _module, bundle, source ->
+      stylesheet = stylesheet_artifact(bundle).content
+      button_rule = selection_button_rule(stylesheet, control_class)
+
+      wrapper_rule = selection_wrapper_rule(stylesheet, control_class)
+
+      for {property, value} <- [
+            {"background", "#135724"},
+            {"border-color", "#2468ac"},
+            {"border-left-width", "7px"},
+            {"border-style", "dotted"},
+            {"display", "grid"},
+            {"grid-template-columns", "11px 19px"},
+            {"grid-template-rows", "23px 29px"},
+            {"padding-left", "31px"},
+            {"padding-right", "37px"},
+            {"position", "relative"},
+            {"row-gap", "41px"},
+            {"transition", "transform 53ms linear"}
+          ] do
+        assert wrapper_rule =~ "#{property}: #{value}"
+        refute Enum.any?(button_rule, &String.contains?(&1, value))
+      end
+
+      assert button_rule == [
+               "font: inherit",
+               "color: inherit",
+               "background: transparent",
+               "border: 0",
+               "padding: 0",
+               "margin: 0",
+               "text-align: inherit",
+               "cursor: pointer"
+             ]
+
+      refute stylesheet =~ marker
+      refute source =~ marker
+      refute bundle_content(bundle) =~ marker
+      refute stylesheet =~ "outline"
+      refute stylesheet =~ ":focus"
+      refute source =~ ~r/disabled|tabindex="-1"/
+    end)
+  end
+
+  test "Renderer and StyleIntegration apply Selection exceptions only at authority IDs" do
+    tuple = selection_generation_tuple()
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _id} = tuple
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert {:ok, %{source: source, stylesheet: stylesheet}} =
+             render_selection_parts(tuple, authority)
+
+    assert source =~ ~s(data-lf-selection-control="true")
+    assert source =~ ~s(data-lf-selection-activate="true")
+    assert stylesheet =~ "data-lf-selection-activate"
+
+    assert {:error, diagnostic} = render_selection_parts(tuple, nil)
+    assert diagnostic.code == "native_generator.semantic_unsupported"
+
+    changed_control = %{authority | control_node_id: "synthetic-other-control"}
+    assert {:error, diagnostic} = render_selection_parts(tuple, changed_control)
+    assert diagnostic.code == "native_generator.semantic_unsupported"
+
+    assert {:ok, filtered} =
+             FilteredStructure.build(
+               document,
+               plan.boundary_node_id,
+               [],
+               Renderer.package_root_class(contract)
+             )
+
+    assert {:ok, changed_control_styling} =
+             StyleIntegration.build(contract, plan, filtered, changed_control)
+
+    refute changed_control_styling.stylesheet_content =~ "data-lf-selection-activate"
+
+    changed_carrier = %{
+      authority
+      | activation_carrier_node_id: DesignNode.deterministic_id([1, 2])
+    }
+
+    assert {:ok, %{source: source, stylesheet: stylesheet}} =
+             render_selection_parts(tuple, changed_carrier)
+
+    refute source =~ ~s(data-lf-selection-activate="true")
+    assert stylesheet =~ "data-lf-selection-activate"
+
+    assert {:ok, filtered} =
+             FilteredStructure.build(
+               document,
+               plan.boundary_node_id,
+               [],
+               Renderer.package_root_class(contract)
+             )
+
+    assert {:ok, ordinary_styling} = StyleIntegration.build(contract, plan, filtered)
+    refute ordinary_styling.stylesheet_content =~ "data-lf-selection-activate"
+
+    other_control = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 4]),
+      semantic_type: "generic",
+      attributes: %{"tag" => "button"}
+    }
+
+    [boundary] = document.root_nodes
+
+    document_with_other_control = %{
+      document
+      | root_nodes: [%{boundary | children: boundary.children ++ [other_control]}]
+    }
+
+    assert {:error, diagnostic} =
+             render_selection_parts(tuple, authority, document_with_other_control)
 
     assert diagnostic.code == "native_generator.semantic_unsupported"
   end
@@ -2336,16 +2635,126 @@ defmodule LiveFrames.NativeGeneratorTest do
     )
   end
 
+  defp with_compiled_selection(tuple, fun) do
+    assert {:ok, bundle} = generate_selection(tuple)
+    source = elixir_artifact(bundle).content
+
+    with_compiled_selection_source(source, fn module ->
+      fun.(module, bundle, source)
+    end)
+  end
+
+  defp with_compiled_selection_source(source, fun) do
+    module_name = "LiveFrames.GeneratedSelection#{System.unique_integer([:positive])}"
+
+    compiled =
+      String.replace(source, "LiveFrames.Components.Sections.SelectionComponent", module_name)
+
+    [{module, _binary}] = Code.compile_string(compiled)
+
+    try do
+      fun.(module)
+    after
+      :code.delete(module)
+    end
+  end
+
+  defp stylesheet_artifact(bundle), do: Enum.find(bundle.artifacts, &(&1.kind == :stylesheet))
+
+  defp bundle_content(bundle), do: Enum.map_join(bundle.artifacts, & &1.content)
+
+  defp selection_button_rule(stylesheet, control_class) do
+    selector =
+      ".#{control_class}[data-lf-selection-control=\"true\"] > :is(h1, h2, h3, h4, h5, h6) > button[data-lf-selection-activate=\"true\"]"
+
+    pattern = Regex.compile!(Regex.escape(selector) <> "\\s*\\{([^}]*)\\}")
+    [_, declarations] = Regex.run(pattern, stylesheet)
+
+    declarations
+    |> String.split(";")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp selection_wrapper_rule(stylesheet, control_class) do
+    pattern = Regex.compile!("\\." <> Regex.escape(control_class) <> "\\s*\\{([^}]*)\\}")
+    [_, declarations] = Regex.run(pattern, stylesheet)
+    declarations
+  end
+
+  defp render_selection_parts(
+         {contract, plan, original_document, _behavior, _behavior_review, _component_review,
+          _review_id},
+         authority,
+         document \\ nil
+       ) do
+    document = document || original_document
+
+    with {:ok, filtered} <-
+           FilteredStructure.build(
+             document,
+             plan.boundary_node_id,
+             [],
+             Renderer.package_root_class(contract)
+           ),
+         {:ok, styling} <- StyleIntegration.build(contract, plan, filtered, authority),
+         {:ok, indexes} <-
+           Renderer.build_indexes(
+             contract,
+             plan,
+             filtered,
+             document.value_bindings,
+             styling.primary_action_slot_targets,
+             styling.native_realization_authority
+           ),
+         indexes <- %{
+           indexes
+           | private_class_owner_ids: Map.keys(styling.private_class_by_id) |> MapSet.new()
+         },
+         {:ok, source} <- Renderer.render_module(indexes) do
+      {:ok, %{source: source, stylesheet: styling.stylesheet_content}}
+    else
+      {:error, :generation_blocked, [%LiveFrames.NativeGenerator.Diagnostic{} = diagnostic | _]} ->
+        {:error, diagnostic}
+
+      {:error, %LiveFrames.NativeGenerator.Diagnostic{} = diagnostic} ->
+        {:error, diagnostic}
+
+      {:error, diagnostics} when is_list(diagnostics) ->
+        {:error, List.first(diagnostics)}
+    end
+  end
+
   defp selection_generation_tuple(opts \\ []) do
     selection_outside? = Keyword.get(opts, :selection_outside?, false)
     selection_split? = Keyword.get(opts, :selection_split?, false)
     carrier_disconnected? = Keyword.get(opts, :carrier_disconnected?, false)
+    control_attributes = Keyword.get(opts, :control_attributes, %{})
+    control_styles = Keyword.get(opts, :control_styles, %{})
+    control_content = Keyword.get(opts, :control_content)
+    carrier_companion_content = Keyword.get(opts, :carrier_companion_content)
+    heading_level_default? = Keyword.get(opts, :heading_level_default?, false)
     has_outer_root? = selection_outside? or selection_split?
     boundary_path = if has_outer_root?, do: [1, 1], else: [1]
     boundary_id = DesignNode.deterministic_id(boundary_path)
     control_path = boundary_path ++ [1]
     control_id = DesignNode.deterministic_id(control_path)
     carrier_id = DesignNode.deterministic_id(control_path ++ [1])
+
+    carrier_children =
+      if is_binary(carrier_companion_content) do
+        [
+          %DesignNode{
+            node_id: DesignNode.deterministic_id(control_path ++ [1, 1]),
+            semantic_type: "rich_text",
+            attributes: %{"tag" => "span"},
+            content: carrier_companion_content
+          }
+        ]
+      else
+        []
+      end
+
     presentation_a_id = DesignNode.deterministic_id(boundary_path ++ [2])
     presentation_b_id = DesignNode.deterministic_id(boundary_path ++ [3])
     disconnected_control_id = DesignNode.deterministic_id(boundary_path ++ [4])
@@ -2358,12 +2767,15 @@ defmodule LiveFrames.NativeGeneratorTest do
           :control_semantic_type,
           if(selection_outside?, do: "button", else: "generic")
         ),
-      attributes: %{"tag" => "button"},
+      attributes: Map.merge(%{"tag" => "button"}, control_attributes),
+      styles: control_styles,
+      content: control_content,
       children: [
         %DesignNode{
           node_id: carrier_id,
           semantic_type: "heading",
-          attributes: %{"tag" => "h3"}
+          attributes: %{"tag" => "h3"},
+          children: carrier_children
         }
       ]
     }
@@ -2525,7 +2937,8 @@ defmodule LiveFrames.NativeGeneratorTest do
         %Attr{
           name: "heading_level",
           type: :integer,
-          required: true,
+          required: not heading_level_default?,
+          default: if(heading_level_default?, do: 3, else: nil),
           semantic_purpose: "heading level",
           validation: %{"values" => [1, 2, 3, 4, 5, 6]}
         }
