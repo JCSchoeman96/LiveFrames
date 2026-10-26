@@ -4,6 +4,8 @@ defmodule LiveFrames.BricksStageATest do
   alias LiveFrames.Adapters.Bricks
   alias LiveFrames.Adapters.Bricks.ClassResolver
   alias LiveFrames.Adapters.Bricks.DependencyExtractor
+  alias LiveFrames.Adapters.Bricks.ExecutionSecuritySanitizer
+  alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Settings
   alias LiveFrames.Adapters.Bricks.StageA.CSSRenderer
   alias LiveFrames.Adapters.Bricks.StageA.HTMLRenderer
@@ -76,6 +78,55 @@ defmodule LiveFrames.BricksStageATest do
       "content" => [%{"id" => "proxy-a", "cid" => "component-a", "label" => "Synthetic"}]
     })
   end
+
+  defp source_with_element(name, settings) do
+    source_with_elements([
+      %{"id" => "root", "name" => name, "parent" => 0, "children" => [], "settings" => settings}
+    ])
+  end
+
+  defp source_with_elements(elements) do
+    copied_elements_source()
+    |> put_in(["components", Access.at(0), "elements"], elements)
+  end
+
+  defp synthetic_signature(marker), do: String.pad_trailing(marker, 32, "s")
+
+  defp assert_markers_absent(term, markers) do
+    Enum.each(markers, fn marker ->
+      refute marker_count(term, marker) > 0, "found private marker #{inspect(marker)}"
+    end)
+  end
+
+  defp assert_markers_present(term, markers) do
+    Enum.each(markers, fn marker ->
+      assert marker_count(term, marker) > 0, "expected private marker #{inspect(marker)}"
+    end)
+  end
+
+  defp private_marker_values(markers) do
+    Enum.flat_map(markers, fn marker ->
+      fragment = binary_part(marker, 0, min(byte_size(marker), 12))
+      digest = :crypto.hash(:sha256, marker) |> Base.encode16(case: :lower)
+      [marker, fragment, digest]
+    end)
+    |> Enum.uniq()
+  end
+
+  defp contains_any_key?(%_{} = struct, keys),
+    do: struct |> Map.from_struct() |> contains_any_key?(keys)
+
+  defp contains_any_key?(map, keys) when is_map(map) do
+    Enum.any?(map, fn {key, value} -> key in keys or contains_any_key?(value, keys) end)
+  end
+
+  defp contains_any_key?(list, keys) when is_list(list),
+    do: Enum.any?(list, &contains_any_key?(&1, keys))
+
+  defp contains_any_key?(tuple, keys) when is_tuple(tuple),
+    do: tuple |> Tuple.to_list() |> contains_any_key?(keys)
+
+  defp contains_any_key?(_term, _keys), do: false
 
   defp marker_count(term, marker) when is_binary(term),
     do: length(:binary.matches(term, marker))
@@ -153,6 +204,283 @@ defmodule LiveFrames.BricksStageATest do
              source_path_body: 0,
              source_path_signature: 0
            }
+  end
+
+  test "sanitizes admitted Code execution data before Stage A consumers" do
+    code_body = "TASK3_CODE_BODY_MARKER_6db2a1"
+    signature = synthetic_signature("TASK3_CODE_SIGNATURE_MARKER_19c3")
+    assert byte_size(signature) == 32
+
+    source =
+      source_with_element("code", %{
+        "executeCode" => true,
+        "code" => code_body,
+        "signature" => signature
+      })
+
+    assert {:ok, result} = StageA.generate(source, component_id: "component-a")
+
+    markers = private_marker_values([code_body, signature])
+
+    for surface <- [
+          result.document,
+          result.proxy,
+          result.component,
+          result.tree,
+          result.dependencies,
+          result.diagnostics,
+          result.report,
+          result.artifacts,
+          result.artifacts["index.html"],
+          result.artifacts["styles.css"],
+          result.artifacts["report.json"],
+          result.report["settings"]["unsupported"],
+          result.report["runtime_dependencies"],
+          result.report["diagnostics"],
+          result.report["source_trace"],
+          result.report["unsupported_elements"],
+          result.dependencies.unsupported_settings,
+          result.dependencies.runtime_dependencies,
+          result.dependencies.diagnostics
+        ] do
+      assert_markers_absent(surface, markers)
+    end
+
+    assert result.status == :completed
+    assert Enum.any?(result.report["unsupported_elements"], &(&1["type"] == "code"))
+    unsupported_code = Enum.find(result.report["unsupported_elements"], &(&1["type"] == "code"))
+    assert marker_count(unsupported_code, code_body) == 0
+    assert marker_count(unsupported_code, signature) == 0
+  end
+
+  test "sanitizes Query Editor data from the JSON entry point without derivatives" do
+    query_body = "TASK3_QUERY_EDITOR_BODY_MARKER_e919 SELECT * FROM synthetic_posts"
+    signature = synthetic_signature("TASK3_QUERY_SIG_MARKER_ab12")
+    assert byte_size(signature) == 32
+
+    source =
+      source_with_element("div", %{
+        "query" => %{
+          "useQueryEditor" => true,
+          "queryEditor" => query_body,
+          "signature" => signature
+        }
+      })
+
+    assert {:ok, result} = StageA.generate(Jason.encode!(source), component_id: "component-a")
+
+    markers = private_marker_values([query_body, signature])
+
+    for surface <- [
+          result.document,
+          result.proxy,
+          result.component,
+          result.tree,
+          result.dependencies,
+          result.diagnostics,
+          result.report,
+          result.artifacts,
+          result.artifacts["index.html"],
+          result.artifacts["styles.css"],
+          result.artifacts["report.json"],
+          result.report["settings"]["unsupported"],
+          result.report["runtime_dependencies"],
+          result.report["diagnostics"],
+          result.report["source_trace"],
+          result.report["unsupported_elements"],
+          result.dependencies.unsupported_settings,
+          result.dependencies.runtime_dependencies,
+          result.dependencies.diagnostics
+        ] do
+      assert_markers_absent(surface, markers)
+    end
+  end
+
+  test "sanitizes a Loader Document and preserves its source identity" do
+    code_body = "TASK3_IDENTITY_CODE_BODY_511d"
+    signature = synthetic_signature("TASK3_IDENTITY_SIG_663e")
+    query_body = "TASK3_IDENTITY_QUERY_BODY_a7c0 SELECT id FROM private_posts"
+    query_signature = synthetic_signature("TASK3_IDENTITY_QUERY_SIG_10ef")
+
+    source =
+      source_with_elements([
+        %{
+          "id" => "code-root",
+          "name" => "code",
+          "parent" => 0,
+          "children" => [],
+          "settings" => %{"executeCode" => true, "code" => code_body, "signature" => signature}
+        },
+        %{
+          "id" => "query-root",
+          "name" => "div",
+          "parent" => 0,
+          "children" => [],
+          "settings" => %{
+            "query" => %{
+              "useQueryEditor" => true,
+              "queryEditor" => query_body,
+              "signature" => query_signature
+            }
+          }
+        }
+      ])
+
+    source_bytes = Jason.encode!(source)
+    private_values = [code_body, signature, query_body, query_signature]
+    markers = private_marker_values(private_values)
+
+    assert {:ok, private_document, _loader_diagnostics} = Loader.from_json(source_bytes)
+    private_document_before = private_document
+    source_hash = private_document.source_hash
+
+    assert source_hash == Base.encode16(:crypto.hash(:sha256, source_bytes), case: :lower)
+    assert_markers_present(private_document, private_values)
+
+    assert {:ok, result} =
+             StageA.generate(private_document,
+               component_id: "component-a",
+               expected_root_count: 2
+             )
+
+    assert result.document.source_hash == source_hash
+    assert result.report["source"]["sha256"] == source_hash
+    assert result == generate_from_sanitized_document(private_document)
+    assert_markers_absent(result, markers)
+    assert private_document == private_document_before
+    assert_markers_present(private_document, private_values)
+  end
+
+  defp generate_from_sanitized_document(private_document) do
+    assert {:ok, sanitized_document} = ExecutionSecuritySanitizer.sanitize(private_document)
+
+    assert {:ok, result} =
+             StageA.generate(sanitized_document,
+               component_id: "component-a",
+               expected_root_count: 2
+             )
+
+    result
+  end
+
+  test "keeps blocking Stage A diagnostics clear of admitted execution data" do
+    code_body = "TASK3_BLOCKED_CODE_BODY_73f9"
+    signature = synthetic_signature("TASK3_BLOCKED_SIG_ee13")
+    query_body = "TASK3_BLOCKED_QUERY_BODY_912c SELECT id FROM blocked_posts"
+    query_signature = synthetic_signature("TASK3_BLOCKED_QUERY_SIG_81a0")
+
+    source =
+      source_with_elements([
+        %{
+          "id" => "code-root",
+          "name" => "code",
+          "parent" => 0,
+          "children" => [],
+          "settings" => %{"executeCode" => true, "code" => code_body, "signature" => signature}
+        },
+        %{
+          "id" => "query-root",
+          "name" => "div",
+          "parent" => 0,
+          "children" => [],
+          "settings" => %{
+            "query" => %{
+              "useQueryEditor" => true,
+              "queryEditor" => query_body,
+              "signature" => query_signature
+            }
+          }
+        }
+      ])
+
+    assert {:error, diagnostics} =
+             StageA.generate(source, component_id: "component-a", expected_root_count: 1)
+
+    assert Enum.any?(diagnostics, &(&1.code == "bricks.tree.root_count"))
+
+    assert_markers_absent(
+      diagnostics,
+      private_marker_values([code_body, signature, query_body, query_signature])
+    )
+
+    refute contains_any_key?(diagnostics, [
+             :signature,
+             "signature",
+             :signature_present,
+             "signature_present",
+             :signature_hash,
+             "signature_hash",
+             :signature_fragment,
+             "signature_fragment",
+             :has_signature,
+             "has_signature"
+           ])
+  end
+
+  test "rejects an unknown signature context before creating artifacts" do
+    signature = synthetic_signature("TASK3_UNKNOWN_SIG_5c21")
+    source = source_with_element("div", %{"signature" => signature})
+
+    output_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "stage-a-unknown-signature-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn -> File.rm_rf(output_dir) end)
+
+    assert {:error, diagnostics} =
+             StageA.generate(source,
+               component_id: "component-a",
+               output_dir: output_dir
+             )
+
+    assert Enum.any?(
+             diagnostics,
+             &(&1.code == "bricks.execution_security.unclassified_signature")
+           )
+
+    assert_markers_absent(diagnostics, private_marker_values([signature]))
+    refute File.exists?(output_dir)
+  end
+
+  test "writes only sanitized artifacts after loading a source file" do
+    code_body = "TASK3_FILE_CODE_BODY_0a82"
+    signature = synthetic_signature("TASK3_FILE_SIG_9d40")
+
+    source =
+      source_with_element("code", %{
+        "executeCode" => true,
+        "code" => code_body,
+        "signature" => signature
+      })
+
+    temporary_root =
+      Path.join(System.tmp_dir!(), "stage-a-private-source-#{System.unique_integer([:positive])}")
+
+    input_path = Path.join(temporary_root, "source.json")
+    output_dir = Path.join(temporary_root, "artifacts")
+    File.mkdir_p!(temporary_root)
+    File.write!(input_path, Jason.encode!(source))
+    on_exit(fn -> File.rm_rf(temporary_root) end)
+
+    assert {:ok, result} =
+             StageA.generate_from_file(input_path,
+               component_id: "component-a",
+               output_dir: output_dir
+             )
+
+    for artifact_name <- ["index.html", "styles.css", "report.json"] do
+      artifact_path = Path.join(output_dir, artifact_name)
+      assert File.regular?(artifact_path)
+
+      assert_markers_absent(
+        File.read!(artifact_path),
+        private_marker_values([code_body, signature])
+      )
+
+      assert result.artifact_paths[artifact_name] == artifact_path
+    end
   end
 
   test "Stage A accepts informational and warning TokenSet diagnostics" do

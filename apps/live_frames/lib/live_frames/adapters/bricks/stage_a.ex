@@ -11,6 +11,7 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
   alias LiveFrames.Adapters.Bricks.DependencyExtractor
   alias LiveFrames.Adapters.Bricks.Diagnostic
   alias LiveFrames.Adapters.Bricks.Document
+  alias LiveFrames.Adapters.Bricks.ExecutionSecuritySanitizer
   alias LiveFrames.Adapters.Bricks.Loader
   alias LiveFrames.Adapters.Bricks.Result
   alias LiveFrames.Adapters.Bricks.Serializer
@@ -135,12 +136,12 @@ defmodule LiveFrames.Adapters.Bricks.StageA do
   end
 
   defp generate_document(document, loader_diagnostics, opts) do
-    result =
-      Result.new(document: document, diagnostics: loader_diagnostics)
-      |> Result.advance(:recognized)
-      |> Result.advance(:validated)
-
-    with {:ok, authority_index} <- build_authority_index(Keyword.get(opts, :token_set)),
+    with {:ok, document} <- ExecutionSecuritySanitizer.sanitize(document),
+         result <-
+           Result.new(document: document, diagnostics: loader_diagnostics)
+           |> Result.advance(:recognized)
+           |> Result.advance(:validated),
+         {:ok, authority_index} <- build_authority_index(Keyword.get(opts, :token_set)),
          :ok <- validate_source_shape(document),
          {:ok, proxy, component, resolve_diagnostics} <-
            Bricks.resolve(document,
