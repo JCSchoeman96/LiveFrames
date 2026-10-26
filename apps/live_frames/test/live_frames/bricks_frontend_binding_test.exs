@@ -3,6 +3,9 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   alias LiveFrames.Adapters.AutomaticCSS
   alias LiveFrames.Adapters.Bricks
+  alias LiveFrames.Adapters.Bricks.Element
+  alias LiveFrames.Adapters.Bricks.FrontendBindingNormalizer
+  alias LiveFrames.Adapters.Bricks.Tree
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.Fidelity
@@ -11,6 +14,7 @@ defmodule LiveFrames.BricksFrontendBindingTest do
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR
   alias LiveFrames.IR.Identity
+  alias LiveFrames.IR.SourceTrace
 
   @private_php_sentinel "PRIVATE_TRANSLATION_SENTINEL_dcb17f"
   @full_description_source "<?php /* #{@private_php_sentinel} */ $product = wc_get_product(get_the_ID()); " <>
@@ -86,6 +90,32 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   defp node_by_source_id(document, source_id) do
     Enum.find(flatten(document.root_nodes), &(&1.source_trace.source_id == source_id))
+  end
+
+  defp frontend_tree(%Element{} = element) do
+    Tree.new(
+      elements: %{element.id => element},
+      ordered_elements: [element],
+      root_ids: [element.id],
+      children_by_id: %{element.id => []},
+      parent_by_id: %{element.id => nil},
+      source_order: [element.id]
+    )
+  end
+
+  defp frontend_trace_index(source_id) do
+    %{
+      source_id => %{
+        node_id: "node_000001",
+        trace: %SourceTrace{
+          source_type: "bricks_element",
+          source_id: source_id,
+          source_path: "components[0].elements[0]",
+          adapter: "bricks",
+          adapter_version: "1.0.0"
+        }
+      }
+    }
   end
 
   defp private_sentinel_paths(value, path \\ [])
@@ -962,6 +992,9 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     ]
 
     for {source_id, source} <- unsupported_sources do
+      sentinel = "PRIVATE_#{String.upcase(source_id)}_SOURCE_SENTINEL"
+      source = String.replace(source, "<?php", "<?php /* #{sentinel} */", global: false)
+
       assert {:ok, document} =
                to_ir([
                  source_element(source_id, "code", 0, %{"executeCode" => true, "code" => source})
@@ -975,6 +1008,17 @@ defmodule LiveFrames.BricksFrontendBindingTest do
                diagnostic.code == "bricks.element.unsupported" and
                  diagnostic.source_trace.source_id == source_id
              end)
+
+      for ordinary_output <- [
+            document,
+            document.diagnostics,
+            document.provenance,
+            IR.to_map(document),
+            IR.encode!(document)
+          ] do
+        refute inspect(ordinary_output) =~ sentinel
+        refute inspect(ordinary_output) =~ source
+      end
     end
 
     assert {:ok, disabled} =
@@ -987,5 +1031,110 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
     assert disabled.value_bindings == %{}
     assert node_by_source_id(disabled, "disabled").semantic_type == "unsupported"
+  end
+
+  test "normalize/4 uses only a binary private Code body matched by source ID" do
+    sanitized_code = %Element{
+      id: "code-a",
+      name: "code",
+      settings: %{"executeCode" => true}
+    }
+
+    tree = frontend_tree(sanitized_code)
+    trace_index = frontend_trace_index("code-a")
+
+    authorized =
+      FrontendBindingNormalizer.normalize(
+        tree,
+        trace_index,
+        "1.0.0",
+        %{"code-a" => @full_description_source}
+      )
+
+    assert %ValueBinding{} = binding = Map.values(authorized.value_bindings) |> hd()
+    assert binding.value_key == "commerce.product.full_description"
+
+    assert binding.source_trace.metadata["source_fingerprint"] ==
+             :crypto.hash(:sha256, @full_description_source) |> Base.encode16(case: :lower)
+
+    refute inspect(authorized) =~ @private_php_sentinel
+    refute inspect(authorized) =~ @full_description_source
+
+    without_authority = FrontendBindingNormalizer.normalize(tree, trace_index, "1.0.0", %{})
+    assert without_authority.value_bindings == %{}
+    assert without_authority.diagnostics == []
+
+    raw_code_without_authority = %Element{
+      sanitized_code
+      | settings: %{"executeCode" => true, "code" => @full_description_source}
+    }
+
+    raw_code_result =
+      FrontendBindingNormalizer.normalize(
+        frontend_tree(raw_code_without_authority),
+        trace_index,
+        "1.0.0",
+        %{}
+      )
+
+    assert raw_code_result.value_bindings == %{}
+    assert raw_code_result.diagnostics == []
+
+    mismatched_authority =
+      FrontendBindingNormalizer.normalize(
+        tree,
+        trace_index,
+        "1.0.0",
+        %{"code-b" => @full_description_source}
+      )
+
+    assert mismatched_authority.value_bindings == %{}
+    assert mismatched_authority.diagnostics == []
+
+    malformed_authority =
+      FrontendBindingNormalizer.normalize(
+        tree,
+        trace_index,
+        "1.0.0",
+        %{"code-a" => %{source: @full_description_source, signature: String.duplicate("S", 32)}}
+      )
+
+    assert malformed_authority.value_bindings == %{}
+    assert malformed_authority.diagnostics == []
+
+    ordinary_element = %Element{
+      id: "heading-a",
+      name: "heading",
+      settings: %{"text" => "Static"}
+    }
+
+    ordinary_result =
+      FrontendBindingNormalizer.normalize(
+        frontend_tree(ordinary_element),
+        frontend_trace_index("heading-a"),
+        "1.0.0",
+        %{"heading-a" => @full_description_source}
+      )
+
+    assert ordinary_result.value_bindings == %{}
+    refute inspect(ordinary_result) =~ @private_php_sentinel
+  end
+
+  test "normalize/3 preserves direct Code source compatibility" do
+    element = %Element{
+      id: "direct-code",
+      name: "code",
+      settings: %{"executeCode" => true, "code" => @full_description_source}
+    }
+
+    result =
+      FrontendBindingNormalizer.normalize(
+        frontend_tree(element),
+        frontend_trace_index("direct-code"),
+        "1.0.0"
+      )
+
+    assert %ValueBinding{} = binding = Map.values(result.value_bindings) |> hd()
+    assert binding.value_key == "commerce.product.full_description"
   end
 end

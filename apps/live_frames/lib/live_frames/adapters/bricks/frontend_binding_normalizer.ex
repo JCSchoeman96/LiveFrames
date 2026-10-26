@@ -23,6 +23,16 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
 
   @spec normalize(Tree.t(), map(), String.t()) :: map()
   def normalize(%Tree{} = tree, trace_index, adapter_version) when is_map(trace_index) do
+    normalize(tree, trace_index, adapter_version, executable_code_sources_from_tree(tree))
+  end
+
+  def normalize(_tree, _trace_index, _adapter_version) do
+    empty_result()
+  end
+
+  @spec normalize(Tree.t(), map(), String.t(), map()) :: map()
+  def normalize(%Tree{} = tree, trace_index, adapter_version, private_code_sources)
+      when is_map(trace_index) and is_map(private_code_sources) do
     initial = {%{}, %{}, %{}, MapSet.new(), []}
 
     {collection_bindings, collection_by_source, collection_context_by_source, query_owner_ids,
@@ -47,7 +57,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
         trace_index,
         adapter_version,
         collection_by_source,
-        collection_context_by_source
+        collection_context_by_source,
+        private_code_sources
       )
 
     %{
@@ -64,7 +75,11 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     }
   end
 
-  def normalize(_tree, _trace_index, _adapter_version) do
+  def normalize(_tree, _trace_index, _adapter_version, _private_code_sources) do
+    empty_result()
+  end
+
+  defp empty_result do
     %{
       collection_bindings: %{},
       collection_by_source: %{},
@@ -77,6 +92,23 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       normalized_site_url_source_ids: MapSet.new(),
       diagnostics: []
     }
+  end
+
+  defp executable_code_sources_from_tree(%Tree{ordered_elements: elements}) do
+    Enum.reduce(elements, %{}, fn
+      %Element{id: source_id, name: "code", settings: settings}, sources
+      when is_binary(source_id) and is_map(settings) ->
+        case {Map.get(settings, "executeCode"), Map.get(settings, "code")} do
+          {true, source_body} when is_binary(source_body) ->
+            Map.put(sources, source_id, source_body)
+
+          _other ->
+            sources
+        end
+
+      _element, sources ->
+        sources
+    end)
   end
 
   defp collect_collections(
@@ -154,7 +186,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
          trace_index,
          adapter_version,
          collection_by_source,
-         collection_context_by_source
+         collection_context_by_source,
+         private_code_sources
        ) do
     initial = %{
       candidates: [],
@@ -175,7 +208,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
             collection_id,
             collection_by_source,
             trace_index,
-            adapter_version
+            adapter_version,
+            private_code_sources
           )
 
         %{
@@ -226,10 +260,11 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
          collection_id,
          collection_by_source,
          trace_index,
-         adapter_version
+         adapter_version,
+         private_code_sources
        ) do
     if element.name == "code" do
-      classify_executable_source(element, trace_index)
+      classify_executable_source(element, trace_index, Map.get(private_code_sources, element.id))
     else
       classify_regular_element_values(
         element,
@@ -283,9 +318,11 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     }
   end
 
-  defp classify_executable_source(%Element{settings: settings} = element, trace_index) do
-    source_bytes = Map.get(settings, "code")
-
+  defp classify_executable_source(
+         %Element{settings: settings} = element,
+         trace_index,
+         source_bytes
+       ) do
     if Map.get(settings, "executeCode") == true and is_binary(source_bytes) do
       trace_entry = Map.fetch!(trace_index, element.id)
 
@@ -327,7 +364,14 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           }
 
         {:unsupported, diagnostic} ->
-          empty_element_classification([diagnostic])
+          classification = empty_element_classification([diagnostic])
+
+          %{
+            classification
+            | node_actions: %{
+                source_trace: code_body_trace(trace_entry.trace, source_bytes)
+              }
+          }
       end
     else
       empty_element_classification([])
@@ -343,6 +387,16 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       normalized_site_url?: false,
       diagnostics: diagnostics
     }
+  end
+
+  defp code_body_trace(%SourceTrace{} = trace, source_bytes) do
+    metadata =
+      Map.merge(trace.metadata || %{}, %{
+        "execution_enabled" => true,
+        "source_fingerprint" => :crypto.hash(:sha256, source_bytes) |> Base.encode16(case: :lower)
+      })
+
+    %{trace | metadata: metadata}
   end
 
   defp classify_text(
