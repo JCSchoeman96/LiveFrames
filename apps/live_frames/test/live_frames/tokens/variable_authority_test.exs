@@ -157,4 +157,64 @@ defmodule LiveFrames.Tokens.VariableAuthorityTest do
     assert VariableAuthority.resolve(first_index, "--gap") ==
              VariableAuthority.resolve(second_index, "--gap")
   end
+
+  test "resolve_terminal returns the unique candidate evidence and its resolved value" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+    index = build!(token_set([token("spacing.content_gap", [source])]))
+
+    assert {:ok, candidate, "16px"} = VariableAuthority.resolve_terminal(index, "--gap")
+
+    assert candidate == %{
+             token_path: "spacing.content_gap",
+             authorities: [source],
+             token_present?: true,
+             resolution_status: :resolved
+           }
+
+    assert VariableAuthority.resolve(index, "--gap") == %{
+             state: :unique_candidate,
+             variable: "--gap",
+             candidates: [candidate]
+           }
+  end
+
+  test "resolve_terminal fails when no authority exists" do
+    index = build!(token_set([token("spacing.content_gap", [])]))
+
+    assert {:error, :no_authority} = VariableAuthority.resolve_terminal(index, "--unknown")
+  end
+
+  test "resolve_terminal fails when authority candidates are ambiguous" do
+    first = authority("--gap", "source_reference", "authority-first", "first")
+    second = authority("--gap", "source_reference", "authority-second", "second")
+
+    index =
+      build!(
+        token_set([
+          token("spacing.alpha", [first]),
+          token("spacing.beta", [second])
+        ])
+      )
+
+    assert {:error, :ambiguous_candidates} = VariableAuthority.resolve_terminal(index, "--gap")
+  end
+
+  test "resolve_terminal fails when the unique candidate has no token" do
+    source = authority("--gap", "source_reference", "authority-gap", "gap")
+
+    index = %VariableAuthority{
+      by_variable: %{"--gap" => %{"spacing.missing" => [source]}}
+    }
+
+    assert {:error, :token_missing} = VariableAuthority.resolve_terminal(index, "--gap")
+  end
+
+  test "resolve_terminal fails when the unique candidate token is unresolved" do
+    source = authority("--gap", "source_reference", "authority-gap", "gap")
+
+    index =
+      build!(token_set([token("spacing.content_gap", [source], :unresolved)]))
+
+    assert {:error, :token_unresolved} = VariableAuthority.resolve_terminal(index, "--gap")
+  end
 end
