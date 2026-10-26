@@ -3,6 +3,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
   alias LiveFrames.ComponentContract
   alias LiveFrames.ComponentizationPlan
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.IR.StateRuleSet
   alias LiveFrames.IR.StyleValue
@@ -59,7 +60,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
          {:ok, boundary_node} <-
            boundary_node(filtered_structure.boundary_node_id, filtered_structure.nodes_by_id),
          {:ok, style_result, classes} <-
-           collect_styles(boundary_node, plan, filtered_structure),
+           collect_styles(boundary_node, plan, filtered_structure, native_realization_authority),
          {:ok, css} <- render_styles_and_state(style_result),
          {:ok, stylesheet_path} <- stylesheet_path(contract) do
       {:ok,
@@ -106,7 +107,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
     end
   end
 
-  defp collect_styles(boundary_node, plan, filtered_structure) do
+  defp collect_styles(boundary_node, plan, filtered_structure, native_realization_authority) do
     slot_targets =
       plan.render_projections
       |> Enum.filter(&(&1.render_role == :subtree_slot))
@@ -117,6 +118,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
       path_by_id: filtered_structure.path_by_id,
       private_class_by_id: filtered_structure.private_class_by_id,
       boundary_path: Map.get(filtered_structure.path_by_id, filtered_structure.boundary_node_id),
+      selection_control_node_id: selection_control_node_id(native_realization_authority),
       subtree_slot_paths:
         Enum.flat_map(Map.keys(slot_targets), fn node_id ->
           case Map.fetch(filtered_structure.path_by_id, node_id) do
@@ -152,6 +154,12 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
         {:error, diagnostic}
     end
   end
+
+  defp selection_control_node_id(%NativeRealizationAuthority{control_node_id: node_id})
+       when is_binary(node_id),
+       do: node_id
+
+  defp selection_control_node_id(_authority), do: nil
 
   defp collect_node_styles(node, plan, slot_targets, style_context, filtered_structure, acc) do
     case Map.fetch(slot_targets, node.node_id) do
@@ -203,9 +211,12 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
          style_context,
          {rendered, classes, slot_targets, state_rule_acc}
        ) do
-    with {:ok, state_rule_set} <- node_state_rule_set(node),
+    selection_control? = node.node_id == style_context.selection_control_node_id
+
+    with {:ok, state_rule_set} <-
+           if(selection_control?, do: {:ok, nil}, else: node_state_rule_set(node)),
          :ok <- validate_state_owner_scope(node.node_id, state_rule_set, style_context),
-         ordinary_node <- ordinary_style_node(node, state_rule_set),
+         ordinary_node <- ordinary_style_node(node, state_rule_set, selection_control?),
          {:ok, base_styles, pseudo_styles} <- node_style(ordinary_node),
          responsive = responsive_overrides(node.responsive),
          {:ok, node_state_rules} <-
@@ -238,7 +249,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
         )
       else
         classes =
-          if root? or styled? or heading_navigation?,
+          if root? or styled? or heading_navigation? or selection_control?,
             do: Map.put(classes, node.node_id, class),
             else: classes
 
@@ -249,6 +260,11 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
         rendered =
           if heading_navigation?, do: [{:heading_navigation, class} | rendered], else: rendered
+
+        rendered =
+          if selection_control?,
+            do: [{:selection_activation_button, class} | rendered],
+            else: rendered
 
         {:ok, {rendered, classes, slot_targets, state_rule_acc}}
       end
@@ -275,6 +291,13 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
   defp ordinary_style_node(%DesignNode{styles: styles} = node, _state_rule_set)
        when is_map(styles),
        do: %{node | styles: Map.delete(styles, "custom-css")}
+
+  defp ordinary_style_node(%DesignNode{styles: styles} = node, _state_rule_set, true)
+       when is_map(styles),
+       do: %{node | styles: Map.delete(styles, "custom-css")}
+
+  defp ordinary_style_node(node, state_rule_set, false),
+    do: ordinary_style_node(node, state_rule_set)
 
   defp validate_state_owner_scope(_owner_node_id, nil, _style_context), do: :ok
 
@@ -912,6 +935,25 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
       {:ok, css} -> {:ok, css, ""}
       {:error, diagnostic} -> {:error, diagnostic}
     end
+  end
+
+  defp render_style_entry({:selection_activation_button, control_class}) do
+    selector =
+      ".#{control_class}[data-lf-selection-control=\"true\"] > :is(h1, h2, h3, h4, h5, h6) > button[data-lf-selection-activate=\"true\"]"
+
+    declarations = [
+      "font: inherit;",
+      "color: inherit;",
+      "background: transparent;",
+      "border: 0;",
+      "padding: 0;",
+      "margin: 0;",
+      "text-align: inherit;",
+      "cursor: pointer;"
+    ]
+
+    css = selector <> " {\n  " <> Enum.join(declarations, "\n  ") <> "\n}"
+    {:ok, css, ""}
   end
 
   defp navigable_heading?(%DesignNode{semantic_type: "heading", attributes: attributes})

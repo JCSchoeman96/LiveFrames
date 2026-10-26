@@ -8,6 +8,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   alias LiveFrames.ComponentizationPlan
   alias LiveFrames.ComponentizationPlan.ReferenceValidation
   alias LiveFrames.ComponentizationPlan.RenderProjection
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.IR.DesignNode
   alias LiveFrames.ComponentContract.Json
   alias LiveFrames.StaticMarkupContract
@@ -1023,7 +1024,18 @@ defmodule LiveFrames.NativeGenerator.Renderer do
            "heading_level placement could not be resolved"
          )}
       else
-        dynamic_heading_markup(indexes, node, collection_stack, is_root?, level_expr, body)
+        if selection_activation_carrier?(indexes, node) do
+          selection_dynamic_heading_markup(
+            indexes,
+            node,
+            collection_stack,
+            is_root?,
+            level_expr,
+            body
+          )
+        else
+          dynamic_heading_markup(indexes, node, collection_stack, is_root?, level_expr, body)
+        end
       end
     else
       case ReferenceValidation.native_tag(node, false) do
@@ -1069,6 +1081,42 @@ defmodule LiveFrames.NativeGenerator.Renderer do
      """
      |> String.trim_trailing()}
   end
+
+  defp selection_dynamic_heading_markup(
+         indexes,
+         node,
+         collection_stack,
+         is_root?,
+         level_expr,
+         body
+       ) do
+    tag_expr =
+      "case #{level_expr} do " <>
+        Enum.map_join(1..6, "; ", fn level -> "#{level} -> \"h#{level}\"" end) <>
+        " end"
+
+    attrs = root_attrs(indexes, node, collection_stack, is_root?)
+
+    with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
+      button =
+        "<button type=\"button\" data-lf-selection-activate=\"true\" aria-pressed=\"false\">" <>
+          body <> children <> "</button>"
+
+      {:ok, "<.dynamic_tag tag_name={#{tag_expr}}#{attrs}>#{button}</.dynamic_tag>"}
+    end
+  end
+
+  defp selection_activation_carrier?(
+         indexes,
+         %DesignNode{node_id: node_id, semantic_type: "heading"}
+       ) do
+    case indexes.native_realization_authority do
+      %NativeRealizationAuthority{activation_carrier_node_id: ^node_id} -> true
+      _ -> false
+    end
+  end
+
+  defp selection_activation_carrier?(_indexes, _node), do: false
 
   defp render_link(indexes, node, _roles, collection_stack, is_root?) do
     render_anchor(indexes, node, collection_stack, is_root?)
@@ -1173,35 +1221,61 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   end
 
   defp render_generic(indexes, node, type, _roles, collection_stack, is_root?) do
-    case ReferenceValidation.native_tag(node, false) do
-      {:ok, :dynamic_heading} ->
-        {:error,
-         Diagnostic.error(
-           "native_generator.tag_unresolved",
-           "unexpected dynamic heading without heading_level placement"
-         )}
+    if selection_control?(indexes, node) do
+      attrs =
+        root_attrs(indexes, node, collection_stack, is_root?) <>
+          " data-lf-selection-control=\"true\" data-lf-selection-state=\"unselected\""
 
-      {:ok, tag} when is_binary(tag) ->
-        attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
+      with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
+        {:ok, "<div#{attrs}>#{children}</div>"}
+      end
+    else
+      case ReferenceValidation.native_tag(node, false) do
+        {:ok, :dynamic_heading} ->
+          {:error,
+           Diagnostic.error(
+             "native_generator.tag_unresolved",
+             "unexpected dynamic heading without heading_level placement"
+           )}
 
-        body =
-          static_or_expr_body(
-            node,
-            role_expr(indexes, node.node_id, :text_content, collection_stack)
-          )
+        {:ok, tag} when is_binary(tag) ->
+          attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
 
-        with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
-          {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
-        end
+          body =
+            static_or_expr_body(
+              node,
+              role_expr(indexes, node.node_id, :text_content, collection_stack)
+            )
 
-      :error ->
-        {:error,
-         Diagnostic.error(
-           "native_generator.semantic_unsupported",
-           "semantic_type #{type} has no frozen native tag mapping"
-         )}
+          with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
+            {:ok, "<#{tag}#{attrs}>#{body}#{children}</#{tag}>"}
+          end
+
+        :error ->
+          {:error,
+           Diagnostic.error(
+             "native_generator.semantic_unsupported",
+             "semantic_type #{type} has no frozen native tag mapping"
+           )}
+      end
     end
   end
+
+  defp selection_control?(
+         indexes,
+         %DesignNode{
+           node_id: node_id,
+           semantic_type: "generic",
+           attributes: %{"tag" => "button"}
+         }
+       ) do
+    case indexes.native_realization_authority do
+      %NativeRealizationAuthority{control_node_id: ^node_id} -> true
+      _ -> false
+    end
+  end
+
+  defp selection_control?(_indexes, _node), do: false
 
   defp tag_attrs(indexes, node, collection_stack, is_root?, tag) do
     root_attrs(indexes, node, collection_stack, is_root?) <>
