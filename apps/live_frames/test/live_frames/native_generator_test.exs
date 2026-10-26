@@ -24,13 +24,20 @@ defmodule LiveFrames.NativeGeneratorTest do
   alias LiveFrames.IR.ValueBinding
   alias LiveFrames.IR
   alias LiveFrames.NativeGenerator
+  alias LiveFrames.NativeGenerator.FilteredStructure
   alias LiveFrames.NativeGenerator.Renderer
+  alias LiveFrames.NativeGenerator.StyleIntegration
   alias LiveFrames.Behavior.Binding, as: BehaviorBinding
+  alias LiveFrames.Behavior.Binding.ControlledTarget
   alias LiveFrames.Behavior.Binding.PrimitiveRef
+  alias LiveFrames.Behavior.Binding.Trigger
   alias LiveFrames.Behavior.BindingIdentity
   alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.Behavior.ReviewResult, as: BehaviorReviewResult
   alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
+  alias LiveFrames.Behavior.Validation, as: BehaviorValidation
+  alias LiveFrames.ComponentizationPlan.ReferenceValidation
   alias LiveFrames.ComponentizationPlan.NodeDisposition
 
   @boundary_id DesignNode.deterministic_id([1])
@@ -398,6 +405,16 @@ defmodule LiveFrames.NativeGeneratorTest do
      behavior_review, component_review, review_id}
   end
 
+  defp validate_behavior_authority_b1(document, behavior_contract, selected_review) do
+    with :ok <- BehaviorValidation.validate_structure(document, behavior_contract),
+         {:ok, _digest} <- BehaviorSerializer.digest(behavior_contract),
+         {:ok, approved_review} <-
+           BehaviorReviewResult.require_approved([selected_review], behavior_contract),
+         {:ok, _review_id} <- BehaviorReviewResult.id(approved_review) do
+      :ok
+    end
+  end
+
   test "generate/3 requires explicit authority for disposition-bearing plans" do
     {approved_contract, plan, design_document, _behavior_contract, _behavior_review_result,
      _component_review_result, _component_review_result_id} = disposition_authority()
@@ -587,14 +604,23 @@ defmodule LiveFrames.NativeGeneratorTest do
     ]
 
     for {changed_contract, changed_review} <- cases do
-      assert {:error, expected_diagnostics} =
-               ComponentizationPlan.validate_for_generation_with_behavior_authority(
-                 plan,
-                 contract,
-                 document,
-                 changed_contract,
-                 changed_review
-               )
+      expected_diagnostics =
+        case validate_behavior_authority_b1(document, changed_contract, changed_review) do
+          {:error, diagnostics} ->
+            diagnostics
+
+          :ok ->
+            assert {:error, diagnostics} =
+                     ComponentizationPlan.validate_references_with_behavior_authority(
+                       plan,
+                       contract,
+                       document,
+                       changed_contract,
+                       changed_review
+                     )
+
+            diagnostics
+        end
 
       assert {:error, :generation_blocked, ^expected_diagnostics} =
                NativeGenerator.generate(
@@ -645,13 +671,7 @@ defmodule LiveFrames.NativeGeneratorTest do
       refresh_behavior_authority(put_elem(tuple, 4, changed_review), behavior_contract.bindings)
 
     assert {:error, expected_diagnostics} =
-             ComponentizationPlan.validate_for_generation_with_behavior_authority(
-               plan,
-               contract,
-               document,
-               behavior_contract,
-               changed_review
-             )
+             BehaviorReviewResult.require_approved([changed_review], behavior_contract)
 
     assert {:error, :generation_blocked, ^expected_diagnostics} =
              NativeGenerator.generate(
@@ -686,7 +706,7 @@ defmodule LiveFrames.NativeGeneratorTest do
        changed_component_review, changed_review_id} = authority
 
       assert {:error, upstream_diagnostics} =
-               ComponentizationPlan.validate_for_generation_with_behavior_authority(
+               ComponentizationPlan.validate_references_with_behavior_authority(
                  changed_plan,
                  changed_contract,
                  changed_document,
@@ -2074,4 +2094,506 @@ defmodule LiveFrames.NativeGeneratorTest do
              module_intent: "marketing_block"
            }) == "lf-section-marketing-block"
   end
+
+  test "generate/7 passes an exact Selection tuple through eligibility to the renderer" do
+    tuple = selection_generation_tuple()
+
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _review_id} =
+      tuple
+
+    assert {:ok, _authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert {:error, :generation_failed, [diagnostic]} = generate_selection(tuple)
+
+    assert diagnostic.code == "native_generator.semantic_unsupported"
+  end
+
+  test "ordinary generic button eligibility and rendering stay closed" do
+    tuple = selection_generation_tuple()
+
+    {contract, plan, document, _behavior_contract, _behavior_review, _component_review, _id} =
+      tuple
+
+    generic_button = %DesignNode{semantic_type: "generic", attributes: %{"tag" => "button"}}
+
+    assert ReferenceValidation.native_tag(generic_button, false) == :error
+
+    assert {:error, :generation_blocked, diagnostics} =
+             NativeGenerator.generate(contract, plan, document)
+
+    assert Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_plan.native_generation.tag_unsupported"
+           end)
+  end
+
+  test "Layer D accepts the exact tuple and threads the same authority through styling and indexes" do
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _id} =
+      selection_generation_tuple()
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert :ok ==
+             ComponentizationPlan.validate_for_generation_with_behavior_and_native_realization_authority(
+               plan,
+               contract,
+               document,
+               behavior_contract,
+               behavior_review,
+               authority
+             )
+
+    {:ok, filtered_structure} =
+      FilteredStructure.build(
+        document,
+        plan.boundary_node_id,
+        [],
+        Renderer.package_root_class(contract)
+      )
+
+    assert {:ok, ordinary_styling} = StyleIntegration.build(contract, plan, filtered_structure)
+    assert ordinary_styling.native_realization_authority == nil
+
+    assert {:ok, ordinary_indexes} =
+             Renderer.build_indexes(
+               contract,
+               plan,
+               filtered_structure,
+               document.value_bindings,
+               ordinary_styling.primary_action_slot_targets
+             )
+
+    assert ordinary_indexes.native_realization_authority == nil
+
+    assert {:ok, styling} =
+             StyleIntegration.build(contract, plan, filtered_structure, authority)
+
+    assert styling.native_realization_authority === authority
+
+    assert {:ok, indexes} =
+             Renderer.build_indexes(
+               contract,
+               plan,
+               filtered_structure,
+               document.value_bindings,
+               styling.primary_action_slot_targets,
+               styling.native_realization_authority
+             )
+
+    assert indexes.native_realization_authority === authority
+  end
+
+  test "Layer D rejects realization authority reused against another tuple" do
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _id} =
+      selection_generation_tuple()
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    changed_contract = %{contract | contract_id: "other-selection-contract"}
+    changed_plan_digest = %{plan | design_document_sha256: String.duplicate("0", 64)}
+    changed_boundary = %{plan | boundary_node_id: DesignNode.deterministic_id([2])}
+    changed_review = %{behavior_review | reviewer_identity: "reviewer:other-selection"}
+
+    tuples = [
+      {changed_contract, plan, behavior_review},
+      {contract, changed_plan_digest, behavior_review},
+      {contract, changed_boundary, behavior_review},
+      {contract, plan, changed_review}
+    ]
+
+    for {selected_contract, selected_plan, selected_review} <- tuples do
+      assert {:error, [diagnostic]} =
+               ComponentizationPlan.validate_for_generation_with_behavior_and_native_realization_authority(
+                 selected_plan,
+                 selected_contract,
+                 document,
+                 behavior_contract,
+                 selected_review,
+                 authority
+               )
+
+      assert diagnostic.code ==
+               "componentization_plan.native_generation.realization_authority_mismatch"
+    end
+  end
+
+  test "generate/7 checks Behavior identity and review authority without node dispositions" do
+    tuple = selection_generation_tuple()
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _id} = tuple
+
+    wrong_identity = %{
+      behavior_contract
+      | design_document_identity: %{
+          behavior_contract.design_document_identity
+          | digest: String.duplicate("0", 64)
+        }
+    }
+
+    unapproved_review = %{behavior_review | decision: "needs_review"}
+
+    mismatched_review_digest = %{
+      behavior_review
+      | behavior_contract_digest: String.duplicate("0", 64)
+    }
+
+    cases = [
+      {wrong_identity, behavior_review,
+       BehaviorValidation.validate_structure(document, wrong_identity)},
+      {behavior_contract, unapproved_review,
+       BehaviorReviewResult.require_approved([unapproved_review], behavior_contract)},
+      {behavior_contract, mismatched_review_digest,
+       BehaviorReviewResult.require_approved([mismatched_review_digest], behavior_contract)}
+    ]
+
+    for {changed_contract, changed_review, {:error, expected_diagnostics}} <- cases do
+      assert {:error, :generation_blocked, ^expected_diagnostics} =
+               generate_selection(
+                 {contract, plan, document, changed_contract, changed_review, elem(tuple, 5),
+                  elem(tuple, 6)}
+               )
+    end
+  end
+
+  test "invalid in-boundary Selection bindings fail through T2 realization diagnostics" do
+    cases = [
+      {selection_generation_tuple(selection_version: "9.9.9"),
+       "behavior.semantic.primitive_unsupported"},
+      {selection_generation_tuple(control_semantic_type: "button"),
+       "behavior.native_realization.control_invalid"},
+      {selection_generation_tuple(carrier_disconnected?: true),
+       "behavior.native_realization.carrier_invalid"}
+    ]
+
+    for {tuple, expected_code} <- cases do
+      assert {:error, :generation_blocked, diagnostics} = generate_selection(tuple)
+      assert Enum.any?(diagnostics, &(&1.code == expected_code))
+
+      refute Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "componentization_plan.native_generation.tag_unsupported"
+             end)
+    end
+  end
+
+  test "a split Selection binding triggers realization derivation and fails closed" do
+    tuple = selection_generation_tuple(selection_split?: true)
+
+    assert {:error, :generation_blocked, diagnostics} = generate_selection(tuple)
+
+    assert Enum.any?(
+             diagnostics,
+             &(&1.code == "behavior.native_realization.binding_not_contained")
+           )
+
+    refute Enum.any?(diagnostics, fn diagnostic ->
+             diagnostic.code == "componentization_plan.native_generation.tag_unsupported"
+           end)
+  end
+
+  test "an outside Selection binding uses ordinary native generation" do
+    tuple = selection_generation_tuple(selection_outside?: true)
+    {_contract, plan, document, behavior_contract, _behavior_review, _review, _id} = tuple
+    [binding] = behavior_contract.bindings
+    context = LiveFrames.Behavior.BindingContainment.prepare(document, plan.boundary_node_id)
+
+    assert LiveFrames.Behavior.BindingContainment.classify_binding(binding, context) ==
+             :outside_candidate
+
+    assert {:ok, %{artifacts: [_module, _stylesheet]}} = generate_selection(tuple)
+  end
+
+  defp generate_selection(
+         {contract, plan, document, behavior_contract, behavior_review, component_review,
+          review_id}
+       ) do
+    NativeGenerator.generate(
+      contract,
+      plan,
+      document,
+      behavior_contract,
+      behavior_review,
+      component_review,
+      review_id
+    )
+  end
+
+  defp selection_generation_tuple(opts \\ []) do
+    selection_outside? = Keyword.get(opts, :selection_outside?, false)
+    selection_split? = Keyword.get(opts, :selection_split?, false)
+    carrier_disconnected? = Keyword.get(opts, :carrier_disconnected?, false)
+    has_outer_root? = selection_outside? or selection_split?
+    boundary_path = if has_outer_root?, do: [1, 1], else: [1]
+    boundary_id = DesignNode.deterministic_id(boundary_path)
+    control_path = boundary_path ++ [1]
+    control_id = DesignNode.deterministic_id(control_path)
+    carrier_id = DesignNode.deterministic_id(control_path ++ [1])
+    presentation_a_id = DesignNode.deterministic_id(boundary_path ++ [2])
+    presentation_b_id = DesignNode.deterministic_id(boundary_path ++ [3])
+    disconnected_control_id = DesignNode.deterministic_id(boundary_path ++ [4])
+
+    boundary_control = %DesignNode{
+      node_id: control_id,
+      semantic_type:
+        Keyword.get(
+          opts,
+          :control_semantic_type,
+          if(selection_outside?, do: "button", else: "generic")
+        ),
+      attributes: %{"tag" => "button"},
+      children: [
+        %DesignNode{
+          node_id: carrier_id,
+          semantic_type: "heading",
+          attributes: %{"tag" => "h3"}
+        }
+      ]
+    }
+
+    disconnected_control =
+      if carrier_disconnected? do
+        [
+          %DesignNode{
+            node_id: disconnected_control_id,
+            semantic_type: "generic",
+            attributes: %{"tag" => "button"}
+          }
+        ]
+      else
+        []
+      end
+
+    boundary_node = %DesignNode{
+      node_id: boundary_id,
+      semantic_type: "section",
+      children:
+        [
+          boundary_control,
+          %DesignNode{node_id: presentation_a_id, semantic_type: "paragraph"},
+          %DesignNode{node_id: presentation_b_id, semantic_type: "paragraph"}
+        ] ++ disconnected_control
+    }
+
+    outside_owner_id = DesignNode.deterministic_id([1, 2])
+    outside_control_id = DesignNode.deterministic_id([1, 2, 1])
+    outside_presentation_a_id = DesignNode.deterministic_id([1, 2, 2])
+    outside_presentation_b_id = DesignNode.deterministic_id([1, 2, 3])
+
+    outside_node = %DesignNode{
+      node_id: outside_owner_id,
+      semantic_type: "section",
+      children: [
+        %DesignNode{
+          node_id: outside_control_id,
+          semantic_type: "generic",
+          attributes: %{"tag" => "button"}
+        },
+        %DesignNode{node_id: outside_presentation_a_id, semantic_type: "paragraph"},
+        %DesignNode{node_id: outside_presentation_b_id, semantic_type: "paragraph"}
+      ]
+    }
+
+    root_nodes =
+      if has_outer_root? do
+        [
+          %DesignNode{
+            node_id: DesignNode.deterministic_id([1]),
+            semantic_type: "section",
+            children: [boundary_node, outside_node]
+          }
+        ]
+      else
+        [boundary_node]
+      end
+
+    document = %DesignDocument{
+      root_nodes: root_nodes,
+      collection_bindings: %{
+        "cb_cards" => %CollectionBinding{
+          collection_binding_id: "cb_cards",
+          owner_node_id: boundary_id,
+          repeat_root_node_id: boundary_id
+        }
+      },
+      value_bindings: %{
+        "vb_title" => %ValueBinding{
+          value_binding_id: "vb_title",
+          target_node_id: carrier_id,
+          target_kind: :text,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_cards",
+          value_key: "title",
+          normalization_status: :normalized,
+          modifier: %LiveFrames.IR.ValueModifier.None{}
+        }
+      }
+    }
+
+    {:ok, document_identity} = Identity.from_document(document)
+
+    selection_control_id =
+      cond do
+        selection_outside? -> outside_control_id
+        carrier_disconnected? -> disconnected_control_id
+        true -> control_id
+      end
+
+    selection_owner_id =
+      cond do
+        selection_outside? -> outside_owner_id
+        selection_split? -> DesignNode.deterministic_id([1])
+        true -> boundary_id
+      end
+
+    selection_presentation_ids =
+      cond do
+        selection_outside? -> [outside_presentation_a_id, outside_presentation_b_id]
+        selection_split? -> [presentation_a_id, outside_presentation_a_id]
+        true -> [presentation_a_id, presentation_b_id]
+      end
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: document_identity,
+        bindings: [
+          %BehaviorBinding{
+            primitive_ref: %PrimitiveRef{
+              kind: "selection",
+              definition_version: Keyword.get(opts, :selection_version, "1.0.0")
+            },
+            owner_node_id: selection_owner_id,
+            binding_role: "primary",
+            primitive_policy_values: %{
+              "alignment" => "position",
+              "advance_boundary" => "wrap"
+            },
+            triggers: [%Trigger{kind: "activate", origin_node_id: selection_control_id}],
+            controlled_targets: [
+              %ControlledTarget{role: "control_collection", node_id: selection_control_id},
+              %ControlledTarget{
+                role: "presentation_collection",
+                node_id: Enum.at(selection_presentation_ids, 0)
+              },
+              %ControlledTarget{
+                role: "presentation_collection",
+                node_id: Enum.at(selection_presentation_ids, 1)
+              }
+            ]
+          }
+        ]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+
+    behavior_review = %BehaviorReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: document_identity,
+      behavior_contract_digest_algorithm: BehaviorSerializer.algorithm(),
+      behavior_contract_digest: behavior_digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:synthetic-selection",
+      reviewed_at: "2026-10-20T00:00:00.000000Z",
+      evidence_refs: ["synthetic-selection-evidence"]
+    }
+
+    contract = %ComponentContract{
+      contract_id: "synthetic-selection-contract",
+      category: :section,
+      module_intent: "selection_component",
+      function_intent: "selection_component",
+      public_attrs: [
+        %Attr{name: "items", type: :list, semantic_purpose: "items"},
+        %Attr{
+          name: "heading_level",
+          type: :integer,
+          required: true,
+          semantic_purpose: "heading level",
+          validation: %{"values" => [1, 2, 3, 4, 5, 6]}
+        }
+      ],
+      collection_inputs: [
+        %CollectionInput{
+          source_collection_binding_id: "cb_cards",
+          public_attr_name: "items",
+          item_fields: [%ItemField{name: "title", type: :string, semantic_purpose: "title"}]
+        }
+      ],
+      binding_projections: [
+        %BindingProjection{
+          source_binding_kind: :collection,
+          source_binding_id: "cb_cards",
+          projection_kind: :collection_attr,
+          public_attr_name: "items",
+          source_collection_binding_id: "cb_cards",
+          target_node_id: boundary_id
+        },
+        %BindingProjection{
+          source_binding_kind: :value,
+          source_binding_id: "vb_title",
+          projection_kind: :collection_item_field,
+          source_collection_binding_id: "cb_cards",
+          item_field_name: "title",
+          target_node_id: carrier_id
+        }
+      ],
+      approval_status: :approved
+    }
+
+    {:ok, fingerprint} = ComponentizationPlan.design_document_sha256(document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: fingerprint,
+      boundary_node_id: boundary_id,
+      render_projections: [
+        %RenderProjection{
+          public_attr_name: "heading_level",
+          target_node_id: carrier_id,
+          render_role: :heading_level
+        }
+      ]
+    }
+
+    {:ok, component_contract_bytes} = ComponentContract.encode(contract)
+    {:ok, plan_bytes} = ComponentizationPlan.encode(plan)
+
+    component_review = %ComponentReviewResult{
+      review_format_version: "1.0.0",
+      component_contract_id: contract.contract_id,
+      component_contract_digest_algorithm: "sha-256",
+      component_contract_digest: sha256(component_contract_bytes),
+      design_document_sha256: fingerprint,
+      componentization_plan_digest_algorithm: "sha-256",
+      componentization_plan_digest: sha256(plan_bytes),
+      decision: "approved",
+      reviewer_identity: "reviewer:synthetic-component",
+      reviewed_at: "2026-10-20T00:00:00.000000Z",
+      evidence_refs: ["synthetic-component-evidence"]
+    }
+
+    {:ok, review_id} = ComponentReviewResult.id(component_review)
+
+    {contract, plan, document, behavior_contract, behavior_review, component_review, review_id}
+  end
+
+  defp sha256(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
 end

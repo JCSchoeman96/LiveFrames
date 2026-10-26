@@ -54,6 +54,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
               binding_roles_by_node: %{},
               binding_projection_by_node_role: %{},
               effective_roles_by_node: %{},
+              native_realization_authority: nil,
               count_attr_names: MapSet.new()
   end
 
@@ -71,6 +72,33 @@ defmodule LiveFrames.NativeGenerator.Renderer do
         %FilteredStructure{} = filtered_structure,
         value_bindings,
         primary_action_slot_targets
+      ),
+      do:
+        build_indexes(
+          contract,
+          plan,
+          filtered_structure,
+          value_bindings,
+          primary_action_slot_targets,
+          nil
+        )
+
+  @spec build_indexes(
+          ComponentContract.t(),
+          ComponentizationPlan.t(),
+          FilteredStructure.t(),
+          map(),
+          MapSet.t(),
+          term()
+        ) ::
+          {:ok, Indexes.t()} | {:error, Diagnostic.t()}
+  def build_indexes(
+        contract,
+        plan,
+        %FilteredStructure{} = filtered_structure,
+        value_bindings,
+        primary_action_slot_targets,
+        native_realization_authority
       ) do
     nodes_by_id = filtered_structure.nodes_by_id
     boundary_node = Map.get(nodes_by_id, plan.boundary_node_id)
@@ -158,6 +186,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
          binding_roles_by_node: binding_roles_by_node,
          binding_projection_by_node_role: binding_projection_by_node_role,
          effective_roles_by_node: effective_roles_by_node,
+         native_realization_authority: native_realization_authority,
          count_attr_names: count_attr_names
        }}
     end
