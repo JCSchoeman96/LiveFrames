@@ -2172,6 +2172,80 @@ defmodule LiveFrames.NativeGeneratorTest do
     end)
   end
 
+  test "authorized Selection control preserves static control content" do
+    control_content = "Authorized control companion"
+    tuple = selection_generation_tuple(control_content: control_content)
+
+    with_compiled_selection(tuple, fn module, _bundle, _source ->
+      render = Function.capture(module, :selection_component, 1)
+
+      html =
+        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+
+      [control_inner] =
+        Regex.run(
+          ~r/<div[^>]*data-lf-selection-control="true"[^>]*>(.*?)<\/div>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      [button_inner] =
+        Regex.run(
+          ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>(.*?)<\/button>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      assert length(:binary.matches(html, control_content)) == 1
+      assert length(:binary.matches(control_inner, control_content)) == 1
+      refute button_inner =~ control_content
+      assert html =~ ~r/<h3[^>]*>\s*<button[^>]*>Synthetic title<\/button>\s*<\/h3>/
+    end)
+  end
+
+  test "Selection activation button leaves carrier children inside the heading" do
+    carrier_content = "Carrier companion"
+    tuple = selection_generation_tuple(carrier_companion_content: carrier_content)
+
+    {contract, plan, document, behavior_contract, behavior_review, _component_review, _review_id} =
+      tuple
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               contract,
+               plan,
+               document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert {:ok, %{source: source}} = render_selection_parts(tuple, authority)
+
+    with_compiled_selection_source(source, fn module ->
+      render = Function.capture(module, :selection_component, 1)
+
+      html =
+        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+
+      [heading_inner] = Regex.run(~r/<h3[^>]*>(.*?)<\/h3>/s, html, capture: :all_but_first)
+
+      [button_inner] =
+        Regex.run(
+          ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>(.*?)<\/button>/s,
+          html,
+          capture: :all_but_first
+        )
+
+      assert button_inner =~ "Synthetic title"
+      refute button_inner =~ carrier_content
+
+      assert heading_inner =~
+               ~r/<button[^>]*data-lf-selection-activate="true"[^>]*>Synthetic title<\/button>\s*<span>Carrier companion<\/span>/
+
+      assert length(:binary.matches(html, carrier_content)) == 1
+    end)
+  end
+
   test "Selection heading levels 1 through 6 and default level 3 render once" do
     tuple = selection_generation_tuple(heading_level_default?: true)
 
@@ -2564,6 +2638,13 @@ defmodule LiveFrames.NativeGeneratorTest do
   defp with_compiled_selection(tuple, fun) do
     assert {:ok, bundle} = generate_selection(tuple)
     source = elixir_artifact(bundle).content
+
+    with_compiled_selection_source(source, fn module ->
+      fun.(module, bundle, source)
+    end)
+  end
+
+  defp with_compiled_selection_source(source, fun) do
     module_name = "LiveFrames.GeneratedSelection#{System.unique_integer([:positive])}"
 
     compiled =
@@ -2572,7 +2653,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     [{module, _binary}] = Code.compile_string(compiled)
 
     try do
-      fun.(module, bundle, source)
+      fun.(module)
     after
       :code.delete(module)
     end
@@ -2650,6 +2731,8 @@ defmodule LiveFrames.NativeGeneratorTest do
     carrier_disconnected? = Keyword.get(opts, :carrier_disconnected?, false)
     control_attributes = Keyword.get(opts, :control_attributes, %{})
     control_styles = Keyword.get(opts, :control_styles, %{})
+    control_content = Keyword.get(opts, :control_content)
+    carrier_companion_content = Keyword.get(opts, :carrier_companion_content)
     heading_level_default? = Keyword.get(opts, :heading_level_default?, false)
     has_outer_root? = selection_outside? or selection_split?
     boundary_path = if has_outer_root?, do: [1, 1], else: [1]
@@ -2657,6 +2740,21 @@ defmodule LiveFrames.NativeGeneratorTest do
     control_path = boundary_path ++ [1]
     control_id = DesignNode.deterministic_id(control_path)
     carrier_id = DesignNode.deterministic_id(control_path ++ [1])
+
+    carrier_children =
+      if is_binary(carrier_companion_content) do
+        [
+          %DesignNode{
+            node_id: DesignNode.deterministic_id(control_path ++ [1, 1]),
+            semantic_type: "rich_text",
+            attributes: %{"tag" => "span"},
+            content: carrier_companion_content
+          }
+        ]
+      else
+        []
+      end
+
     presentation_a_id = DesignNode.deterministic_id(boundary_path ++ [2])
     presentation_b_id = DesignNode.deterministic_id(boundary_path ++ [3])
     disconnected_control_id = DesignNode.deterministic_id(boundary_path ++ [4])
@@ -2671,11 +2769,13 @@ defmodule LiveFrames.NativeGeneratorTest do
         ),
       attributes: Map.merge(%{"tag" => "button"}, control_attributes),
       styles: control_styles,
+      content: control_content,
       children: [
         %DesignNode{
           node_id: carrier_id,
           semantic_type: "heading",
-          attributes: %{"tag" => "h3"}
+          attributes: %{"tag" => "h3"},
+          children: carrier_children
         }
       ]
     }

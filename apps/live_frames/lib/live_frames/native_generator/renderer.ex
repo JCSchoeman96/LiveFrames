@@ -1100,9 +1100,9 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
       button =
         "<button type=\"button\" data-lf-selection-activate=\"true\" aria-pressed=\"false\">" <>
-          body <> children <> "</button>"
+          body <> "</button>"
 
-      {:ok, "<.dynamic_tag tag_name={#{tag_expr}}#{attrs}>#{button}</.dynamic_tag>"}
+      {:ok, "<.dynamic_tag tag_name={#{tag_expr}}#{attrs}>#{button}#{children}</.dynamic_tag>"}
     end
   end
 
@@ -1226,8 +1226,14 @@ defmodule LiveFrames.NativeGenerator.Renderer do
         root_attrs(indexes, node, collection_stack, is_root?) <>
           " data-lf-selection-control=\"true\" data-lf-selection-state=\"unselected\""
 
+      body =
+        static_or_expr_body(
+          node,
+          role_expr(indexes, node.node_id, :text_content, collection_stack)
+        )
+
       with {:ok, children} <- render_children(indexes, node, collection_stack, is_root?) do
-        {:ok, "<div#{attrs}>#{children}</div>"}
+        {:ok, "<div#{attrs}>#{body}#{children}</div>"}
       end
     else
       case ReferenceValidation.native_tag(node, false) do
