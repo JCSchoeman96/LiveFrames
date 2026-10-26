@@ -21,7 +21,12 @@ config :esbuild,
   app: [
     args: ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js),
     cd: Path.expand("../apps/live_frames_preview/assets", __DIR__),
-    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+    env: %{
+      "NODE_PATH" => [
+        Path.expand("../deps", __DIR__),
+        Mix.Project.build_path()
+      ]
+    }
   ],
   storybook: [
     args: ~w(js/storybook.js --bundle --target=es2022 --outdir=../priv/static/assets/js),
