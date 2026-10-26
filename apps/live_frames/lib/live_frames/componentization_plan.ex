@@ -138,6 +138,32 @@ defmodule LiveFrames.ComponentizationPlan do
           selected_behavior_review_result
         )
 
+  @spec validate_for_generation_with_behavior_and_native_realization_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_for_generation_with_behavior_and_native_realization_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result,
+        native_realization_authority
+      ),
+      do:
+        ReferenceValidation.validate_for_generation_with_behavior_and_native_realization_authority(
+          plan,
+          approved_component_contract,
+          design_document,
+          behavior_contract,
+          selected_behavior_review_result,
+          native_realization_authority
+        )
+
   @spec design_document_sha256(term()) :: {:ok, String.t()} | {:error, [Diagnostic.t()]}
   def design_document_sha256(design_document) do
     try do

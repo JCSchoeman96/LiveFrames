@@ -44,6 +44,16 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
         %ComponentContract{} = contract,
         %ComponentizationPlan{} = plan,
         %FilteredStructure{} = filtered_structure
+      ),
+      do: build(contract, plan, filtered_structure, nil)
+
+  @spec build(ComponentContract.t(), ComponentizationPlan.t(), FilteredStructure.t(), term()) ::
+          {:ok, map()} | {:error, :generation_blocked, [Diagnostic.t()]}
+  def build(
+        %ComponentContract{} = contract,
+        %ComponentizationPlan{} = plan,
+        %FilteredStructure{} = filtered_structure,
+        native_realization_authority
       ) do
     with :ok <- validate_boundary(plan, filtered_structure),
          {:ok, boundary_node} <-
@@ -56,6 +66,7 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
        %{
          private_class_by_id: classes,
          primary_action_slot_targets: style_result.primary_action_slot_targets,
+         native_realization_authority: native_realization_authority,
          nodes_by_id: filtered_structure.nodes_by_id,
          stylesheet_content: css,
          stylesheet_path: stylesheet_path

@@ -14,11 +14,14 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
   alias LiveFrames.ComponentizationPlan.Validation
-  alias LiveFrames.Behavior.ComponentizationDecision
+  alias LiveFrames.Behavior.BindingContainment
+  alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.Behavior.ReviewResult
   alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
   alias LiveFrames.IR.CollectionBinding
   alias LiveFrames.IR.DesignNode
+  alias LiveFrames.IR.Identity
   alias LiveFrames.IR.ValueBinding
 
   @role_types %{
@@ -85,10 +88,24 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  defp validate_generation_prerequisites_ordinary(plan, component_contract, design_document) do
+  defp validate_generation_prerequisites_ordinary(
+         plan,
+         component_contract,
+         design_document,
+         native_realization_authority \\ nil
+       ) do
     case preflight_generation(plan, component_contract, design_document) do
       {:ok, plan, component_contract, design_document} ->
-        reference_result = validate_indexed(plan, component_contract, design_document, true)
+        reference_result =
+          validate_indexed(
+            plan,
+            component_contract,
+            design_document,
+            true,
+            nil,
+            [],
+            native_realization_authority
+          )
 
         stored_blockers =
           Enum.filter(plan.diagnostics, fn diagnostic ->
@@ -179,6 +196,63 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
         behavior_contract,
         selected_behavior_review_result
       ) do
+    validate_generation_prerequisites_with_behavior_authority_internal(
+      plan,
+      component_contract,
+      design_document,
+      behavior_contract,
+      selected_behavior_review_result,
+      nil
+    )
+  end
+
+  @spec validate_generation_prerequisites_with_behavior_and_native_realization_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_generation_prerequisites_with_behavior_and_native_realization_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result,
+        native_realization_authority
+      ) do
+    case validate_native_realization_authority_tuple(
+           native_realization_authority,
+           approved_component_contract,
+           plan,
+           design_document,
+           behavior_contract,
+           selected_behavior_review_result
+         ) do
+      :ok ->
+        validate_generation_prerequisites_with_behavior_authority_internal(
+          plan,
+          approved_component_contract,
+          design_document,
+          behavior_contract,
+          selected_behavior_review_result,
+          native_realization_authority
+        )
+
+      {:error, diagnostic} ->
+        {:error, [diagnostic]}
+    end
+  end
+
+  defp validate_generation_prerequisites_with_behavior_authority_internal(
+         plan,
+         component_contract,
+         design_document,
+         behavior_contract,
+         selected_behavior_review_result,
+         native_realization_authority
+       ) do
     if dispositions_present?(plan) do
       case preflight_disposition_generation(plan, component_contract, design_document) do
         {:ok, plan, component_contract, design_document, intrinsic_diagnostics} ->
@@ -196,7 +270,8 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
               design_document,
               true,
               authority,
-              intrinsic_diagnostics
+              intrinsic_diagnostics,
+              native_realization_authority
             )
 
           stored_blockers =
@@ -211,7 +286,12 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
           finish(diagnostics)
       end
     else
-      validate_generation_prerequisites_ordinary(plan, component_contract, design_document)
+      validate_generation_prerequisites_ordinary(
+        plan,
+        component_contract,
+        design_document,
+        native_realization_authority
+      )
     end
   rescue
     _error ->
@@ -294,6 +374,123 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       ])
   end
 
+  @spec validate_for_generation_with_behavior_and_native_realization_authority(
+          term(),
+          term(),
+          term(),
+          term(),
+          term(),
+          term()
+        ) :: :ok | {:error, [Diagnostic.t()]}
+  def validate_for_generation_with_behavior_and_native_realization_authority(
+        plan,
+        approved_component_contract,
+        design_document,
+        behavior_contract,
+        selected_behavior_review_result,
+        native_realization_authority
+      ) do
+    case validate_native_realization_authority_tuple(
+           native_realization_authority,
+           approved_component_contract,
+           plan,
+           design_document,
+           behavior_contract,
+           selected_behavior_review_result
+         ) do
+      :ok ->
+        prerequisite_result =
+          validate_generation_prerequisites_with_behavior_and_native_realization_authority(
+            plan,
+            approved_component_contract,
+            design_document,
+            behavior_contract,
+            selected_behavior_review_result,
+            native_realization_authority
+          )
+
+        approval_result = contract_approval_result(approved_component_contract)
+
+        diagnostics =
+          []
+          |> append_result(prerequisite_result)
+          |> append_contract_gate(approval_result)
+
+        if diagnostics == [],
+          do: :ok,
+          else: finish([generation_blocked(diagnostics) | diagnostics])
+
+      {:error, diagnostic} ->
+        {:error, [diagnostic]}
+    end
+  rescue
+    _error ->
+      finish([
+        error("componentization_plan.generation_blocked", "generation inputs are malformed")
+      ])
+  catch
+    _kind, _reason ->
+      finish([
+        error("componentization_plan.generation_blocked", "generation inputs are malformed")
+      ])
+  end
+
+  defp validate_native_realization_authority_tuple(
+         %NativeRealizationAuthority{} = authority,
+         %ComponentContract{contract_id: component_contract_id},
+         %ComponentizationPlan{} = plan,
+         design_document,
+         %BehaviorContract{bindings: bindings} = behavior_contract,
+         selected_behavior_review_result
+       ) do
+    with {:ok, document_identity} <- Identity.from_document(design_document),
+         {:ok, behavior_contract_digest} <- BehaviorSerializer.digest(behavior_contract),
+         {:ok, behavior_review_result_id} <- ReviewResult.id(selected_behavior_review_result),
+         true <- authority.component_contract_id == component_contract_id,
+         true <- authority.plan_contract_id == plan.contract_id,
+         true <- authority.plan_design_document_sha256 == plan.design_document_sha256,
+         true <- authority.design_document_identity == document_identity,
+         true <- authority.design_document_identity.digest == plan.design_document_sha256,
+         true <- authority.boundary_node_id == plan.boundary_node_id,
+         true <- authority.behavior_contract_digest == behavior_contract_digest,
+         true <- authority.behavior_review_result_id == behavior_review_result_id,
+         true <- behavior_binding_count(bindings, authority.behavior_binding_id) == 1 do
+      :ok
+    else
+      _ -> {:error, native_realization_authority_mismatch()}
+    end
+  rescue
+    _error -> {:error, native_realization_authority_mismatch()}
+  catch
+    _kind, _reason -> {:error, native_realization_authority_mismatch()}
+  end
+
+  defp validate_native_realization_authority_tuple(
+         _authority,
+         _component_contract,
+         _plan,
+         _design_document,
+         _behavior_contract,
+         _selected_behavior_review_result
+       ),
+       do: {:error, native_realization_authority_mismatch()}
+
+  defp behavior_binding_count(bindings, binding_id) when is_list(bindings) do
+    Enum.count(bindings, fn
+      %{binding_id: candidate_id} -> candidate_id == binding_id
+      _binding -> false
+    end)
+  end
+
+  defp behavior_binding_count(_bindings, _binding_id), do: 0
+
+  defp native_realization_authority_mismatch do
+    error(
+      "componentization_plan.native_generation.realization_authority_mismatch",
+      "transient NativeRealizationAuthority does not match these generation inputs"
+    )
+  end
+
   defp validate_disposition_references(plan, component_contract, design_document, authority_input) do
     case preflight_disposition(plan, component_contract, design_document) do
       {:ok, plan, component_contract, design_document, intrinsic_diagnostics} ->
@@ -374,8 +571,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     approval_result = ReviewResult.require_approved([selected_review], behavior_contract)
     review_id_result = ReviewResult.id(selected_review)
 
-    reference_result =
-      ComponentizationDecision.reference_index(design_document, behavior_contract)
+    reference_result = BindingContainment.reference_index(design_document, behavior_contract)
 
     valid? =
       match?({:ok, _digest}, digest_result) and
@@ -614,9 +810,36 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   end
 
   defp validate_indexed(plan, contract, document, generation? \\ false),
-    do: validate_indexed(plan, contract, document, generation?, nil, [])
+    do: validate_indexed(plan, contract, document, generation?, nil, [], nil)
 
-  defp validate_indexed(plan, contract, document, generation?, disposition_authority, initial) do
+  defp validate_indexed(
+         plan,
+         contract,
+         document,
+         generation?,
+         disposition_authority,
+         initial
+       ),
+       do:
+         validate_indexed(
+           plan,
+           contract,
+           document,
+           generation?,
+           disposition_authority,
+           initial,
+           nil
+         )
+
+  defp validate_indexed(
+         plan,
+         contract,
+         document,
+         generation?,
+         disposition_authority,
+         initial,
+         native_realization_authority
+       ) do
     indexes = build_indexes(plan, contract, document)
 
     case Map.fetch(indexes.nodes_by_id, plan.boundary_node_id) do
@@ -666,7 +889,8 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
                 contract,
                 indexes,
                 consumed_node_ids,
-                diagnostics
+                diagnostics,
+                native_realization_authority
               ),
             else: diagnostics
 
@@ -2266,7 +2490,14 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     end
   end
 
-  defp validate_native_generation(plan, contract, indexes, consumed_node_ids, diagnostics) do
+  defp validate_native_generation(
+         plan,
+         contract,
+         indexes,
+         consumed_node_ids,
+         diagnostics,
+         native_realization_authority
+       ) do
     diagnostics =
       Enum.reduce(indexes.value_bindings, diagnostics, fn {id, %ValueBinding{} = binding}, acc ->
         if binding.target_kind == :rich_text and
@@ -2342,7 +2573,12 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
           true ->
             acc
-            |> validate_native_tag(node, node_roles, indexes)
+            |> validate_native_tag(
+              node,
+              node_roles,
+              indexes,
+              native_realization_authority
+            )
             |> validate_native_node_surface(node)
             |> validate_native_boundary_image(node, node_roles, plan, indexes)
             |> validate_native_navigation(node, node_roles, Map.has_key?(indexes.slot_owners, id))
@@ -2491,11 +2727,12 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   @doc false
   def native_binding_role(_projection, _node, _indexes), do: :unsupported
 
-  defp validate_native_tag(diagnostics, node, roles, indexes) do
+  defp validate_native_tag(diagnostics, node, roles, indexes, native_realization_authority) do
     heading = Map.get(roles, :heading_level)
 
     diagnostics =
-      if native_tag(node, heading != nil) == :error do
+      if native_tag(node, heading != nil) == :error and
+           not authorized_selection_control_node?(node, native_realization_authority) do
         native_error(
           diagnostics,
           "tag_unsupported",
@@ -2522,6 +2759,15 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       diagnostics
     end
   end
+
+  defp authorized_selection_control_node?(
+         %DesignNode{node_id: node_id, semantic_type: "generic", attributes: attributes},
+         %NativeRealizationAuthority{control_node_id: node_id}
+       ) do
+    Map.get(attributes, "tag") == "button"
+  end
+
+  defp authorized_selection_control_node?(_node, _authority), do: false
 
   defp validate_native_boundary_image(diagnostics, node, roles, plan, indexes) do
     if node.node_id == plan.boundary_node_id and node.semantic_type == "image" do
