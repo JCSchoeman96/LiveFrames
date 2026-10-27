@@ -299,11 +299,246 @@ defmodule LiveFrames.NativeGenerator.Renderer do
   @spec render_module(Indexes.t()) :: {:ok, String.t()} | {:error, Diagnostic.t()}
   def render_module(indexes) do
     with {:ok, heex_body} <- render_boundary(indexes, []),
+         heex_body <- append_selection_hook(indexes, heex_body),
          {:ok, source} <- assemble_module(indexes, heex_body),
          {:ok, formatted} <- format_source(source),
          :ok <- validate_emitted_source(formatted, indexes) do
       {:ok, formatted}
     end
+  end
+
+  defp append_selection_hook(
+         %Indexes{native_realization_authority: %NativeRealizationAuthority{}},
+         heex_body
+       ) do
+    heex_body <> "\n" <> selection_hook_definition()
+  end
+
+  defp append_selection_hook(_indexes, heex_body), do: heex_body
+
+  defp selection_hook_definition do
+    ~S"""
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Selection">
+      const ROOT_SELECTOR = '[data-lf-selection-root="true"]';
+      const CONTROL_SELECTOR = '[data-lf-selection-control="true"]';
+      const ACTIVATE_SELECTOR = '[data-lf-selection-activate="true"]';
+      const PRESENTATION_0_SELECTOR = '[data-lf-selection-presentation="0"]';
+      const PRESENTATION_1_SELECTOR = '[data-lf-selection-presentation="1"]';
+
+      function createState() {
+        return {
+          instanceState: "UNMOUNTED",
+          timerState: "SUSPENDED_UNAVAILABLE",
+          selectedPosition: 0,
+          controls: [],
+          presentations: [[], []],
+          intervalId: null,
+          clickListener: null,
+          rootElement: null,
+          manuallyStopped: false,
+          connected: true,
+          resumeOnReconnect: false
+        };
+      }
+
+      function reducedMotionEnabled() {
+        return typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      }
+
+      function ownedElements(hook, selector) {
+        return Array.from(hook.el.querySelectorAll(selector)).filter((element) => {
+          return element.closest(ROOT_SELECTOR) === hook.el;
+        });
+      }
+
+      function resolveTopology(hook, state) {
+        state.controls = ownedElements(hook, CONTROL_SELECTOR);
+        state.presentations = [
+          ownedElements(hook, PRESENTATION_0_SELECTOR),
+          ownedElements(hook, PRESENTATION_1_SELECTOR)
+        ];
+
+        const cardinality = state.controls.length;
+        return cardinality > 0 &&
+          cardinality === state.presentations[0].length &&
+          cardinality === state.presentations[1].length &&
+          Number.isInteger(state.selectedPosition) &&
+          state.selectedPosition >= 0 &&
+          state.selectedPosition < cardinality;
+      }
+
+      function project(hook, state) {
+        if (state.instanceState !== "ACTIVE") return;
+
+        const activationCarriers = ownedElements(hook, ACTIVATE_SELECTOR);
+        const controlPositions = new Map();
+
+        state.controls.forEach((control, position) => {
+          const selected = position === state.selectedPosition;
+          controlPositions.set(control, position);
+          control.setAttribute("data-lf-selection-state", selected ? "selected" : "unselected");
+        });
+
+        activationCarriers.forEach((carrier) => {
+          const position = controlPositions.get(carrier.closest(CONTROL_SELECTOR));
+          if (position !== undefined) {
+            carrier.setAttribute("aria-pressed", String(position === state.selectedPosition));
+          }
+        });
+
+        state.presentations.forEach((group) => {
+          group.forEach((presentation, position) => {
+            presentation.hidden = position !== state.selectedPosition;
+          });
+        });
+      }
+
+      function clearTimer(state) {
+        if (state.intervalId !== null) {
+          clearInterval(state.intervalId);
+          state.intervalId = null;
+        }
+      }
+
+      function startTimer(hook, state) {
+        if (state.intervalId !== null || state.manuallyStopped || !state.connected) return;
+
+        state.intervalId = setInterval(() => {
+          advance(hook, state);
+        }, 5000);
+        state.timerState = "RUNNING";
+      }
+
+      function unavailable(state) {
+        clearTimer(state);
+        state.instanceState = "UNAVAILABLE";
+        state.timerState = "SUSPENDED_UNAVAILABLE";
+      }
+
+      function reconcile(hook, phase) {
+        const state = hook.__lfSelectionState;
+        if (!state || state.instanceState === "DESTROYED") return false;
+
+        const resumeOnReconnect = phase === "reconnected" && state.resumeOnReconnect;
+        if (phase === "reconnected") state.resumeOnReconnect = false;
+
+        if (!resolveTopology(hook, state)) {
+          unavailable(state);
+          return false;
+        }
+
+        state.instanceState = "ACTIVE";
+        project(hook, state);
+
+        if (state.manuallyStopped) {
+          clearTimer(state);
+          state.timerState = "STOPPED_BY_USER";
+        } else if (reducedMotionEnabled()) {
+          clearTimer(state);
+          state.timerState = "SUPPRESSED_REDUCED_MOTION";
+        } else if (phase === "reconnected") {
+          if (resumeOnReconnect) {
+            startTimer(hook, state);
+          } else {
+            state.timerState = "SUSPENDED_DISCONNECTED";
+          }
+        } else if (state.connected) {
+          startTimer(hook, state);
+        }
+
+        return true;
+      }
+
+      function activate(hook, state, event) {
+        const origin = event.target && event.target.nodeType === 1
+          ? event.target
+          : event.target && event.target.parentElement;
+        const carrier = origin && origin.closest(ACTIVATE_SELECTOR);
+
+        if (!carrier || carrier.closest(ROOT_SELECTOR) !== hook.el) return;
+
+        const control = carrier.closest(CONTROL_SELECTOR);
+        if (!control || control.closest(ROOT_SELECTOR) !== hook.el) return;
+        if (!resolveTopology(hook, state)) {
+          unavailable(state);
+          return;
+        }
+
+        const position = state.controls.indexOf(control);
+        if (position < 0 || state.instanceState !== "ACTIVE") return;
+
+        state.selectedPosition = position;
+        project(hook, state);
+        state.manuallyStopped = true;
+        clearTimer(state);
+        state.timerState = "STOPPED_BY_USER";
+      }
+
+      function advance(hook, state) {
+        if (state.instanceState !== "ACTIVE" || state.timerState !== "RUNNING") return;
+
+        if (!resolveTopology(hook, state)) {
+          unavailable(state);
+          return;
+        }
+
+        state.selectedPosition = (state.selectedPosition + 1) % state.controls.length;
+        project(hook, state);
+      }
+
+      export default {
+        mounted() {
+          if (this.__lfSelectionState) return;
+
+          const state = createState();
+          state.rootElement = this.el;
+          this.__lfSelectionState = state;
+          state.clickListener = (event) => activate(this, state, event);
+          this.el.addEventListener("click", state.clickListener);
+          reconcile(this, "mounted");
+        },
+
+        updated() {
+          reconcile(this, "updated");
+        },
+
+        disconnected() {
+          const state = this.__lfSelectionState;
+          if (!state || state.instanceState === "DESTROYED" || !state.connected) return;
+
+          state.resumeOnReconnect = state.timerState === "RUNNING" && state.intervalId !== null;
+          state.connected = false;
+          clearTimer(state);
+          state.timerState = "SUSPENDED_DISCONNECTED";
+        },
+
+        reconnected() {
+          const state = this.__lfSelectionState;
+          if (!state || state.instanceState === "DESTROYED" || state.connected) return;
+
+          state.connected = true;
+          reconcile(this, "reconnected");
+        },
+
+        destroyed() {
+          const state = this.__lfSelectionState || createState();
+          if (state.instanceState === "DESTROYED") return;
+
+          clearTimer(state);
+          if (state.clickListener && state.rootElement) {
+            state.rootElement.removeEventListener("click", state.clickListener);
+            state.clickListener = null;
+          }
+
+          state.connected = false;
+          state.timerState = "DESTROYED";
+          state.instanceState = "DESTROYED";
+          this.__lfSelectionState = state;
+        }
+      };
+    </script>
+    """
   end
 
   defp assemble_module(indexes, heex_body) do
@@ -1303,8 +1538,44 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     class_part = class_attr(indexes, node, roles, collection_stack, is_root?)
     global_part = root_global_attrs_fragment(indexes, node_id, roles, collection_stack, is_root?)
 
-    id_part <> class_part <> global_part
+    id_part <>
+      class_part <>
+      global_part <>
+      selection_hook_attribute(indexes, node_id, is_root?) <>
+      selection_presentation_attribute(indexes, node_id)
   end
+
+  defp selection_hook_attribute(
+         %Indexes{
+           boundary_id: boundary_id,
+           native_realization_authority: %NativeRealizationAuthority{}
+         },
+         node_id,
+         true
+       )
+       when node_id == boundary_id,
+       do: ~s( phx-hook=".Selection" data-lf-selection-root="true")
+
+  defp selection_hook_attribute(_indexes, _node_id, _is_root?), do: ""
+
+  defp selection_presentation_attribute(
+         %Indexes{
+           native_realization_authority: %NativeRealizationAuthority{
+             presentation_node_ids: presentation_node_ids
+           }
+         },
+         node_id
+       ) do
+    case Enum.find_index(presentation_node_ids, &(&1 == node_id)) do
+      index when index in [0, 1] ->
+        " data-lf-selection-presentation=\"#{index}\""
+
+      _ ->
+        ""
+    end
+  end
+
+  defp selection_presentation_attribute(_indexes, _node_id), do: ""
 
   defp root_global_attrs_fragment(indexes, _node_id, roles, _collection_stack, is_root?) do
     if is_root? and Map.has_key?(roles, :root_global_attrs) do
