@@ -74,7 +74,7 @@ A version freezes the required source and acquisition identities. `recorded -> v
 
 ### PrivateSourceEvidence
 
-This resource holds private source, acquisition and acceptance evidence. `captured -> verified -> retained` requires integrity and authorized access. `captured` or `verified -> quarantined` blocks use pending investigation. `retained -> access_restricted` limits access; `access_restricted -> retained` requires restored authorization. `retained` or `access_restricted -> disposed` requires explicit retention authority and satisfaction of holds. Disposal records loss of the evidence and sets `REPRODUCIBILITY_STATUS=UNAVAILABLE` when evidence needed for reproduction is lost. `disposed` is terminal. Failed verification may be retried against unchanged evidence or a newly captured record; disposal requests are idempotent and never delete audit history.
+This resource holds private source, acquisition and acceptance evidence. `captured -> verified -> retained` requires integrity and authorized access. `captured` or `verified -> quarantined` blocks use pending investigation. `retained -> access_restricted` limits access; `access_restricted -> retained` requires restored authorization. `retained` or `access_restricted -> disposed` requires explicit retention authority and satisfaction of holds. Disposal records loss of the evidence and sets `REPRODUCIBILITY_STATUS=UNAVAILABLE` when evidence needed for reproduction is lost. `quarantined -> verified` requires investigation confirming the same immutable evidence bytes, reverified integrity, restored authority and access, and no unresolved privacy or security block. From verified, the normal lifecycle may continue to retained. `quarantined -> disposed` requires explicit retention authority and satisfaction of applicable holds; disposal of evidence needed for reproduction records `REPRODUCIBILITY_STATUS=UNAVAILABLE`. Quarantined evidence is never mutated in place. `disposed` is terminal. Failed verification may be retried against unchanged evidence or a newly captured record; disposal requests are idempotent and never delete audit history.
 
 ### IngestionAttempt
 
@@ -86,21 +86,21 @@ An immutable outcome identifies either failure or a candidate manifest and artif
 
 ### CanonicalIngestionManifest
 
-`draft -> sealed` requires complete, verified input, implementation, policy and output identities. Sealing fixes canonical bytes and their external digest. `draft -> discarded` abandons the candidate; `sealed -> invalidated` blocks new acceptance and identifies dependent acceptances for invalidation where necessary. Discarded and invalidated are terminal. Corrections create a new manifest; repeated sealing of identical canonical bytes is idempotent.
+`draft -> sealed` requires complete, verified input, implementation, policy and output identities. Sealing fixes canonical bytes and their external digest. `draft -> discarded` abandons the candidate. `sealed -> invalidated` immediately makes every dependent acceptance, release and promotion non-consumable, without waiting for subsequent records. Append-only acceptance invalidation and promotion revocation records follow for lifecycle bookkeeping. Stale acceptance or promotion pointers cannot override manifest invalidation. Discarded and invalidated are terminal. Corrections create a new manifest; repeated sealing of identical canonical bytes is idempotent.
 
 ### CanonicalIRArtifact
 
-The artifact is the exact immutable serialized ordinary IR. `staged -> verified -> retained` requires digest, schema, privacy and access checks. `staged -> rejected` discards a failed candidate. `verified` or `retained -> quarantined` blocks consumption. `retained -> disposed` requires `NO_ACTIVE_PROMOTION_REFERENCES_ARTIFACT` and explicit retention disposal authority. First revoke or supersede the promotion, then verify no active references, then authorize disposal, then dispose. Rejected and disposed are terminal. A retry stages independently and atomically installs only verified bytes. Disposal never deletes release, acceptance, promotion or revocation history.
+The artifact is the exact immutable serialized ordinary IR. `staged -> verified -> retained` requires digest, schema, privacy and access checks. `staged -> rejected` discards a failed candidate. `verified` or `retained -> quarantined` immediately makes the artifact non-consumable. `quarantined -> retained` is permitted only for a previously retained artifact after re-verifying the same immutable bytes, digest, schema, privacy gates, access policy and manifest relationship. Restoration preserves artifact identity. `retained` or `quarantined -> disposed` requires `NO_ACTIVE_PROMOTION_REFERENCES_ARTIFACT` and explicit retention disposal authority. No artifact is repaired or mutated in place; corrected bytes require a new staged artifact identity. First revoke or supersede the promotion, then verify no active references, then authorize disposal, then dispose. Rejected and disposed are terminal. A retry stages independently and atomically installs only verified bytes. Disposal never deletes release, acceptance, promotion or revocation history.
 
 ### CanonicalAcceptance
 
-`proposed -> accepted` requires the owner, a sealed valid manifest, verified available artifact, named criteria and verified evidence with no applicable block. `proposed -> rejected` records the decision. `accepted -> invalidated` applies when evidence or identity is wrong or unverifiable, a relevant privacy, security or correctness defect is found, source rights are withdrawn, criteria were unmet, or policy declares incompatibility. Invalidated and rejected are terminal; reassessment creates a new decision.
+`proposed -> accepted` requires the owner, a sealed valid manifest, an artifact in the retained state, named criteria and verified evidence with no applicable block. `proposed -> rejected` records the decision. `accepted -> invalidated` applies when evidence or identity is wrong or unverifiable, a relevant privacy, security or correctness defect is found, source rights are withdrawn, criteria were unmet, or policy declares incompatibility. Invalidated and rejected are terminal; reassessment creates a new decision.
 
 Invalidation immediately makes **all dependent promotions non-consumable**, without waiting for any further control record. An append-only revocation or supersession record follows. Acceptance does not promote itself. Loss of reproduction evidence is recorded and reviewed under the explicit policy; it does not automatically erase the historical acceptance or imply continued eligibility.
 
 ### CanonicalPromotion
 
-`proposed -> active` requires owner approval, a valid acceptance, an available verified artifact, compatible schema, approved private consumer scope and no applicable block. Activation atomically changes the active pointer for that scope and preserves history. `proposed -> rejected`; `active -> superseded` or `revoked`. Rejected, superseded and revoked are terminal. A rollback creates a new owner-approved promotion after current eligibility checks; it cannot reactivate a revoked or invalid release by deleting history. Repeated requests are idempotent. Promotion is not disclosure.
+`proposed -> active` requires owner approval, a valid acceptance, an artifact in the retained state, compatible schema, approved private consumer scope and no applicable block. Activation atomically changes the active pointer for that scope and preserves history. `proposed -> rejected`; `active -> superseded` or `revoked`. Rejected, superseded and revoked are terminal. A rollback creates a new owner-approved promotion after current eligibility checks; it cannot reactivate a revoked or invalid release by deleting history. Repeated requests are idempotent. Promotion is not disclosure.
 
 ### CanonicalRevocation
 
@@ -111,15 +111,17 @@ Invalidation immediately makes **all dependent promotions non-consumable**, with
 Every new consumption must establish current authorization for its exact release and scope:
 
 ```text
-promotion.active?
+manifest.sealed?
+AND NOT manifest.invalidated?
 AND acceptance.accepted?
 AND NOT acceptance.invalidated?
+AND promotion.active?
 AND NOT promotion.revoked?
-AND artifact.available?
+AND artifact.consumable?
 AND compatibility.valid?
 ```
 
-The consumer also verifies the artifact digest and records the exact manifest, IR and acceptance identities. If current authorization cannot be established, `CONSUMER_RESULT=FAIL_CLOSED`. A stale active pointer cannot override acceptance invalidation. Downstream outputs retain their recorded provenance; the owner decides whether affected outputs require withdrawal, rebuild or other action. Componentization remains unauthorized.
+`artifact.consumable?` requires the retained state and current availability, privacy and access authorization. Retained is potentially consumable only when all eligibility guards hold. Staged, verified, quarantined, disposed and rejected artifacts are not consumable as canonical releases. The consumer also verifies the artifact digest and records the exact manifest, IR and acceptance identities. If current authorization cannot be established, `CONSUMER_RESULT=FAIL_CLOSED`. A stale active pointer cannot override acceptance invalidation. Downstream outputs retain their recorded provenance; the owner decides whether affected outputs require withdrawal, rebuild or other action. Componentization remains unauthorized.
 
 ## Required invariants
 
@@ -129,7 +131,10 @@ IMMUTABLE_SEALED_MANIFEST=YES
 IMMUTABLE_CANONICAL_IR_ARTIFACT=YES
 ATTEMPT_CANNOT_ACCEPT_ITSELF=YES
 ACCEPTANCE_CANNOT_PROMOTE_ITSELF=YES
+INVALID_MANIFEST_CANNOT_BE_CONSUMED=YES
 INVALID_ACCEPTANCE_CANNOT_BE_CONSUMED=YES
+UNRETAINED_ARTIFACT_CANNOT_BE_PROMOTED=YES
+QUARANTINED_ARTIFACT_CANNOT_BE_CONSUMED=YES
 REVOKED_PROMOTION_CANNOT_BE_CONSUMED=YES
 ACTIVE_ARTIFACT_CANNOT_BE_DISPOSED=YES
 PROMOTION_IS_PRIVATE_SCOPE_ACTIVATION=YES
