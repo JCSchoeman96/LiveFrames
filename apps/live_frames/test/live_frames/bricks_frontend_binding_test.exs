@@ -873,6 +873,40 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     assert is_binary(IR.encode!(document))
   end
 
+  test "post URL link carriers with unproven extra keys retain generic ownership" do
+    link = %{
+      "type" => "meta",
+      "useDynamicData" => "{post_url}",
+      "unproven" => "value"
+    }
+
+    assert {:ok, document} =
+             to_ir([
+               source_element("loop", "block", 0, query_settings(true), ["heading"]),
+               source_element(
+                 "heading",
+                 "heading",
+                 "loop",
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert binding_for(document, "heading", :link_url) == nil
+    assert node_by_source_id(document, "heading").attributes["link"] == link
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+  end
+
   test "post URL without collection context records evidence and removes the generic link" do
     link = %{"type" => "meta", "useDynamicData" => "{post_url}"}
 

@@ -893,8 +893,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
   end
 
   defp post_url_dynamic_link?(link) do
-    json_object?(link) and Map.get(link, "type") == "meta" and
-      Map.get(link, "useDynamicData") == "{post_url}" and not Map.has_key?(link, "url")
+    json_object?(link) and map_size(link) == 2 and Map.get(link, "type") == "meta" and
+      Map.get(link, "useDynamicData") == "{post_url}"
   end
 
   defp classify_dynamic_alt_text(element) do
