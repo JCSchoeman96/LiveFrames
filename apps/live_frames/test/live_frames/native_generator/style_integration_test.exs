@@ -1103,6 +1103,117 @@ defmodule LiveFrames.NativeGenerator.StyleIntegrationTest do
     assert module.content =~ "<img class={\"lf-section-style-fixture__n-000001-000001\"}"
   end
 
+  test "picture partitions the four authorized properties across exact selectors" do
+    image = %DesignNode{
+      node_id: DesignNode.deterministic_id([1, 1]),
+      semantic_type: "image",
+      attributes: %{"tag" => "picture"},
+      styles: %{
+        "position" => StyleValue.keyword("relative"),
+        "object-fit" => StyleValue.keyword("cover"),
+        "width" => StyleValue.literal("80%"),
+        "height" => StyleValue.literal("20rem")
+      }
+    }
+
+    root = boundary([image])
+    c = contract()
+    assert {:ok, result} = build_styles(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+    class = result.private_class_by_id[image.node_id]
+    assert map_size(result.private_class_by_id) == 2
+    assert [outer, inner] = String.split(result.stylesheet_content, "\n\n.#{class} > img {")
+    assert outer =~ ".#{class} {"
+    assert outer =~ "position: relative;"
+    refute outer =~ "object-fit:"
+    assert inner =~ "object-fit: cover;"
+    refute inner =~ "position:"
+
+    for declaration <- ["width: 80%;", "height: 20rem;"] do
+      assert outer =~ declaration
+      assert inner =~ declaration
+    end
+  end
+
+  test "picture rejects unsupported, responsive, state, and opaque custom css" do
+    id = DesignNode.deterministic_id([1, 1])
+    base = %DesignNode{node_id: id, semantic_type: "image", attributes: %{"tag" => "picture"}}
+
+    variants = [
+      %{base | styles: %{"color" => StyleValue.keyword("red")}},
+      %{
+        base
+        | responsive: %{
+            "mobile" => %ResponsiveOverride{
+              breakpoint_id: "mobile",
+              source_name: "mobile",
+              resolution_status: :resolved,
+              max_width: 767,
+              styles: %{"width" => StyleValue.literal("100%")}
+            }
+          }
+      },
+      %{
+        base
+        | styles: %{
+            "custom-css" =>
+              state_value([state_rule("hover", id, %{"width" => literal("100%")}, 0)])
+          }
+      },
+      %{
+        base
+        | styles: %{
+            "custom-css" =>
+              StyleValue.complex_css(%{
+                "type" => "custom_css",
+                "property" => "custom-css",
+                "rules" => ["%root% > img { width: 100%; }"]
+              })
+          }
+      }
+    ]
+
+    for image <- variants do
+      root = boundary([image])
+      c = contract()
+
+      assert {:error, :generation_blocked, [diagnostic]} =
+               build_styles(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+
+      assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+      assert diagnostic.metadata.node_id == id
+    end
+  end
+
+  test "ancestor state rules cannot target a picture image" do
+    owner_id = DesignNode.deterministic_id([1, 1])
+    image_id = DesignNode.deterministic_id([1, 1, 1])
+
+    image = %DesignNode{
+      node_id: image_id,
+      semantic_type: "image",
+      attributes: %{"tag" => "picture"}
+    }
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      styles: %{
+        "custom-css" =>
+          state_value([state_rule("focus_within", image_id, %{"width" => literal("100%")}, 0)])
+      },
+      children: [image]
+    }
+
+    root = boundary([owner])
+    c = contract()
+
+    assert {:error, :generation_blocked, [diagnostic]} =
+             build_styles(c, plan_for(root, c), %DesignDocument{root_nodes: [root]})
+
+    assert diagnostic.code == "native_generator.styling.style_locus_authority_gap"
+    assert diagnostic.metadata.node_id == image_id
+  end
+
   test "each figure radius property stays on the figure and is inherited by img" do
     private_class = "lf-section-style-fixture__n-000001-000001"
 
