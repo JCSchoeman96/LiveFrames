@@ -44,7 +44,53 @@ AWS documents Fargate on-demand quotas in Cape Town and VPC networking and task 
 
 Attach the control task to a VPC, preferably in private application subnets. Place RDS in private database subnets with public access disabled. Security groups allow only the required PostgreSQL path from authorized task identities, and database connections require TLS. Choose an S3 gateway endpoint and, where useful, interface endpoints for ECR, CloudWatch Logs and Secrets Manager, or a narrowly scoped NAT path when that is simpler. Verify the complete image-pull and logging paths, including ECR image-layer access to S3. Do not record VPC or subnet identifiers as authority. Endpoint availability, networking and cost must be verified during provisioning.
 
-Use a dedicated LiveFrames-only canonical control database on RDS for PostgreSQL. Do not assume reuse of EventSales, FastCheck or any unrelated database. Cross-project reuse requires separate owner authority. Require private connectivity, TLS, continuous WAL backup and daily base backup, PITR, backup integrity and coverage verification, separate recovery failure-domain protection, and quarterly restore exercises as required by the storage authority. Use a dedicated least-privilege service database credential with clear ownership, rotation and recovery. RDS IAM database authentication is not required for the initial deployment.
+Use a dedicated LiveFrames-only canonical control database on RDS for PostgreSQL. Do not assume reuse of EventSales, FastCheck or any unrelated database. Cross-project reuse requires separate owner authority. Require private connectivity, TLS, backup integrity and coverage verification, and quarterly restore exercises as required by the storage authority. Use a dedicated least-privilege service database credential with clear ownership, rotation and recovery. RDS IAM database authentication is not required for the initial deployment.
+
+### RDS encryption and recovery
+
+```text
+RDS_PRIMARY_REGION=af-south-1
+RDS_BACKUP_REGION=eu-west-1
+RDS_ENCRYPTION_AT_REST=REQUIRED
+RDS_PRIMARY_KMS_KEY_CLASS=CUSTOMER_MANAGED_SINGLE_REGION_SYMMETRIC
+RDS_PRIMARY_KMS_REGION=af-south-1
+RDS_BACKUP_KMS_KEY_CLASS=CUSTOMER_MANAGED_SINGLE_REGION_SYMMETRIC
+RDS_BACKUP_KMS_REGION=eu-west-1
+RDS_KMS_KEYS_DISTINCT=YES
+MULTI_REGION_KMS_KEY=NO
+RDS_KMS_AUTOMATIC_ROTATION=YES
+RDS_KMS_ROTATION_PERIOD=365_DAYS
+RDS_AUTOMATED_BACKUPS=REQUIRED
+RDS_PITR=REQUIRED
+RDS_CROSS_REGION_AUTOMATED_BACKUP_REPLICATION=REQUIRED
+RDS_REPLICATED_BACKUP_INCLUDES=SNAPSHOTS_AND_TRANSACTION_LOGS
+RDS_REPLICATED_BACKUP_ENCRYPTED=YES
+RDS_DESTINATION_KMS_KEY_REQUIRED=YES
+```
+
+Encrypt the primary RDS database from creation with a customer-managed KMS key dedicated to the LiveFrames canonical-control RDS security boundary in `af-south-1`. Encrypt its replicated backups with a distinct customer-managed KMS key in `eu-west-1`. RDS storage, logs, automated backups and snapshots must remain encrypted under the RDS provider model. Do not reuse an unrelated project's key. AWS supports both AWS-managed and customer-managed keys for RDS encryption, but the exact destination AWS-managed key model for this cross-region automated-backup authority is not sufficiently proven. The programme selects customer-managed keys; it does not claim AWS-managed keys are unsupported. Do not record key IDs or ARNs in repository authority.
+
+Both keys use AWS-generated symmetric key material and automatic rotation every 365 days. Imported material, asymmetric or HMAC keys, and custom key stores are excluded. KMS retains earlier key material for decryption after rotation. Do not implement rotation by deleting or replacing a key.
+
+Key administration belongs to owner-controlled infrastructure authority with separate audit. `OWNER_BREAK_GLASS` remains an emergency role, not a routine deployment or application identity. No application identity may disable either key, schedule its deletion, change its policy, or disable its rotation. Runtime task roles receive only the minimum cryptographic or service permissions actually required, if any, and no broad `kms:*` grant. Phase 0 must derive exact IAM and KMS actions from current AWS service requirements and create least-privilege key policies. Where supported and appropriate, restrict use to RDS through a service condition equivalent to `kms:ViaService = rds.<region>.amazonaws.com`.
+
+A key required by active RDS, automated or replicated backups, a restorable snapshot, or required recovery evidence must remain enabled. Retiring an application release does not authorize disabling or scheduling deletion of that key. Key retirement requires a separate owner-controlled decision after proving no authoritative recovery dependency remains. Ordinary application cleanup must not delete keys.
+
+An unavailable primary RDS KMS key makes the control plane unavailable and denies new authorization. An unavailable destination backup key makes cross-region recovery unavailable and leaves the recovery requirement unsatisfied. A backup that cannot be decrypted is not a successful recovery.
+
+RDS automated-backup replication must copy snapshots and transaction logs from `af-south-1` to `eu-west-1` for destination-region point-in-time restore. This RDS backup is separately required from the S3 cross-region private backup copy. A cross-region read replica, logical replication, occasional manual snapshot copy or application SQL dump does not substitute for it. AWS documents the [supported region pair and backup replication](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReplicateBackups.html) and [destination encryption key selection](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/AutomatedBackups.Replicating.Enable.html).
+
+The accepted generic PostgreSQL recovery authority maps to this managed provider as follows:
+
+```text
+GENERIC_POSTGRES_PITR_REQUIREMENT=RDS_POINT_IN_TIME_RECOVERY
+GENERIC_CONTINUOUS_WAL_ARCHIVE_REQUIREMENT=RDS_MANAGED_TRANSACTION_LOG_BACKUP_FOR_PITR
+GENERIC_DAILY_BASE_BACKUP_REQUIREMENT=RDS_MANAGED_AUTOMATED_SNAPSHOT_BACKUP
+```
+
+This mapping preserves the recovery requirement. The application and owner do not operate a second self-managed WAL archive to mimic its terminology. Phase 0 must verify the configured retention, required restore window and latest restorable time; an RDS instance alone does not prove PITR.
+
+The quarterly recovery exercise must pass both a primary-region PITR restore and a cross-region replicated-backup restore. The latter must demonstrate that the Ireland key decrypts and restores the replicated backup. Configuration alone does not prove restorability. A successful RDS restore does not prove canonical authority freshness. The canonical witness freshness and reconciliation protocol must pass before restored control state can authorize consumption.
 
 AWS Secrets Manager is the deployment secret store for database credentials and any other actual deployment secrets. Prefer ECS-supported secret injection at task start with permission to retrieve only the named secret; the application must not enumerate secrets. Use separate service credentials, never shared human credentials. AWS access uses short-lived ECS task-role credentials, not static access keys. Separate the ECS execution role, task roles, witness-writer permission set, backup role and owner break-glass role. Region names, safe bucket references and retention settings are non-secret deployment configuration; do not treat them as credentials. No secret belongs in Git, fixtures, manifests, IR, logs, snapshots or CI artifacts. Restrict task-definition and runtime inspection because injected secrets may be visible to privileged operators and processes.
 
@@ -79,7 +125,7 @@ Redis, Cachex and PubSub are not required. A GenServer is not durable authority.
 
 ## Phase 0 and acceptance evidence
 
-`PHASE_0=CANONICAL_CONTROL_INFRASTRUCTURE_PROVISIONING_AND_VERIFICATION` is a future, separately authorized infrastructure lane. It covers the owner-controlled account and billing boundary, both regions, VPC and private network paths, ECS/Fargate, ECR, S3 and Object Lock, IAM roles, Secrets Manager, RDS and PITR, separate-region protected copies, CloudTrail data-event or equivalent audit, and operational monitoring. It must verify the selected account supports the required services, permissions, quotas and region opt-in, and verify the owner-approved billing. No account number, secret value, access key, password or unnecessary private ARN belongs in public evidence.
+`PHASE_0=CANONICAL_CONTROL_INFRASTRUCTURE_PROVISIONING_AND_VERIFICATION` is a future, separately authorized infrastructure lane. It covers the owner-controlled account and billing boundary, both regions, VPC and private network paths, ECS/Fargate, ECR, S3 and Object Lock, IAM roles, Secrets Manager, RDS and PITR, separate-region protected copies, CloudTrail data-event or equivalent audit, and operational monitoring. It must verify the selected account supports the required services, permissions, quotas and region opt-in, and verify the owner-approved billing. No AWS account ID, secret value, access key, database password or endpoint, KMS key ID or ARN, or private subnet ID belongs in public evidence unless separately authorized.
 
 Safe Phase 0 evidence must establish all of the following, without disclosing secrets:
 
@@ -93,7 +139,19 @@ BACKUP_REGION=eu-west-1
 FARGATE_EXECUTION_VERIFIED=YES
 RDS_PRIVATE_ACCESS=YES
 RDS_TLS=YES
+RDS_PRIMARY_REGION=af-south-1
+RDS_STORAGE_ENCRYPTED=YES
+RDS_PRIMARY_KMS_KEY_CLASS=CUSTOMER_MANAGED_SINGLE_REGION_SYMMETRIC
+RDS_PRIMARY_KMS_ROTATION_ENABLED=YES
+RDS_AUTOMATED_BACKUPS=YES
 RDS_PITR=YES
+RDS_LATEST_RESTORABLE_TIME_VERIFIED=YES
+RDS_CROSS_REGION_AUTOMATED_BACKUP_REPLICATION=YES
+RDS_BACKUP_REGION=eu-west-1
+RDS_BACKUP_KMS_KEY_CLASS=CUSTOMER_MANAGED_SINGLE_REGION_SYMMETRIC
+RDS_BACKUP_KMS_ROTATION_ENABLED=YES
+RDS_REPLICATED_BACKUP_ENCRYPTED=YES
+RDS_REPLICATED_BACKUP_RESTORABLE=YES
 S3_PUBLIC_ACCESS_BLOCK=YES
 S3_VERSIONING=YES
 WITNESS_OBJECT_LOCK=GOVERNANCE
@@ -104,4 +162,4 @@ SECRET_BOUNDARY_VERIFIED=YES
 BACKUP_COPY_REGION=eu-west-1
 ```
 
-Evidence must also demonstrate scoped identities, the renewal monitor, protected copies and restore tests, rather than asserting them from configuration alone. Merging this authority does not authorize Phase 0 or application implementation. The infrastructure prerequisites required by the storage authority remain mandatory before implementation. A separate owner authorization is required for each future phase. No private ingestion, promotion, disclosure or componentization is authorized by this document.
+Evidence must also demonstrate scoped identities, the renewal monitor, protected copies and restore tests, rather than asserting them from configuration alone. `RDS_REPLICATED_BACKUP_RESTORABLE=YES` requires evidence from an approved restore exercise. The quarterly exercise must record `PRIMARY_REGION_PITR_RESTORE=PASS` and `CROSS_REGION_REPLICATED_BACKUP_RESTORE=PASS`. Merging this authority does not authorize Phase 0 or application implementation. The infrastructure prerequisites required by the storage authority remain mandatory before implementation. A separate owner authorization is required for each future phase. No private ingestion, promotion, disclosure or componentization is authorized by this document.
