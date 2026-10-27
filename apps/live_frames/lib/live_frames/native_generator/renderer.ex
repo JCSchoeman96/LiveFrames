@@ -1026,7 +1026,13 @@ defmodule LiveFrames.NativeGenerator.Renderer do
 
   defp render_image(indexes, node, _roles, collection_stack, is_root?) do
     node_id = node.node_id
-    figure? = Map.get(node.attributes, "tag") == "figure"
+
+    wrapper_tag =
+      case Map.get(node.attributes, "tag") do
+        "figure" -> "figure"
+        "picture" -> "picture"
+        _ -> nil
+      end
 
     case asset_src_source_spec(indexes, node_id, collection_stack) do
       nil ->
@@ -1047,7 +1053,7 @@ defmodule LiveFrames.NativeGenerator.Renderer do
            node,
            collection_stack,
            is_root?,
-           figure?,
+           wrapper_tag,
            src_expr,
            required_src?: true
          )}
@@ -1056,18 +1062,20 @@ defmodule LiveFrames.NativeGenerator.Renderer do
         {:ok,
          """
          <%= if (lf_src = #{src_expr}) != nil do %>
-         #{indent(image_unit_heex(indexes, node, collection_stack, is_root?, figure?, "lf_src", required_src?: true), 2)}
+         #{indent(image_unit_heex(indexes, node, collection_stack, is_root?, wrapper_tag, "lf_src", required_src?: true), 2)}
          <% end %>
          """
          |> String.trim_trailing()}
     end
   end
 
-  defp image_unit_heex(indexes, node, collection_stack, is_root?, figure?, src_var, _opts) do
+  defp image_unit_heex(indexes, node, collection_stack, is_root?, wrapper_tag, src_var, _opts) do
     policy = image_alt_policy(indexes, node.node_id, collection_stack)
 
     img_attrs =
-      if figure?, do: "", else: tag_attrs(indexes, node, collection_stack, is_root?, "img")
+      if wrapper_tag,
+        do: "",
+        else: tag_attrs(indexes, node, collection_stack, is_root?, "img")
 
     img_inner =
       case policy do
@@ -1091,11 +1099,13 @@ defmodule LiveFrames.NativeGenerator.Renderer do
           "<img#{img_attrs} src={#{src_var}} />"
       end
 
-    if figure? do
-      figure_attrs = tag_attrs(indexes, node, collection_stack, is_root?, "figure")
-      "<figure#{figure_attrs}>#{img_inner}</figure>"
-    else
-      img_inner
+    case wrapper_tag do
+      nil ->
+        img_inner
+
+      tag ->
+        wrapper_attrs = tag_attrs(indexes, node, collection_stack, is_root?, tag)
+        "<#{tag}#{wrapper_attrs}>#{img_inner}</#{tag}>"
     end
   end
 
@@ -1608,8 +1618,11 @@ defmodule LiveFrames.NativeGenerator.Renderer do
     package? = is_root? and node.node_id == indexes.boundary_id
     consumer? = is_root? and Map.has_key?(roles, :root_class)
 
+    picture_wrapper? =
+      node.semantic_type == "image" and Map.get(node.attributes, "tag") == "picture"
+
     private_class =
-      if MapSet.member?(indexes.private_class_owner_ids, node.node_id) do
+      if MapSet.member?(indexes.private_class_owner_ids, node.node_id) or picture_wrapper? do
         Map.get(indexes.private_class_by_id, node.node_id)
       end
 

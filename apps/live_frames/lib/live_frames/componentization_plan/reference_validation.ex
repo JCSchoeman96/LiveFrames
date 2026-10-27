@@ -2460,7 +2460,7 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
     "paragraph" => {~w(p), "p"},
     "rich_text" => {~w(div p span), nil},
     "heading" => {~w(h1 h2 h3 h4 h5 h6), nil},
-    "image" => {~w(figure), "img"},
+    "image" => {~w(figure picture), "img"},
     "button" => {~w(button), "button"},
     "link" => {[], "a"}
   }

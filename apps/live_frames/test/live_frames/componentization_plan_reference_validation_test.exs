@@ -11,6 +11,7 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
   alias LiveFrames.ComponentizationPlan.Diagnostic
   alias LiveFrames.ComponentizationPlan.NodeDisposition
   alias LiveFrames.ComponentizationPlan.RenderProjection
+  alias LiveFrames.ComponentizationPlan.ReferenceValidation
   alias LiveFrames.Behavior.Binding, as: BehaviorBinding
   alias LiveFrames.Behavior.Binding.ControlledTarget
   alias LiveFrames.Behavior.Binding.FocusPolicy
@@ -1200,6 +1201,20 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
              consumer_contract,
              design_document
            ) == :ok
+  end
+
+  test "image native tag compatibility allows only the closed image shapes" do
+    cases = [
+      {%DesignNode{semantic_type: "image"}, {:ok, "img"}},
+      {%DesignNode{semantic_type: "image", attributes: %{"tag" => "figure"}}, {:ok, "figure"}},
+      {%DesignNode{semantic_type: "image", attributes: %{"tag" => "picture"}}, {:ok, "picture"}},
+      {%DesignNode{semantic_type: "image", attributes: %{"tag" => "img"}}, :error},
+      {%DesignNode{semantic_type: "image", attributes: %{"tag" => "div"}}, :error}
+    ]
+
+    for {node, expected} <- cases do
+      assert ReferenceValidation.native_tag(node, false) == expected
+    end
   end
 
   test "allows link_url on a link boundary" do
