@@ -257,6 +257,62 @@ defmodule LiveFrames.NativeGeneratorTest do
 
   defp elixir_artifact(bundle), do: Enum.find(bundle.artifacts, &(&1.kind == :elixir_module))
 
+  defp image_generation_fixture(tag, alt_policy) do
+    image_id = DesignNode.deterministic_id([1, 3])
+    %DesignNode{} = boundary = hd(document().root_nodes)
+    image_attrs = if is_binary(tag), do: %{"tag" => tag}, else: %{}
+
+    design_document = %{
+      document()
+      | root_nodes: [
+          %DesignNode{
+            boundary
+            | children:
+                boundary.children ++
+                  [
+                    %DesignNode{
+                      node_id: image_id,
+                      semantic_type: "image",
+                      attributes: image_attrs
+                    }
+                  ]
+          }
+        ]
+    }
+
+    accessibility =
+      case alt_policy do
+        :decorative ->
+          %{"image_alt_policy" => "decorative"}
+
+        :consumer ->
+          %{
+            "image_alt_policy" => "consumer_supplied",
+            "alt_attr_name" => "alt",
+            "required_when_source_present" => true
+          }
+      end
+
+    public_attrs = [attr("src", :string, required: true, accessibility: accessibility)]
+
+    public_attrs =
+      if alt_policy == :consumer, do: public_attrs ++ [attr("alt")], else: public_attrs
+
+    render_projections = [render_attr("src", :asset_src, image_id)]
+
+    render_projections =
+      if alt_policy == :consumer,
+        do: render_projections ++ [render_attr("alt", :asset_alt, image_id)],
+        else: render_projections
+
+    component_contract = contract(public_attrs: public_attrs)
+
+    component_plan =
+      plan(component_contract, design_document, render_projections: render_projections)
+
+    {component_contract, component_plan, design_document, image_id}
+  end
+
   defp disposition_authority(heading_overrides \\ []) do
     target_id = DesignNode.deterministic_id([1, 3])
     source_type = "synthetic-builder"
@@ -1504,6 +1560,76 @@ defmodule LiveFrames.NativeGeneratorTest do
     refute source =~ "<button"
   end
 
+  test "untagged image remains a standalone img" do
+    {component_contract, component_plan, design_document, _image_id} =
+      image_generation_fixture(nil, :decorative)
+
+    source =
+      component_contract
+      |> generate!(component_plan, design_document)
+      |> elixir_artifact()
+      |> Map.fetch!(:content)
+
+    assert source =~ ~s(<img src={@src} alt="" />)
+    assert length(Regex.scan(~r/<img\b/, source)) == 1
+    refute source =~ "<figure"
+    refute source =~ "<picture"
+  end
+
+  test "picture keeps its class on the wrapper and decorative alt and source on img" do
+    {component_contract, component_plan, design_document, _image_id} =
+      image_generation_fixture("picture", :decorative)
+
+    source =
+      component_contract
+      |> generate!(component_plan, design_document)
+      |> elixir_artifact()
+      |> Map.fetch!(:content)
+
+    private_class = "lf-section-marketing-block__n-000001-000003"
+
+    assert source =~
+             ~s(<picture class={"#{private_class}"}><img src={@src} alt="" /></picture>)
+
+    assert length(Regex.scan(~r/<picture\b/, source)) == 1
+    assert length(Regex.scan(~r/<img\b/, source)) == 1
+    assert Regex.match?(~r/<img\b[^>]*\bsrc=/, source)
+    assert Regex.match?(~r/<img\b[^>]*\balt=/, source)
+    refute Regex.match?(~r/<picture\b[^>]*\b(?:src|alt)=/, source)
+    refute source =~ ~s(<img class={"#{private_class}"})
+    refute source =~ "<source"
+  end
+
+  test "picture keeps consumer alt on the inner img" do
+    {component_contract, component_plan, design_document, _image_id} =
+      image_generation_fixture("picture", :consumer)
+
+    source =
+      component_contract
+      |> generate!(component_plan, design_document)
+      |> elixir_artifact()
+      |> Map.fetch!(:content)
+
+    assert source =~ "case Map.get(assigns, :alt) do"
+    assert source =~ "<img src={@src} alt={lf_alt} />"
+    refute Regex.match?(~r/<picture\b[^>]*\balt=/, source)
+    refute source =~ "<source"
+  end
+
+  test "unsupported explicit image tags are blocked before rendering" do
+    for tag <- ["img", "div"] do
+      {component_contract, component_plan, design_document, _image_id} =
+        image_generation_fixture(tag, :decorative)
+
+      assert {:error, :generation_blocked, diagnostics} =
+               NativeGenerator.generate(component_contract, component_plan, design_document)
+
+      assert Enum.any?(diagnostics, fn diagnostic ->
+               diagnostic.code == "componentization_plan.native_generation.tag_unsupported"
+             end)
+    end
+  end
+
   test "figure wrapper keeps package class on outer element" do
     image_id = DesignNode.deterministic_id([1, 3])
     %DesignNode{} = boundary = hd(document().root_nodes)
@@ -1546,6 +1672,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert source =~ "lf-section-marketing-block"
     assert source =~ "<img src={@src}"
     assert source =~ ~s(alt="")
+    assert source =~ "<figure><img src={@src} alt=\"\" /></figure>"
   end
 
   test "scalar BindingProjection link_url suppresses static navigation href" do
