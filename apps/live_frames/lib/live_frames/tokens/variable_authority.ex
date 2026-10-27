@@ -8,6 +8,7 @@ defmodule LiveFrames.Tokens.VariableAuthority do
   resolution status.
   """
 
+  alias LiveFrames.Tokens.CSSValue
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
 
@@ -20,7 +21,12 @@ defmodule LiveFrames.Tokens.VariableAuthority do
 
   @type terminal_result ::
           {:ok, candidate(), term()}
-          | {:error, :no_authority | :ambiguous_candidates | :token_missing | :token_unresolved}
+          | {:error,
+             :no_authority
+             | :ambiguous_candidates
+             | :token_missing
+             | :token_unresolved
+             | :token_value_unavailable}
 
   @type t :: %__MODULE__{
           by_variable: %{optional(String.t()) => %{optional(String.t()) => [map()]}},
@@ -79,7 +85,14 @@ defmodule LiveFrames.Tokens.VariableAuthority do
     %{state: state, variable: variable, candidates: candidates}
   end
 
-  @doc "Returns the resolved value for one unique, present authority candidate."
+  @doc """
+  Returns a CSS terminal candidate for one unique, present, resolved authority
+  candidate.
+
+  Binary resolved values are returned directly. Resolved structured-derived
+  Tokens may use `CSSValue.candidate/1`. The returned value remains a candidate
+  and must be validated by the consumer.
+  """
   @spec resolve_terminal(t(), String.t()) :: terminal_result()
   def resolve_terminal(%__MODULE__{} = index, variable) when is_binary(variable) do
     case resolve(index, variable) do
@@ -92,7 +105,9 @@ defmodule LiveFrames.Tokens.VariableAuthority do
       %{state: :unique_candidate, candidates: [candidate]} ->
         case Map.fetch(index.tokens_by_path, candidate.token_path) do
           {:ok, %Token{resolution_status: :resolved} = token} ->
-            {:ok, candidate, token.resolved_value}
+            with {:ok, terminal} <- terminal_value(token) do
+              {:ok, candidate, terminal}
+            end
 
           {:ok, _token} ->
             {:error, :token_unresolved}
@@ -102,6 +117,18 @@ defmodule LiveFrames.Tokens.VariableAuthority do
         end
     end
   end
+
+  defp terminal_value(%Token{resolved_value: resolved_value}) when is_binary(resolved_value),
+    do: {:ok, resolved_value}
+
+  defp terminal_value(%Token{resolved_value: %{"type" => "derived"}} = token) do
+    case CSSValue.candidate(token) do
+      {:ok, candidate} when is_binary(candidate) -> {:ok, candidate}
+      _ -> {:error, :token_value_unavailable}
+    end
+  end
+
+  defp terminal_value(_token), do: {:error, :token_value_unavailable}
 
   defp candidate(index, path, authorities) do
     token = Map.get(index.tokens_by_path, path)
