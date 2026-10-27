@@ -66,6 +66,33 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
     index_from_tokens([authority_token(variable, "spacing.synthetic", resolved_value)])
   end
 
+  defp derived_external_authority_index(variable, css_expression) do
+    path = "spacing.synthetic"
+    derived_value = %{"type" => "derived", "recipe" => "synthetic", "inputs" => %{}}
+
+    authority = %{
+      "variable" => variable,
+      "kind" => "source_output_alias",
+      "authority_id" => "synthetic:#{path}",
+      "source_key" => path,
+      "source_version" => "4.0.1"
+    }
+
+    token = %Token{
+      path: path,
+      category: :spacing,
+      value: derived_value,
+      resolved_value: derived_value,
+      resolution_status: :resolved,
+      metadata: %{
+        "variable_authorities" => [authority],
+        "css_expression" => css_expression
+      }
+    }
+
+    index_from_tokens([token])
+  end
+
   defp ambiguous_external_authority_index(variable) do
     index_from_tokens([
       authority_token(variable, "spacing.first", "12px"),
@@ -794,7 +821,7 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
   test "rejects a non-binary external resolved value" do
     authority_index = raw_external_authority_index("--external-b", %{"value" => "18px"})
 
-    assert {:ok, [{:error, :unsupported_terminal_value}]} =
+    assert {:ok, [{:error, :no_local_definition}]} =
              resolve_external_passthrough("var(--external-b)", authority_index)
   end
 
@@ -825,6 +852,27 @@ defmodule LiveFrames.BricksSourceLocalCustomPropertyResolverTest do
 
     assert {:ok, [{:error, :unsupported_terminal_value}]} =
              resolve_external_passthrough("var(--external-b)", authority_index)
+  end
+
+  test "applies existing terminal validation to structured-derived candidates" do
+    safe_index = derived_external_authority_index("--external-b", "18px")
+
+    assert {:ok, [{:ok, "18px"}]} =
+             resolve_external_passthrough("var(--external-b)", safe_index)
+
+    invalid_candidates = [
+      {"var(--external-c)", :unsupported_nested_reference},
+      {"var(--external-c, 18px)", :unsupported_fallback},
+      {"18px; color: red", :unsupported_terminal_value},
+      {String.duplicate("x", 4097), :resource_limit_exceeded}
+    ]
+
+    for {candidate, expected_error} <- invalid_candidates do
+      authority_index = derived_external_authority_index("--external-b", candidate)
+
+      assert {:ok, [{:error, ^expected_error}]} =
+               resolve_external_passthrough("var(--external-b)", authority_index)
+    end
   end
 
   test "does not hand off fallback or composed A values to external authority" do

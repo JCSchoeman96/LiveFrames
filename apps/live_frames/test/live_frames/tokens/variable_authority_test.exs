@@ -27,6 +27,30 @@ defmodule LiveFrames.Tokens.VariableAuthorityTest do
     }
   end
 
+  defp token_with_resolved_value(path, authorities, resolved_value, metadata) do
+    token_with_resolved_value(path, authorities, resolved_value, metadata, "16px")
+  end
+
+  defp token_with_resolved_value(path, authorities, resolved_value, metadata, source_expression) do
+    token = token(path, authorities)
+
+    %{
+      token
+      | resolved_value: resolved_value,
+        source_expression: source_expression,
+        metadata: Map.merge(token.metadata, metadata)
+    }
+  end
+
+  defp raw_index(token) do
+    [source] = token.metadata["variable_authorities"]
+
+    %VariableAuthority{
+      by_variable: %{source["variable"] => %{token.path => [source]}},
+      tokens_by_path: %{token.path => token}
+    }
+  end
+
   defp token_set(tokens) do
     TokenSet.new(tokens: Map.new(tokens, &{&1.path, &1}))
   end
@@ -176,6 +200,104 @@ defmodule LiveFrames.Tokens.VariableAuthorityTest do
              variable: "--gap",
              candidates: [candidate]
            }
+  end
+
+  test "resolve_terminal prefers the binary resolved value over conflicting CSS metadata" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [source],
+        "16px",
+        %{"css_expression" => "999px"}
+      )
+
+    index = build!(token_set([token]))
+
+    assert {:ok, _candidate, "16px"} = VariableAuthority.resolve_terminal(index, "--gap")
+  end
+
+  test "resolve_terminal selects the CSS candidate for a resolved derived value" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [source],
+        %{"type" => "derived", "recipe" => "acss.clamp", "inputs" => %{}},
+        %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+      )
+
+    index = build!(token_set([token]))
+
+    assert {:ok, _candidate, "clamp(1rem, 2vw, 2rem)"} =
+             VariableAuthority.resolve_terminal(index, "--gap")
+  end
+
+  test "resolve_terminal reports a derived value without a candidate as unavailable" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [source],
+        %{"type" => "derived", "recipe" => "acss.clamp", "inputs" => %{}},
+        %{},
+        nil
+      )
+
+    assert {:error, :token_value_unavailable} =
+             VariableAuthority.resolve_terminal(raw_index(token), "--gap")
+  end
+
+  test "resolve_terminal excludes responsive values with CSS metadata" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [source],
+        %{"type" => "responsive", "min" => "16px", "max" => "18px"},
+        %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+      )
+
+    assert {:error, :token_value_unavailable} =
+             VariableAuthority.resolve_terminal(raw_index(token), "--gap")
+  end
+
+  test "resolve_terminal excludes every fluid value shape with CSS metadata" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    for type <- ["fluid_domain", "fluid_value", "fluid_scale", "fluid_scale_step"] do
+      token =
+        token_with_resolved_value(
+          "spacing.content_gap",
+          [source],
+          %{"type" => type, "value" => "16px"},
+          %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+        )
+
+      assert {:error, :token_value_unavailable} =
+               VariableAuthority.resolve_terminal(raw_index(token), "--gap")
+    end
+  end
+
+  test "resolve_terminal excludes unknown and atom-keyed derived maps with CSS metadata" do
+    source = authority("--gap", "source_output_alias", "authority-gap", "gap")
+
+    for resolved_value <- [%{"custom" => "16px"}, %{:type => "derived"}] do
+      token =
+        token_with_resolved_value(
+          "spacing.content_gap",
+          [source],
+          resolved_value,
+          %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+        )
+
+      assert {:error, :token_value_unavailable} =
+               VariableAuthority.resolve_terminal(raw_index(token), "--gap")
+    end
   end
 
   test "resolve_terminal fails when no authority exists" do
