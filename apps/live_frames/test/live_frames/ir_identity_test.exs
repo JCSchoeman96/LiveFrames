@@ -29,10 +29,12 @@ defmodule LiveFrames.IR.IdentityTest do
     assert digest =~ ~r/\A[0-9a-f]{64}\z/
   end
 
-  test "current IR5 identity is stable for repeated encodes" do
+  test "current IR6 identity is stable for repeated encodes" do
     document = valid_document()
     assert {:ok, identity} = Identity.from_document(document)
-    assert identity.ir_version == "5.0.0"
+    assert identity.ir_version == "6.0.0"
+    assert identity.canonicalization_id == "lf-ir-serializer-v1"
+    assert identity.digest_algorithm == "sha-256"
     assert {:ok, ^identity} = Identity.from_document(document)
   end
 
@@ -117,8 +119,8 @@ defmodule LiveFrames.IR.IdentityTest do
 
     assert {:ok, none_identity} = Identity.from_document(none)
     assert {:ok, resolved_identity} = Identity.from_document(resolved)
-    assert none_identity.ir_version == "5.0.0"
-    assert resolved_identity.ir_version == "5.0.0"
+    assert none_identity.ir_version == "6.0.0"
+    assert resolved_identity.ir_version == "6.0.0"
     assert none_identity.digest != resolved_identity.digest
   end
 

@@ -43,7 +43,7 @@ defmodule LiveFrames.FidelityDriftTest do
       |> Map.put("input_ir_version", "4.0.0")
 
     committed_manifest = Jason.decode!(File.read!(@manifest))
-    assert bundle.manifest["input_ir_version"] == "5.0.0"
+    assert bundle.manifest["input_ir_version"] == "6.0.0"
     assert committed_manifest["input_ir_version"] == "4.0.0"
     assert expected_manifest == committed_manifest
   end

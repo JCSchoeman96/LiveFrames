@@ -70,8 +70,10 @@ defmodule LiveFrames.Behavior.ReviewResultTest do
 
     ir5_identity = %Identity{@identity | ir_version: "5.0.0"}
     assert ReviewResult.validate(review(design_document_identity: ir5_identity)) == :ok
+    ir6_identity = %Identity{@identity | ir_version: "6.0.0"}
+    assert ReviewResult.validate(review(design_document_identity: ir6_identity)) == :ok
 
-    for version <- ["1.0.0", "2.0.0", "future"] do
+    for version <- ["1.0.0", "2.0.0", "7.0.0", "future"] do
       identity = %Identity{@identity | ir_version: version}
       assert invalid_code(review(design_document_identity: identity)) == "behavior.review.invalid"
     end

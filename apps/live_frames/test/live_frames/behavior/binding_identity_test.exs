@@ -76,6 +76,13 @@ defmodule LiveFrames.Behavior.BindingIdentityTest do
     refute hd(ir5_contract.bindings).binding_id == hd(ir3_contract.bindings).binding_id
   end
 
+  test "assigns deterministic IDs for IR6 identities" do
+    identity = %Identity{@identity | ir_version: "6.0.0"}
+    input = contract([occurrence()], identity)
+    assert {:ok, first} = BindingIdentity.assign(input)
+    assert {:ok, ^first} = BindingIdentity.assign(input)
+  end
+
   test "preserves binding list order while IDs follow semantic occurrences" do
     first = occurrence(primitive_policy_values: %{"mode" => "alpha"})
     second = occurrence(primitive_policy_values: %{"mode" => "beta"})

@@ -567,6 +567,7 @@ defmodule LiveFrames.Fidelity.DocumentLoader do
   defp value_target_kind("asset"), do: :asset
   defp value_target_kind("link_url"), do: :link_url
   defp value_target_kind("rich_text"), do: :rich_text
+  defp value_target_kind("datetime_attribute"), do: :datetime_attribute
   defp value_target_kind(_other), do: :__invalid_enum__
 
   defp value_kind("field"), do: :field

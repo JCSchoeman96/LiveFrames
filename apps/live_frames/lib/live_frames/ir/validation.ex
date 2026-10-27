@@ -1399,6 +1399,22 @@ defmodule LiveFrames.IR.Validation do
 
   defp validate_value_binding_target_kind(
          diagnostics,
+         %{target_kind: :datetime_attribute, value_kind: value_kind, scope: scope},
+         _node_semantics,
+         trace
+       )
+       when value_kind != :field or scope != :collection_item do
+    error(
+      diagnostics,
+      "ir.value_binding.target_kind_invalid",
+      "datetime_attribute requires a collection_item field",
+      :schema,
+      trace
+    )
+  end
+
+  defp validate_value_binding_target_kind(
+         diagnostics,
          %{target_kind: target_kind, value_kind: value_kind},
          _node_semantics,
          trace

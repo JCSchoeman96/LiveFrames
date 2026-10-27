@@ -92,6 +92,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
         "2.0.0" -> minimal_v2_map()
         "3.0.0" -> minimal_v3_map()
         "4.0.0" -> minimal_v3_map() |> Map.put("ir_version", "4.0.0")
+        "5.0.0" -> minimal_v3_map() |> Map.put("ir_version", "5.0.0")
       end
 
     put_in(base, ["value_bindings"], %{"value_001" => binding})
@@ -103,10 +104,133 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     |> Enum.map(fn entry -> {entry["source_version"], entry["target_version"]} end)
   end
 
-  test "migrates valid v1 maps through all versions to 5.0.0" do
+  test "v5 migration preserves represented payload and validates migration history" do
+    entry = fn source, target ->
+      %{
+        "source_version" => source,
+        "target_version" => target,
+        "kind" => "structural",
+        "frontend_semantics_recovered" => false
+      }
+    end
+
+    v4_to_v5 = entry.("4.0.0", "5.0.0")
+    v5_to_v6 = entry.("5.0.0", "6.0.0")
+
+    v5 =
+      minimal_v3_map()
+      |> Map.put("ir_version", "5.0.0")
+      |> put_in(["value_bindings"], %{
+        "value_001" =>
+          value_binding_map(%{
+            "modifier" => %{"status" => "opaque"},
+            "normalization_status" => "evidence_insufficient"
+          })
+      })
+      |> put_in(["provenance"], %{
+        "other" => "preserved",
+        "liveframes_ir_migrations" => [v4_to_v5, v5_to_v6]
+      })
+
+    assert {:ok, migrated} = Migration.to_current(v5)
+    assert migrated == Map.put(v5, "ir_version", "6.0.0")
+    reordered = put_in(v5, ["provenance", "liveframes_ir_migrations"], [v5_to_v6, v4_to_v5])
+    assert {:error, diagnostics} = Migration.to_current(reordered)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.migration.provenance_collision"))
+
+    conflict =
+      put_in(v5, ["provenance", "liveframes_ir_migrations"], [
+        Map.put(v5_to_v6, "kind", "inferred")
+      ])
+
+    assert {:error, diagnostics} = Migration.to_current(conflict)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.migration.provenance_collision"))
+  end
+
+  test "loads IR6 datetime targets and rejects unknown targets" do
+    id = DesignNode.deterministic_id([1])
+    map = minimal_v3_map() |> Map.put("ir_version", "6.0.0")
+
+    map =
+      put_in(map, ["collection_bindings"], %{
+        "collection_001" => %{
+          "collection_binding_id" => "collection_001",
+          "owner_node_id" => id,
+          "repeat_root_node_id" => id,
+          "parent_collection_binding_id" => nil,
+          "normalization_status" => "normalized",
+          "source_trace" => nil
+        }
+      })
+
+    binding =
+      value_binding_map(%{
+        "target_kind" => "datetime_attribute",
+        "scope" => "collection_item",
+        "collection_binding_id" => "collection_001"
+      })
+
+    map = put_in(map, ["value_bindings"], %{"value_001" => binding})
+    assert {:ok, document} = DocumentLoader.from_map(map)
+    assert document.value_bindings["value_001"].target_kind == :datetime_attribute
+    assert {:ok, ^document} = document |> IR.to_map() |> DocumentLoader.from_map()
+    unknown = put_in(map, ["value_bindings", "value_001", "target_kind"], "future_attribute_kind")
+    assert {:error, diagnostics} = DocumentLoader.from_map(unknown)
+    assert Enum.any?(diagnostics, &(&1.code == "ir.value_binding.target_kind_invalid"))
+  end
+
+  test "legacy datetime enum fails while IR5 enums are preserved" do
+    for version <- ["2.0.0", "3.0.0", "4.0.0", "5.0.0"] do
+      input = legacy_binding_input(version, %{"target_kind" => "datetime_attribute"})
+      assert {:error, diagnostics} = Migration.to_current(input)
+      assert Enum.any?(diagnostics, &(&1.code == "ir.migration.value_binding_invalid"))
+    end
+
+    v5 = minimal_v3_map() |> Map.put("ir_version", "5.0.0")
+
+    binding =
+      value_binding_map()
+      |> Map.put("target_kind", "rich_text")
+      |> Map.put("scope", "current_entity")
+
+    v5 = put_in(v5, ["value_bindings"], %{"value_001" => binding})
+    assert {:ok, migrated} = Migration.to_current(v5)
+    assert migrated["ir_version"] == "6.0.0"
+    assert migrated["value_bindings"] == v5["value_bindings"]
+  end
+
+  test "all legacy routes reach IR6 in chronological order" do
+    inputs = [
+      minimal_v1_map(),
+      minimal_v2_map(),
+      minimal_v3_map(),
+      Map.put(minimal_v3_map(), "ir_version", "4.0.0"),
+      Map.put(minimal_v3_map(), "ir_version", "5.0.0")
+    ]
+
+    transitions = Enum.map(1..5, fn n -> {"#{n}.0.0", "#{n + 1}.0.0"} end)
+
+    for {input, index} <- Enum.with_index(inputs) do
+      assert {:ok, migrated} = Migration.to_current(input)
+      assert migrated["ir_version"] == "6.0.0"
+      assert migration_pairs(migrated) == Enum.drop(transitions, index)
+
+      assert List.last(migrated["provenance"]["liveframes_ir_migrations"]) == %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             }
+    end
+
+    current = %{"ir_version" => "6.0.0"}
+    assert {:ok, ^current} = Migration.to_current(current)
+  end
+
+  test "migrates valid v1 maps through all versions to 6.0.0" do
     assert {:ok, migrated} = Migration.to_current(minimal_v1_map())
 
-    assert migrated["ir_version"] == "5.0.0"
+    assert migrated["ir_version"] == "6.0.0"
     assert migrated["collection_bindings"] == %{}
     assert migrated["value_bindings"] == %{}
     refute migrated["provenance"] == %{}
@@ -135,6 +259,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
                "target_version" => "5.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
              }
            ]
   end
@@ -146,8 +276,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       |> Map.put("value_bindings", %{"value_001" => value_binding_map()})
 
     assert {:ok, migrated} = Migration.to_current(v4)
-    assert migrated["ir_version"] == "5.0.0"
-    assert migration_pairs(migrated) == [{"4.0.0", "5.0.0"}]
+    assert migrated["ir_version"] == "6.0.0"
+    assert migration_pairs(migrated) == [{"4.0.0", "5.0.0"}, {"5.0.0", "6.0.0"}]
     assert {:ok, ^migrated} = Migration.to_current(v4)
 
     for {field, value} <- [{"target_kind", "rich_text"}, {"scope", "current_entity"}] do
@@ -218,7 +348,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       |> put_in(["provenance", "existing"], "kept")
 
     assert {:ok, migrated} = Migration.to_current(v2)
-    assert migrated["ir_version"] == "5.0.0"
+    assert migrated["ir_version"] == "6.0.0"
 
     assert get_in(migrated, ["root_nodes", Access.at(0), "styles", "gap", "value"]) ==
              legacy_calculation
@@ -241,6 +371,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              %{
                "source_version" => "4.0.0",
                "target_version" => "5.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
              }
@@ -275,7 +411,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       |> put_in(["provenance", "existing"], "kept")
 
     assert {:ok, migrated} = Migration.to_current(v3)
-    assert migrated["ir_version"] == "5.0.0"
+    assert migrated["ir_version"] == "6.0.0"
     assert migrated["provenance"]["existing"] == "kept"
 
     assert migrated["provenance"]["liveframes_ir_migrations"] == [
@@ -288,6 +424,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              %{
                "source_version" => "4.0.0",
                "target_version" => "5.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
              }
@@ -311,8 +453,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
   test "v4 migration is structural and unknown versions fail closed" do
     v4 = minimal_v3_map() |> Map.put("ir_version", "4.0.0")
     assert {:ok, migrated} = Migration.to_current(v4)
-    assert migrated["ir_version"] == "5.0.0"
-    assert migration_pairs(migrated) == [{"4.0.0", "5.0.0"}]
+    assert migrated["ir_version"] == "6.0.0"
+    assert migration_pairs(migrated) == [{"4.0.0", "5.0.0"}, {"5.0.0", "6.0.0"}]
     assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "9.0.0"})
     assert Enum.any?(unsupported, &(&1.code == "ir.document.version_unsupported"))
   end
@@ -418,7 +560,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
       )
 
     assert {:ok, document} = DocumentLoader.from_map(map)
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
 
     assert {:ok, round_trip} = document |> IR.to_map() |> DocumentLoader.from_map()
     loaded_style = hd(round_trip.root_nodes).styles["gap"]
@@ -473,6 +615,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              %{
                "source_version" => "4.0.0",
                "target_version" => "5.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
              }
@@ -539,6 +687,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
                    "target_version" => "5.0.0",
                    "kind" => "structural",
                    "frontend_semantics_recovered" => false
+                 },
+                 %{
+                   "source_version" => "5.0.0",
+                   "target_version" => "6.0.0",
+                   "kind" => "structural",
+                   "frontend_semantics_recovered" => false
                  }
                ]
   end
@@ -561,7 +715,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              {"1.0.0", "2.0.0"},
              {"2.0.0", "3.0.0"},
              {"3.0.0", "4.0.0"},
-             {"4.0.0", "5.0.0"}
+             {"4.0.0", "5.0.0"},
+             {"5.0.0", "6.0.0"}
            ]
   end
 
@@ -580,7 +735,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert migration_pairs(migrated) == [
              {"2.0.0", "3.0.0"},
              {"3.0.0", "4.0.0"},
-             {"4.0.0", "5.0.0"}
+             {"4.0.0", "5.0.0"},
+             {"5.0.0", "6.0.0"}
            ]
   end
 
@@ -600,7 +756,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              {"1.0.0", "2.0.0"},
              {"2.0.0", "3.0.0"},
              {"3.0.0", "4.0.0"},
-             {"4.0.0", "5.0.0"}
+             {"4.0.0", "5.0.0"},
+             {"5.0.0", "6.0.0"}
            ]
   end
 
@@ -632,7 +789,8 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              {"1.0.0", "2.0.0"},
              {"2.0.0", "3.0.0"},
              {"3.0.0", "4.0.0"},
-             {"4.0.0", "5.0.0"}
+             {"4.0.0", "5.0.0"},
+             {"5.0.0", "6.0.0"}
            ]
   end
 
@@ -672,6 +830,12 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
              %{
                "source_version" => "4.0.0",
                "target_version" => "5.0.0",
+               "kind" => "structural",
+               "frontend_semantics_recovered" => false
+             },
+             %{
+               "source_version" => "5.0.0",
+               "target_version" => "6.0.0",
                "kind" => "structural",
                "frontend_semantics_recovered" => false
              }
@@ -758,7 +922,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     assert Enum.any?(invalid, &(&1.code == "ir.document.version_invalid"))
 
     assert {:ok, v4} = Migration.to_current(minimal_v3_map())
-    assert v4["ir_version"] == "5.0.0"
+    assert v4["ir_version"] == "6.0.0"
     assert {:error, unsupported} = Migration.to_current(%{"ir_version" => "9.0.0"})
     assert Enum.any?(unsupported, &(&1.code == "ir.document.version_unsupported"))
   end
@@ -966,7 +1130,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
     v1 = minimal_v1_map() |> put_in(["provenance", "source_hash"], "fixture")
 
     assert {:ok, document} = DocumentLoader.from_map(v1)
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert document.provenance["source_hash"] == "fixture"
@@ -993,7 +1157,7 @@ defmodule LiveFrames.FidelityDocumentLoaderTest do
 
   test "hero india v1 fixture migrates and fidelity drift inputs stay controlled" do
     assert {:ok, document} = DocumentLoader.from_file(@hero_v1_input)
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     refute Map.has_key?(document.token_set["tokens"], "typography.heading.scale.h2")

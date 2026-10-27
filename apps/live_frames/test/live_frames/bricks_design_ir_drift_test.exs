@@ -29,7 +29,7 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
                theme_styles: @theme_styles_path
              )
 
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
     assert document.collection_bindings == %{}
     assert document.value_bindings == %{}
     assert Map.has_key?(document.token_set["tokens"], "typography.heading.scale.h2")
@@ -40,11 +40,11 @@ defmodule LiveFrames.BricksDesignIRDriftTest do
     assert artifact_document["ir_version"] == "4.0.0"
 
     current_artifact_bytes =
-      artifact_document |> Map.put("ir_version", "5.0.0") |> Jason.encode!()
+      artifact_document |> Map.put("ir_version", "6.0.0") |> Jason.encode!()
 
     assert Jason.decode!(current_bytes) == Jason.decode!(current_artifact_bytes)
 
-    assert Jason.decode!(current_artifact_bytes)["ir_version"] == "5.0.0"
+    assert Jason.decode!(current_artifact_bytes)["ir_version"] == "6.0.0"
   end
 
   defp token_set do

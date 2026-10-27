@@ -930,7 +930,7 @@ defmodule LiveFrames.BricksStaticNavigationTest do
                })
              ])
 
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
     assert IR.validate(document) == :ok
   end
 end

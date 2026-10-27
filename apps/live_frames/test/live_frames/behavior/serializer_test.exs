@@ -30,6 +30,13 @@ defmodule LiveFrames.Behavior.SerializerTest do
              Serializer.encode(%Contract{design_document_identity: @identity})
   end
 
+  test "accepts IR6 and rejects IR7 identity" do
+    ir6 = %Identity{@identity | ir_version: "6.0.0"}
+    assert {:ok, _} = Serializer.encode(%Contract{design_document_identity: ir6})
+    ir7 = %Identity{@identity | ir_version: "7.0.0"}
+    assert {:error, _} = Serializer.encode(%Contract{design_document_identity: ir7})
+  end
+
   test "accepts the closed IR3, IR4, and IR5 identity set" do
     ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
 

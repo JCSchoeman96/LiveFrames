@@ -611,7 +611,7 @@ defmodule LiveFrames.BricksDesignIRTest do
       )
 
     owner = hd(document.root_nodes)
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
 
     assert %LiveFrames.IR.ResponsiveOverride{min_width: 767.0, max_width: nil} =
              owner.responsive["custom_min_767"]
@@ -742,7 +742,7 @@ defmodule LiveFrames.BricksDesignIRTest do
     document = document()
 
     assert IR.validate(document) == :ok
-    assert document.ir_version == "5.0.0"
+    assert document.ir_version == "6.0.0"
     assert length(document.root_nodes) == 1
 
     nodes = flatten(document.root_nodes)
