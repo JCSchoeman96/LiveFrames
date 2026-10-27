@@ -30,6 +30,103 @@ defmodule LiveFrames.Behavior.SerializerTest do
              Serializer.encode(%Contract{design_document_identity: @identity})
   end
 
+  test "preserves the accepted Feature Milan IR5 Behavior artifacts" do
+    identity = %Identity{
+      ir_version: "5.0.0",
+      canonicalization_id: "lf-ir-serializer-v1",
+      digest_algorithm: "sha-256",
+      digest: "9ae73053d9224bebcb71833b77094a17c3ef7c3a25f0b5b1c4dbad5aaf9d2229"
+    }
+
+    binding = %Binding{
+      primitive_ref: %PrimitiveRef{kind: "selection", definition_version: "1.0.0"},
+      owner_node_id: "node_000001",
+      binding_role: "primary",
+      primitive_policy_values: %{"alignment" => "position", "advance_boundary" => "wrap"},
+      triggers: [
+        %Trigger{kind: "activate", origin_node_id: "node_000001_000001_000001_000002_000001"},
+        %Trigger{kind: "timer", origin_node_id: nil}
+      ],
+      controlled_targets: [
+        %ControlledTarget{
+          role: "control_collection",
+          node_id: "node_000001_000001_000001_000002_000001"
+        },
+        %ControlledTarget{
+          role: "presentation_collection",
+          node_id: "node_000001_000001_000001_000002_000001_000002_000001"
+        },
+        %ControlledTarget{
+          role: "presentation_collection",
+          node_id: "node_000001_000001_000002_000001"
+        }
+      ],
+      timer_policy: %{
+        "purpose" => "advance_selection",
+        "interval_ms" => 5000,
+        "start" => "on_initialization",
+        "manual_activation" => "stop",
+        "restart" => "never",
+        "reset" => "none",
+        "reduced_motion" => "disable_automatic_advance"
+      }
+    }
+
+    assert {:ok, contract} =
+             LiveFrames.Behavior.BindingIdentity.assign(%Contract{
+               design_document_identity: identity,
+               bindings: [binding]
+             })
+
+    assert contract.design_document_identity == identity
+
+    assert hd(contract.bindings).binding_id ==
+             "bnd_abf701b79aba7597825525c7ddf5065e89a2fdcfb378797f63e3d9fb74ff8ee2"
+
+    expected_contract =
+      ~S|{"behavior_contract_format_version":"1.0.0","bindings":[{"binding_id":"bnd_abf701b79aba7597825525c7ddf5065e89a2fdcfb378797f63e3d9fb74ff8ee2","binding_role":"primary","controlled_targets":[{"node_id":"node_000001_000001_000001_000002_000001","role":"control_collection"},{"node_id":"node_000001_000001_000001_000002_000001_000002_000001","role":"presentation_collection"},{"node_id":"node_000001_000001_000002_000001","role":"presentation_collection"}],"diagnostics":[],"focus_policy":null,"initial_state":null,"keyboard_policy":null,"motion_policy":null,"ordinal":0,"owner_node_id":"node_000001","primitive_policy_values":{"advance_boundary":"wrap","alignment":"position"},"primitive_ref":{"definition_version":"1.0.0","kind":"selection"},"provenance":{},"responsive_overrides":[],"source_trace":null,"timer_policy":{"interval_ms":5000,"manual_activation":"stop","purpose":"advance_selection","reduced_motion":"disable_automatic_advance","reset":"none","restart":"never","start":"on_initialization"},"triggers":[{"kind":"activate","origin_node_id":"node_000001_000001_000001_000002_000001"},{"kind":"timer","origin_node_id":null}]}],"design_document_identity":{"canonicalization_id":"lf-ir-serializer-v1","digest":"9ae73053d9224bebcb71833b77094a17c3ef7c3a25f0b5b1c4dbad5aaf9d2229","digest_algorithm":"sha-256","ir_version":"5.0.0"},"diagnostics":[],"provenance":{}}|
+
+    assert {:ok, ^expected_contract} = Serializer.encode(contract)
+
+    assert {:ok, "1e0095418d96f392594a155d9c6ea9610b6b5f4d62c6d0205df66dedea57506a"} =
+             Serializer.digest(contract)
+
+    review = %LiveFrames.Behavior.ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: identity,
+      behavior_contract_digest_algorithm: "lf-behavior-v1-jcs-sha256",
+      behavior_contract_digest:
+        "1e0095418d96f392594a155d9c6ea9610b6b5f4d62c6d0205df66dedea57506a",
+      decision: "approved",
+      reviewer_identity: "reviewer:JCSchoeman96",
+      reviewed_at: "2026-10-23T05:34:02.000000Z",
+      review_note:
+        "Approved Feature Milan IR5 selection@1.0.0 contract against the accepted IR5 DesignDocument identity and current operative Milan behavior evidence.",
+      evidence_refs: [
+        "BEH-P007",
+        "docs/development/c09b2b_behavior_identity_ir5_compatibility_authority.md",
+        "docs/development/feature_milan_ir5_behavior_contract_reissue.md",
+        "docs/development/feature_milan_timed_selection_mapping_preflight.md"
+      ]
+    }
+
+    expected_review =
+      ~S|{"behavior_contract_digest":"1e0095418d96f392594a155d9c6ea9610b6b5f4d62c6d0205df66dedea57506a","behavior_contract_digest_algorithm":"lf-behavior-v1-jcs-sha256","decision":"approved","design_document_identity":{"canonicalization_id":"lf-ir-serializer-v1","digest":"9ae73053d9224bebcb71833b77094a17c3ef7c3a25f0b5b1c4dbad5aaf9d2229","digest_algorithm":"sha-256","ir_version":"5.0.0"},"evidence_refs":["BEH-P007","docs/development/c09b2b_behavior_identity_ir5_compatibility_authority.md","docs/development/feature_milan_ir5_behavior_contract_reissue.md","docs/development/feature_milan_timed_selection_mapping_preflight.md"],"review_format_version":"1.0.0","review_note":"Approved Feature Milan IR5 selection@1.0.0 contract against the accepted IR5 DesignDocument identity and current operative Milan behavior evidence.","reviewed_at":"2026-10-23T05:34:02.000000Z","reviewer_identity":"reviewer:JCSchoeman96"}|
+
+    assert :ok = LiveFrames.Behavior.ReviewResult.validate_against_contract(review, contract)
+    assert {:ok, ^expected_review} = LiveFrames.Behavior.ReviewResult.encode(review)
+
+    assert {:ok, "brv_b4bc3ab7f4284cf20ae6f0aaf73da3fd2c242e42d18f1ab049acc6f1e62e9c11"} =
+             LiveFrames.Behavior.ReviewResult.id(review)
+  end
+
+  test "accepts IR6 and rejects IR7 identity" do
+    ir6 = %Identity{@identity | ir_version: "6.0.0"}
+    assert {:ok, _} = Serializer.encode(%Contract{design_document_identity: ir6})
+    ir7 = %Identity{@identity | ir_version: "7.0.0"}
+    assert {:error, _} = Serializer.encode(%Contract{design_document_identity: ir7})
+  end
+
   test "accepts the closed IR3, IR4, and IR5 identity set" do
     ir4_identity = %Identity{@identity | ir_version: "4.0.0"}
 

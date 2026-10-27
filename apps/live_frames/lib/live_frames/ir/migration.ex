@@ -9,6 +9,7 @@ defmodule LiveFrames.IR.Migration do
   @v3 "3.0.0"
   @v4 "4.0.0"
   @v5 "5.0.0"
+  @v6 "6.0.0"
 
   @v1_to_v2 %{
     "source_version" => @v1,
@@ -35,6 +36,13 @@ defmodule LiveFrames.IR.Migration do
     "frontend_semantics_recovered" => false
   }
 
+  @v5_to_v6 %{
+    "source_version" => @v5,
+    "target_version" => @v6,
+    "kind" => "structural",
+    "frontend_semantics_recovered" => false
+  }
+
   @spec to_current(map()) :: {:ok, map()} | {:error, [Diagnostic.t()]}
   def to_current(map) when is_map(map) do
     case Map.fetch(map, "ir_version") do
@@ -50,32 +58,42 @@ defmodule LiveFrames.IR.Migration do
       {:ok, @v1} ->
         with {:ok, v2} <- migrate_v1_to_v2(map) do
           with {:ok, v3} <- migrate_v2_to_v3(v2, :legacy_values_checked) do
-            with {:ok, v4} <- migrate_v3_to_v4(v3) do
-              migrate_v4_to_v5(v4)
+            with {:ok, v4} <- migrate_v3_to_v4(v3),
+                 {:ok, v5} <- migrate_v4_to_v5(v4) do
+              migrate_v5_to_v6(v5)
             end
           end
         end
 
       {:ok, @v2} ->
-        with :ok <- reject_v5_only_binding_enums(map),
+        with :ok <- reject_v6_only_binding_enums(map),
+             :ok <- reject_v5_only_binding_enums(map),
              {:ok, v3} <- migrate_v2_to_v3(map, :check_legacy_values) do
-          with {:ok, v4} <- migrate_v3_to_v4(v3) do
-            migrate_v4_to_v5(v4)
+          with {:ok, v4} <- migrate_v3_to_v4(v3),
+               {:ok, v5} <- migrate_v4_to_v5(v4) do
+            migrate_v5_to_v6(v5)
           end
         end
 
       {:ok, @v3} ->
-        with :ok <- reject_v5_only_binding_enums(map),
-             {:ok, v4} <- migrate_v3_to_v4(map) do
-          migrate_v4_to_v5(v4)
+        with :ok <- reject_v6_only_binding_enums(map),
+             :ok <- reject_v5_only_binding_enums(map),
+             {:ok, v4} <- migrate_v3_to_v4(map),
+             {:ok, v5} <- migrate_v4_to_v5(v4) do
+          migrate_v5_to_v6(v5)
         end
 
       {:ok, @v4} ->
-        with :ok <- reject_v5_only_binding_enums(map) do
-          migrate_v4_to_v5(map)
+        with :ok <- reject_v6_only_binding_enums(map),
+             :ok <- reject_v5_only_binding_enums(map),
+             {:ok, v5} <- migrate_v4_to_v5(map) do
+          migrate_v5_to_v6(v5)
         end
 
       {:ok, @v5} ->
+        with :ok <- reject_v6_only_binding_enums(map), do: migrate_v5_to_v6(map)
+
+      {:ok, @v6} ->
         {:ok, map}
 
       {:ok, _unsupported} ->
@@ -91,6 +109,27 @@ defmodule LiveFrames.IR.Migration do
 
   def to_current(_map),
     do: {:error, [error("ir.document.invalid", "expected a decoded JSON object")]}
+
+  defp migrate_v5_to_v6(map) do
+    with :ok <- require_provenance_object(map),
+         provenance = Map.fetch!(map, "provenance"),
+         {:ok, provenance} <- merge_migration_provenance(provenance, @v5_to_v6) do
+      {:ok, map |> Map.put("ir_version", @v6) |> Map.put("provenance", provenance)}
+    end
+  end
+
+  defp reject_v6_only_binding_enums(map) do
+    bindings = Map.get(map, "value_bindings", %{})
+
+    if is_map(bindings) and
+         Enum.any?(bindings, fn {_id, binding} ->
+           is_map(binding) and Map.get(binding, "target_kind") == "datetime_attribute"
+         end) do
+      {:error, [value_binding_migration_error("legacy bindings cannot use v6-only enum values")]}
+    else
+      :ok
+    end
+  end
 
   defp migrate_v4_to_v5(map) do
     with :ok <- require_provenance_object(map),
@@ -420,6 +459,8 @@ defmodule LiveFrames.IR.Migration do
   defp known_transition_rank(%{"source_version" => @v1, "target_version" => @v2}), do: 1
   defp known_transition_rank(%{"source_version" => @v2, "target_version" => @v3}), do: 2
   defp known_transition_rank(%{"source_version" => @v3, "target_version" => @v4}), do: 3
+  defp known_transition_rank(%{"source_version" => @v4, "target_version" => @v5}), do: 4
+  defp known_transition_rank(%{"source_version" => @v5, "target_version" => @v6}), do: 5
   defp known_transition_rank(_entry), do: nil
 
   defp error(code, message),

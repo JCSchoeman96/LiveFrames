@@ -3,14 +3,14 @@ defmodule LiveFrames.IR.ValueBinding do
   Caller-supplied frontend value binding stored in a Design IR registry.
   """
 
-  @target_kinds [:text, :asset, :link_url, :rich_text]
+  @target_kinds [:text, :asset, :link_url, :rich_text, :datetime_attribute]
   @value_kinds [:field, :collection_count]
   @scopes [:collection_item, :site, :collection, :current_entity]
   @normalization_statuses [:normalized, :evidence_insufficient]
 
   alias LiveFrames.IR.ValueModifier
 
-  @type target_kind :: :text | :asset | :link_url | :rich_text
+  @type target_kind :: :text | :asset | :link_url | :rich_text | :datetime_attribute
   @type value_kind :: :field | :collection_count
   @type scope :: :collection_item | :site | :collection | :current_entity
   @type normalization_status :: :normalized | :evidence_insufficient

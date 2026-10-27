@@ -96,7 +96,7 @@ defmodule LiveFrames.IRTest do
   end
 
   test "exposes the current supported IR version and uses it by default" do
-    assert DesignDocument.current_ir_version() == "5.0.0"
+    assert DesignDocument.current_ir_version() == "6.0.0"
     assert IR.current_ir_version() == DesignDocument.current_ir_version()
     assert DesignDocument.new().ir_version == IR.current_ir_version()
     assert DesignDocument.new().collection_bindings == %{}
@@ -421,7 +421,7 @@ defmodule LiveFrames.IRTest do
     assert first == second
 
     decoded = Jason.decode!(first)
-    assert decoded["ir_version"] == "5.0.0"
+    assert decoded["ir_version"] == "6.0.0"
     assert decoded["collection_bindings"] == %{}
     assert decoded["value_bindings"] == %{}
 
@@ -619,6 +619,52 @@ defmodule LiveFrames.IRTest do
 
   test "accepts valid collection and value bindings" do
     assert IR.validate(binding_document()) == :ok
+  end
+
+  test "datetime attribute admits only collection item fields" do
+    document = binding_document()
+
+    valid =
+      update_in(document.value_bindings["value_001"], fn binding ->
+        %{
+          binding
+          | target_kind: :datetime_attribute,
+            value_key: "content.published_at",
+            modifier: %ValueModifier.Opaque{},
+            normalization_status: :evidence_insufficient
+        }
+      end)
+
+    assert IR.validate(valid) == :ok
+    assert {:ok, identity} = LiveFrames.IR.Identity.from_document(valid)
+    assert {:ok, ^identity} = LiveFrames.IR.Identity.from_document(valid)
+    assert IR.encode!(valid) == IR.encode!(valid)
+    assert IR.to_map(valid)["value_bindings"]["value_001"]["target_kind"] == "datetime_attribute"
+
+    assert IR.validate(
+             update_in(
+               valid.value_bindings["value_001"],
+               &%{&1 | modifier: %ValueModifier.None{}, normalization_status: :normalized}
+             )
+           ) == :ok
+
+    changes = [
+      %{scope: :site, collection_binding_id: nil},
+      %{scope: :current_entity, collection_binding_id: nil},
+      %{value_kind: :collection_count, scope: :collection, value_key: nil},
+      %{value_key: nil},
+      %{collection_binding_id: nil},
+      %{target_node_id: DesignNode.deterministic_id([1])},
+      %{
+        modifier: %ValueModifier.Resolved{kind: :word_limit, arguments: %{"count" => 3}},
+        normalization_status: :normalized
+      }
+    ]
+
+    for change <- changes do
+      invalid = update_in(valid.value_bindings["value_001"], &struct!(&1, change))
+      assert {:error, _diagnostics} = IR.validate(invalid)
+    end
   end
 
   test "serializes ValueBinding modifiers as a required nested v4 object" do

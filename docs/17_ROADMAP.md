@@ -14,7 +14,7 @@ STATUS_EVIDENCE_BASE_CI_RESULT=PASS
 
 ## Current status
 
-- Design IR current version: `5.0.0`.
+- Design IR current version: `6.0.0`.
 - C09D6-B review, C09D6-C native generation, and C09D6-D native styling are
   implemented on `main`.
 - C09D7-A CTA Tango componentization and review are accepted (A3 approval
