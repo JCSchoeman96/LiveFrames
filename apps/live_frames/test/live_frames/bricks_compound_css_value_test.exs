@@ -52,6 +52,102 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
     assert {:ok, "calc(\n2px\r\n)"} = CompoundCssValue.reconstruct(spaced, %{0 => "2px"})
   end
 
+  test "reconstructs bounded fluid clamps as bare calc operands" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x))")
+
+    for terminal <- [
+          "clamp(1rem, calc(2vw + 0.5rem), 2rem)",
+          "clamp(1.5rem, calc(-0.25vw + 2rem), 3rem)",
+          "clamp(-1rem, calc(0vw + -0.5rem), 1rem)",
+          "clamp(\t1rem\n,\fcalc(\r2vw\t+\n0.5rem\f)\t,\n2rem\r)"
+        ] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) == {:ok, "calc(#{terminal})"}
+    end
+  end
+
+  test "reconstructs a bounded fluid clamp with literal calc multiplication" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x) * 2)")
+    terminal = "clamp(1rem, calc(2vw + 0.5rem), 2rem)"
+
+    assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+             {:ok, "calc(#{terminal} * 2)"}
+  end
+
+  test "reconstructs a multiline bounded clamp with calc multiplication" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x) * 2)")
+    terminal = "clamp(\t1rem\n,\fcalc(\r2vw\t+\n0.5rem\f)\t,\n2rem\r)"
+
+    assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+             {:ok, "calc(#{terminal} * 2)"}
+  end
+
+  test "rejects invalid multiline calc terminals" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x))")
+
+    for terminal <- [
+          "foo(\n1rem)",
+          "clamp(1rem,\ncalc(2vw + var(--x)), 2rem)",
+          "clamp(1rem,\ncalc(2vw + 1rem + 1rem), 2rem)",
+          "clamp(1rem,\ncalc(2vh + 1rem), 2rem)",
+          "clamp(1rem,\ncalc(2vw + 1rem), 2rem) trailing",
+          "clamp(1rem,\n\u00a0calc(2vw + 1rem), 2rem)"
+        ] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+               {:error, :invalid_slot_terminal},
+             terminal
+    end
+  end
+
+  test "rejects terminals outside the bounded fluid clamp grammar" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x))")
+
+    for terminal <- [
+          "CLAMP(1rem, calc(2vw + 1rem), 2rem)",
+          "Clamp(1rem, calc(2vw + 1rem), 2rem)",
+          "min(1rem, calc(2vw + 1rem), 2rem)",
+          "clamp(1rem, 2rem)",
+          "clamp(1rem, calc(2vw + 1rem), 2rem, 3rem)",
+          "clamp(1px, calc(2vw + 1rem), 2rem)",
+          "clamp(1em, calc(2vw + 1rem), 2rem)",
+          "clamp(1%, calc(2vw + 1rem), 2rem)",
+          "clamp(1rem, calc(2vh + 1rem), 2rem)",
+          "clamp(1rem, calc(2px + 1rem), 2rem)",
+          "clamp(1rem, calc(2rem + 1rem), 2rem)",
+          "clamp(1rem, calc(2vw + 1px), 2rem)",
+          "clamp(1rem, calc(2vw + 1rem), 2px)",
+          "clamp(+1rem, calc(2vw + 1rem), 2rem)",
+          "clamp(1rem, calc(+2vw + 1rem), 2rem)",
+          "clamp(1e3rem, calc(2vw + 1rem), 2rem)",
+          "clamp(.5rem, calc(2vw + 1rem), 2rem)",
+          "clamp(NaNrem, calc(2vw + 1rem), 2rem)",
+          "clamp(Infinityrem, calc(2vw + 1rem), 2rem)",
+          "clamp(1rem, calc(2vw + var(--x)), 2rem)",
+          "clamp(1rem, calc(2vw + clamp(1rem, 2rem, 3rem)), 2rem)",
+          "clamp(1rem, calc(2vw + foo(1rem)), 2rem)",
+          "clamp(1rem, calc(2vw - 1rem), 2rem)",
+          "clamp(1rem, calc(2vw * 1rem), 2rem)",
+          "clamp(1rem, calc(2vw / 1rem), 2rem)",
+          "clamp(1rem, calc(2vw + 1rem + 1rem), 2rem)",
+          "clamp(1rem, calc(2vw + 1rem), 2rem) + 1rem",
+          "clamp(1rem, calc(2vw + 1rem, 2rem)",
+          "clamp(1rem, calc(2vw + 1rem), 2rem) trailing",
+          "clamp(1rem,\u00a0calc(2vw + 1rem), 2rem)",
+          "clamp(1rem, calc(2vw\u2003+ 1rem), 2rem)"
+        ] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+               {:error, :invalid_slot_terminal},
+             terminal
+    end
+  end
+
+  test "retains the reconstructed argument limit for a bounded fluid clamp" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--x))")
+    terminal = "clamp(" <> String.duplicate("1", 2048) <> "rem, calc(2vw + 1rem), 2rem)"
+
+    assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+             {:error, :resource_limit_exceeded}
+  end
+
   test "classifies two dimensions and two local references" do
     assert {:ok, multi} = CompoundCssValue.parse("10px 2rem")
     assert multi.production == :multi_token_value
@@ -156,7 +252,7 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
   end
 
   test "enforces calc expression grammar and positive factor predicate" do
-    for factor <- ["1", "2.25", ".5"] do
+    for factor <- ["1", "2", "2.25", ".5"] do
       assert {:ok, _} = CompoundCssValue.parse("calc(var(--x) * #{factor})")
     end
 

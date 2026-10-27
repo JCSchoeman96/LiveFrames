@@ -424,7 +424,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
   defp valid_slot?(:calc_operand, value) when is_binary(value),
     do:
       Regex.match?(~r/^-?\d+(?:\.\d+)?$/, value) or Regex.match?(@dimension, value) or
-        Regex.match?(~r/^-?\d+(?:\.\d+)?%$/, value)
+        Regex.match?(~r/^-?\d+(?:\.\d+)?%$/, value) or bounded_fluid_clamp?(value)
 
   defp valid_slot?(:juxtaposition_left_operand, value) when is_binary(value),
     do:
@@ -436,6 +436,13 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
 
   defp valid_slot?(:juxtaposition_right_operand, "ease-in-out"), do: true
   defp valid_slot?(_, _), do: false
+
+  defp bounded_fluid_clamp?(value) do
+    Regex.match?(
+      ~r/\Aclamp\([\x20\t\r\n\f]*-?\d+(?:\.\d+)?rem[\x20\t\r\n\f]*,[\x20\t\r\n\f]*calc\([\x20\t\r\n\f]*-?\d+(?:\.\d+)?vw[\x20\t\r\n\f]*\+[\x20\t\r\n\f]*-?\d+(?:\.\d+)?rem[\x20\t\r\n\f]*\)[\x20\t\r\n\f]*,[\x20\t\r\n\f]*-?\d+(?:\.\d+)?rem[\x20\t\r\n\f]*\)\z/,
+      value
+    )
+  end
 
   defp valid_transition_duration?(value) do
     if Regex.match?(@transition_duration, value) do
@@ -537,7 +544,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     case Regex.run(~r/^calc\((.*)\)$/is, value, capture: :all_but_first) do
       [body] ->
         case Regex.run(
-               ~r/^[\x20\t\r\n\f]*(.*?)[\x20\t\r\n\f]*(?:\*[\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/,
+               ~r/^[\x20\t\r\n\f]*(.*?)[\x20\t\r\n\f]*(?:\*[\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/s,
                body,
                capture: :all_but_first
              ) do
