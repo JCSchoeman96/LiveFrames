@@ -202,7 +202,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
 
   defp parse_calc(source, body) do
     case Regex.run(
-           ~r/^[\x20\t\r\n\f]*(var\([\x20\t\r\n\f]*--[A-Za-z0-9_-]+[\x20\t\r\n\f]*\))[\x20\t\r\n\f]*(?:\*[\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/,
+           ~r/^[\x20\t\r\n\f]*(var\([\x20\t\r\n\f]*--[A-Za-z0-9_-]+[\x20\t\r\n\f]*\))[\x20\t\r\n\f]*(?:[\/*][\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/,
            body,
            capture: :all_but_first
          ) do
@@ -544,7 +544,7 @@ defmodule LiveFrames.Adapters.Bricks.CompoundCssValue do
     case Regex.run(~r/^calc\((.*)\)$/is, value, capture: :all_but_first) do
       [body] ->
         case Regex.run(
-               ~r/^[\x20\t\r\n\f]*(.*?)[\x20\t\r\n\f]*(?:\*[\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/s,
+               ~r/^[\x20\t\r\n\f]*(.*?)[\x20\t\r\n\f]*(?:[\/*][\x20\t\r\n\f]*((?:\d+(?:\.\d+)?|\.\d+)))?[\x20\t\r\n\f]*$/s,
                body,
                capture: :all_but_first
              ) do

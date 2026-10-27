@@ -34,6 +34,24 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
     assert [%{local_name: "--Accent"}] = CompoundCssValue.occurrences(case_variant)
   end
 
+  test "parses bounded calc division with one local occurrence" do
+    for value <- [
+          "calc(var(--x) / 1)",
+          "calc(var(--x) / 2)",
+          "calc(var(--x) / 2.25)",
+          "calc(var(--x) / .5)",
+          "calc(var( --x ) / 2.25)",
+          "calc(\n  var(--x)\n  /\n  .5\n)"
+        ] do
+      assert {:ok, parsed} = CompoundCssValue.parse(value)
+      assert parsed.production == :function_call
+      assert parsed.function_name == :calc
+
+      assert [%{local_name: "--x", slot_grammar: :calc_operand}] =
+               CompoundCssValue.occurrences(parsed)
+    end
+  end
+
   test "parses calc references with and without a positive factor" do
     for value <- [
           "calc(var(--space))",
@@ -50,6 +68,73 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
 
     assert {:ok, spaced} = CompoundCssValue.parse("calc(\nvar(--space)\r\n)")
     assert {:ok, "calc(\n2px\r\n)"} = CompoundCssValue.reconstruct(spaced, %{0 => "2px"})
+  end
+
+  test "rejects unsupported calc division forms" do
+    for divisor <- [
+          "0",
+          "-1",
+          "+1",
+          ".",
+          "1e3",
+          "1e999",
+          "2px",
+          "2rem",
+          "2%",
+          "var(--n)",
+          "calc(2)",
+          "(2)",
+          "NaN",
+          "Infinity",
+          String.duplicate("9", 400)
+        ] do
+      assert CompoundCssValue.parse("calc(var(--x) / #{divisor})") ==
+               {:error, :unsupported_grammar}
+    end
+
+    for expression <- [
+          "var(--x, 10px) / 2",
+          "(var(--x) + 1) / 2",
+          "var(--x) / 2 / 3",
+          "var(--x) * 2 / 3",
+          "var(--x) / 2 * 3",
+          "var(--x)\u00a0/ 2",
+          "var(--x) /\u20032"
+        ] do
+      assert CompoundCssValue.parse("calc(#{expression})") == {:error, :unsupported_grammar}
+    end
+  end
+
+  test "reconstructs bounded calc division operands and preserves spacing" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--gap) / 2)")
+
+    for terminal <- [
+          "2rem",
+          "0",
+          "-2.5",
+          "10px",
+          "2%",
+          "-2%",
+          "clamp(1rem, calc(2vw + 0.5rem), 2rem)",
+          "clamp(\t1rem\n,\fcalc(\r2vw\t+\n0.5rem\f)\t,\n2rem\r)"
+        ] do
+      assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+               {:ok, "calc(#{terminal} / 2)"}
+    end
+
+    assert {:error, :invalid_slot_terminal} =
+             CompoundCssValue.reconstruct(parsed, %{0 => "clamp(.5rem, calc(2vw + 1rem), 2rem)"})
+
+    assert {:ok, spaced} = CompoundCssValue.parse("calc(\n var( --gap )\n /\t.5\n)")
+    assert {:ok, "calc(\n 2rem\n /\t.5\n)"} = CompoundCssValue.reconstruct(spaced, %{0 => "2rem"})
+  end
+
+  test "reconstructs bounded clamp through calc division" do
+    assert {:ok, parsed} = CompoundCssValue.parse("calc(var(--gap) / 2)")
+    terminal = "clamp(1rem, calc(2vw + 0.5rem), 2rem)"
+
+    assert CompoundCssValue.reconstruct(parsed, %{0 => terminal}) ==
+             {:ok, "calc(#{terminal} / 2)"}
   end
 
   test "reconstructs bounded fluid clamps as bare calc operands" do
@@ -271,7 +356,6 @@ defmodule LiveFrames.BricksCompoundCssValueTest do
           "var(--x) var(--y)",
           "var(--x) + 2",
           "var(--x) - 2",
-          "var(--x) / 2",
           "var(--x) * 2 * 3",
           "var(--x) * 2px",
           "var(--x) * (2)"
