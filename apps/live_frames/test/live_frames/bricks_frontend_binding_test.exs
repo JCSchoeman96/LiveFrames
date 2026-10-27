@@ -25,6 +25,7 @@ defmodule LiveFrames.BricksFrontendBindingTest do
                         "../../../../fixtures/automatic_css/acss_settings.json",
                         __DIR__
                       )
+  @article_juliet_source_path Path.expand("../../../../sources/bricks_components.json", __DIR__)
 
   defp token_set do
     {:ok, token_set, _diagnostics} =
@@ -77,6 +78,27 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     Enum.find(Map.values(document.value_bindings), fn binding ->
       binding.source_trace.source_id == source_id
     end)
+  end
+
+  defp assert_text_binding(document, source_id, expression, value_key) do
+    assert %ValueBinding{} = binding = binding_for(document, source_id)
+    assert binding.target_kind == :text
+    assert binding.value_kind == :field
+    assert binding.scope == :collection_item
+    assert binding.value_key == value_key
+    assert Map.has_key?(document.collection_bindings, binding.collection_binding_id)
+    assert binding.normalization_status == :normalized
+
+    assert binding.source_trace.source_id == source_id
+    assert String.ends_with?(binding.source_trace.source_path, ".settings.text")
+    assert binding.source_trace.adapter == "bricks"
+    assert binding.source_trace.adapter_version == "1.0.0"
+    assert binding.source_trace.source_settings == %{"text" => expression}
+    assert binding.source_trace.metadata["raw_expression"] == expression
+    assert binding.source_trace.inference =~ value_key
+    assert node_by_source_id(document, source_id).content == nil
+
+    binding
   end
 
   defp loop_with_target(target_id, target_name, target_settings) do
@@ -349,6 +371,168 @@ defmodule LiveFrames.BricksFrontendBindingTest do
            } = binding.modifier
 
     assert binding.normalization_status == :normalized
+  end
+
+  test "category terms plain text maps to taxonomy.category_names" do
+    expression = "{post_terms_category:plain}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("category", "text-basic", %{"text" => expression}))
+
+    binding = assert_text_binding(document, "category", expression, "taxonomy.category_names")
+    assert %LiveFrames.IR.ValueModifier.None{} = binding.modifier
+    assert binding.source_trace.metadata["classification"] == "text.post_terms_category_plain"
+  end
+
+  test "excerpt word limit 20 maps to content.excerpt" do
+    expression = "{post_excerpt:20}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("excerpt", "text-basic", %{"text" => expression}))
+
+    binding = assert_text_binding(document, "excerpt", expression, "content.excerpt")
+
+    assert %LiveFrames.IR.ValueModifier.Resolved{
+             kind: :word_limit,
+             arguments: %{"count" => 20}
+           } = binding.modifier
+
+    assert binding.source_trace.metadata["classification"] == "text.post_excerpt_word_limit"
+  end
+
+  test "author name maps to author.name" do
+    expression = "{author_name}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("author", "text-basic", %{"text" => expression}))
+
+    binding = assert_text_binding(document, "author", expression, "author.name")
+    assert %LiveFrames.IR.ValueModifier.None{} = binding.modifier
+    assert binding.source_trace.metadata["classification"] == "text.author_name"
+  end
+
+  test "published date text maps to content.published_at" do
+    expression = "{post_date}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("published-date", "text-basic", %{"text" => expression}))
+
+    binding = assert_text_binding(document, "published-date", expression, "content.published_at")
+    assert %LiveFrames.IR.ValueModifier.None{} = binding.modifier
+    assert binding.source_trace.metadata["classification"] == "text.post_date"
+  end
+
+  test "excerpt word limit 21 remains outside the closed classifier" do
+    expression = "{post_excerpt:21}"
+
+    assert {:ok, document} =
+             to_ir(loop_with_target("excerpt", "text-basic", %{"text" => expression}))
+
+    assert binding_for(document, "excerpt") == nil
+    assert document.value_bindings == %{}
+    assert node_by_source_id(document, "excerpt").content == nil
+    assert "bricks.binding.expression_unsupported" in diagnostic_codes(document)
+    refute "bricks.binding.interpolation_unsupported" in diagnostic_codes(document)
+  end
+
+  test "metadata text without collection context fails closed" do
+    for {source_id, expression} <- [
+          {"category", "{post_terms_category:plain}"},
+          {"excerpt", "{post_excerpt:20}"},
+          {"author", "{author_name}"},
+          {"published-date", "{post_date}"}
+        ] do
+      assert {:ok, document} =
+               to_ir([source_element(source_id, "text-basic", 0, %{"text" => expression})])
+
+      assert binding_for(document, source_id) == nil
+      assert node_by_source_id(document, source_id).content == nil
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.binding.evidence_insufficient" and
+                 diagnostic.source_trace.source_id == source_id
+             end)
+    end
+  end
+
+  test "wrapped metadata text tokens fail as unsupported interpolation" do
+    for expression <- [
+          "Category: {post_terms_category:plain}",
+          "Read {post_excerpt:20}",
+          "By {author_name}",
+          "Published {post_date}"
+        ] do
+      assert {:ok, document} =
+               to_ir(loop_with_target("wrapped", "text-basic", %{"text" => expression}))
+
+      assert binding_for(document, "wrapped") == nil
+      assert node_by_source_id(document, "wrapped").content == nil
+
+      assert Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.binding.interpolation_unsupported" and
+                 diagnostic.source_trace.source_id == "wrapped"
+             end)
+    end
+  end
+
+  test "Article Juliet metadata text mappings preserve P2A phase boundaries" do
+    assert {:ok, document} =
+             Bricks.to_ir(@article_juliet_source_path,
+               component_id: "idjmjz",
+               token_set: token_set()
+             )
+
+    category =
+      assert_text_binding(
+        document,
+        "a3b871",
+        "{post_terms_category:plain}",
+        "taxonomy.category_names"
+      )
+
+    assert %LiveFrames.IR.ValueModifier.None{} = category.modifier
+
+    excerpt = assert_text_binding(document, "d9eebe", "{post_excerpt:20}", "content.excerpt")
+
+    assert %LiveFrames.IR.ValueModifier.Resolved{
+             kind: :word_limit,
+             arguments: %{"count" => 20}
+           } = excerpt.modifier
+
+    author = assert_text_binding(document, "5c0e06", "{author_name}", "author.name")
+    assert %LiveFrames.IR.ValueModifier.None{} = author.modifier
+
+    published_date =
+      assert_text_binding(document, "cfc2f2", "{post_date}", "content.published_at")
+
+    assert %LiveFrames.IR.ValueModifier.None{} = published_date.modifier
+
+    for source_id <- ["a3b871", "d9eebe", "5c0e06", "cfc2f2"] do
+      refute Enum.any?(document.diagnostics, fn diagnostic ->
+               diagnostic.code == "bricks.binding.expression_unsupported" and
+                 diagnostic.source_trace.source_id == source_id
+             end)
+    end
+
+    refute Enum.any?(Map.values(document.value_bindings), fn binding ->
+             binding.source_trace.source_id == "c5162b" and
+               binding.source_trace.metadata["raw_expression"] == "{post_url}"
+           end)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "c5162b" and
+               diagnostic.metadata["raw_value"] == "{post_url}"
+           end)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.attribute.unsupported" and
+               diagnostic.source_trace.source_id == "cfc2f2" and
+               Enum.any?(diagnostic.source_trace.source_settings["_attributes"], fn attribute ->
+                 attribute["name"] == "datetime" and
+                   attribute["value"] == "{post_date:Y-m-d h:m}"
+               end)
+           end)
   end
 
   test "post content word limit accepts positive integers above unsigned 64-bit range" do
