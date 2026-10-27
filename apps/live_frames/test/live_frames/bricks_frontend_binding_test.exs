@@ -80,8 +80,14 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     end)
   end
 
+  defp binding_for(document, source_id, target_kind) do
+    Enum.find(Map.values(document.value_bindings), fn binding ->
+      binding.source_trace.source_id == source_id and binding.target_kind == target_kind
+    end)
+  end
+
   defp assert_text_binding(document, source_id, expression, value_key) do
-    assert %ValueBinding{} = binding = binding_for(document, source_id)
+    assert %ValueBinding{} = binding = binding_for(document, source_id, :text)
     assert binding.target_kind == :text
     assert binding.value_kind == :field
     assert binding.scope == :collection_item
@@ -514,15 +520,34 @@ defmodule LiveFrames.BricksFrontendBindingTest do
              end)
     end
 
-    refute Enum.any?(Map.values(document.value_bindings), fn binding ->
-             binding.source_trace.source_id == "c5162b" and
-               binding.source_trace.metadata["raw_expression"] == "{post_url}"
-           end)
+    post_title = assert_text_binding(document, "c5162b", "{post_title}", "content.title")
+    post_url = binding_for(document, "c5162b", :link_url)
 
-    assert Enum.any?(document.diagnostics, fn diagnostic ->
+    assert %ValueBinding{} = post_url
+    assert post_url.value_kind == :field
+    assert post_url.scope == :collection_item
+    assert post_url.value_key == "content.url"
+    assert %LiveFrames.IR.ValueModifier.None{} = post_url.modifier
+    assert post_url.normalization_status == :normalized
+    assert post_url.collection_binding_id == post_title.collection_binding_id
+    assert String.ends_with?(post_url.source_trace.source_path, ".settings.link.useDynamicData")
+    assert post_url.source_trace.metadata["raw_expression"] == "{post_url}"
+    assert post_url.source_trace.metadata["classification"] == "link.post_url"
+
+    heading = node_by_source_id(document, "c5162b")
+    assert heading.semantic_type == "heading"
+    refute Map.has_key?(heading.attributes, "link")
+    refute Map.has_key?(heading.attributes, "navigation")
+
+    assert heading.source_trace.source_settings["link"] == %{
+             "type" => "meta",
+             "useDynamicData" => "{post_url}"
+           }
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
              diagnostic.code == "bricks.runtime.unsupported" and
                diagnostic.source_trace.source_id == "c5162b" and
-               diagnostic.metadata["raw_value"] == "{post_url}"
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
            end)
 
     assert Enum.any?(document.diagnostics, fn diagnostic ->
@@ -533,6 +558,9 @@ defmodule LiveFrames.BricksFrontendBindingTest do
                    attribute["value"] == "{post_date:Y-m-d h:m}"
                end)
            end)
+
+    assert IR.validate(document) == :ok
+    assert is_binary(IR.encode!(document))
   end
 
   test "post content word limit accepts positive integers above unsigned 64-bit range" do
@@ -800,6 +828,190 @@ defmodule LiveFrames.BricksFrontendBindingTest do
     assert node_by_source_id(document, "link").attributes["navigation"] == nil
     refute "bricks.runtime.unsupported" in diagnostic_codes(document)
     refute "bricks.navigation.dynamic" in diagnostic_codes(document)
+  end
+
+  test "post URL maps only the proven dynamic link carrier to collection-item content.url" do
+    link = %{"type" => "meta", "useDynamicData" => "{post_url}"}
+
+    assert {:ok, document} =
+             to_ir([
+               source_element("loop", "block", 0, query_settings(true), ["heading"]),
+               source_element(
+                 "heading",
+                 "heading",
+                 "loop",
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert %ValueBinding{} = binding = binding_for(document, "heading", :link_url)
+    assert binding.target_kind == :link_url
+    assert binding.value_kind == :field
+    assert binding.scope == :collection_item
+    assert binding.value_key == "content.url"
+    assert binding.modifier == %LiveFrames.IR.ValueModifier.None{}
+    assert binding.normalization_status == :normalized
+    assert Map.has_key?(document.collection_bindings, binding.collection_binding_id)
+    assert String.ends_with?(binding.source_trace.source_path, ".settings.link.useDynamicData")
+    assert binding.source_trace.source_settings == %{"link" => link}
+    assert binding.source_trace.metadata["raw_expression"] == "{post_url}"
+    assert binding.source_trace.metadata["classification"] == "link.post_url"
+    assert binding.source_trace.inference =~ "collection-item content.url"
+
+    node = node_by_source_id(document, "heading")
+    assert node.semantic_type == "heading"
+    refute Map.has_key?(node.attributes, "link")
+    refute Map.has_key?(node.attributes, "navigation")
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+
+    assert IR.validate(document) == :ok
+    assert is_binary(IR.encode!(document))
+  end
+
+  test "post URL link carriers with unproven extra keys retain generic ownership" do
+    link = %{
+      "type" => "meta",
+      "useDynamicData" => "{post_url}",
+      "unproven" => "value"
+    }
+
+    assert {:ok, document} =
+             to_ir([
+               source_element("loop", "block", 0, query_settings(true), ["heading"]),
+               source_element(
+                 "heading",
+                 "heading",
+                 "loop",
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert binding_for(document, "heading", :link_url) == nil
+    assert node_by_source_id(document, "heading").attributes["link"] == link
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+  end
+
+  test "post URL without collection context records evidence and removes the generic link" do
+    link = %{"type" => "meta", "useDynamicData" => "{post_url}"}
+
+    assert {:ok, document} =
+             to_ir([
+               source_element(
+                 "heading",
+                 "heading",
+                 0,
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert binding_for(document, "heading", :link_url) == nil
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "heading" and
+               String.ends_with?(
+                 diagnostic.source_trace.source_path,
+                 ".settings.link.useDynamicData"
+               ) and
+               diagnostic.message =~
+                 "post URL collection-item value has no admitted collection context"
+           end)
+
+    refute Map.has_key?(node_by_source_id(document, "heading").attributes, "link")
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+  end
+
+  test "unknown dynamic link expressions retain runtime ownership" do
+    link = %{"type" => "meta", "useDynamicData" => "{unknown_url}"}
+
+    assert {:ok, document} =
+             to_ir([
+               source_element(
+                 "heading",
+                 "heading",
+                 0,
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert binding_for(document, "heading", :link_url) == nil
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
+             String.starts_with?(diagnostic.code, "bricks.binding.") and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+
+    assert node_by_source_id(document, "heading").attributes["link"] == link
+  end
+
+  test "mixed static and dynamic link destinations retain existing rejection diagnostics" do
+    link = %{"type" => "meta", "url" => "/static", "useDynamicData" => "{post_url}"}
+
+    assert {:ok, document} =
+             to_ir([
+               source_element(
+                 "heading",
+                 "heading",
+                 0,
+                 %{"text" => "Title", "tag" => "h2", "link" => link}
+               )
+             ])
+
+    assert binding_for(document, "heading", :link_url) == nil
+    assert node_by_source_id(document, "heading").attributes["link"] == link
+    assert "bricks.navigation.rejected" in diagnostic_codes(document)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.runtime.unsupported" and
+               diagnostic.source_trace.source_id == "heading" and
+               diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
+           end)
+  end
+
+  test "post URL on settings.url remains outside the dynamic URL classifier" do
+    url = %{"type" => "meta", "useDynamicData" => "{post_url}"}
+
+    assert {:ok, document} =
+             to_ir([
+               source_element(
+                 "link",
+                 "text-link",
+                 0,
+                 %{"text" => "Post", "url" => url}
+               )
+             ])
+
+    assert binding_for(document, "link", :link_url) == nil
+    refute Map.has_key?(node_by_source_id(document, "link").attributes, "url")
+    assert "bricks.binding.expression_unsupported" in diagnostic_codes(document)
   end
 
   test "unknown dynamic URL removes the raw URL object and emits no binding" do
