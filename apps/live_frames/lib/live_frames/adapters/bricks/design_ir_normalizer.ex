@@ -685,6 +685,14 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
 
   defp reconcile_frontend_binding_diagnostics(diagnostics, frontend_bindings) do
     Enum.reject(diagnostics, fn
+      %BricksDiagnostic{
+        code: "bricks.attribute.unsupported",
+        source_id: source_id,
+        source_path: "_attributes[0].name",
+        metadata: %{"attribute_name" => "datetime"}
+      } ->
+        MapSet.member?(frontend_bindings.datetime_attribute_source_ids, source_id)
+
       %BricksDiagnostic{code: "bricks.element.unsupported", source_id: source_id} ->
         get_in(frontend_bindings.node_actions, [source_id, :suppress_unsupported_diagnostic]) ==
           true

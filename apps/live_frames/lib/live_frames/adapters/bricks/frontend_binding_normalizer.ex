@@ -58,7 +58,8 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     diagnostics = Enum.reverse(diagnostics)
 
     {value_bindings, node_actions, dynamic_image_source_ids, dynamic_url_source_ids,
-     dynamic_link_source_ids, normalized_site_url_source_ids, value_diagnostics} =
+     dynamic_link_source_ids, normalized_site_url_source_ids, datetime_attribute_source_ids,
+     value_diagnostics} =
       normalize_values(
         tree,
         trace_index,
@@ -74,6 +75,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       collection_context_by_source: collection_context_by_source,
       query_owner_ids: query_owner_ids,
       value_bindings: value_bindings,
+      datetime_attribute_source_ids: datetime_attribute_source_ids,
       node_actions: node_actions,
       dynamic_image_source_ids: dynamic_image_source_ids,
       dynamic_url_source_ids: dynamic_url_source_ids,
@@ -94,6 +96,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       collection_context_by_source: %{},
       query_owner_ids: MapSet.new(),
       value_bindings: %{},
+      datetime_attribute_source_ids: MapSet.new(),
       node_actions: %{},
       dynamic_image_source_ids: MapSet.new(),
       dynamic_url_source_ids: MapSet.new(),
@@ -204,6 +207,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       dynamic_image_source_ids: MapSet.new(),
       dynamic_url_source_ids: MapSet.new(),
       dynamic_link_source_ids: MapSet.new(),
+      datetime_attribute_source_ids: MapSet.new(),
       normalized_site_url_source_ids: MapSet.new(),
       diagnostics: []
     }
@@ -244,6 +248,11 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
                 do: MapSet.put(acc.dynamic_link_source_ids, element.id),
                 else: acc.dynamic_link_source_ids
               ),
+            datetime_attribute_source_ids:
+              if(Enum.any?(classified.candidates, &(&1.target_kind == :datetime_attribute)),
+                do: MapSet.put(acc.datetime_attribute_source_ids, element.id),
+                else: acc.datetime_attribute_source_ids
+              ),
             normalized_site_url_source_ids:
               if(classified.normalized_site_url?,
                 do: MapSet.put(acc.normalized_site_url_source_ids, element.id),
@@ -267,6 +276,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       result.dynamic_url_source_ids,
       result.dynamic_link_source_ids,
       result.normalized_site_url_source_ids,
+      result.datetime_attribute_source_ids,
       diagnostics
     }
   end
@@ -317,11 +327,15 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     {link_candidates, dynamic_link?, link_diagnostics} =
       classify_dynamic_link(element, collection_id, trace_index, adapter_version)
 
+    {datetime_candidates, datetime_diagnostics} =
+      classify_datetime_attribute(element, collection_id, trace_index, adapter_version)
+
     alt_diagnostics = classify_dynamic_alt_text(element)
 
     candidates =
       Enum.sort_by(
-        text_candidates ++ image_candidates ++ url_candidates ++ link_candidates,
+        text_candidates ++
+          image_candidates ++ url_candidates ++ link_candidates ++ datetime_candidates,
         &candidate_order_key/1
       )
 
@@ -343,9 +357,86 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           image_diagnostics ++
           url_diagnostics ++
           link_diagnostics ++
+          datetime_diagnostics ++
           alt_diagnostics
     }
   end
+
+  defp classify_datetime_attribute(
+         %Element{name: "text-basic", settings: settings} = element,
+         collection_id,
+         trace_index,
+         adapter_version
+       ) do
+    case settings do
+      %{
+        "tag" => "custom",
+        "customTag" => "time",
+        "text" => "{post_date}",
+        "_attributes" => [
+          %{"id" => id, "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"} = attribute
+        ]
+      }
+      when is_binary(id) and byte_size(id) > 0 and map_size(attribute) == 3 ->
+        path = "_attributes[0].value"
+        expression = "{post_date:Y-m-d h:m}"
+
+        if is_binary(collection_id) do
+          candidate =
+            value_candidate(
+              element,
+              trace_index,
+              adapter_version,
+              path,
+              Map.take(settings, ["tag", "customTag", "text", "_attributes"]),
+              expression,
+              "attribute.datetime.post_date_format",
+              "closed Bricks datetime carrier maps to content.published_at",
+              %{
+                target_kind: :datetime_attribute,
+                value_kind: :field,
+                scope: :collection_item,
+                value_key: "content.published_at",
+                collection_binding_id: collection_id,
+                modifier: %LiveFrames.IR.ValueModifier.Opaque{},
+                normalization_status: :evidence_insufficient
+              },
+              %{
+                "filter_class" => "date_format",
+                "format_literal" => "Y-m-d h:m",
+                "attribute_name" => "datetime"
+              }
+            )
+
+          {[candidate], []}
+        else
+          diagnostic =
+            binding_diagnostic(
+              "bricks.binding.evidence_insufficient",
+              element,
+              path,
+              expression,
+              "datetime attribute has no admitted collection context"
+            )
+
+          diagnostic = %{
+            diagnostic
+            | metadata:
+                Map.merge(diagnostic.metadata, %{
+                  "raw_expression" => expression,
+                  "classification" => "attribute.datetime.post_date_format"
+                })
+          }
+
+          {[], [diagnostic]}
+        end
+
+      _ ->
+        {[], []}
+    end
+  end
+
+  defp classify_datetime_attribute(_, _, _, _), do: {[], []}
 
   defp classify_executable_source(
          %Element{settings: settings} = element,
