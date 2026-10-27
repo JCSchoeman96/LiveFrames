@@ -58,7 +58,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     diagnostics = Enum.reverse(diagnostics)
 
     {value_bindings, node_actions, dynamic_image_source_ids, dynamic_url_source_ids,
-     normalized_site_url_source_ids, value_diagnostics} =
+     dynamic_link_source_ids, normalized_site_url_source_ids, value_diagnostics} =
       normalize_values(
         tree,
         trace_index,
@@ -77,6 +77,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       node_actions: node_actions,
       dynamic_image_source_ids: dynamic_image_source_ids,
       dynamic_url_source_ids: dynamic_url_source_ids,
+      dynamic_link_source_ids: dynamic_link_source_ids,
       normalized_site_url_source_ids: normalized_site_url_source_ids,
       diagnostics: diagnostics ++ value_diagnostics
     }
@@ -96,6 +97,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       node_actions: %{},
       dynamic_image_source_ids: MapSet.new(),
       dynamic_url_source_ids: MapSet.new(),
+      dynamic_link_source_ids: MapSet.new(),
       normalized_site_url_source_ids: MapSet.new(),
       diagnostics: []
     }
@@ -201,6 +203,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       node_actions: %{},
       dynamic_image_source_ids: MapSet.new(),
       dynamic_url_source_ids: MapSet.new(),
+      dynamic_link_source_ids: MapSet.new(),
       normalized_site_url_source_ids: MapSet.new(),
       diagnostics: []
     }
@@ -236,6 +239,11 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
                 do: MapSet.put(acc.dynamic_url_source_ids, element.id),
                 else: acc.dynamic_url_source_ids
               ),
+            dynamic_link_source_ids:
+              if(classified.dynamic_link?,
+                do: MapSet.put(acc.dynamic_link_source_ids, element.id),
+                else: acc.dynamic_link_source_ids
+              ),
             normalized_site_url_source_ids:
               if(classified.normalized_site_url?,
                 do: MapSet.put(acc.normalized_site_url_source_ids, element.id),
@@ -257,6 +265,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       result.node_actions,
       result.dynamic_image_source_ids,
       result.dynamic_url_source_ids,
+      result.dynamic_link_source_ids,
       result.normalized_site_url_source_ids,
       diagnostics
     }
@@ -305,23 +314,36 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     {url_candidates, dynamic_url?, normalized_site_url?, url_diagnostics} =
       classify_dynamic_url(element, trace_index, adapter_version)
 
+    {link_candidates, dynamic_link?, link_diagnostics} =
+      classify_dynamic_link(element, collection_id, trace_index, adapter_version)
+
     alt_diagnostics = classify_dynamic_alt_text(element)
 
     candidates =
-      Enum.sort_by(text_candidates ++ image_candidates ++ url_candidates, &candidate_order_key/1)
+      Enum.sort_by(
+        text_candidates ++ image_candidates ++ url_candidates ++ link_candidates,
+        &candidate_order_key/1
+      )
 
     node_actions =
       %{}
       |> maybe_put_action(:clear_content, clear_content?)
       |> maybe_put_action(:remove_dynamic_url, dynamic_url?)
+      |> maybe_put_action(:remove_dynamic_link, dynamic_link?)
 
     %{
       candidates: candidates,
       node_actions: node_actions,
       dynamic_image?: dynamic_image?,
       dynamic_url?: dynamic_url?,
+      dynamic_link?: dynamic_link?,
       normalized_site_url?: normalized_site_url?,
-      diagnostics: text_diagnostics ++ image_diagnostics ++ url_diagnostics ++ alt_diagnostics
+      diagnostics:
+        text_diagnostics ++
+          image_diagnostics ++
+          url_diagnostics ++
+          link_diagnostics ++
+          alt_diagnostics
     }
   end
 
@@ -366,6 +388,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
             },
             dynamic_image?: false,
             dynamic_url?: false,
+            dynamic_link?: false,
             normalized_site_url?: false,
             diagnostics: [diagnostic]
           }
@@ -391,6 +414,7 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
       node_actions: %{},
       dynamic_image?: false,
       dynamic_url?: false,
+      dynamic_link?: false,
       normalized_site_url?: false,
       diagnostics: diagnostics
     }
@@ -819,6 +843,58 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
     else
       {[], false, false, []}
     end
+  end
+
+  defp classify_dynamic_link(element, collection_id, trace_index, adapter_version) do
+    link = Map.get(element.settings, "link")
+
+    if post_url_dynamic_link?(link) do
+      case collection_id do
+        collection_id when is_binary(collection_id) ->
+          candidate =
+            value_candidate(
+              element,
+              trace_index,
+              adapter_version,
+              "link.useDynamicData",
+              %{"link" => link},
+              "{post_url}",
+              "link.post_url",
+              "closed Bricks post URL form maps to collection-item content.url",
+              %{
+                target_kind: :link_url,
+                value_kind: :field,
+                scope: :collection_item,
+                value_key: "content.url",
+                collection_binding_id: collection_id,
+                modifier: %LiveFrames.IR.ValueModifier.None{},
+                normalization_status: :normalized
+              },
+              %{}
+            )
+
+          {[candidate], true, []}
+
+        _missing_collection_context ->
+          diagnostic =
+            binding_diagnostic(
+              "bricks.binding.evidence_insufficient",
+              element,
+              "link.useDynamicData",
+              "{post_url}",
+              "known post URL collection-item value has no admitted collection context"
+            )
+
+          {[], true, [diagnostic]}
+      end
+    else
+      {[], false, []}
+    end
+  end
+
+  defp post_url_dynamic_link?(link) do
+    json_object?(link) and Map.get(link, "type") == "meta" and
+      Map.get(link, "useDynamicData") == "{post_url}" and not Map.has_key?(link, "url")
   end
 
   defp classify_dynamic_alt_text(element) do

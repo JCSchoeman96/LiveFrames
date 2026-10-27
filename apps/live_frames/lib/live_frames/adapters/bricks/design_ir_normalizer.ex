@@ -706,7 +706,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
           (MapSet.member?(frontend_bindings.dynamic_image_source_ids, source_id) and
              source_path == "settings.image.useDynamicData") or
           (MapSet.member?(frontend_bindings.dynamic_url_source_ids, source_id) and
-             source_path == "settings.url.useDynamicData")
+             source_path == "settings.url.useDynamicData") or
+          (MapSet.member?(frontend_bindings.dynamic_link_source_ids, source_id) and
+             source_path == "settings.link.useDynamicData")
 
       %BricksDiagnostic{
         code: "bricks.asset.unresolved",
@@ -897,6 +899,7 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     attributes =
       attributes_for(element, static_semantics)
       |> remove_dynamic_url(node_actions)
+      |> remove_dynamic_link(node_actions)
       |> apply_static_navigation(static_navigation, static_semantics)
 
     semantic_type =
@@ -963,6 +966,11 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     do: Map.delete(attributes, "url")
 
   defp remove_dynamic_url(attributes, _node_actions), do: attributes
+
+  defp remove_dynamic_link(attributes, %{remove_dynamic_link: true}),
+    do: Map.delete(attributes, "link")
+
+  defp remove_dynamic_link(attributes, _node_actions), do: attributes
 
   defp content_for(%Element{name: name, settings: settings})
        when name in ["heading", "text", "text-basic", "button", "text-link"] do
