@@ -2125,7 +2125,11 @@ defmodule LiveFrames.NativeGeneratorTest do
       render = Function.capture(module, :selection_component, 1)
 
       html =
-        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+        render_component(render, %{
+          id: "selection-root",
+          items: [%{"title" => "Synthetic title"}],
+          heading_level: 3
+        })
 
       [control_attrs] = Regex.run(~r/<div([^>]*)>/, html, capture: :all_but_first)
 
@@ -2164,11 +2168,14 @@ defmodule LiveFrames.NativeGeneratorTest do
       refute source =~ ~r/role="tab(?:list|panel)?"|aria-selected|aria-controls|tabindex="-1"/
       refute source =~ "role=\"tabpanel\""
       refute source =~ "role=\"tablist\""
-      refute source =~ "phx-hook"
+      assert length(:binary.matches(source, ~s|phx-hook=".Selection"|)) == 1
+      assert length(:binary.matches(source, ~s|name=".Selection"|)) == 1
+      refute source =~ ~s|name=".Selection" runtime|
       refute source =~ "phx-click"
       refute source =~ "setTimeout"
-      refute source =~ "setInterval"
-      refute source =~ "hidden"
+      assert length(:binary.matches(source, "setInterval(")) == 1
+      assert source =~ "}, 5000)"
+      refute html =~ ~r/<p[^>]*\shidden(?:\s|>|=)/
     end)
   end
 
@@ -2180,7 +2187,11 @@ defmodule LiveFrames.NativeGeneratorTest do
       render = Function.capture(module, :selection_component, 1)
 
       html =
-        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+        render_component(render, %{
+          id: "selection-root",
+          items: [%{"title" => "Synthetic title"}],
+          heading_level: 3
+        })
 
       [control_inner] =
         Regex.run(
@@ -2225,7 +2236,11 @@ defmodule LiveFrames.NativeGeneratorTest do
       render = Function.capture(module, :selection_component, 1)
 
       html =
-        render_component(render, %{items: [%{"title" => "Synthetic title"}], heading_level: 3})
+        render_component(render, %{
+          id: "selection-root",
+          items: [%{"title" => "Synthetic title"}],
+          heading_level: 3
+        })
 
       [heading_inner] = Regex.run(~r/<h3[^>]*>(.*?)<\/h3>/s, html, capture: :all_but_first)
 
@@ -2254,14 +2269,16 @@ defmodule LiveFrames.NativeGeneratorTest do
       items = [%{"title" => "Selection title"}]
 
       for level <- 1..6 do
-        html = render_component(render, %{items: items, heading_level: level})
+        html =
+          render_component(render, %{id: "selection-root", items: items, heading_level: level})
+
         assert html =~ "<h#{level}"
 
         assert html =~
                  ~r/<h#{level}[^>]*>\s*<button[^>]*>Selection title<\/button>\s*<\/h#{level}>/
       end
 
-      default_html = render_component(render, %{items: items})
+      default_html = render_component(render, %{id: "selection-root", items: items})
       assert default_html =~ ~r/<h3[^>]*>\s*<button[^>]*>Selection title<\/button>\s*<\/h3>/
     end)
   end
@@ -2381,7 +2398,7 @@ defmodule LiveFrames.NativeGeneratorTest do
     assert {:ok, %{source: source, stylesheet: stylesheet}} =
              render_selection_parts(tuple, changed_carrier)
 
-    refute source =~ ~s(data-lf-selection-activate="true")
+    refute source =~ ~r/<button[^>]*data-lf-selection-activate="true"/
     assert stylesheet =~ "data-lf-selection-activate"
 
     assert {:ok, filtered} =
@@ -2933,6 +2950,7 @@ defmodule LiveFrames.NativeGeneratorTest do
       module_intent: "selection_component",
       function_intent: "selection_component",
       public_attrs: [
+        %Attr{name: "id", type: :string, required: true, semantic_purpose: "root id"},
         %Attr{name: "items", type: :list, semantic_purpose: "items"},
         %Attr{
           name: "heading_level",
@@ -2978,6 +2996,11 @@ defmodule LiveFrames.NativeGeneratorTest do
       design_document_sha256: fingerprint,
       boundary_node_id: boundary_id,
       render_projections: [
+        %RenderProjection{
+          public_attr_name: "id",
+          target_node_id: boundary_id,
+          render_role: :root_id
+        },
         %RenderProjection{
           public_attr_name: "heading_level",
           target_node_id: carrier_id,
