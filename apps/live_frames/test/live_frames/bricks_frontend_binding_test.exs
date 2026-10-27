@@ -169,6 +169,150 @@ defmodule LiveFrames.BricksFrontendBindingTest do
 
   defp private_sentinel_paths(_value, _path), do: []
 
+  test "normalizes the proven datetime attribute alongside post date text" do
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "_attributes" => [
+        %{"id" => "local", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+      ]
+    }
+
+    assert {:ok, document} = to_ir(loop_with_target("date", "text-basic", settings))
+    assert_text_binding(document, "date", "{post_date}", "content.published_at")
+
+    assert %ValueBinding{
+             target_kind: :datetime_attribute,
+             value_kind: :field,
+             scope: :collection_item,
+             value_key: "content.published_at",
+             modifier: %LiveFrames.IR.ValueModifier.Opaque{},
+             normalization_status: :evidence_insufficient
+           } =
+             binding_for(document, "date", :datetime_attribute)
+  end
+
+  test "datetime attribute without a collection retains classified diagnostic evidence" do
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "_attributes" => [
+        %{"id" => "local", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+      ]
+    }
+
+    assert {:ok, document} = to_ir([source_element("date", "text-basic", 0, settings)])
+    refute binding_for(document, "date", :datetime_attribute)
+
+    assert Enum.any?(document.diagnostics, fn diagnostic ->
+             diagnostic.code == "bricks.binding.evidence_insufficient" and
+               diagnostic.source_trace.source_id == "date" and
+               diagnostic.metadata["raw_expression"] == "{post_date:Y-m-d h:m}" and
+               diagnostic.metadata["classification"] == "attribute.datetime.post_date_format"
+           end)
+  end
+
+  test "an empty attribute list does not produce a datetime binding" do
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "_attributes" => []
+    }
+
+    assert {:ok, document} = to_ir(loop_with_target("date", "text-basic", settings))
+    refute binding_for(document, "date", :datetime_attribute)
+    refute "bricks.attribute.unsupported" in diagnostic_codes(document)
+  end
+
+  test "reconciles only the claimed datetime diagnostic" do
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "ariaLabel" => 42,
+      "_attributes" => [
+        %{"id" => "local", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+      ]
+    }
+
+    assert {:ok, document} = to_ir(loop_with_target("date", "text-basic", settings))
+    diagnostics = Enum.filter(document.diagnostics, &(&1.code == "bricks.attribute.unsupported"))
+
+    refute Enum.any?(
+             diagnostics,
+             &String.ends_with?(&1.source_trace.source_path, "._attributes[0].name")
+           )
+
+    assert Enum.any?(diagnostics, &String.ends_with?(&1.source_trace.source_path, ".ariaLabel"))
+  end
+
+  test "rejects unproven datetime carrier and attribute shapes" do
+    attribute = %{"id" => "local", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "_attributes" => [attribute]
+    }
+
+    cases = [
+      Map.put(settings, "_attributes", [Map.put(attribute, "name", "onclick")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "value", "other")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "value", "{post_date}")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "value", "{post_date:Y-m-d}")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "value", "{unknown}")]),
+      Map.put(settings, "tag", "span"),
+      Map.put(settings, "customTag", "span"),
+      Map.put(settings, "text", "other"),
+      Map.put(settings, "_attributes", "invalid"),
+      Map.put(settings, "_attributes", []),
+      Map.put(settings, "_attributes", [attribute, %{"name" => "onclick"}]),
+      Map.put(settings, "_attributes", [Map.delete(attribute, "id")]),
+      Map.put(settings, "_attributes", [Map.delete(attribute, "name")]),
+      Map.put(settings, "_attributes", [Map.delete(attribute, "value")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "extra", true)]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "id", "")]),
+      Map.put(settings, "_attributes", [Map.put(attribute, "id", 3)]),
+      Map.put(settings, "_attributes", [attribute, attribute])
+    ]
+
+    for invalid <- cases do
+      assert {:ok, document} = to_ir(loop_with_target("date", "text-basic", invalid))
+      refute binding_for(document, "date", :datetime_attribute), inspect(invalid)
+
+      if invalid["_attributes"] != [] do
+        assert "bricks.attribute.unsupported" in diagnostic_codes(document), inspect(invalid)
+      end
+    end
+  end
+
+  test "datetime normalization is deterministic" do
+    settings = %{
+      "tag" => "custom",
+      "customTag" => "time",
+      "text" => "{post_date}",
+      "_attributes" => [
+        %{"id" => "local", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+      ]
+    }
+
+    elements = loop_with_target("date", "text-basic", settings)
+    assert {:ok, first} = to_ir(elements)
+    assert {:ok, second} = to_ir(elements)
+    assert first.value_bindings == second.value_bindings
+    assert first.collection_bindings == second.collection_bindings
+    assert first.diagnostics == second.diagnostics
+    assert IR.encode!(first) == IR.encode!(second)
+    assert Identity.from_document(first) == Identity.from_document(second)
+
+    assert binding_for(first, "date", :datetime_attribute).value_binding_id ==
+             binding_for(second, "date", :datetime_attribute).value_binding_id
+  end
+
   test "admits a query owner with hasLoop and a structurally linked child" do
     assert {:ok, document} =
              to_ir([
@@ -550,7 +694,41 @@ defmodule LiveFrames.BricksFrontendBindingTest do
                diagnostic.metadata["source_path"] == "settings.link.useDynamicData"
            end)
 
-    assert Enum.any?(document.diagnostics, fn diagnostic ->
+    assert %ValueBinding{} = datetime = binding_for(document, "cfc2f2", :datetime_attribute)
+    assert datetime.value_kind == :field
+    assert datetime.scope == :collection_item
+    assert datetime.value_key == "content.published_at"
+    assert datetime.collection_binding_id == published_date.collection_binding_id
+    assert datetime.target_node_id == published_date.target_node_id
+    assert datetime.value_binding_id != published_date.value_binding_id
+    assert %LiveFrames.IR.ValueModifier.Opaque{} = datetime.modifier
+    assert datetime.normalization_status == :evidence_insufficient
+    assert datetime.source_trace.metadata["raw_expression"] == "{post_date:Y-m-d h:m}"
+
+    assert datetime.source_trace.metadata["classification"] ==
+             "attribute.datetime.post_date_format"
+
+    assert datetime.source_trace.metadata["filter_class"] == "date_format"
+    assert datetime.source_trace.metadata["format_literal"] == "Y-m-d h:m"
+    assert datetime.source_trace.metadata["attribute_name"] == "datetime"
+    assert String.ends_with?(datetime.source_trace.source_path, ".settings._attributes[0].value")
+    assert datetime.source_trace.source_type == "bricks_value_binding"
+    assert datetime.source_trace.source_id == "cfc2f2"
+    assert datetime.source_trace.adapter == "bricks"
+    assert datetime.source_trace.adapter_version == "1.0.0"
+
+    assert datetime.source_trace.source_settings == %{
+             "tag" => "custom",
+             "customTag" => "time",
+             "text" => "{post_date}",
+             "_attributes" => [
+               %{"id" => "opmerk", "name" => "datetime", "value" => "{post_date:Y-m-d h:m}"}
+             ]
+           }
+
+    refute inspect(node_by_source_id(document, "cfc2f2").attributes) =~ "{post_date:Y-m-d h:m}"
+
+    refute Enum.any?(document.diagnostics, fn diagnostic ->
              diagnostic.code == "bricks.attribute.unsupported" and
                diagnostic.source_trace.source_id == "cfc2f2" and
                Enum.any?(diagnostic.source_trace.source_settings["_attributes"], fn attribute ->
