@@ -19,7 +19,14 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
   @query_count_occurrence ~r/\{query_results_count:([^{}]+)\}/
   @post_content_word_limit_token ~r/^\{post_content:([1-9][0-9]*)\}$/
   @post_content_word_limit_occurrence ~r/\{post_content:[1-9][0-9]*\}/
-  @known_text_tokens ["{post_title}", "{post_content}"]
+  @known_text_tokens [
+    "{post_title}",
+    "{post_content}",
+    "{post_terms_category:plain}",
+    "{post_excerpt:20}",
+    "{author_name}",
+    "{post_date}"
+  ]
 
   @spec normalize(Tree.t(), map(), String.t()) :: map()
   def normalize(%Tree{} = tree, trace_index, adapter_version) when is_map(trace_index) do
@@ -418,6 +425,69 @@ defmodule LiveFrames.Adapters.Bricks.FrontendBindingNormalizer do
           expression,
           "text.post_title",
           "content.title",
+          %LiveFrames.IR.ValueModifier.None{},
+          :normalized
+        )
+
+      "{post_terms_category:plain}" = expression ->
+        classify_collection_field(
+          element,
+          collection_id,
+          trace_index,
+          adapter_version,
+          "text",
+          %{"text" => expression},
+          expression,
+          "text.post_terms_category_plain",
+          "taxonomy.category_names",
+          %LiveFrames.IR.ValueModifier.None{},
+          :normalized
+        )
+
+      "{post_excerpt:20}" = expression ->
+        classify_collection_field(
+          element,
+          collection_id,
+          trace_index,
+          adapter_version,
+          "text",
+          %{"text" => expression},
+          expression,
+          "text.post_excerpt_word_limit",
+          "content.excerpt",
+          %LiveFrames.IR.ValueModifier.Resolved{
+            kind: :word_limit,
+            arguments: %{"count" => 20}
+          },
+          :normalized
+        )
+
+      "{author_name}" = expression ->
+        classify_collection_field(
+          element,
+          collection_id,
+          trace_index,
+          adapter_version,
+          "text",
+          %{"text" => expression},
+          expression,
+          "text.author_name",
+          "author.name",
+          %LiveFrames.IR.ValueModifier.None{},
+          :normalized
+        )
+
+      "{post_date}" = expression ->
+        classify_collection_field(
+          element,
+          collection_id,
+          trace_index,
+          adapter_version,
+          "text",
+          %{"text" => expression},
+          expression,
+          "text.post_date",
+          "content.published_at",
           %LiveFrames.IR.ValueModifier.None{},
           :normalized
         )
