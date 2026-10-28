@@ -236,37 +236,51 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
       state_rule_acc = Enum.reverse(node_state_rules) ++ state_rule_acc
 
-      if figure_image?(node) do
-        collect_figure_image_style(
-          node,
-          class,
-          base_styles,
-          responsive,
-          pseudo_styles,
-          styled?,
-          root?,
-          {rendered, classes, slot_targets, state_rule_acc}
-        )
-      else
-        classes =
-          if root? or styled? or heading_navigation? or selection_control?,
-            do: Map.put(classes, node.node_id, class),
-            else: classes
+      cond do
+        picture_image?(node) ->
+          collect_picture_image_style(
+            node,
+            class,
+            base_styles,
+            responsive,
+            pseudo_styles,
+            styled?,
+            root?,
+            {rendered, classes, slot_targets, state_rule_acc}
+          )
 
-        rendered =
-          if styled?,
-            do: [{:single, class, base_styles, responsive, pseudo_styles} | rendered],
-            else: rendered
+        figure_image?(node) ->
+          collect_figure_image_style(
+            node,
+            class,
+            base_styles,
+            responsive,
+            pseudo_styles,
+            styled?,
+            root?,
+            {rendered, classes, slot_targets, state_rule_acc}
+          )
 
-        rendered =
-          if heading_navigation?, do: [{:heading_navigation, class} | rendered], else: rendered
+        true ->
+          classes =
+            if root? or styled? or heading_navigation? or selection_control?,
+              do: Map.put(classes, node.node_id, class),
+              else: classes
 
-        rendered =
-          if selection_control?,
-            do: [{:selection_activation_button, class} | rendered],
-            else: rendered
+          rendered =
+            if styled?,
+              do: [{:single, class, base_styles, responsive, pseudo_styles} | rendered],
+              else: rendered
 
-        {:ok, {rendered, classes, slot_targets, state_rule_acc}}
+          rendered =
+            if heading_navigation?, do: [{:heading_navigation, class} | rendered], else: rendered
+
+          rendered =
+            if selection_control?,
+              do: [{:selection_activation_button, class} | rendered],
+              else: rendered
+
+          {:ok, {rendered, classes, slot_targets, state_rule_acc}}
       end
     end
   end
@@ -395,6 +409,13 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
          node_id: node_id,
          semantic_type: "image",
          attributes: %{"tag" => "figure"}
+       }),
+       do: {:error, style_locus_gap(node_id)}
+
+  defp state_rule_target_locus(%DesignNode{
+         node_id: node_id,
+         semantic_type: "image",
+         attributes: %{"tag" => "picture"}
        }),
        do: {:error, style_locus_gap(node_id)}
 
@@ -530,6 +551,48 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
 
   defp collect_subtree_slot_style(_node, _public_slot_name, _private_class_by_id, acc),
     do: {:ok, acc}
+
+  defp collect_picture_image_style(
+         node,
+         class,
+         styles,
+         responsive,
+         pseudos,
+         styled?,
+         root?,
+         {rendered, classes, slot_targets, state_rule_acc}
+       ) do
+    if responsive != [] or pseudos != %{} do
+      {:error, style_locus_gap(node.node_id)}
+    else
+      with {:ok, {outer, inner}} <- partition_picture_image_styles(node.node_id, styles) do
+        classes = if root? or styled?, do: Map.put(classes, node.node_id, class), else: classes
+
+        rendered =
+          if styled?, do: [{:figure_image, class, outer, inner} | rendered], else: rendered
+
+        {:ok, {rendered, classes, slot_targets, state_rule_acc}}
+      end
+    end
+  end
+
+  defp partition_picture_image_styles(node_id, styles) do
+    Enum.reduce_while(styles, {:ok, {%{}, %{}}}, fn {property, value}, {:ok, {outer, inner}} ->
+      case property do
+        "position" ->
+          {:cont, {:ok, {Map.put(outer, property, value), inner}}}
+
+        "object-fit" ->
+          {:cont, {:ok, {outer, Map.put(inner, property, value)}}}
+
+        property when property in ["width", "height"] ->
+          {:cont, {:ok, {Map.put(outer, property, value), Map.put(inner, property, value)}}}
+
+        _ ->
+          {:halt, {:error, style_locus_gap(node_id)}}
+      end
+    end)
+  end
 
   defp collect_figure_image_style(
          node,
@@ -1008,6 +1071,11 @@ defmodule LiveFrames.NativeGenerator.StyleIntegration do
       {:error, :invalid_stylesheet_authority}
     end
   end
+
+  defp picture_image?(%DesignNode{semantic_type: "image", attributes: attrs}),
+    do: Map.get(attrs, "tag") == "picture"
+
+  defp picture_image?(_node), do: false
 
   defp figure_image?(%DesignNode{semantic_type: "image", attributes: attrs}),
     do: Map.get(attrs, "tag") == "figure"
