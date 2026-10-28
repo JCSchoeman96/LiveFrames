@@ -52,6 +52,46 @@ The non-serialized `EvidenceHandlingDecision` gains exactly one outcome, `caller
 
 C09D5's prohibition on assigning an evidence-insufficient binding remains in force except when this rule passes, the evidence decision has the new outcome and the assignment targets that exact binding. The proposer may then construct the ordinary collection-item BindingProjection. There is no new projection kind, generic override flag or generic evidence waiver.
 
+C09C7 amends the applicable C09D5 frozen first-wave evidence-handling rules only for `caller_supplied_destination_value`. It preserves `omit_public_projection` unchanged.
+
+| Rule | `omit_public_projection` | `caller_supplied_destination_value` |
+| --- | --- | --- |
+| Requires `normalization_status=evidence_insufficient` | YES | YES |
+| Requires `modifier=Opaque` | Existing C09D5 rules | YES |
+| Scope limited to `collection_item` | Existing C09D5 rules | YES |
+| Target limited to `datetime_attribute` | NO | YES |
+| `BindingAssignmentDecision` allowed | NO | YES, exactly one |
+| `BindingProjection` emitted | NO | YES, ordinary collection-item field |
+| Public field required | NO from binding | YES |
+| Field type | N/A | `:string` |
+| Field required | N/A | `true` |
+| Field default | N/A | `nil` |
+| Contract provenance audit | YES | YES |
+| Evidence-insufficient blocking diagnostic | YES | NO for exact valid tuple |
+| Proposer may return `:proposed` | NO | NO |
+| Proposer result when otherwise valid | `:needs_review` | `:needs_review` |
+| Human approval required before generation | YES | YES |
+| Generation after approval | NO ordinary projection | YES, only for exact persisted tuple |
+
+The semantic-input decision record remains transient and non-serialized. As with existing C09D5 evidence handling, construction records an inert audit copy in the existing contract provenance map:
+
+```elixir
+provenance["evidence_handling"][source_binding_id] =
+  %{"outcome" => "caller_supplied_destination_value"}
+```
+
+The audit is serialized provenance, not a new serialized schema field or enum. It requires no ComponentContract format bump.
+
+The underlying binding retains `normalization_status=evidence_insufficient` and `modifier=Opaque`. Caller ownership makes the closed projection structurally admissible; it does not normalize the source evidence. Human semantic review remains mandatory. This narrowly amends C09D5 section 16.4: the exact authorized tuple with `caller_supplied_destination_value` returns `:needs_review`, never `:proposed`.
+
+```text
+CALLER_SUPPLIED_DESTINATION_PROPOSER_RESULT=needs_review
+CALLER_SUPPLIED_DESTINATION_MAY_AUTO_PROPOSE=NO
+PROPOSER_NEEDS_REVIEW -> HUMAN_REVIEW -> APPROVED | REJECTED
+```
+
+For the exact valid tuple, an intrinsically and reference-valid candidate pair must be available for human review. Do not emit `component_contract.binding_evidence_insufficient` or `componentization_plan.binding.evidence_insufficient` as blocking errors for that tuple. Do not emit `componentization_plan.binding.uncovered`, because the authorized ordinary BindingProjection covers the binding. These diagnostics remain required for every other evidence-insufficient case. The semantic review trigger, not an invalid candidate pair, requires `:needs_review`.
+
 The visible date text and datetime destination share `content.published_at` but have different transformation semantics. They must use distinct collection item fields. For illustration only, names could be `published_at_text` and `published_at_datetime`; explicit semantic componentization decisions select the actual names later. Names must not be mechanically derived from `value_key`. The datetime field has `type=:string`, `required=true` and `default=nil`, and its purpose states that the caller supplies the final destination value, not a DateTime for LiveFrames to format. Public inputs do not accept format strings, timezone or locale options, formatter functions, Bricks expressions, raw HTML attributes or attribute maps.
 
 The carrier must have normalized native tag `time`. Preserve the current DesignNode semantic type. Do not add `semantic_type=time` or change Design IR. Native validation must admit the proven `time` tag for this closed binding-backed case while retaining the existing semantic type; if it cannot safely do so, stop with `STOP=NEW_DESIGN_NODE_SEMANTIC_TYPE_REQUIRED`. The compiler owns the fixed attribute name `datetime`; the caller supplies only its value. Conceptually:
@@ -66,7 +106,7 @@ This is conceptual structure, not literal implementation code. The datetime valu
 
 ### Post-proposal validation
 
-The semantic decision is transient and is not serialized. Generation and reference validation must therefore check the persisted tuple, not depend on that decision record:
+After human approval, generation and reference validation must check the persisted tuple, not depend on the transient semantic decision record:
 
 ```text
 OPAQUE_DATETIME_PROJECTABLE =
@@ -79,7 +119,7 @@ OPAQUE_DATETIME_PROJECTABLE =
   + target node normalized native tag=time
 ```
 
-Only this exact tuple may pass the evidence-insufficient projection blocker. All other evidence-insufficient bindings remain blocked. Proposal validation still requires the explicit decision and exact assignment; persisted tuple validation does not claim to recover that transient decision.
+Only this exact tuple may pass the evidence-insufficient projection blocker after approval. All other evidence-insufficient bindings remain blocked. Other opaque bindings, target kinds and scopes gain no exception; the new outcome is invalid for normalized bindings and non-Opaque modifiers. Proposal validation still requires the explicit decision and exact assignment; persisted tuple validation does not claim to recover that transient decision.
 
 The fixed destination is binding-backed. An internal native role `:datetime_attribute` derives from the IR ValueBinding target kind, analogous to binding-native `text_content`, `asset_src` and `link_url`. It is not added to serialized `ComponentizationPlan.RenderProjection.render_roles`. There is no unbound public datetime RenderProjection.
 
@@ -122,7 +162,7 @@ COMPONENTIZATION_PLAN_FORMAT=1.0.0
 COMPONENTIZATION_PLAN_FORMAT_BUMP_REQUIRED=NO
 ```
 
-No serialized IR shape or meaning changes. No ComponentContract serialized field or enum changes, and no BindingProjection kind is added. No ComponentizationPlan serialized field or RenderProjection enum changes. The additional EvidenceHandlingDecision outcome is compile-time semantic input only, not a serialized artifact. Generation and reference validation admit only an exact existing tuple, not a generic schema change. If any serialized shape or enum must change, stop with `STOP=SERIALIZED_FORMAT_CHANGE_REQUIRED`; do not silently bump a version.
+No serialized IR shape or meaning changes. No ComponentContract serialized field or enum changes, and no BindingProjection kind is added. No ComponentizationPlan serialized field or RenderProjection enum changes. The additional EvidenceHandlingDecision record is compile-time semantic input only; its inert audit effect may be serialized in the existing provenance map. Generation and reference validation admit only an exact existing tuple, not a generic schema change. If any serialized shape or enum must change, stop with `STOP=SERIALIZED_FORMAT_CHANGE_REQUIRED`; do not silently bump a version.
 
 | Architecture question | Answer |
 | --- | --- |
