@@ -103,61 +103,113 @@ The terms in `docs/06_ACSS_TOKEN_ADAPTER.md` retain their distinct meanings:
 - `explicit_project_contract` is a frozen, exact LiveFrames variable-to-path
   ownership record.
 
-The generic direct-variable decision is:
+The existing generic `VariableAuthority` APIs and the merged source-local to
+external handoff authority remain unchanged:
 
 ```text
+VARIABLE_AUTHORITY_RESOLVE_2_CHANGE=NO
+VARIABLE_AUTHORITY_RESOLVE_TERMINAL_2_CHANGE=NO
+DIRECT_VARIABLE_OWNER_API=ADDITIVE
+GENERIC_VARIABLE_AUTHORITY_CANDIDATE_API=UNCHANGED
 DIRECT_VARIABLE_OWNER_SELECTION=A_OUTPUT_ALIAS_IS_EXACT_OWNER_WHEN_UNIQUE
-DIRECT_VARIABLE_RULE_SUPERSEDES=docs/06_ACSS_TOKEN_ADAPTER.md current inverse-candidate rule
 ONLY_FOR=direct var(--x) ownership resolution
+A1_AUTHORITY=docs/development/source_local_to_external_variable_authority_handoff_authority.md
+A1_LOCAL_EXTERNAL_HANDOFF_SEMANTICS_CHANGED=NO
+ORDINARY_SEMANTIC_REFERENCE_NORMALIZATION_CHANGED=NO
+REFERENCE_ONLY_DIRECT_OWNER_RESULT=no_authority
+GENERIC_REFERENCE_CANDIDATE_BEHAVIOR_CHANGED=NO
 ```
 
-Once this authority is accepted, §4 supersedes the current inverse-candidate
-rule in `docs/06_ACSS_TOKEN_ADAPTER.md` only for direct
-`var(--x)` ownership resolution. It does not change ordinary
-semantic-reference normalization. This PR freezes the rule; it does not
-authorize implementation.
+The merged PR #323 authority at
+`docs/development/source_local_to_external_variable_authority_handoff_authority.md`
+remains authoritative for the source-local to external handoff. It freezes
+`VariableAuthority.resolve/2` as unchanged and authorizes the additive
+terminal API now provided by `resolve_terminal/2`. This authority does not
+supersede the generic candidate semantics in that authority or in
+`docs/06_ACSS_TOKEN_ADAPTER.md`. R1 may add a separate direct-owner API, but it
+must leave the behavior and return shapes of both existing APIs unchanged.
+Ordinary semantic-reference normalization remains unchanged. This PR freezes
+the additive rule; it does not authorize implementation.
 
-For an exact direct expression `var(--x)`, the owner candidate set consists
-only of exact `source_output_alias` and `explicit_project_contract` records.
-`source_reference` records never become owner candidates and cannot compete
-with an owner. Apply these guards:
+For an exact direct expression `var(--x)`, the new direct-owner API considers
+only exact `source_output_alias` and `explicit_project_contract` records as
+owner evidence. `source_reference` records remain generic candidate evidence
+and consumer/reference evidence, but they never become direct owners and do
+not compete with an owner. The API boundary is additive and purpose-specific:
+
+```text
+DIRECT_VARIABLE_OWNER_API_CONCEPT=VariableAuthority.resolve_direct_owner(index, variable)
+DIRECT_VARIABLE_OWNER_TERMINAL_API_CONCEPT=VariableAuthority.resolve_direct_owner_terminal(index, variable)
+DIRECT_VARIABLE_OWNER_API_NAMING=FINAL_NAME_MAY_FOLLOW_REPOSITORY_CONVENTIONS
+DIRECT_VARIABLE_OWNER_API_SCOPE=EXACT_DIRECT_VAR_EXPRESSION_ONLY
+BRICKS_CONSUMER_TOKENS_BY_PATH_ACCESS=FORBIDDEN
+```
+
+`resolve_direct_owner/2` selects zero, one, or multiple distinct owner paths
+without changing generic candidate resolution. The additive terminal
+companion applies the same owner selection, then checks TokenSet presence,
+resolution status, and CSS terminal availability inside `VariableAuthority`.
+Its outcome states are frozen as follows:
+
+```text
+NO_OWNER -> {:error, :no_authority}
+UNIQUE_OWNER -> {:ok, owner_candidate}
+AMBIGUOUS_OWNERS -> {:error, :ambiguous_candidates}
+OWNER_TOKEN_MISSING -> {:error, :token_missing}
+OWNER_TOKEN_UNRESOLVED -> {:error, :token_unresolved}
+OWNER_TERMINAL_UNAVAILABLE -> {:error, :token_value_unavailable}
+```
+
+Only the direct-owner API may use these owner-selection outcomes. Bricks
+consumers must not inspect `tokens_by_path` or another private index to
+implement owner selection or retrieve the terminal.
+
+Apply these direct-owner guards:
 
 1. There must be exactly one distinct owner token path.
 2. The owner token must be present in the TokenSet and resolved.
 3. The token must expose a representation accepted by the consuming CSS
    serializer.
-4. Multiple distinct output aliases or project contracts remain ambiguous
-   and fail closed, even if their resolved values happen to match.
+4. Multiple distinct owner paths carrying output-alias or project-contract
+   evidence remain ambiguous and fail closed, even if their resolved values
+   happen to match.
 5. A missing, unresolved, invalid, or unserializable owner fails closed; do
    not fall back to `source_reference` records.
 6. Do not infer an owner from variable spelling, token path, value equality,
    property name, map ordering, or candidate ordering.
 7. Do not add a Milan-specific property branch.
 
-The direct-variable lookup state machine is frozen as follows. “Owner paths”
-means distinct paths carrying `source_output_alias` or
-`explicit_project_contract`; reference-only paths are counted separately and
-are never owner candidates.
+The following state machine applies only to the new direct-owner API, not to
+`resolve/2` or `resolve_terminal/2`. “Owner paths” means distinct paths
+carrying `source_output_alias` or `explicit_project_contract`;
+reference-only paths are counted separately and are never direct-owner
+candidates.
 
 | Case | Exact authority state | Result |
 | --- | --- | --- |
-| 1 | Exactly one resolved `source_output_alias` owner path, with no conflicting explicit project owner | Select that path, subject to presence and terminal-value checks. |
-| 2 | Exactly one output-alias owner path plus `source_reference` records on other paths | Select the output-alias path; references do not compete. |
-| 3 | More than one distinct `source_output_alias` owner path | `{:error, :ambiguous_candidates}`; fail closed. |
-| 4 | No output-alias owner, no explicit project owner, and exactly one `source_reference` path | `{:error, :no_authority}`; keep the direct expression unresolved. One reference path is not an owner. |
-| 5 | No output-alias owner, no explicit project owner, and multiple `source_reference` paths | `{:error, :no_authority}`; keep the direct expression unresolved. Reference cardinality does not create owners or owner ambiguity. |
-| 6 | A selected owner path has no TokenSet token | `{:error, :token_missing}`; fail closed. |
-| 7 | A selected owner token is unresolved | `{:error, :token_unresolved}`; fail closed. |
-| 8 | A selected owner has no valid CSS terminal representation | `{:error, :token_value_unavailable}`; fail closed. |
+| 1 | Exactly one resolved `source_output_alias` owner path, with no conflicting explicit project owner | `UNIQUE_OWNER`; select that path, subject to terminal checks. |
+| 2 | Exactly one output-alias owner path plus `source_reference` records on other paths | `UNIQUE_OWNER`; select the output-alias path. References do not compete. |
+| 3 | More than one distinct owner path across either owner kind | `AMBIGUOUS_OWNERS`; `{:error, :ambiguous_candidates}`; fail closed. |
+| 4 | No owner path and exactly one `source_reference` path | `NO_OWNER`; `{:error, :no_authority}`; keep the direct expression unresolved. One reference path is not an owner. |
+| 5 | No owner path and multiple `source_reference` paths | `NO_OWNER`; `{:error, :no_authority}`; keep the direct expression unresolved. Reference cardinality does not create owners or owner ambiguity. |
+| 6 | A selected owner path has no TokenSet token | `OWNER_TOKEN_MISSING`; `{:error, :token_missing}`; fail closed. |
+| 7 | A selected owner token is unresolved | `OWNER_TOKEN_UNRESOLVED`; `{:error, :token_unresolved}`; fail closed. |
+| 8 | A selected owner has no valid CSS terminal representation | `OWNER_TERMINAL_UNAVAILABLE`; `{:error, :token_value_unavailable}`; fail closed. |
 
 One exact `explicit_project_contract` path may own a direct variable when no
-output alias exists; conflicting distinct owner paths across either owner
-kind return `{:error, :ambiguous_candidates}`. Multiple records for the same
-owner path remain one path after the existing exact-record deduplication.
-An exact `source_reference` without an exact owner record never authorizes a
-direct source-variable expression. Existing semantic-reference
-normalization continues to use its validated semantic reference and is not
-converted into a direct-variable owner by this rule.
+output alias exists. Multiple records for the same owner path remain one path
+after exact-record deduplication. An exact `source_reference` without an exact
+owner record never authorizes a direct source-variable expression.
+
+The generic APIs retain the existing inverse-candidate behavior. In Case 2,
+`resolve/2` remains ambiguous when the owner and reference records name
+distinct paths, while the direct-owner API selects the output-alias path. In
+Case 4, `resolve/2` continues to report one reference-only path as
+`:unique_candidate`; in Case 5 it continues to report distinct reference paths
+as `:ambiguous_candidates`. `resolve_terminal/2` continues to follow those
+same generic candidates. This difference is intentional and preserves the
+PR #323 handoff contract. Semantic-reference normalization continues to use
+its validated semantic reference and does not become direct-owner resolution.
 
 ### `--space-m`
 
@@ -171,9 +223,10 @@ SPACE_M_TOKEN_PATH=spacing.scale.medium
 ```
 
 The two consumer references remain recorded as evidence and do not make the
-owner ambiguous. No value or token-path inference is permitted. If the exact
-TokenSet no longer has one resolved output alias for `--space-m`, it remains
-unresolved and the reconstruction stops.
+direct owner ambiguous. Generic `resolve/2` retains its current candidate
+result. No value or token-path inference is permitted. If the exact TokenSet
+no longer has one resolved output alias for `--space-m`, it remains unresolved
+and the reconstruction stops.
 
 ## 5. Non-grid source-variable decisions
 
@@ -292,10 +345,10 @@ component API or behavior appears unchanged.
 The only currently frozen blocker inventory is the twelve occurrences in §2.
 After R1–R4, reconstruct and inspect the corrected document. The two grid
 values must be literals; `--space-m` must resolve only through the unique
-owner rule; `spacing.scale.s` must map at the native package boundary; and
-the remaining color variables must each be either backed by newly accepted
-exact authority or remain visibly unresolved. No unresolved value may be
-silently dropped or serialized.
+direct-owner API rule; `spacing.scale.s` must map at the native package
+boundary; and the remaining color variables must each be either backed by
+newly accepted exact authority or remain visibly unresolved. No unresolved
+value may be silently dropped or serialized.
 
 ## 8. SemanticInput preservation
 
@@ -382,43 +435,68 @@ slice's success. The files below are the complete planned edit/evidence
 surfaces for that slice; any additional production surface requires a new
 authority review before work begins.
 
-### R1 — `R1_GENERIC_DIRECT_VARIABLE_AUTHORITY`
+### R1 — `R1_ADDITIVE_DIRECT_VARIABLE_OWNER_API`
 
-**Owner and authority:** `LiveFrames.Tokens.VariableAuthority`, using the
-relationship definitions in `docs/06_ACSS_TOKEN_ADAPTER.md` and this §4.
+**Owner and authority:** additive APIs in `LiveFrames.Tokens.VariableAuthority`,
+the generic relationship definitions in `docs/06_ACSS_TOKEN_ADAPTER.md`, this
+§4, and the merged source-local to external handoff authority at
+`docs/development/source_local_to_external_variable_authority_handoff_authority.md`.
 
 **Files:**
 
-- Production: `apps/live_frames/lib/live_frames/tokens/variable_authority.ex`.
+- Production: add the direct-owner API in
+  `apps/live_frames/lib/live_frames/tokens/variable_authority.ex`; update only
+  the exact direct-variable normalization branch in
+  `apps/live_frames/lib/live_frames/adapters/bricks/design_ir_normalizer.ex`
+  to use it.
 - Tests: `apps/live_frames/test/live_frames/tokens/variable_authority_test.exs`,
   `apps/live_frames/test/live_frames/automatic_css_adapter_test.exs`,
-  `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`.
-- Documentation: `docs/06_ACSS_TOKEN_ADAPTER.md`.
+  `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`, and
+  `apps/live_frames/test/live_frames/bricks_source_local_custom_property_resolver_test.exs`.
+- Documentation: add the direct-owner API contract to
+  `docs/06_ACSS_TOKEN_ADAPTER.md` without changing its generic candidate
+  semantics or existing relationship definitions.
 
-Update the canonical Token Adapter documentation, `VariableAuthority`,
-and its focused tests together in this implementation slice. This authority PR
-does not authorize those implementation changes.
+Add `VariableAuthority.resolve_direct_owner(index, variable)` and its bounded
+terminal companion, conceptually
+`VariableAuthority.resolve_direct_owner_terminal(index, variable)`. R1 may
+settle the exact public names to match repository conventions, but must freeze
+the §4 outcome states before implementation. The terminal companion must
+perform owner selection itself and must not call generic `resolve/2` or
+`resolve_terminal/2` as a substitute. This authority PR does not authorize
+those implementation changes.
 
-**Focused tests:** one unique resolved output alias wins over unrelated
-reference consumers; distinct owner aliases fail; unresolved or missing owner
-fails without reference fallback; exactly one and multiple reference-only
-paths both return `:no_authority`; explicit project contract remains exact;
-token path ordering has no effect; unrelated property behavior is unchanged.
+**Focused tests:** prove existing `resolve/2` and `resolve_terminal/2`
+behavior and return shapes remain unchanged: `resolve/2` reports one
+reference-only path as `:unique_candidate` and multiple distinct paths as
+`:ambiguous_candidates`; `resolve_terminal/2` preserves its existing terminal
+result for a unique resolved reference-only candidate and its ambiguity error
+for multiple paths. The new API selects one output-alias owner,
+accepts one exact explicit project contract, ignores reference records when
+selecting an owner, returns no owner for one or multiple reference-only paths,
+and fails closed for multiple owners, missing tokens, unresolved tokens, or
+unavailable terminals. The direct-variable normalization branch uses the new
+API. Source-local to external handoff tests continue to pass unchanged.
 
-**Forbidden widening:** no variable-name/value inference, no property-specific
+**Forbidden widening:** no change to `resolve/2` or `resolve_terminal/2`, no
+change to A1 local-to-external behavior, no direct-owner routing in
+`DependencyExtractor`, `CustomCssNormalizer`, or
+`SourceLocalCustomPropertyResolver`, no Bricks consumer access to
+`tokens_by_path`, no variable-name/value inference, no property-specific owner
 rule, no preference by path order, and no NativeGenerator change.
 
 **Identity effect:** no schema change. Any reconstructed DesignDocument whose
 direct variable changes from unresolved to token_ref receives a new document
 digest and requires all downstream authorities to be reissued.
 
-**STOP:** `STOP=DIRECT_VARIABLE_OWNER_RULE_UNPROVABLE`,
+**STOP:** `STOP=DIRECT_VARIABLE_OWNER_API_BOUNDARY_CONFLICT`,
 `STOP=SPACE_M_REMAINS_AMBIGUOUS`, `STOP=SERIALIZED_SCHEMA_CHANGE_DISCOVERED`,
 or `STOP=AUTHORITY_CONFLICT`.
 
 **Success:** the accepted exact TokenSet resolves `--space-m` to the single
-resolved `spacing.scale.medium` owner while `source_reference` records remain
-consumer evidence.
+resolved `spacing.scale.medium` direct owner while `source_reference` records
+remain generic candidates and consumer evidence. Existing generic API
+semantics and the A1 local-to-external handoff remain unchanged.
 
 ### R2 — `R2_MILAN_STRUCTURAL_AUTHORITY_WIRING`
 
@@ -545,8 +623,8 @@ package-owned `--lf-space-scale-s` mapping and regenerated assets.
 ### R5 — `R5_CORRECTED_DESIGN_DOCUMENT_ISSUANCE`
 
 **Owner and authority:** exact accepted ACSS structural authority, the R1
-owner rule, the R3 accepted color contracts, the R4 package mapping, and the
-existing Design IR 6.0.0 schema.
+direct-owner API rule, the R3 accepted color contracts, the R4 package
+mapping, and the existing Design IR 6.0.0 schema.
 
 **Files:**
 
@@ -704,7 +782,7 @@ Stop without workaround or scope expansion on any of:
 
 ```text
 STOP=GRID_AUTHORITY_CONFLICT
-STOP=DIRECT_VARIABLE_OWNER_RULE_UNPROVABLE
+STOP=DIRECT_VARIABLE_OWNER_API_BOUNDARY_CONFLICT
 STOP=BG_ULTRA_LIGHT_REQUIRES_EXACT_SOURCE_EVIDENCE
 STOP=BLACK_TRANS_10_REQUIRES_EXACT_SOURCE_EVIDENCE
 STOP=TEXT_DARK_MUTED_REQUIRES_EXACT_SOURCE_EVIDENCE
