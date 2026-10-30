@@ -25,6 +25,12 @@ DESIGN_IR_VERSION_CHANGE=NO
 
 MILAN_PUBLIC_API_CHANGE_REQUIRED=NO
 MILAN_SEMANTIC_INPUT_CHANGE_REQUIRED=NO
+
+GENERIC_SUBTREE_SLOT_BOUNDARY_RULE=FROZEN
+GENERIC_SUBTREE_SLOT_ON_BOUNDARY=FORBIDDEN
+GENERIC_BOUNDARY_DIAGNOSTIC_CODE=componentization_plan.slot.boundary_replacement_forbidden
+
+HISTORICAL_ACTIONS_BOUNDARY_BEHAVIOR_CHANGED=NO
 ```
 
 This document amends the accepted C09D3 `ComponentizationPlan` and render
@@ -39,7 +45,9 @@ The accepted Feature Milan Phase 7A semantic input places the public slot
 `intro` on a Design IR node with semantic type `generic`:
 
 ```text
-MILAN_TARGET_NODE=node_000001_000001_000001_000001
+MILAN_BOUNDARY_NODE_ID=node_000001
+MILAN_GENERIC_SLOT_TARGET=node_000001_000001_000001_000001
+MILAN_SLOT_TARGET_IS_BOUNDARY=NO
 MILAN_TARGET_SEMANTIC_TYPE=generic
 MILAN_PUBLIC_SLOT=intro
 MILAN_RENDER_ROLE=subtree_slot
@@ -90,6 +98,10 @@ DesignNode.semantic_type == "generic"
 
 AND
 
+target_node_id != plan.boundary_node_id
+
+AND
+
 exactly one RenderProjection targets that generic node, with:
   render_role = subtree_slot
   public target = an existing approved public Slot
@@ -104,10 +116,35 @@ validations pass
 => valid generic subtree_slot carrier
 ```
 
-The plan still has one placement for that public slot under the existing
-public-target placement rules. A generic node cannot be the component boundary
-root when replacing it would remove the component root. Existing boundary and
-slot-ownership validation continues to decide that case.
+Freeze the boundary restriction explicitly:
+
+```text
+GENERIC_SUBTREE_SLOT_BOUNDARY_RULE =
+
+DesignNode.semantic_type == "generic"
+
+AND
+RenderProjection.render_role == subtree_slot
+
+=> target_node_id MUST NOT equal plan.boundary_node_id
+
+GENERIC_SUBTREE_SLOT_ON_BOUNDARY=FORBIDDEN
+```
+
+Reference validation must reject this case with the deterministic plan
+diagnostic:
+
+```text
+code=componentization_plan.slot.boundary_replacement_forbidden
+severity=error
+message=generic subtree_slot cannot replace the component boundary root
+path=render_projections[<projection index>]
+```
+
+The generic-only guard is necessary because existing C09D3 reference validation
+accepts a `subtree_slot` on an `actions` boundary. Do not change that historical
+behavior in this amendment. Existing subtree-ownership rules continue to
+validate isolation; they do not enforce this new generic boundary inequality.
 
 This rule authorizes the semantic type `generic`, not every node that happens to
 render as a `div`. Semantic compatibility follows `DesignNode.semantic_type`,
@@ -228,6 +265,18 @@ returns the slot invocation before ordinary target-node rendering. The
 slot replaces the generic node before its ordinary native realization, so this
 amendment introduces no new generic tag semantics.
 
+The boundary restriction protects the C09D6 package-root invariant:
+
+```text
+C09D6_PACKAGE_ROOT_CLASS=ALWAYS_PRESENT_ON_COMPONENT_ROOT
+```
+
+A boundary-targeting subtree slot would replace the generator-owned root before
+ordinary node rendering and could remove the package semantic class with it.
+The generic boundary guard keeps this new carrier below the component boundary.
+The accepted Milan target is below `node_000001`, so the restriction does not
+block Milan.
+
 The rich-text-specific native-generation bypass is unchanged:
 
 ```text
@@ -250,7 +299,7 @@ apps/live_frames/lib/live_frames/componentization_plan/reference_validation.ex
 apps/live_frames/test/live_frames/componentization_plan_reference_validation_test.exs
 ```
 
-The two mechanically coupled changes are both required:
+Three mechanically coupled changes are required:
 
 ```elixir
 :subtree_slot -> node.semantic_type in ["actions", "button", "link", "rich_text", "generic"]
@@ -262,12 +311,23 @@ and:
 semantic_allowed_roles(%DesignNode{semantic_type: "generic"}) -> [:subtree_slot]
 ```
 
-The implementation must not make just one change; otherwise one of the two
-Milan diagnostics remains. The implementation tests must prove:
+The new generic boundary guard must reject a generic `subtree_slot` target when
+`target_node_id == plan.boundary_node_id` using:
 
 ```text
-generic + one subtree_slot
+componentization_plan.slot.boundary_replacement_forbidden
+```
+
+The implementation must apply both carrier changes and the boundary guard. It
+must not widen boundary behavior for `actions`, `button`, `link`, or `rich_text`.
+The implementation tests must prove:
+
+```text
+generic non-boundary + one subtree_slot
   => valid
+
+generic boundary + one subtree_slot
+  => componentization_plan.slot.boundary_replacement_forbidden
 
 generic + duplicate subtree_slot
   => role_conflict
@@ -289,8 +349,20 @@ wrapper + subtree_slot
 ```
 
 An end-to-end native-generation regression should also prove, where the existing
-test infrastructure can do so without unrelated authority, that the generic
-source subtree is omitted and the slot invocation replaces it.
+test infrastructure can do so without unrelated authority, that for a
+non-boundary generic target:
+
+```text
+component boundary is still emitted
+package-owned root class remains present
+generic source subtree is omitted
+slot invocation is emitted in the generic target's place
+```
+
+Do not write an end-to-end test that replaces the component boundary. Preserve
+the existing test that accepts a `subtree_slot` on an `actions` boundary at the
+reference-validation layer; any separate C09D6 generation restriction remains
+unchanged.
 
 ## 10. Format, security, and source-neutral boundaries
 
@@ -324,6 +396,9 @@ slot cardinality and subtree isolation rules remain the safety boundary.
 This capability does not change Milan's accepted SemanticInput or public API:
 
 ```text
+MILAN_BOUNDARY_NODE_ID=node_000001
+MILAN_GENERIC_SLOT_TARGET=node_000001_000001_000001_000001
+MILAN_SLOT_TARGET_IS_BOUNDARY=NO
 MILAN_SEMANTIC_INPUT_CHANGE_REQUIRED=NO
 MILAN_PUBLIC_API_CHANGE_REQUIRED=NO
 MILAN_PHASE_7A_CURRENT_STATUS=BLOCKED_ON_GENERIC_SUBTREE_SLOT_CAPABILITY
