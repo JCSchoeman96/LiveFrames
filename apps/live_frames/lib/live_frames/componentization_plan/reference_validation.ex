@@ -1559,8 +1559,42 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
       acc = validate_render_target(projection, path, target, boundary_ids, acc)
       acc = validate_render_public_target(projection, path, indexes, acc)
       acc = validate_render_role_type(projection, path, indexes, acc)
-      validate_render_role_node(projection, path, target, plan.boundary_node_id, acc)
+      acc = validate_render_role_node(projection, path, target, plan.boundary_node_id, acc)
+
+      validate_generic_subtree_slot_boundary(
+        projection,
+        path,
+        target,
+        plan.boundary_node_id,
+        acc
+      )
     end)
+  end
+
+  defp validate_generic_subtree_slot_boundary(
+         projection,
+         path,
+         target,
+         boundary_node_id,
+         diagnostics
+       ) do
+    generic_boundary_replacement? =
+      projection.render_role == :subtree_slot and
+        match?(%DesignNode{semantic_type: "generic"}, target) and
+        projection.target_node_id == boundary_node_id
+
+    if generic_boundary_replacement? do
+      add(
+        diagnostics,
+        error_at(
+          "componentization_plan.slot.boundary_replacement_forbidden",
+          "generic subtree_slot cannot replace the component boundary root",
+          path
+        )
+      )
+    else
+      diagnostics
+    end
   end
 
   defp validate_render_target(_projection, path, nil, _boundary_ids, diagnostics) do
@@ -1650,14 +1684,29 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
   defp validate_render_role_node(projection, path, node, boundary_id, diagnostics) do
     valid? =
       case projection.render_role do
-        role when role in @root_roles -> projection.target_node_id == boundary_id
-        :text_content -> node.semantic_type in ["heading", "paragraph", "rich_text"]
-        :asset_src -> node.semantic_type == "image"
-        :asset_alt -> node.semantic_type == "image"
-        :link_url -> node.semantic_type == "link"
-        :heading_level -> node.semantic_type == "heading"
-        :subtree_slot -> node.semantic_type in ["actions", "button", "link", "rich_text"]
-        _ -> false
+        role when role in @root_roles ->
+          projection.target_node_id == boundary_id
+
+        :text_content ->
+          node.semantic_type in ["heading", "paragraph", "rich_text"]
+
+        :asset_src ->
+          node.semantic_type == "image"
+
+        :asset_alt ->
+          node.semantic_type == "image"
+
+        :link_url ->
+          node.semantic_type == "link"
+
+        :heading_level ->
+          node.semantic_type == "heading"
+
+        :subtree_slot ->
+          node.semantic_type in ["actions", "button", "link", "rich_text", "generic"]
+
+        _ ->
+          false
       end
 
     if valid? do
@@ -1963,6 +2012,9 @@ defmodule LiveFrames.ComponentizationPlan.ReferenceValidation do
 
   defp semantic_allowed_roles(%DesignNode{semantic_type: "rich_text"}),
     do: [:text_content, :subtree_slot]
+
+  defp semantic_allowed_roles(%DesignNode{semantic_type: "generic"}),
+    do: [:subtree_slot]
 
   defp semantic_allowed_roles(%DesignNode{semantic_type: "image"}),
     do: [:asset_src, :asset_alt]

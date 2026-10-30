@@ -1932,6 +1932,72 @@ defmodule LiveFrames.NativeGeneratorTest do
     refute stylesheet =~ "lf-section-marketing-block__n-000001-000005"
   end
 
+  test "replaces a non-boundary generic subtree slot and preserves the package root" do
+    generic_id = DesignNode.deterministic_id([1, 3])
+
+    generic = %DesignNode{
+      node_id: generic_id,
+      semantic_type: "generic",
+      children: [
+        %DesignNode{
+          node_id: DesignNode.deterministic_id([1, 3, 1]),
+          semantic_type: "heading",
+          attributes: %{"tag" => "h3"},
+          content: "LF_GENERIC_HEADING_SOURCE"
+        },
+        %DesignNode{
+          node_id: DesignNode.deterministic_id([1, 3, 2]),
+          semantic_type: "paragraph",
+          content: "LF_GENERIC_PARAGRAPH_SOURCE"
+        }
+      ]
+    }
+
+    %DesignNode{} = boundary = hd(document().root_nodes)
+
+    document = %{
+      document()
+      | root_nodes: [%{boundary | children: boundary.children ++ [generic]}]
+    }
+
+    assert :ok = IR.validate(document)
+
+    c =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    p =
+      plan(c, document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    source = elixir_artifact(generate!(c, p, document)).content
+
+    assert source =~ "<section"
+
+    assert source =~
+             ~s(<section class={["lf-section-marketing-block", "lf-section-marketing-block__n-000001"]}>)
+
+    refute source =~ "<div"
+    refute source =~ "LF_GENERIC_HEADING_SOURCE"
+    refute source =~ "LF_GENERIC_PARAGRAPH_SOURCE"
+    assert source =~ "<%= render_slot(@body) %>"
+  end
+
   test "primary action subtree slot gets a package boundary and direct-root presentation" do
     target_id = DesignNode.deterministic_id([1, 3])
 
