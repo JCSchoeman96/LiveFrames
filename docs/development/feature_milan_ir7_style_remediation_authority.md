@@ -107,7 +107,15 @@ The generic direct-variable decision is:
 
 ```text
 DIRECT_VARIABLE_OWNER_SELECTION=A_OUTPUT_ALIAS_IS_EXACT_OWNER_WHEN_UNIQUE
+DIRECT_VARIABLE_RULE_SUPERSEDES=docs/06_ACSS_TOKEN_ADAPTER.md current inverse-candidate rule
+ONLY_FOR=direct var(--x) ownership resolution
 ```
+
+Once this authority is accepted, §4 supersedes the current inverse-candidate
+rule in `docs/06_ACSS_TOKEN_ADAPTER.md` only for direct
+`var(--x)` ownership resolution. It does not change ordinary
+semantic-reference normalization. This PR freezes the rule; it does not
+authorize implementation.
 
 For an exact direct expression `var(--x)`, the owner candidate set consists
 only of exact `source_output_alias` and `explicit_project_contract` records.
@@ -171,45 +179,35 @@ unresolved and the reconstruction stops.
 
 ### `--bg-ultra-light`
 
-The accepted AutomaticCSS 4.0.1 normalizer explicitly models source key
-`bg-ultra-light` as semantic path `color.background.ultra_light`, whose value
-is a reference to `color.neutral.ultra_light` through `--neutral-ultra-light`.
-That model supplies the semantic token and its resolved value. It does not
-currently attach direct ownership for `--bg-ultra-light`; the accepted IR6
-TokenSet lookup for that exact variable has no authority.
-
-This authority freezes a new bounded project contract, not an ACSS output
-alias:
+The accepted AutomaticCSS 4.0.1 normalizer models source key
+`bg-ultra-light` as the semantic concept
+`color.background.ultra_light`, whose value references
+`color.neutral.ultra_light` through
+`--neutral-ultra-light`. This establishes the semantic concept
+and source key. It does not establish that `--bg-ultra-light` is
+emitted or owned by that path as a project-wide direct-variable contract.
 
 ```text
-BG_ULTRA_LIGHT_REMEDIATION=B_NEW_EXPLICIT_VARIABLE_AUTHORITY_RECORD
-BG_ULTRA_LIGHT_TOKEN_PATH=color.background.ultra_light
-BG_ULTRA_LIGHT_AUTHORITY_KIND=explicit_project_contract
-BG_ULTRA_LIGHT_AUTHORITY_ID=liveframes:feature-milan:ir7:bg-ultra-light:v1
-BG_ULTRA_LIGHT_VARIABLE=--bg-ultra-light
-BG_ULTRA_LIGHT_AUTHORITY_RECORD_SOURCE_KEY=null
-BG_ULTRA_LIGHT_AUTHORITY_RECORD_SOURCE_VERSION=null
-BG_ULTRA_LIGHT_EVIDENCE_SOURCE_KEY=bg-ultra-light
-BG_ULTRA_LIGHT_EVIDENCE_SOURCE_VERSION=4.0.1
+EXISTING_SEMANTIC_CONCEPT=color.background.ultra_light
+EXISTING_SOURCE_KEY=bg-ultra-light
+BG_ULTRA_LIGHT_REMEDIATION=B_NEW_EVIDENCE_REQUIRED
+BG_ULTRA_LIGHT_TOKEN_PATH=NONE_AUTHORIZED_FOR_DIRECT_VARIABLE_OWNERSHIP
+BG_ULTRA_LIGHT_DIRECT_OWNER_AUTHORIZED=NO
+BG_ULTRA_LIGHT_EXACT_SOURCE_VERSION_EVIDENCE_REQUIRED=YES
 ```
 
-The record is attached only to `color.background.ultra_light` for the accepted
-Milan source reconstruction. Its evidence is the exact accepted IR source
-expression at `node_000001` and the ACSS 4.0.1 normalizer definition for
-`color.background.ultra_light` / `bg-ultra-light` / `color.neutral.ultra_light`.
-The explicit project contract, once this authority is accepted, declares the
-variable-to-path relationship; implementation must not derive it by stripping
-`--`, matching names, or inspecting arbitrary source CSS. This does not claim
-ACSS emits `--bg-ultra-light` as a universal output variable. The record
-fields `source_key` and `source_version` remain `null`; the source key and
-version above identify semantic-model evidence, not an ACSS output-alias
-claim.
+The existing semantic model does not by itself prove
+`--bg-ultra-light -> color.background.ultra_light`. Separate
+exact source/version evidence must establish that relationship before this
+authority can authorize either a `source_output_alias` or a
+genuinely project-wide `explicit_project_contract`. The global
+`AutomaticCSS.Normalizer.project_contract_authorities/1`
+function cannot claim Milan-only scope. This authority adds no Milan-specific
+production branch or scoping mechanism.
 
-Resolution still fails closed unless the exact project contract is present,
-the token is present and resolved, and its representation passes normal
-consumer validation. Conflicting project ownership, a changed source key,
-changed token path, or missing evidence stops the work. NativeGenerator has no
-knowledge of this variable.
+Keep the direct expression unresolved until the exact evidence and its
+resulting authority are accepted. NativeGenerator has no knowledge of this
+variable.
 
 ### `--black-trans-10`
 
@@ -397,6 +395,10 @@ relationship definitions in `docs/06_ACSS_TOKEN_ADAPTER.md` and this §4.
   `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`.
 - Documentation: `docs/06_ACSS_TOKEN_ADAPTER.md`.
 
+Update the canonical Token Adapter documentation, `VariableAuthority`,
+and its focused tests together in this implementation slice. This authority PR
+does not authorize those implementation changes.
+
 **Focused tests:** one unique resolved output alias wins over unrelated
 reference consumers; distinct owner aliases fail; unresolved or missing owner
 fails without reference fallback; exactly one and multiple reference-only
@@ -458,52 +460,52 @@ all dependent authorities are reissued under §9.
 **Success:** all three existing grid occurrences normalize to the specified
 literal values in the accepted Milan reconstruction.
 
-### R3 — `R3_BOUNDED_COLOR_VARIABLE_AUTHORITY`
+### R3 — `R3_COLOR_VARIABLE_EVIDENCE_GATE`
 
-**Owner and authority:** AutomaticCSS TokenSet authority, using the exact
-project contract in §5 for `--bg-ultra-light`. No authority is frozen for
-`--black-trans-10` or `--text-dark-muted` until separate exact evidence is
-accepted.
+**Owner and authority:** separate exact source/version evidence for each
+currently unsupported direct color variable: `--bg-ultra-light`,
+`--black-trans-10`, and `--text-dark-muted`. The
+existing semantic concept for `--bg-ultra-light` does not
+establish direct-variable ownership. No exact path or value authority is
+frozen for any of the three variables.
 
 **Files:**
 
-- Production: `apps/live_frames/lib/live_frames/adapters/automatic_css/normalizer.ex`
-  only for the explicit project-contract record frozen in §5. Its record kind
-  is `explicit_project_contract`, with `source_key=null` and
-  `source_version=null`; it must not be emitted as an ACSS
-  `source_output_alias`. No Bricks or NativeGenerator variable branch is
-  authorized.
-- Tests: `apps/live_frames/test/live_frames/automatic_css_adapter_test.exs`,
+- Production: none authorized in this evidence gate. In particular, no edit
+  to `apps/live_frames/lib/live_frames/adapters/automatic_css/normalizer.ex`
+  is authorized until exact evidence is accepted and a separate
+  implementation authority permits the change.
+- Tests after evidence acceptance:
+  `apps/live_frames/test/live_frames/automatic_css_adapter_test.exs`,
   `apps/live_frames/test/live_frames/tokens/variable_authority_test.exs`,
   `apps/live_frames/test/live_frames/bricks_design_ir_test.exs`.
-- Documentation/evidence: this authority plus, if new source evidence is
-  submitted for either unresolved variable, a separately reviewed
+- Documentation/evidence: submit exact source/version evidence for review in
   `docs/development/feature_milan_ir7_color_variable_authority.md`.
+  Evidence must prove the exact variable-to-path relationship at the proposed
+  authority's scope before either `source_output_alias` or a
+  project-wide `explicit_project_contract` can be accepted.
 
-**Focused tests:** the exact project record resolves `--bg-ultra-light` only
-to `color.background.ultra_light`; no record means unresolved; conflicting or
-unresolved token authority fails; unrelated projects and source expressions
-receive no mapping; black-trans-10 and text-dark-muted stay unresolved absent
-separate accepted evidence.
+**Focused checks after evidence acceptance:** each approved record names the
+exact variable and token path; absent or insufficient evidence leaves the
+direct expression unresolved; a project contract applies project-wide; no
+unrelated source or project receives an inferred mapping.
 
-**Forbidden widening:** no inference from source spelling, no arbitrary
-source-CSS scan, no output value invention, no global source variable table,
-and no generator serializer change.
+**Forbidden widening:** no variable-name inference, no arbitrary source-CSS
+scan, no guessed output value, no Milan-specific production branch, no global
+source variable table, and no NativeGenerator serializer change.
 
-**Identity effect:** adding the bounded record changes TokenSet authority
-metadata and the reconstructed DesignDocument identity. R5 and every
-downstream issuance step are required. The three styles must remain present;
-they may not be dropped to pass generation.
+**Identity effect:** accepting a later authority record changes TokenSet
+authority metadata and the reconstructed DesignDocument identity. R5 and all
+downstream issuance steps remain required.
 
-**STOP:** `STOP=BG_ULTRA_LIGHT_AUTHORITY_UNPROVABLE`,
-`STOP=BLACK_TRANS_10_REQUIRES_UNAUTHORIZED_SOURCE_INFERENCE`,
-`STOP=TEXT_DARK_MUTED_REQUIRES_UNAUTHORIZED_SOURCE_INFERENCE`,
-`STOP=SOURCE_SPECIFIC_GENERATOR_BRANCH_REQUIRED`, or
+**STOP:** `STOP=BG_ULTRA_LIGHT_REQUIRES_EXACT_SOURCE_EVIDENCE`,
+`STOP=BLACK_TRANS_10_REQUIRES_EXACT_SOURCE_EVIDENCE`,
+`STOP=TEXT_DARK_MUTED_REQUIRES_EXACT_SOURCE_EVIDENCE`, or
 `STOP=AUTHORITY_CONFLICT`.
 
-**Success:** `--bg-ultra-light` has the exact bounded owner contract and each
-other source variable is either backed by a separately accepted exact record
-or remains visibly unresolved and blocks final generation.
+**Success:** exact evidence is accepted for any color variable to be
+authorized. Every variable without accepted evidence remains unresolved and
+blocks final generation.
 
 ### R4 — `R4_SPACING_SCALE_S_PACKAGE_MAPPING`
 
@@ -703,9 +705,9 @@ Stop without workaround or scope expansion on any of:
 ```text
 STOP=GRID_AUTHORITY_CONFLICT
 STOP=DIRECT_VARIABLE_OWNER_RULE_UNPROVABLE
-STOP=BG_ULTRA_LIGHT_AUTHORITY_UNPROVABLE
-STOP=BLACK_TRANS_10_REQUIRES_UNAUTHORIZED_SOURCE_INFERENCE
-STOP=TEXT_DARK_MUTED_REQUIRES_UNAUTHORIZED_SOURCE_INFERENCE
+STOP=BG_ULTRA_LIGHT_REQUIRES_EXACT_SOURCE_EVIDENCE
+STOP=BLACK_TRANS_10_REQUIRES_EXACT_SOURCE_EVIDENCE
+STOP=TEXT_DARK_MUTED_REQUIRES_EXACT_SOURCE_EVIDENCE
 STOP=SPACE_M_REMAINS_AMBIGUOUS
 STOP=PACKAGE_VARIABLE_NAME_CONFLICT
 STOP=SERIALIZED_SCHEMA_CHANGE_DISCOVERED
