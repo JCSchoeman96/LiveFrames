@@ -17,6 +17,7 @@ defmodule LiveFrames.BricksDesignIRTest do
   alias LiveFrames.Tokens.Diagnostic, as: TokenDiagnostic
   alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.TokenSet
+  alias LiveFrames.Tokens.VariableAuthority
 
   @fixture_path Path.expand("../../../../fixtures/bricks/bricks_components.json", __DIR__)
   @token_fixture_path Path.expand(
@@ -1451,6 +1452,55 @@ defmodule LiveFrames.BricksDesignIRTest do
              kind: :unresolved,
              value: "var(--primary)",
              metadata: %{"resolution_reason" => "mapping_ambiguous"}
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "keeps the accepted fixture white variable unresolved without direct-owner authority" do
+    assert {:ok, authority_index} = VariableAuthority.build(token_set())
+
+    assert %{
+             state: :ambiguous_candidates,
+             candidates: [
+               %{
+                 token_path: "color.text.light",
+                 authorities: [%{"kind" => "source_reference", "variable" => "--white"}]
+               },
+               %{
+                 token_path: "color.white",
+                 authorities: [%{"kind" => "source_reference", "variable" => "--white"}]
+               }
+             ]
+           } = VariableAuthority.resolve(authority_index, "--white")
+
+    assert {:error, :no_authority} =
+             VariableAuthority.resolve_direct_owner(authority_index, "--white")
+
+    document = style_document("_width", "var(--white)")
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--white)",
+             source_expression: "var(--white)",
+             metadata: %{
+               "source_variable" => "--white",
+               "authority_state" => "ambiguous_candidates",
+               "candidate_paths" => ["color.text.light", "color.white"],
+               "resolution_reason" => "mapping_ambiguous",
+               "authority_evidence" => [
+                 %{
+                   "token_path" => "color.text.light",
+                   "authorities" => [
+                     %{"kind" => "source_reference", "variable" => "--white"}
+                   ]
+                 },
+                 %{
+                   "token_path" => "color.white",
+                   "authorities" => [
+                     %{"kind" => "source_reference", "variable" => "--white"}
+                   ]
+                 }
+               ]
+             }
            } = node_by_source_id(document, "root").styles["width"]
   end
 
