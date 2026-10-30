@@ -198,6 +198,20 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
     }
   end
 
+  defp subtree_target_document(semantic_type, children \\ []) do
+    design_document = document()
+    [boundary, outside] = design_document.root_nodes
+    target_id = DesignNode.deterministic_id([1, 4])
+    target = %DesignNode{node_id: target_id, semantic_type: semantic_type, children: children}
+
+    design_document = %{
+      design_document
+      | root_nodes: [%{boundary | children: boundary.children ++ [target]}, outside]
+    }
+
+    {design_document, target_id}
+  end
+
   defp semantic_boundary_document(semantic_type) do
     design_document = document()
     [_boundary, outside] = design_document.root_nodes
@@ -1259,6 +1273,338 @@ defmodule LiveFrames.ComponentizationPlanReferenceValidationTest do
              component_contract,
              design_document
            ) == :ok
+  end
+
+  test "allows a non-boundary generic node to be replaced by a subtree slot" do
+    design_document = document()
+    [boundary, outside] = design_document.root_nodes
+    generic_id = DesignNode.deterministic_id([1, 4])
+
+    design_document = %{
+      design_document
+      | root_nodes: [
+          %{
+            boundary
+            | children:
+                boundary.children ++ [%DesignNode{node_id: generic_id, semantic_type: "generic"}]
+          },
+          outside
+        ]
+    }
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert ComponentizationPlan.validate_references(
+             component_plan,
+             component_contract,
+             design_document
+           ) == :ok
+  end
+
+  test "rejects a generic subtree slot on the component boundary" do
+    design_document = semantic_boundary_document("generic")
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: @boundary_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+
+    diagnostic =
+      Enum.find(
+        diagnostics,
+        &(&1.code == "componentization_plan.slot.boundary_replacement_forbidden")
+      )
+
+    assert %Diagnostic{
+             severity: :error,
+             message: "generic subtree_slot cannot replace the component boundary root",
+             path: "render_projections[0]"
+           } = diagnostic
+  end
+
+  test "rejects a second subtree slot on a generic node" do
+    {design_document, generic_id} = subtree_target_document("generic")
+
+    component_contract =
+      contract(
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          },
+          %Slot{
+            name: "actions",
+            cardinality: "0..1",
+            semantic_purpose: "actions",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          },
+          %RenderProjection{
+            public_slot_name: "actions",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert "componentization_plan.render_projection.role_conflict" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
+  test "rejects an unsupported second render role on a generic node" do
+    {design_document, generic_id} = subtree_target_document("generic")
+
+    component_contract =
+      contract(
+        public_attrs: [attr("title")],
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          render_attr("title", :text_content, generic_id),
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert "componentization_plan.render_projection.role_conflict" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
+  test "generic subtree slots still reject descendant ValueBindings" do
+    value_target_id = DesignNode.deterministic_id([1, 4, 1])
+    value_target = %DesignNode{node_id: value_target_id, semantic_type: "paragraph"}
+    {design_document, generic_id} = subtree_target_document("generic", [value_target])
+
+    design_document = %{
+      design_document
+      | value_bindings: %{
+          "vb_generic_label" => value_binding("vb_generic_label", value_target_id)
+        }
+    }
+
+    component_contract =
+      contract(
+        public_attrs: [attr("label")],
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ],
+        binding_projections: [binding_projection("vb_generic_label", "label", value_target_id)]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert "componentization_plan.slot.subtree_conflict" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
+  test "generic subtree slots still reject collection bindings in the replaced subtree" do
+    owner_id = DesignNode.deterministic_id([1, 4, 1])
+    repeat_root_id = DesignNode.deterministic_id([1, 4, 1, 1])
+
+    owner = %DesignNode{
+      node_id: owner_id,
+      semantic_type: "container",
+      children: [%DesignNode{node_id: repeat_root_id, semantic_type: "container"}]
+    }
+
+    {design_document, generic_id} = subtree_target_document("generic", [owner])
+
+    design_document = %{
+      design_document
+      | collection_bindings: %{
+          "cb_generic" => %CollectionBinding{
+            collection_binding_id: "cb_generic",
+            owner_node_id: owner_id,
+            repeat_root_node_id: repeat_root_id
+          }
+        }
+    }
+
+    component_contract =
+      contract(
+        public_attrs: [attr("items", :list)],
+        public_slots: [
+          %Slot{
+            name: "body",
+            cardinality: "0..1",
+            semantic_purpose: "body",
+            consumer_responsibility: "caller"
+          }
+        ],
+        collection_inputs: [
+          %CollectionInput{
+            source_collection_binding_id: "cb_generic",
+            public_attr_name: "items",
+            item_fields: [%ItemField{name: "title", type: :string, semantic_purpose: "title"}]
+          }
+        ],
+        binding_projections: [
+          %BindingProjection{
+            source_binding_kind: :collection,
+            source_binding_id: "cb_generic",
+            projection_kind: :collection_attr,
+            public_attr_name: "items",
+            source_collection_binding_id: "cb_generic",
+            target_node_id: repeat_root_id
+          }
+        ]
+      )
+
+    component_plan =
+      plan(component_contract, design_document,
+        render_projections: [
+          %RenderProjection{
+            public_slot_name: "body",
+            target_node_id: generic_id,
+            render_role: :subtree_slot
+          }
+        ]
+      )
+
+    assert "componentization_plan.slot.subtree_conflict" in codes(
+             ComponentizationPlan.validate_references(
+               component_plan,
+               component_contract,
+               design_document
+             )
+           )
+  end
+
+  test "container and wrapper subtree slots remain unsupported" do
+    for semantic_type <- ["container", "wrapper"] do
+      {design_document, target_id} = subtree_target_document(semantic_type)
+
+      component_contract =
+        contract(
+          public_slots: [
+            %Slot{
+              name: "body",
+              cardinality: "0..1",
+              semantic_purpose: "body",
+              consumer_responsibility: "caller"
+            }
+          ]
+        )
+
+      component_plan =
+        plan(component_contract, design_document,
+          render_projections: [
+            %RenderProjection{
+              public_slot_name: "body",
+              target_node_id: target_id,
+              render_role: :subtree_slot
+            }
+          ]
+        )
+
+      assert "componentization_plan.render_projection.role_node_mismatch" in codes(
+               ComponentizationPlan.validate_references(
+                 component_plan,
+                 component_contract,
+                 design_document
+               )
+             )
+    end
   end
 
   test "allows a rich_text node to be replaced by a subtree slot" do
