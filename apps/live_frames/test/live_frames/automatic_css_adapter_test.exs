@@ -924,6 +924,28 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
            } = VariableAuthority.resolve(index, "--space-xl")
   end
 
+  test "approved fixture selects the explicit direct owner for space m" do
+    token_set = accepted_fixture_token_set()
+    assert {:ok, index} = VariableAuthority.build(token_set)
+
+    assert %{
+             state: :ambiguous_candidates,
+             candidates: candidates
+           } = VariableAuthority.resolve(index, "--space-m")
+
+    assert Enum.map(candidates, & &1.token_path) == [
+             "spacing.content_gap",
+             "spacing.grid_gap",
+             "spacing.scale.medium"
+           ]
+
+    assert {:ok,
+            %{
+              token_path: "spacing.scale.medium",
+              authorities: [%{"kind" => "source_output_alias", "variable" => "--space-m"}]
+            }} = VariableAuthority.resolve_direct_owner(index, "--space-m")
+  end
+
   test "resolves the proven BW foundation and ultra-dark contextual relationships" do
     assert {:ok, token_set, _diagnostics} = AutomaticCSS.normalize(minimal_settings())
     primary = token_set.tokens["color.primary"]

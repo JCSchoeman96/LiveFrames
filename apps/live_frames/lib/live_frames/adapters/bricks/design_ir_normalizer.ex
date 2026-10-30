@@ -37,17 +37,9 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
   alias LiveFrames.Tokens.TokenSet
   alias LiveFrames.Fidelity.CSSDeclaration
   alias LiveFrames.Styles.StructuralVariableAuthority
-  alias LiveFrames.Tokens.Token
   alias LiveFrames.Tokens.VariableAuthority
 
   @bricks_container_width_default "1100px"
-  @radius_canonicalization_properties MapSet.new([
-                                        "border-radius",
-                                        "border-top-left-radius",
-                                        "border-top-right-radius",
-                                        "border-bottom-right-radius",
-                                        "border-bottom-left-radius"
-                                      ])
   @grid_gap_multiply_expression ~r/^\s*calc\s*\(\s*var\s*\(\s*--grid-gap\s*\)\s*\*\s*(\d+(?:\.\d+)?|\.\d+)\s*\)\s*$/i
   @valid_width_length ~r/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ch|vw|vh|vmin|vmax|ex|cm|mm|in|pt|pc)$/i
   @direct_variable_expression ~r/^\s*var\(\s*(--[A-Za-z0-9_-]+)\s*\)\s*$/
@@ -1528,60 +1520,61 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
          trace,
          metadata
        ) do
-    resolution = VariableAuthority.resolve(authority_index, variable)
-    authority_metadata = authority_resolution_metadata(resolution)
+    case VariableAuthority.resolve_direct_owner_terminal(
+           authority_index,
+           variable
+         ) do
+      {:ok, candidate, _terminal} ->
+        authority_metadata = direct_owner_metadata(variable, :unique_candidate, [candidate])
 
-    case {resolution.state, resolution.candidates} do
-      {:unique_candidate, [%{token_path: token_path, resolution_status: :resolved}]} ->
-        StyleValue.token_ref(token_path,
+        StyleValue.token_ref(candidate.token_path,
           source_expression: value,
           source_trace: trace,
           metadata: Map.merge(metadata, authority_metadata)
         )
 
-      {:unique_candidate, [_candidate]} ->
+      {:error, :no_authority} ->
+        resolution = VariableAuthority.resolve(authority_index, variable)
+        authority_metadata = authority_resolution_metadata(resolution)
+
+        if resolution.state == :no_authority do
+          resolve_structural_direct_variable(
+            value,
+            variable,
+            property,
+            structural_authority_index,
+            trace,
+            metadata,
+            authority_metadata
+          )
+        else
+          reason =
+            case {resolution.state, resolution.candidates} do
+              {:ambiguous_candidates, _candidates} -> "mapping_ambiguous"
+              {:unique_candidate, [%{resolution_status: :resolved}]} -> "mapping_unproven"
+              {:unique_candidate, [_candidate]} -> "token_unresolved"
+            end
+
+          unresolved_authority_style(value, trace, metadata, authority_metadata, reason)
+        end
+
+      {:error, :ambiguous_candidates} ->
+        resolution = VariableAuthority.resolve(authority_index, variable)
+        authority_metadata = authority_resolution_metadata(resolution)
+
         unresolved_authority_style(
           value,
           trace,
           metadata,
           authority_metadata,
-          "token_unresolved"
+          "mapping_ambiguous"
         )
 
-      {:ambiguous_candidates, candidates} ->
-        case canonicalize_radius_variable(
-               variable,
-               property,
-               candidates,
-               authority_index
-             ) do
-          {:ok, token_path} ->
-            StyleValue.token_ref(token_path,
-              source_expression: value,
-              source_trace: trace,
-              metadata: Map.merge(metadata, authority_metadata)
-            )
+      {:error, _terminal_error} ->
+        {:ok, candidate} = VariableAuthority.resolve_direct_owner(authority_index, variable)
+        authority_metadata = direct_owner_metadata(variable, :unique_candidate, [candidate])
 
-          :error ->
-            unresolved_authority_style(
-              value,
-              trace,
-              metadata,
-              authority_metadata,
-              "mapping_ambiguous"
-            )
-        end
-
-      {:no_authority, []} ->
-        resolve_structural_direct_variable(
-          value,
-          variable,
-          property,
-          structural_authority_index,
-          trace,
-          metadata,
-          authority_metadata
-        )
+        unresolved_authority_style(value, trace, metadata, authority_metadata, "token_unresolved")
     end
   end
 
@@ -1762,42 +1755,8 @@ defmodule LiveFrames.Adapters.Bricks.DesignIRNormalizer do
     )
   end
 
-  defp canonicalize_radius_variable("--radius", property, candidates, authority_index) do
-    if not MapSet.member?(@radius_canonicalization_properties, property) do
-      :error
-    else
-      base =
-        Enum.find(candidates, fn candidate ->
-          candidate.token_path == "radius.base" and candidate.resolution_status == :resolved
-        end)
-
-      others = Enum.reject(candidates, &(&1.token_path == "radius.base"))
-
-      cond do
-        is_nil(base) ->
-          :error
-
-        Enum.all?(others, &radius_semantic_reference_to_base?(&1, authority_index)) ->
-          {:ok, "radius.base"}
-
-        true ->
-          :error
-      end
-    end
-  end
-
-  defp canonicalize_radius_variable(_variable, _property, _candidates, _authority_index),
-    do: :error
-
-  defp radius_semantic_reference_to_base?(candidate, authority_index) do
-    case Map.get(authority_index.tokens_by_path, candidate.token_path) do
-      %Token{resolution_status: :resolved, references: references, value: value} ->
-        candidate.resolution_status == :resolved and references == ["radius.base"] and
-          Map.get(value, "type") == "reference" and Map.get(value, "path") == "radius.base"
-
-      _ ->
-        false
-    end
+  defp direct_owner_metadata(variable, state, candidates) do
+    authority_resolution_metadata(%{variable: variable, state: state, candidates: candidates})
   end
 
   defp grid_gap_expression?(value), do: String.contains?(value, "--grid-gap")

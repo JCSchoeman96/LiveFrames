@@ -339,4 +339,193 @@ defmodule LiveFrames.Tokens.VariableAuthorityTest do
 
     assert {:error, :token_unresolved} = VariableAuthority.resolve_terminal(index, "--gap")
   end
+
+  test "resolve_direct_owner selects one source output alias" do
+    output_alias = authority("--gap", "source_output_alias", "authority-gap", "gap")
+    index = build!(token_set([token("spacing.content_gap", [output_alias])]))
+
+    assert {:ok,
+            %{
+              token_path: "spacing.content_gap",
+              authorities: [^output_alias],
+              token_present?: true,
+              resolution_status: :resolved
+            }} = VariableAuthority.resolve_direct_owner(index, "--gap")
+  end
+
+  test "resolve_direct_owner selects one explicit project contract" do
+    contract = authority("--gap", "explicit_project_contract", "project-gap", "gap")
+    index = build!(token_set([token("spacing.content_gap", [contract])]))
+
+    assert {:ok, %{token_path: "spacing.content_gap", authorities: [^contract]}} =
+             VariableAuthority.resolve_direct_owner(index, "--gap")
+  end
+
+  test "direct owner selection ignores competing source references while generic resolution stays ambiguous" do
+    owner = authority("--gap", "source_output_alias", "owner-gap", "gap")
+    reference = authority("--gap", "source_reference", "reference-gap", "gap-ref")
+
+    index =
+      build!(
+        token_set([
+          token("spacing.zulu", [reference]),
+          token("spacing.alpha", [owner])
+        ])
+      )
+
+    assert VariableAuthority.resolve(index, "--gap").state == :ambiguous_candidates
+
+    assert {:ok, %{token_path: "spacing.alpha", authorities: [^owner]}} =
+             VariableAuthority.resolve_direct_owner(index, "--gap")
+  end
+
+  test "reference-only paths remain generic candidates and are not direct owners" do
+    reference = authority("--gap", "source_reference", "reference-gap", "gap-ref")
+    index = build!(token_set([token("spacing.content_gap", [reference])]))
+
+    assert %{state: :unique_candidate, candidates: [%{token_path: "spacing.content_gap"}]} =
+             VariableAuthority.resolve(index, "--gap")
+
+    assert {:ok, _candidate, "16px"} = VariableAuthority.resolve_terminal(index, "--gap")
+    assert {:error, :no_authority} = VariableAuthority.resolve_direct_owner(index, "--gap")
+
+    assert {:error, :no_authority} =
+             VariableAuthority.resolve_direct_owner_terminal(index, "--gap")
+  end
+
+  test "multiple reference-only paths remain generic ambiguity without direct ownership" do
+    first = authority("--gap", "source_reference", "reference-first", "first")
+    second = authority("--gap", "source_reference", "reference-second", "second")
+
+    index =
+      build!(
+        token_set([
+          token("spacing.alpha", [first]),
+          token("spacing.beta", [second])
+        ])
+      )
+
+    assert VariableAuthority.resolve(index, "--gap").state == :ambiguous_candidates
+    assert {:error, :no_authority} = VariableAuthority.resolve_direct_owner(index, "--gap")
+  end
+
+  test "multiple distinct direct owner paths remain ambiguous" do
+    first = authority("--gap", "source_output_alias", "owner-first", "first")
+    second = authority("--gap", "explicit_project_contract", "owner-second", "second")
+
+    index =
+      build!(
+        token_set([
+          token("spacing.alpha", [first]),
+          token("spacing.beta", [second])
+        ])
+      )
+
+    assert {:error, :ambiguous_candidates} =
+             VariableAuthority.resolve_direct_owner(index, "--gap")
+
+    assert {:error, :ambiguous_candidates} =
+             VariableAuthority.resolve_direct_owner_terminal(index, "--gap")
+  end
+
+  test "multiple owner records on one path produce one direct owner" do
+    first = authority("--gap", "source_output_alias", "owner-first", "first")
+    second = authority("--gap", "explicit_project_contract", "owner-second", "second")
+    reference = authority("--gap", "source_reference", "reference-gap", "reference")
+    index = build!(token_set([token("spacing.content_gap", [reference, second, first])]))
+
+    assert {:ok,
+            %{
+              token_path: "spacing.content_gap",
+              authorities: owners,
+              token_present?: true,
+              resolution_status: :resolved
+            }} = VariableAuthority.resolve_direct_owner(index, "--gap")
+
+    assert owners ==
+             Enum.sort_by(
+               [first, second, reference],
+               &{&1["kind"], &1["authority_id"], &1["source_key"]}
+             )
+  end
+
+  test "direct owner terminal reports a missing owner token" do
+    owner = authority("--gap", "source_output_alias", "owner-gap", "gap")
+
+    index = %VariableAuthority{
+      by_variable: %{"--gap" => %{"spacing.missing" => [owner]}}
+    }
+
+    assert {:error, :token_missing} =
+             VariableAuthority.resolve_direct_owner_terminal(index, "--gap")
+  end
+
+  test "direct owner terminal reports an unresolved owner token" do
+    owner = authority("--gap", "source_output_alias", "owner-gap", "gap")
+    index = build!(token_set([token("spacing.content_gap", [owner], :unresolved)]))
+
+    assert {:error, :token_unresolved} =
+             VariableAuthority.resolve_direct_owner_terminal(index, "--gap")
+  end
+
+  test "direct owner terminal rejects unsupported terminal representations" do
+    owner = authority("--gap", "source_output_alias", "owner-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [owner],
+        %{"type" => "responsive", "min" => "16px", "max" => "18px"},
+        %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+      )
+
+    assert {:error, :token_value_unavailable} =
+             VariableAuthority.resolve_direct_owner_terminal(raw_index(token), "--gap")
+  end
+
+  test "direct owner terminal uses the existing bounded derived CSS candidate" do
+    owner = authority("--gap", "source_output_alias", "owner-gap", "gap")
+
+    token =
+      token_with_resolved_value(
+        "spacing.content_gap",
+        [owner],
+        %{"type" => "derived", "recipe" => "acss.clamp", "inputs" => %{}},
+        %{"css_expression" => "clamp(1rem, 2vw, 2rem)"}
+      )
+
+    index = build!(token_set([token]))
+
+    assert VariableAuthority.resolve_direct_owner_terminal(index, "--gap") ==
+             VariableAuthority.resolve_terminal(index, "--gap")
+  end
+
+  test "direct owner selection is deterministic across path and authority input order" do
+    alpha = authority("--gap", "source_output_alias", "owner-alpha", "alpha")
+
+    alpha_contract =
+      authority("--gap", "explicit_project_contract", "owner-alpha-contract", "alpha-contract")
+
+    reference = authority("--gap", "source_reference", "reference-zulu", "reference")
+
+    first_index =
+      build!(
+        token_set([
+          token("spacing.zulu", [reference]),
+          token("spacing.alpha", [alpha, alpha_contract])
+        ])
+      )
+
+    second_index =
+      build!(
+        token_set([
+          token("spacing.alpha", [alpha_contract, alpha]),
+          token("spacing.zulu", [reference])
+        ])
+      )
+
+    assert {:ok, candidate} = VariableAuthority.resolve_direct_owner(first_index, "--gap")
+    assert {:ok, candidate} == VariableAuthority.resolve_direct_owner(second_index, "--gap")
+    assert candidate.token_path == "spacing.alpha"
+  end
 end

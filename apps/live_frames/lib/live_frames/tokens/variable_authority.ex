@@ -28,6 +28,9 @@ defmodule LiveFrames.Tokens.VariableAuthority do
              | :token_unresolved
              | :token_value_unavailable}
 
+  @type direct_owner_result ::
+          {:ok, candidate()} | {:error, :no_authority | :ambiguous_candidates}
+
   @type t :: %__MODULE__{
           by_variable: %{optional(String.t()) => %{optional(String.t()) => [map()]}},
           tokens_by_path: %{optional(String.t()) => Token.t()}
@@ -86,6 +89,35 @@ defmodule LiveFrames.Tokens.VariableAuthority do
   end
 
   @doc """
+  Selects the unique token path backed by direct-owner authority records.
+
+  Source references remain generic candidates and do not count as owners.
+  """
+  @spec resolve_direct_owner(t(), String.t()) :: direct_owner_result()
+  def resolve_direct_owner(%__MODULE__{} = index, variable) when is_binary(variable) do
+    owner_paths =
+      index.by_variable
+      |> Map.get(variable, %{})
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.flat_map(fn {path, authorities} ->
+        if Enum.any?(authorities, &direct_owner_authority?/1),
+          do: [{path, authorities}],
+          else: []
+      end)
+
+    case owner_paths do
+      [] ->
+        {:error, :no_authority}
+
+      [{path, authorities}] ->
+        {:ok, candidate(index, path, authorities)}
+
+      _multiple_paths ->
+        {:error, :ambiguous_candidates}
+    end
+  end
+
+  @doc """
   Returns a CSS terminal candidate for one unique, present, resolved authority
   candidate.
 
@@ -103,20 +135,40 @@ defmodule LiveFrames.Tokens.VariableAuthority do
         {:error, :ambiguous_candidates}
 
       %{state: :unique_candidate, candidates: [candidate]} ->
-        case Map.fetch(index.tokens_by_path, candidate.token_path) do
-          {:ok, %Token{resolution_status: :resolved} = token} ->
-            with {:ok, terminal} <- terminal_value(token) do
-              {:ok, candidate, terminal}
-            end
-
-          {:ok, _token} ->
-            {:error, :token_unresolved}
-
-          :error ->
-            {:error, :token_missing}
-        end
+        terminal_candidate(index, candidate)
     end
   end
+
+  @doc """
+  Selects a direct owner and returns its available bounded CSS terminal value.
+  """
+  @spec resolve_direct_owner_terminal(t(), String.t()) :: terminal_result()
+  def resolve_direct_owner_terminal(%__MODULE__{} = index, variable) when is_binary(variable) do
+    case resolve_direct_owner(index, variable) do
+      {:ok, candidate} -> terminal_candidate(index, candidate)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp terminal_candidate(index, candidate) do
+    case Map.fetch(index.tokens_by_path, candidate.token_path) do
+      {:ok, %Token{resolution_status: :resolved} = token} ->
+        with {:ok, terminal} <- terminal_value(token) do
+          {:ok, candidate, terminal}
+        end
+
+      {:ok, _token} ->
+        {:error, :token_unresolved}
+
+      :error ->
+        {:error, :token_missing}
+    end
+  end
+
+  defp direct_owner_authority?(%{"kind" => kind}),
+    do: kind in ["source_output_alias", "explicit_project_contract"]
+
+  defp direct_owner_authority?(_authority), do: false
 
   defp terminal_value(%Token{resolved_value: resolved_value}) when is_binary(resolved_value),
     do: {:ok, resolved_value}

@@ -172,16 +172,21 @@ TokenSet.
 
 For an exact direct expression `var(--x)`, resolution order is:
 
-1. `VariableAuthority` lookup.
-2. A unique resolved token candidate becomes `token_ref`.
-3. Unique unresolved or ambiguous token authority retains the existing
-   unresolved behavior and does **not** consult structural authority.
-4. When token authority is `no_authority`, structural authority may resolve a
-   proven structural literal (for example ACSS 4.0.1 `--grid-1` →
+1. Bricks calls `VariableAuthority.resolve_direct_owner_terminal/2`. One
+   resolved direct owner becomes `token_ref` for that owner's token path.
+   `source_output_alias` and `explicit_project_contract` are owner kinds;
+   `source_reference` records remain generic candidates and do not compete
+   with an owner.
+2. A reference-only candidate, missing or ambiguous owner, missing or
+   unresolved owner token, or unavailable owner terminal keeps the original
+   expression unresolved. This remains true when generic `resolve/2` reports
+   one unique reference candidate.
+3. Structural authority may resolve a proven literal only when there is no
+   generic TokenSet candidate (for example ACSS 4.0.1 `--grid-1` →
    `repeat(1, minmax(0, 1fr))`, `--grid-2` → `repeat(2, minmax(0, 1fr))`,
    or `--grid-3-2` → `minmax(0, 3fr) minmax(0, 2fr)` on
    `grid-template-columns` / `grid-template-rows`).
-5. Missing, ambiguous, or invalid structural authority keeps the existing
+4. Missing, ambiguous, or invalid structural authority keeps the existing
    fail-closed unresolved behavior.
 
 Fallback expressions such as `var(--grid-1, fallback)` remain

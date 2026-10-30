@@ -1360,6 +1360,42 @@ defmodule LiveFrames.BricksDesignIRTest do
            } = node_by_source_id(document, "root").styles["width"]
   end
 
+  test "keeps an exact direct variable unresolved when its only authority is a source reference" do
+    document =
+      style_document(
+        "_width",
+        "var(--gap)",
+        authority_token_set("spacing.gap", "--gap", :resolved)
+      )
+
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--gap)",
+             source_expression: "var(--gap)",
+             metadata: %{"source_variable" => "--gap"}
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
+  test "normalizes an exact direct space m expression through its fixture owner" do
+    document = style_document("_width", "var(--space-m)")
+
+    assert %StyleValue{
+             kind: :token_ref,
+             value: "spacing.scale.medium",
+             source_expression: "var(--space-m)",
+             metadata: %{
+               "authority_evidence" => [
+                 %{
+                   "token_path" => "spacing.scale.medium",
+                   "authorities" => [
+                     %{"kind" => "source_output_alias", "variable" => "--space-m"}
+                   ]
+                 }
+               ]
+             }
+           } = node_by_source_id(document, "root").styles["width"]
+  end
+
   test "keeps a uniquely authorized unresolved token as an unresolved style" do
     document =
       style_document(
@@ -1387,41 +1423,35 @@ defmodule LiveFrames.BricksDesignIRTest do
            end)
   end
 
-  test "keeps the B1 section-space-m graph ambiguous without choosing a CSS property winner" do
+  test "selects the section-space-m direct owner despite its source-reference competitor" do
     document = style_document("_width", "var(--section-space-m)")
 
     assert %StyleValue{
-             kind: :unresolved,
-             value: "var(--section-space-m)",
+             kind: :token_ref,
+             value: "spacing.section",
+             source_expression: "var(--section-space-m)",
              metadata: %{
                "source_variable" => "--section-space-m",
-               "resolution_reason" => "mapping_ambiguous",
-               "authority_state" => "ambiguous_candidates",
-               "candidate_paths" => ["spacing.section", "spacing.section.padding_block"]
+               "authority_state" => "unique_candidate",
+               "candidate_paths" => ["spacing.section"],
+               "authority_evidence" => [
+                 %{
+                   "token_path" => "spacing.section",
+                   "authorities" => [%{"kind" => "source_output_alias"}]
+                 }
+               ]
              }
            } = node_by_source_id(document, "root").styles["width"]
-
-    assert Enum.any?(document.diagnostics, fn diagnostic ->
-             diagnostic.code == "bricks.variable.unresolved" and
-               diagnostic.metadata["candidate_paths"] == [
-                 "spacing.section",
-                 "spacing.section.padding_block"
-               ]
-           end)
   end
 
-  test "keeps every currently ambiguous B1 variable unresolved in Design IR" do
-    for variable <- ["--space-m", "--radius", "--primary", "--white"] do
-      document = style_document("_width", "var(#{variable})")
+  test "keeps an ambiguous reference-only B1 variable unresolved in Design IR" do
+    document = style_document("_width", "var(--primary)")
 
-      assert %StyleValue{
-               kind: :unresolved,
-               value: expression,
-               metadata: %{"resolution_reason" => "mapping_ambiguous"}
-             } = node_by_source_id(document, "root").styles["width"]
-
-      assert expression == "var(#{variable})"
-    end
+    assert %StyleValue{
+             kind: :unresolved,
+             value: "var(--primary)",
+             metadata: %{"resolution_reason" => "mapping_ambiguous"}
+           } = node_by_source_id(document, "root").styles["width"]
   end
 
   test "resolves responsive _gridGap content-gap through existing VariableAuthority" do
@@ -1961,7 +1991,7 @@ defmodule LiveFrames.BricksDesignIRTest do
     assert first.root_nodes == second.root_nodes
   end
 
-  describe "R3 bounded radius canonicalization" do
+  describe "direct owner selection for radius aliases" do
     defp radius_styles_document(settings \\ %{}, tokens \\ nil) do
       base = %{
         "_border" => %{
@@ -2001,17 +2031,17 @@ defmodule LiveFrames.BricksDesignIRTest do
       end
     end
 
-    test "keeps var(--radius) ambiguous on unrelated properties" do
+    test "uses the radius direct owner on unrelated properties without property inference" do
       document = style_document("_width", "var(--radius)")
 
       assert %StyleValue{
-               kind: :unresolved,
-               metadata: %{"resolution_reason" => "mapping_ambiguous"}
+               kind: :token_ref,
+               value: "radius.base"
              } =
                node_by_source_id(document, "root").styles["width"]
     end
 
-    test "fails closed when an extra unrelated resolved --radius candidate is present" do
+    test "ignores extra source-reference candidates when the radius direct owner is unique" do
       base_ts = token_set()
 
       unrelated_authority = %{
@@ -2045,10 +2075,7 @@ defmodule LiveFrames.BricksDesignIRTest do
             "border-bottom-right-radius",
             "border-bottom-left-radius"
           ] do
-        assert %StyleValue{
-                 kind: :unresolved,
-                 metadata: %{"resolution_reason" => "mapping_ambiguous"}
-               } =
+        assert %StyleValue{kind: :token_ref, value: "radius.base"} =
                  node.styles[property]
       end
     end
