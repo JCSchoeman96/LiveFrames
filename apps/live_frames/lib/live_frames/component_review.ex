@@ -9,6 +9,7 @@ defmodule LiveFrames.ComponentReview do
   alias LiveFrames.ComponentizationPlan.Diagnostic, as: PlanDiagnostic
   alias LiveFrames.ComponentReviewResult
   alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.Behavior.ReviewResult, as: BehaviorReviewResult
   alias LiveFrames.IR.DesignDocument
 
@@ -68,7 +69,12 @@ defmodule LiveFrames.ComponentReview do
          :ok <- require_disposition_plan(plan),
          :ok <- validate_behavior_shapes(behavior_contract, selected_behavior_review_result),
          :ok <-
-           ComponentizationPlan.validate_generation_prerequisites_with_behavior_authority(
+           ComponentContract.validate_generation_prerequisites(
+             contract,
+             design_document
+           ),
+         :ok <-
+           ComponentizationPlan.validate_references_with_behavior_authority(
              plan,
              contract,
              design_document,
@@ -85,7 +91,7 @@ defmodule LiveFrames.ComponentReview do
              evidence_refs
            ),
          :ok <-
-           ComponentizationPlan.validate_for_generation_with_behavior_authority(
+           validate_final_generation_gate(
              plan,
              approved_contract,
              design_document,
@@ -212,6 +218,47 @@ defmodule LiveFrames.ComponentReview do
       end
     else
       {:error, diagnostics} -> {:error, diagnostics}
+    end
+  end
+
+  defp validate_final_generation_gate(
+         plan,
+         approved_contract,
+         design_document,
+         behavior_contract,
+         selected_behavior_review_result
+       ) do
+    case ComponentizationPlan.validate_for_generation_with_behavior_authority(
+           plan,
+           approved_contract,
+           design_document,
+           behavior_contract,
+           selected_behavior_review_result
+         ) do
+      :ok ->
+        :ok
+
+      {:error, ordinary_diagnostics} ->
+        case NativeRealizationAuthority.derive(
+               approved_contract,
+               plan,
+               design_document,
+               behavior_contract,
+               selected_behavior_review_result
+             ) do
+          {:ok, native_realization_authority} ->
+            ComponentizationPlan.validate_for_generation_with_behavior_and_native_realization_authority(
+              plan,
+              approved_contract,
+              design_document,
+              behavior_contract,
+              selected_behavior_review_result,
+              native_realization_authority
+            )
+
+          {:error, _authority_diagnostics} ->
+            {:error, ordinary_diagnostics}
+        end
     end
   end
 
