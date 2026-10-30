@@ -238,9 +238,9 @@ Keep it unresolved until a separate reviewed source/version authority or
 explicit project contract names the exact path and value authority. No code
 may infer a token from its spelling or emit a guessed value.
 
-R3 cannot be declared complete while either variable remains unresolved. If
-no qualifying evidence is accepted, the exact Milan design remains blocked
-until a separate human authority process approves a changed presentation.
+R3 closes with an explicit disposition for each of the three variables:
+accepted exact authority, or unresolved with final generation blocked. No
+variable may be authorized from the semantic concept or source key alone.
 
 ## 6. `spacing.scale.s` package mapping
 
