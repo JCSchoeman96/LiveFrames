@@ -29,9 +29,12 @@ defmodule LiveFrames.ComponentReviewTest do
 
   alias LiveFrames.ComponentReviewResult
   alias LiveFrames.Behavior.Binding, as: BehaviorBinding
+  alias LiveFrames.Behavior.Binding.ControlledTarget
   alias LiveFrames.Behavior.Binding.PrimitiveRef
+  alias LiveFrames.Behavior.Binding.Trigger
   alias LiveFrames.Behavior.BindingIdentity
   alias LiveFrames.Behavior.Contract, as: BehaviorContract
+  alias LiveFrames.Behavior.NativeRealizationAuthority
   alias LiveFrames.Behavior.ReviewResult
   alias LiveFrames.Behavior.Serializer, as: BehaviorSerializer
   alias LiveFrames.IR.{CollectionBinding, DesignDocument, ValueBinding}
@@ -39,6 +42,7 @@ defmodule LiveFrames.ComponentReviewTest do
   alias LiveFrames.IR.Identity
   alias LiveFrames.IR.SourceTrace
   alias LiveFrames.IR.ValueBinding
+  alias LiveFrames.IR.ValueModifier
 
   @boundary_id DesignNode.deterministic_id([1])
   @heading_id DesignNode.deterministic_id([1, 1])
@@ -397,6 +401,14 @@ defmodule LiveFrames.ComponentReviewTest do
     assert review_result.component_contract_digest == approved_digest
     refute review_result.component_contract_digest == proposed_digest
 
+    assert {:ok, plan_bytes} = ComponentizationPlan.encode(plan)
+    assert review_result.componentization_plan_digest == sha256(plan_bytes)
+
+    assert {:ok, design_document_digest} =
+             ComponentizationPlan.design_document_sha256(design_document)
+
+    assert review_result.design_document_sha256 == design_document_digest
+
     assert {:ok, encoded_review_result} = ComponentReviewResult.encode(review_result)
 
     assert String.contains?(
@@ -408,6 +420,62 @@ defmodule LiveFrames.ComponentReviewTest do
     assert plan == original_plan
     assert design_document == original_document
     assert length(original_plan.node_dispositions) == 1
+  end
+
+  test "the exact Selection button is approved through transient native realization authority" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      selection_candidate()
+
+    assert {:error, ordinary_diagnostics} =
+             ComponentizationPlan.validate_generation_prerequisites_with_behavior_authority(
+               plan,
+               contract,
+               design_document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert "componentization_plan.native_generation.tag_unsupported" in codes(
+             {:error, ordinary_diagnostics}
+           )
+
+    assert [%PlanDiagnostic{} = tag_diagnostic] =
+             Enum.filter(
+               ordinary_diagnostics,
+               &(&1.code == "componentization_plan.native_generation.tag_unsupported")
+             )
+
+    assert tag_diagnostic.path == "nodes[#{selection_ids().control}]"
+
+    assert {:ok, approved, review_result} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:selection",
+               "2026-10-30T00:00:00.000000Z",
+               ["selection-evidence"]
+             )
+
+    assert {:ok, authority} =
+             NativeRealizationAuthority.derive(
+               approved,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert authority.control_node_id == selection_ids().control
+
+    assert ComponentReviewResult.validate_against(
+             review_result,
+             approved,
+             plan,
+             design_document
+           ) == :ok
   end
 
   test "atomic disposition approval never promotes a needs_review candidate" do
@@ -638,6 +706,102 @@ defmodule LiveFrames.ComponentReviewTest do
       assert {:error, diagnostics} = ComponentReview.approve(contract, plan, design_document)
       assert Enum.any?(diagnostics, &(&1.code == "component_contract.approval_blocked"))
     end
+  end
+
+  test "generic button remains blocked when no accepted Selection authority matches it" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      selection_candidate()
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%{behavior_contract | bindings: []})
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+    behavior_review = %{behavior_review | behavior_contract_digest: behavior_digest}
+    approved_contract = %{contract | approval_status: :approved}
+    plan_without_disposition = %{plan | node_dispositions: []}
+
+    assert {:error, diagnostics} =
+             ComponentizationPlan.validate_for_generation_with_behavior_authority(
+               plan_without_disposition,
+               approved_contract,
+               design_document,
+               behavior_contract,
+               behavior_review
+             )
+
+    assert "componentization_plan.native_generation.tag_unsupported" in codes(
+             {:error, diagnostics}
+           )
+  end
+
+  test "malformed or split Selection topology cannot derive native realization authority" do
+    for {topology, expected_code} <- [
+          {:malformed, "behavior.native_realization.presentation_invalid"},
+          {:split, "behavior.reference.outside_owner"}
+        ] do
+      {contract, plan, design_document, behavior_contract, behavior_review} =
+        selection_candidate(topology: topology)
+
+      approved_contract = %{contract | approval_status: :approved}
+
+      assert {:error, authority_diagnostics} =
+               NativeRealizationAuthority.derive(
+                 approved_contract,
+                 plan,
+                 design_document,
+                 behavior_contract,
+                 behavior_review
+               )
+
+      assert expected_code in codes({:error, authority_diagnostics})
+
+      assert {:error, review_diagnostics} =
+               ComponentReview.approve_with_result(
+                 contract,
+                 plan,
+                 design_document,
+                 behavior_contract,
+                 behavior_review,
+                 "reviewer:selection",
+                 "2026-10-30T00:00:00.000000Z",
+                 ["selection-evidence"]
+               )
+
+      if topology == :malformed do
+        assert "componentization_plan.native_generation.tag_unsupported" in codes(
+                 {:error, review_diagnostics}
+               )
+
+        refute "behavior.native_realization.presentation_invalid" in codes(
+                 {:error, review_diagnostics}
+               )
+      end
+    end
+  end
+
+  test "Selection authority leaves a second native tag defect blocking approval atomically" do
+    {contract, plan, design_document, behavior_contract, behavior_review} =
+      selection_candidate(extra_native_defect?: true)
+
+    assert {:error, diagnostics} =
+             ComponentReview.approve_with_result(
+               contract,
+               plan,
+               design_document,
+               behavior_contract,
+               behavior_review,
+               "reviewer:selection",
+               "2026-10-30T00:00:00.000000Z",
+               ["selection-evidence"]
+             )
+
+    assert [diagnostic] =
+             Enum.filter(
+               diagnostics,
+               &(&1.code == "componentization_plan.native_generation.tag_unsupported")
+             )
+
+    assert diagnostic.path == "nodes[#{selection_ids().extra_button}]"
   end
 
   test "proposed and needs_review candidates can be rejected" do
@@ -1030,6 +1194,243 @@ defmodule LiveFrames.ComponentReviewTest do
     }
 
     {contract, plan, design_document, behavior_contract, behavior_review}
+  end
+
+  defp selection_candidate(options \\ []) do
+    ids = selection_ids()
+    source_type = "synthetic-selection-builder"
+    source_id = "selection-source-runtime"
+    topology = Keyword.get(options, :topology, :valid)
+
+    presentation_b_id =
+      if topology == :split, do: ids.outside_presentation, else: ids.presentation_b
+
+    selection_targets = [
+      %ControlledTarget{role: "control_collection", node_id: ids.control},
+      %ControlledTarget{role: "presentation_collection", node_id: ids.presentation_a},
+      %ControlledTarget{role: "presentation_collection", node_id: presentation_b_id}
+    ]
+
+    selection_targets =
+      if topology == :malformed, do: Enum.take(selection_targets, 2), else: selection_targets
+
+    extra_nodes =
+      if Keyword.get(options, :extra_native_defect?, false) do
+        [
+          %DesignNode{
+            node_id: ids.extra_button,
+            semantic_type: "generic",
+            attributes: %{"tag" => "button"}
+          }
+        ]
+      else
+        []
+      end
+
+    design_document = %DesignDocument{
+      root_nodes: [
+        %DesignNode{
+          node_id: ids.root,
+          semantic_type: "section",
+          children: [
+            %DesignNode{
+              node_id: ids.boundary,
+              semantic_type: "section",
+              children: [
+                %DesignNode{
+                  node_id: ids.control_container,
+                  semantic_type: "section",
+                  children: [
+                    %DesignNode{
+                      node_id: ids.control_parent_placeholder,
+                      semantic_type: "paragraph"
+                    },
+                    %DesignNode{
+                      node_id: ids.control_parent,
+                      semantic_type: "section",
+                      children: [
+                        %DesignNode{
+                          node_id: ids.control,
+                          semantic_type: "generic",
+                          attributes: %{"tag" => "button"},
+                          children: [
+                            %DesignNode{
+                              node_id: ids.carrier,
+                              semantic_type: "heading",
+                              attributes: %{"tag" => "h3"}
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                %DesignNode{node_id: ids.presentation_a, semantic_type: "paragraph"},
+                %DesignNode{node_id: ids.presentation_b, semantic_type: "paragraph"},
+                %DesignNode{node_id: ids.presentation_c, semantic_type: "paragraph"},
+                %DesignNode{
+                  node_id: ids.disposition,
+                  semantic_type: "unsupported",
+                  source_trace: %SourceTrace{source_type: source_type, source_id: source_id}
+                }
+                | extra_nodes
+              ]
+            },
+            %DesignNode{
+              node_id: ids.outside,
+              semantic_type: "section",
+              children: [
+                %DesignNode{node_id: ids.outside_presentation, semantic_type: "paragraph"}
+              ]
+            }
+          ]
+        }
+      ],
+      collection_bindings: %{
+        "cb_selection_items" => %CollectionBinding{
+          collection_binding_id: "cb_selection_items",
+          owner_node_id: ids.boundary,
+          repeat_root_node_id: ids.boundary
+        }
+      },
+      value_bindings: %{
+        "selection-title" => %ValueBinding{
+          value_binding_id: "selection-title",
+          target_node_id: ids.carrier,
+          target_kind: :text,
+          value_kind: :field,
+          scope: :collection_item,
+          collection_binding_id: "cb_selection_items",
+          value_key: "title",
+          normalization_status: :normalized,
+          modifier: %ValueModifier.None{}
+        }
+      }
+    }
+
+    {:ok, design_document_identity} = Identity.from_document(design_document)
+
+    {:ok, behavior_contract} =
+      BindingIdentity.assign(%BehaviorContract{
+        design_document_identity: design_document_identity,
+        bindings: [
+          %BehaviorBinding{
+            primitive_ref: %PrimitiveRef{kind: "selection", definition_version: "1.0.0"},
+            owner_node_id: ids.boundary,
+            binding_role: "primary",
+            primitive_policy_values: %{"alignment" => "position", "advance_boundary" => "wrap"},
+            triggers: [%Trigger{kind: "activate", origin_node_id: ids.control}],
+            controlled_targets: selection_targets
+          }
+        ]
+      })
+
+    {:ok, behavior_digest} = BehaviorSerializer.digest(behavior_contract)
+
+    behavior_review = %ReviewResult{
+      review_format_version: "1.0.0",
+      design_document_identity: design_document_identity,
+      behavior_contract_digest_algorithm: BehaviorSerializer.algorithm(),
+      behavior_contract_digest: behavior_digest,
+      decision: "approved",
+      reviewer_identity: "reviewer:synthetic-selection",
+      reviewed_at: "2026-10-30T00:00:00.000000Z",
+      review_note: nil,
+      evidence_refs: ["synthetic-selection-review"]
+    }
+
+    {:ok, behavior_review_id} = ReviewResult.id(behavior_review)
+
+    contract = %ComponentContract{
+      contract_id: "selection-review-contract",
+      category: :section,
+      module_intent: "selection_component",
+      function_intent: "selection_component",
+      public_attrs: [
+        %Attr{name: "items", type: :list, semantic_purpose: "items"},
+        %Attr{
+          name: "heading_level",
+          type: :integer,
+          required: true,
+          semantic_purpose: "heading level",
+          validation: %{"values" => [1, 2, 3, 4, 5, 6]}
+        }
+      ],
+      collection_inputs: [
+        %CollectionInput{
+          source_collection_binding_id: "cb_selection_items",
+          public_attr_name: "items",
+          item_fields: [%ItemField{name: "title", type: :string, semantic_purpose: "title"}]
+        }
+      ],
+      binding_projections: [
+        %BindingProjection{
+          source_binding_kind: :collection,
+          source_binding_id: "cb_selection_items",
+          projection_kind: :collection_attr,
+          public_attr_name: "items",
+          source_collection_binding_id: "cb_selection_items",
+          target_node_id: ids.boundary
+        },
+        %BindingProjection{
+          source_binding_kind: :value,
+          source_binding_id: "selection-title",
+          projection_kind: :collection_item_field,
+          source_collection_binding_id: "cb_selection_items",
+          item_field_name: "title",
+          target_node_id: ids.carrier
+        }
+      ],
+      approval_status: :proposed
+    }
+
+    {:ok, document_sha256} = ComponentizationPlan.design_document_sha256(design_document)
+
+    plan = %ComponentizationPlan{
+      contract_id: contract.contract_id,
+      design_document_sha256: document_sha256,
+      boundary_node_id: ids.boundary,
+      render_projections: [
+        %RenderProjection{
+          public_attr_name: "heading_level",
+          target_node_id: ids.carrier,
+          render_role: :heading_level
+        }
+      ],
+      node_dispositions: [
+        %NodeDisposition{
+          design_node_id: ids.disposition,
+          disposition: :exclude_source_runtime_carrier,
+          source_type: source_type,
+          source_id: source_id,
+          behavior_binding_id: hd(behavior_contract.bindings).binding_id,
+          behavior_contract_digest: behavior_digest,
+          behavior_review_id: behavior_review_id,
+          evidence_refs: ["selection-disposition-evidence"]
+        }
+      ]
+    }
+
+    {contract, plan, design_document, behavior_contract, behavior_review}
+  end
+
+  defp selection_ids do
+    %{
+      root: DesignNode.deterministic_id([1]),
+      boundary: DesignNode.deterministic_id([1, 1]),
+      control_container: DesignNode.deterministic_id([1, 1, 1]),
+      control_parent_placeholder: DesignNode.deterministic_id([1, 1, 1, 1]),
+      control_parent: DesignNode.deterministic_id([1, 1, 1, 2]),
+      control: DesignNode.deterministic_id([1, 1, 1, 2, 1]),
+      carrier: DesignNode.deterministic_id([1, 1, 1, 2, 1, 1]),
+      presentation_a: DesignNode.deterministic_id([1, 1, 2]),
+      presentation_b: DesignNode.deterministic_id([1, 1, 3]),
+      presentation_c: DesignNode.deterministic_id([1, 1, 4]),
+      disposition: DesignNode.deterministic_id([1, 1, 5]),
+      extra_button: DesignNode.deterministic_id([1, 1, 6]),
+      outside: DesignNode.deterministic_id([1, 2]),
+      outside_presentation: DesignNode.deterministic_id([1, 2, 1])
+    }
   end
 
   defp sha256(bytes), do: :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
