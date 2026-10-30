@@ -127,6 +127,42 @@ candidate; records for distinct paths remain ambiguous. A candidate's token
 resolution status remains a separate fact. This optional metadata keeps
 TokenSet at version `1.0.0` and does not add a root field.
 
+`VariableAuthority.resolve/2` keeps this generic candidate behavior. One
+distinct token path is `:unique_candidate`, and multiple distinct paths are
+`:ambiguous_candidates`, regardless of authority kind. The existing
+`resolve_terminal/2` remains an additive generic API: it requires one generic
+candidate whose token is present and resolved, then returns the existing
+bounded CSS terminal candidate. Neither API makes an ownership decision.
+
+Direct ownership has two separate additive APIs:
+
+~~~elixir
+VariableAuthority.resolve_direct_owner(index, variable)
+VariableAuthority.resolve_direct_owner_terminal(index, variable)
+~~~
+
+`resolve_direct_owner/2` treats only `source_output_alias` and
+`explicit_project_contract` records as owners. `source_reference` remains
+generic candidate and consumer evidence, but never establishes direct
+ownership or competes with an owner. Owner selection counts distinct token
+paths, so multiple owner records on one path still select that one path. It
+returns `{:error, :no_authority}` when no owner path exists,
+`{:ok, candidate}` for one owner path, and
+`{:error, :ambiguous_candidates}` for multiple owner paths. It preserves the
+validated authority records on the selected candidate and does not choose by
+variable name, path spelling, property, resolved value, or input ordering.
+
+`resolve_direct_owner_terminal/2` performs the same owner selection, then
+requires the owner token to exist, be resolved, and provide the existing
+bounded CSS terminal representation. It returns the same candidate evidence
+and terminal value as the generic terminal API on success. Missing tokens,
+unresolved tokens, and unavailable terminal representations return
+`:token_missing`, `:token_unresolved`, and `:token_value_unavailable` errors.
+No owner and multiple owner paths keep their respective
+`:no_authority` and `:ambiguous_candidates` errors. A reference-only variable
+has no direct owner even when generic `resolve/2` reports a unique candidate.
+Direct consumers must keep that expression unresolved.
+
 Structural framework variables such as Automatic.css grid recipes are **not**
 TokenSet tokens. They are recorded separately through
 `LiveFrames.Adapters.AutomaticCSS.StructuralVariables` and consumed by Bricks

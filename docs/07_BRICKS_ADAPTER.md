@@ -172,16 +172,21 @@ TokenSet.
 
 For an exact direct expression `var(--x)`, resolution order is:
 
-1. `VariableAuthority` lookup.
-2. A unique resolved token candidate becomes `token_ref`.
-3. Unique unresolved or ambiguous token authority retains the existing
-   unresolved behavior and does **not** consult structural authority.
-4. When token authority is `no_authority`, structural authority may resolve a
-   proven structural literal (for example ACSS 4.0.1 `--grid-1` →
+1. Bricks calls `VariableAuthority.resolve_direct_owner_terminal/2`. One
+   resolved direct owner becomes `token_ref` for that owner's token path.
+   `source_output_alias` and `explicit_project_contract` are owner kinds;
+   `source_reference` records remain generic candidates and do not compete
+   with an owner.
+2. A reference-only candidate, missing or ambiguous owner, missing or
+   unresolved owner token, or unavailable owner terminal keeps the original
+   expression unresolved. This remains true when generic `resolve/2` reports
+   one unique reference candidate.
+3. Structural authority may resolve a proven literal only when there is no
+   generic TokenSet candidate (for example ACSS 4.0.1 `--grid-1` →
    `repeat(1, minmax(0, 1fr))`, `--grid-2` → `repeat(2, minmax(0, 1fr))`,
    or `--grid-3-2` → `minmax(0, 3fr) minmax(0, 2fr)` on
    `grid-template-columns` / `grid-template-rows`).
-5. Missing, ambiguous, or invalid structural authority keeps the existing
+4. Missing, ambiguous, or invalid structural authority keeps the existing
    fail-closed unresolved behavior.
 
 Fallback expressions such as `var(--grid-1, fallback)` remain
@@ -352,16 +357,19 @@ or keyword values, and calc and clamp expressions remain complete calculations.
 On `gap` only, the bounded form `calc(var(--grid-gap) * <positive-rational>)`
 may become a structured `StyleValue.calculation` multiply when `--grid-gap`
 authority is uniquely `spacing.grid_gap`; other `--grid-gap` calculation shapes
-fail closed. On bounded radius properties only, ambiguous `var(--radius)` may
-canonicalize to `token_ref radius.base` when every non-base candidate is a
-resolved semantic reference to `radius.base` (no global VariableAuthority
-rewrite). Only an exact direct `var(--x)` expression can become a token
-reference, when VariableAuthority returns one resolved candidate. Fallback expressions keep
-their complete source and fallback metadata and remain unresolved. Ambiguous
-authority and unresolved tokens never select a path. Nested overlay variables
-and the unitless source value "400" remain unresolved. Gradients and custom
-CSS use complex_css with their source values intact. No style is silently
-dropped.
+fail closed. For an exact direct `var(--x)`, the normalizer uses
+`VariableAuthority.resolve_direct_owner_terminal/2`. `source_output_alias` and
+`explicit_project_contract` provide ownership evidence. `source_reference`
+provides generic/reference evidence only. One resolved direct owner with a
+terminal CSS value becomes `token_ref`; reference-only variables, multiple
+direct owners, and missing, unresolved, or unavailable owners remain
+unresolved. Structural-variable authority remains separate. The previous
+bounded `--radius` disambiguation is not needed because `radius.base` has
+explicit owner authority and direct-owner selection is property-independent.
+Fallback expressions keep their complete source and fallback metadata and
+remain unresolved. Nested overlay variables and the unitless source value
+"400" remain unresolved. Gradients and custom CSS use complex_css with their
+source values intact. No style is silently dropped.
 
 Responsive overrides retain the exact source name as both breakpoint_id and
 source_name. Their min_width and max_width remain nil, and their resolution
