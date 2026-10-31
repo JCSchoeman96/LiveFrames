@@ -104,10 +104,56 @@ defmodule LiveFrames.BricksDependencyExtractorStructuralTest do
     assert variable["status"] == "resolved_structural"
     assert variable["structural_authority_id"] == "automatic-css-4.0.1:structural-grid:grid-1"
     assert variable["structural_resolved_value"] == "repeat(1, minmax(0, 1fr))"
+    assert variable["expressions"] == ["var(--grid-1)"]
 
     [occurrence] = variable["occurrences"]
+    assert occurrence["expression"] == "var(--grid-1)"
     assert occurrence["property"] == "grid-template-columns"
     assert occurrence["resolution_status"] == "resolved_structural"
+  end
+
+  test "nonempty structural authority retains source dependency expressions and context" do
+    document =
+      to_ir!(
+        %{
+          "_gridTemplateColumns" => "var(--grid-1)",
+          "_gridTemplateColumns:tablet_portrait" => "var(--grid-1)",
+          "_gridGap" => "var(--content-gap)",
+          "_cssCustom" => ".x { width: var(--custom-width); }"
+        },
+        structural_variable_authority: structural_index()
+      )
+
+    grid_variable = dependency_variable(document, "--grid-1")
+    assert grid_variable["expressions"] == ["var(--grid-1)"]
+
+    assert Enum.all?(grid_variable["occurrences"], fn occurrence ->
+             occurrence["expression"] == "var(--grid-1)" and
+               occurrence["property"] == "grid-template-columns" and
+               occurrence["resolution_status"] == "resolved_structural"
+           end)
+
+    assert Enum.any?(grid_variable["occurrences"], &(&1["breakpoint"] == "tablet_portrait"))
+
+    content_gap = dependency_variable(document, "--content-gap")
+    assert content_gap["expressions"] == ["var(--content-gap)"]
+    assert Enum.all?(content_gap["occurrences"], &(&1["expression"] == "var(--content-gap)"))
+
+    custom_css = dependency_variable(document, "--custom-width")
+    css_expression = ".x { width: var(--custom-width); }"
+    assert custom_css["expressions"] == [css_expression]
+    assert Enum.all?(custom_css["occurrences"], &(&1["expression"] == css_expression))
+  end
+
+  test "explicit empty structural authority preserves the legacy dependency summary" do
+    settings = %{"_width" => "var(--unknown-width)"}
+    omitted_index = to_ir!(settings)
+
+    explicit_empty_index =
+      to_ir!(settings, structural_variable_authority: %StructuralVariableAuthority{})
+
+    assert dependency_variable(omitted_index, "--unknown-width") ==
+             dependency_variable(explicit_empty_index, "--unknown-width")
   end
 
   test "valid grid-template-rows occurrence resolves structurally in extract" do
