@@ -371,7 +371,7 @@ defmodule LiveFrames.Adapters.Bricks.DependencyExtractor do
 
       occurrences = Enum.map(reconciled_occurrences, &occurrence_record/1)
 
-      expressions = Enum.uniq(Enum.map(occurrences, & &1["expression"]))
+      expressions = Enum.uniq(Enum.map(occurrences, &Map.fetch!(&1, :expression)))
 
       record
       |> Map.put(:occurrences, occurrences)
