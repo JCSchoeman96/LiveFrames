@@ -205,6 +205,7 @@ license, ownership, or general legal redistribution outcome.
 | Automatic.css 4.0.1 structural-grid interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the resolved values of `--grid-1`, `--grid-2`, and `--grid-3-2`, plus minimum verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
 | Automatic.css 4.0.1 text-scale interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the three-variable text-scale semantic facts, active `text-s` endpoint overrides, minimum generated controls, and verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
 | Feature Milan breakpoint interoperability facts | `SOURCE_ENVIRONMENT=LocalWP DanBricks`; `SOURCE_URL=http://localhost:10049`; `SOURCE_SYSTEM=Bricks`; `SOURCE_VERSION=exact runtime unknown`; Milan private artifact SHA-256 `f906273e067b3f23f8cd9c2a675f18fcdba1e78e6f2fcb1a6480857487e65132`; DanBricks SQL SHA-256 `78aa02fe494dd5e07e46e09323c0328e68a5cbc08902a08c0b0b61a158e5bef7`; direct evidence manifest SHA-256 `c4050958d5993eb028ad2440ebd923b27fd611a1432525b5e4d0399785a9ad86`. | Owner approved scoped public-repository publication on 2026-10-17 for `tablet_portrait=991px`, `mobile_landscape=767px`, and `mobile_portrait=478px`; `max-width` queries `@media (max-width: 991px)`, `@media (max-width: 767px)`, and `@media (max-width: 478px)`; `MOBILE_LANDSCAPE_ENABLED=true`; `CASCADE_ORDER=desktop > tablet_portrait > mobile_landscape > mobile_portrait`; and minimum provenance hashes. `REDISTRIBUTION_STATUS=approved` only for this scope. Broader Bricks and Automatic.css redistribution remains unresolved. | `PUBLICATION_STATE=public_safe` ONLY for these sanitized interoperability facts and minimum provenance metadata. | `docs/development/feature_milan_direct_breakpoint_authority.md`; `sources/work/feature_milan/fidelity/breakpoint_authority.json` | Yes — scoped owner decision recorded 2026-10-17. |
+| Feature Milan R3 color-variable interoperability facts | Project owner approved scoped public-repository publication on 2026-11-03; this record defines the approved facts and minimum provenance identities. | Approval covers only the three stated variable facts and the listed artifact hashes. It excludes Automatic.css source, generated stylesheet contents, configuration-export contents, and the broader private research corpus. | `public_safe` for this scope only. | `docs/04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision`; `docs/development/feature_milan_ir7_color_variable_authority.md` | Yes — scoped owner decision recorded 2026-11-03; no production implementation authorized. |
 | Standalone HTML/CSS/JS experiments | Named groups under `sources/` are present, but no group-level provenance record, internal-use authority, or origin is recorded. | No redistribution evidence is recorded; status is unknown. | `discovered`; not `public_safe`. | `sources/GSAP-*`, `sources/card-carousel`, `sources/css-tooltips`, `sources/elastic-accordion`, `sources/enlarge-gallery`, `sources/infinite-scroll`, `sources/swipe-reveal`, `sources/ux-animations` | Yes — classify each group or establish verified shared provenance. |
 | Derived Hero India conversion artifacts | `sources/work/hero_india/` contains deterministic Stage A, IR, fidelity, manifest, and breakpoint artifacts that retain upstream source identifiers/hashes. | Upstream Bricks/Automatic.css redistribution remains unresolved; derivation does not provide independent clearance. | Inherits upstream unresolved status; not `public_safe`. | `sources/work/hero_india/` | Yes — decide whether these are distributable derived evidence or review-only artifacts. |
 
@@ -230,6 +231,48 @@ export, DanBricks SQL/database contents, screenshots themselves, credentials,
 proprietary Bricks source, proprietary Automatic.css source, ACSS configuration
 exports, generated stylesheets, and unrelated source or private evidence.
 
+### Feature Milan R3 scoped color-variable publication decision
+
+The project owner approved public-repository publication on 2026-11-03 of
+only the sanitized interoperability facts and minimum source/version
+verification identities below. This is a scoped publication decision, not a
+license conclusion or general clearance of Automatic.css material.
+
+```text
+DECISION_DATE=2026-11-03
+SOURCE_ENVIRONMENT=Local Site danbricks
+SOURCE_SYSTEM=Automatic.css
+SOURCE_VERSION=4.0.1
+PUBLICATION_STATE=public_safe
+REDISTRIBUTION_STATUS=approved
+PUBLICATION_SCOPE=the_three_variable_facts_and_listed_hashes_only
+BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
+PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
+```
+
+| ID | Artifact identity | SHA-256 |
+| --- | --- | --- |
+| S1 | `wp-content/plugins/automatic-css/automatic-css.php` | `fbb07573733b46f941c49d69153d9c4797bb0bf686da4fbc2d6f8f32cdd14276` |
+| S2 | `assets/scss/modules/contextual-colors/_contextual-tokens.scss` | `6ef43c18e6ac854a3b96174a2786affe8da314ab33c026bfedcb4ff6b283c1ac` |
+| S3 | `assets/scss/modules/contextual-colors/_contextual-maps.scss` | `312565b672a29142e226bb8c89c13a3c1a1bc7480ddedab9d7ded5142e8970c5` |
+| S5 | `private_reference/frames/staging-2026-09/environment/acss-settings.json` | `3347240b2837dc28854020b0fa0f1d2100086d259123f8b964ac8f31114cad32` |
+| S7 | `wp-content/uploads/automatic-css/automatic-variables.css` | `34127351b41a2496c5be9a9f238aba2fcffd63dc8a790eefc8f03d6b3becd093` |
+| S8 | `wp-content/uploads/automatic-css/automatic.css` | `77823f526e62ae945c5e295ced9179aa75cfd6fb6dc797cfec1acbc50299b4b5` |
+| S9 | `wp-content/uploads/automatic-css/automatic-core-for-block-editor.css` | `2c29b31bbaba284a29e35c9a8e37284dc4e3232e187532b8063f2ae47424f533` |
+| S10 | `wp-content/uploads/automatic-css/automatic-core-for-iframe-editor.css` | `49d18b654600a861e6048fcfae14ed0c2a340a02a563ee953c81c737359e5ff1` |
+
+The approved interoperability facts are limited to:
+
+| Variable | Approved public fact |
+| --- | --- |
+| `--bg-ultra-light` | The exact source-output alias is `--bg-ultra-light → color.background.ultra_light`. |
+| `--black-trans-10` | Ownership and token path remain unresolved for insufficient exact evidence. |
+| `--text-dark-muted` | Source emission is proven; no exact LiveFrames token path is established, so ownership remains unresolved. |
+
+The hashes identify evidence artifacts only. This decision does not publish
+Automatic.css source code, generated stylesheet contents, configuration-export
+contents, or the broader private Automatic.css research corpus. It does not
+authorize production implementation.
 ## Human governance boundary
 
 An agent may record evidence, hashes, unknown values, and derived-artifact
