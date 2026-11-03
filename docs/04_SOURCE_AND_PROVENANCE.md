@@ -200,7 +200,7 @@ license, ownership, or general legal redistribution outcome.
 | --- | --- | --- | --- | --- | --- |
 | Bricks copied-elements export / Hero India | `fixtures/bricks/SOURCE.md` records identity, Bricks versions, internal origin, and internal-use status approved for internal conversion only; broader project use is unknown. | License and allowed redistribution are unknown; no explicit public-clearance evidence is recorded. | `internal_use_approved`, scoped to internal conversion; not `public_safe`. | `fixtures/bricks/` and duplicate `sources/bricks_components.json` | Yes — existing public material requires an explicit governance decision. |
 | Bricks copied-elements export / CTA Tango | `AUTHORITY=docs/04_SOURCE_AND_PROVENANCE.md`; `SOURCE_SYSTEM=Bricks copied-elements export`; `ORIGIN_REFERENCE=private_reference/frames/staging-2026-09/cta-section-tango/bricks-component-hxambs-cta-section-tango.json`; `SHA256=73f866a27070c010584babe230b5ffd0c78dc704388fd8b6c286e149a3d93a87`; `EVIDENCE_REFS=[docs/development/c09d7a_cta_tango_semantic_input_freeze.md, docs/development/c09d7a_cta_tango_component_review.md]`; `SOURCE_VERSION=unknown`; `VENDOR/AUTHOR=unknown`; `ORIGIN_TYPE=unknown`; `OWNERSHIP=unknown`; `LICENSE_STATUS=unknown`; `INTERNAL_USE_STATUS=unknown`. | `REDISTRIBUTION_STATUS=unknown`; `CLEARANCE_EVIDENCE_REFS=[]`. | `PUBLICATION_STATE=classified` | `CURRENT_LOCATION=private_reference/` | `HUMAN_REVIEW=YES`; no human clearance decision is recorded or authorized by this entry. |
-| Automatic.css settings export | `fixtures/automatic_css/SOURCE.md` records identity, version, internal origin, and internal-use status approved for internal conversion only; broader project use is unknown. | License and allowed redistribution are unknown; no explicit public-clearance evidence is recorded. | `internal_use_approved`, scoped to internal conversion; not `public_safe`. | `fixtures/automatic_css/` and `acss/acss.json` | Yes — existing public material requires an explicit governance decision. |
+| Automatic.css settings export | `fixtures/automatic_css/SOURCE.md` records identity, version, internal origin, and internal-use status approved for internal conversion only; broader project use is unknown. The owner approved publication of the fixture path, digest, byte size, and 4.0.1 reference-set version for R3 verification only. | Fixture-content license and redistribution remain unknown; this approval does not clear fixture contents or other Automatic.css material. | `internal_use_approved` for internal conversion; `public_safe` only for R3 metadata. Fixture contents are not declared `public_safe`. | `fixtures/automatic_css/` and `acss/acss.json` | Yes — fixture contents, broader project use, and redistribution remain unresolved; scoped metadata approval recorded 2026-11-03. |
 | Automatic.css 4.0.1 research set | `acss/README.md` and `private_reference/REFERENCE_MANIFEST.md` identify a research-only, immutable reference set; no explicit internal-use authority is recorded for the checked-in notes. | No license or redistribution clearance is recorded; status is unknown. | `classified`; not `public_safe`. | `acss/4.0.1/` | Yes — reconcile its public location, reference path, hash, and permitted use. |
 | Automatic.css 4.0.1 structural-grid interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the resolved values of `--grid-1`, `--grid-2`, and `--grid-3-2`, plus minimum verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e1_acss_4_0_1_grid_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
 | Automatic.css 4.0.1 text-scale interoperability facts | Project owner reviewed the scoped evidence on 2026-10-07. | Owner approval covers only the three-variable text-scale semantic facts, active `text-s` endpoint overrides, minimum generated controls, and verification metadata. Broader Automatic.css redistribution remains unresolved. | `public_safe` for this scoped evidence only. | `docs/evidence/c09d6_d0e2_acss_4_0_1_text_scale_authority.md` | Yes — scoped owner decision recorded 2026-10-07. |
@@ -245,7 +245,7 @@ SOURCE_SYSTEM=Automatic.css
 SOURCE_VERSION=4.0.1
 PUBLICATION_STATE=public_safe
 REDISTRIBUTION_STATUS=approved
-PUBLICATION_SCOPE=the_three_variable_facts_listed_hashes_and_one_contextual_output_condition_only
+PUBLICATION_SCOPE=the_three_variable_facts_listed_hashes_one_contextual_output_condition_and_r3_source_identity_verification_metadata_only
 BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
 PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
 ```
@@ -282,10 +282,41 @@ conditional output fact for Feature Milan R3:
 | Automatic.css 4.0.1 | `option-contextual-color-variables` | `on` | The `--bg-ultra-light` contextual output is emitted. |
 | Automatic.css 4.0.1 | `option-contextual-color-variables` | `off` | The `--bg-ultra-light` contextual output is not emitted. |
 
-This is the only additional output condition approved here. It adds no source
-hashes and does not authorize publication of proprietary source, generated
-stylesheet, or configuration-export contents, other output contracts, or
-broader Automatic.css material.
+This is the only additional output condition approved here. It does not change
+the S1–S10 evidence identity set or authorize publication of proprietary
+source, generated stylesheet, configuration-export contents, other output
+contracts, or broader Automatic.css material.
+
+The project owner separately approved publication, on 2026-11-03, of only the
+existing fixture metadata required for R3 source-identity verification:
+
+```text
+R3_FIXTURE_METADATA_PUBLICATION_APPROVED=YES
+APPROVAL_SCOPE=R3_SOURCE_IDENTITY_VERIFICATION_METADATA_ONLY
+APPROVAL_DATE=2026-11-03
+
+REFERENCE_FIXTURE=fixtures/automatic_css/acss_settings.json
+REFERENCE_FIXTURE_SHA256=19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05
+REFERENCE_FIXTURE_SIZE_BYTES=92199
+REFERENCE_SOURCE_VERSION=Automatic.css 4.0.1 reference set
+APPROVED_PUBLIC_FACTS=exact_fixture_identity_and_4_0_1_reference_set_provenance
+
+FIXTURE_CONTENT_REDISTRIBUTION_STATUS=unknown
+BROADER_FIXTURE_PROJECT_USE_STATUS=unknown
+BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
+
+PROOF_IMPLEMENTATION_AUTHORIZED=NO
+BG_IMPLEMENTATION_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+```
+
+This approval covers publication of the named metadata only. It does not
+approve or publish the fixture bytes, configuration export, plugin source,
+generated stylesheets, or other Automatic.css materials. It does not expand
+the fixture's internal-use scope, resolve broader project-use or
+redistribution status, or authorize proof implementation, BG implementation,
+or final generation. The existing S1–S10 identities and the contextual BG
+output condition above remain unchanged.
 
 ## Human governance boundary
 
