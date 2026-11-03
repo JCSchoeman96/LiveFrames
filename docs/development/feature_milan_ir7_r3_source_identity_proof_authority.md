@@ -72,6 +72,7 @@ The only eligible reference identity is this pair:
 | Source system | Automatic.css configuration JSON |
 | Source version provenance | `fixtures/automatic_css/SOURCE.md` and the scoped Feature Milan R3 decision in `docs/04_SOURCE_AND_PROVENANCE.md` |
 | Version scope | Automatic.css 4.0.1 reference set for this fixture only |
+| Contextual feature option in the fixture | `option-contextual-color-variables=on` |
 
 The proposed digest is a byte identity for the repository fixture. It is not
 a vendor signature, and a matching digest alone does not establish vendor
@@ -87,52 +88,44 @@ bytes requires a new reviewed identity record before implementation.
 
 ## 3. Owning layer and proof boundary
 
-`LiveFrames.Adapters.AutomaticCSS.Loader` owns source-byte ingestion. It is
-the correct place to verify the digest because `from_file/2` reads the source
-and `from_json/2` receives its raw bytes before decoding. The adapter owns
-the later decision to apply the verified result to the one alias. The
-Normalizer does not establish source identity.
+`LiveFrames.Adapters.AutomaticCSS.Loader` owns source-byte ingestion. Keep
+`AutomaticCSS.from_file/2`, `from_json/2`, and `normalize/2` backward
+compatible. Their current recognition, normalization, and descriptive
+`source_version` and `source_version_status` metadata behavior remains
+unchanged. Those values do not prove identity and cannot authorize the new
+`--bg-ultra-light` alias.
 
-The minimum implementation change is an internal Loader-to-adapter handoff
-for a verified reference result. The trusted `AutomaticCSS.from_file/2` and
-`from_json/2` flows must use that result directly. Do not add a
-caller-controlled `verified` option, proof flag, accepted path, filename,
-source-version field, status label, or public metadata map as proof. Do not
-put the proof in TokenSet metadata or return it as a reusable caller claim.
+Add one distinct adapter operation, `AutomaticCSS.from_reference_file/2`, for
+the single approved reference identity. It takes a path only to locate bytes.
+The Loader reads those bytes once, checks the size and exact digest against the
+fixed reviewed reference/version binding, and decodes that same byte sequence
+only after a match. A different path containing the exact approved bytes may
+pass. The expected path containing different bytes must fail. The operation
+uses a fixed internal reference record; caller options cannot select its
+reference, source version, or provenance binding.
 
-The verified result is transient and is consumed beside the decoded settings
-inside the existing adapter flow. The adapter must not reconstruct it from
-`source_version`, `source_version_status`, `export_version`, path, filename,
-or settings-map contents. The alias record's `source_version` is the fixed
-version in the reviewed identity record.
+The Loader's successful return is consumed immediately by the adapter's
+private normalization path. Keep the handoff in that control flow. Do not
+return a reusable proof value or put proof fields in TokenSet metadata. Do not
+accept a caller-supplied proof flag, struct, public metadata map, filename,
+source-version label, status label, or decoded settings map as proof. Any
+legacy `source_version` or `source_version_status` options remain descriptive
+only and cannot change the fixed reference binding or the alias authority's
+version.
 
-The byte sequence is processed in this order:
+The adapter's private trusted path may run the existing Normalizer and then
+add the one alias after the byte proof, source-option, token-path, and source
+key guards pass. Do not add proof handling or a proof option to the
+Normalizer. Its existing public entrypoint must not emit this new alias from
+caller options, metadata, or an arbitrary map. Keep `normalize(map, opts)` as
+the historical decoded-map route and preserve the exact R2 reconstruction
+input procedure. Such a map remains `UNVERIFIED` for this alias.
 
-1. Read source bytes once at the Loader boundary. For file input, limit the
-   trusted-reference read to `92199` bytes plus one sentinel byte so larger
-   inputs reject before hashing or decoding. For an already supplied binary,
-   reject it before hashing when its length exceeds `92199` bytes.
-2. Compare the exact bytes and byte length with the reviewed reference
-   identity. Do this before JSON decoding.
-3. On a match, decode that same binary value. Do not reread the path, rebuild
-   bytes from a decoded map, or hash once per token.
-4. Pass the verified result and the map decoded from those exact bytes
-   directly through the adapter's internal normalization flow.
-
-`from_file/2` must not use the path or basename as identity. The path only
-locates bytes. A different path with the exact approved bytes can pass the
-same fixture identity check; different bytes at the expected path cannot.
-
-The existing `normalize(map, opts)` boundary remains the historical decoded
-map route. It may preserve its current output for the accepted R2 reconstruction,
-but it always has `UNVERIFIED` identity. Caller options cannot promote it to
-verified status or authorize this alias. Preserve the exact historical map
-input procedure recorded in the R2 reconstruction record.
-
-If trusted byte verification or decoding fails, return the error. Do not retry
-through `normalize/2` or any caller-asserted fallback. A caller may separately
-use the legacy map API for historical reconstruction, but that result has no
-verified identity and cannot authorize the R3 alias.
+If reading, byte verification, or decoding fails, return a terminal error.
+Do not retry through `from_file/2`, `from_json/2`, `normalize/2`, or another
+caller-asserted fallback. A separate legacy conversion may still be invoked by
+the caller, but it must not inherit verified identity from the rejected
+operation.
 
 ## 4. Per-ingestion lifecycle
 
@@ -141,27 +134,27 @@ state-machine resource.
 
 | State | Transition and guard | Diagnostics and result |
 | --- | --- | --- |
-| `UNVERIFIED` | Trusted byte ingestion starts with source bytes. Historical `normalize(map, opts)` stays unverified and does not enter the trusted transitions. | No proof diagnostic. The alias is unavailable. |
-| `VERIFYING` | Loader checks byte length, exact bytes, and the accepted fixture/version binding before decode. | Internal state only. No success diagnostic. |
-| `VERIFIED_REFERENCE` | Exact fixture bytes and the reviewed 4.0.1 reference binding match. Loader decodes the same binary value. | No diagnostic. Eligible to continue through guarded normalization. |
-| `REJECTED_MISMATCH` | Byte length, bytes, or expected reference identity differs. | Terminal source error diagnostic. Return an error; do not produce verified authority or retry through an unverified fallback. |
-| `REJECTED_UNSUPPORTED_SOURCE` | The trusted reference record has no accepted source/version binding for the input. | Terminal source error diagnostic. Caller version or status labels cannot create or change the binding. |
+| `UNVERIFIED` | An ordinary `from_file/2`, `from_json/2`, or `normalize/2` call runs without entering trusted verification. A trusted-reference call starts here and immediately enters `VERIFYING`. | No proof diagnostic for ordinary conversion. The new alias is unavailable. |
+| `VERIFYING` | `from_reference_file/2` asks Loader to check the bounded byte length and exact bytes against the one accepted fixture/version binding before decode. | Internal state only. No success diagnostic. |
+| `VERIFIED_REFERENCE` | Exact fixture bytes and the reviewed 4.0.1 reference binding match. Loader decodes the same binary value and returns it directly to the adapter operation. | No diagnostic. Eligible to continue through guarded normalization. |
+| `REJECTED_MISMATCH` | Byte length, bytes, or the fixed expected identity differs. | Terminal source error diagnostic. Return an error; do not produce verified authority or retry through an unverified fallback. |
+| `REJECTED_UNSUPPORTED_SOURCE` | The fixed internal record has no accepted source/version binding. The current operation exposes no caller-selected reference or version. | Terminal source error diagnostic. Caller version or status labels cannot create or change the binding. |
 | `REJECTED_INVALID_INPUT` | Input is unreadable, malformed, or outside the supported JSON settings shape. | Terminal source error diagnostic. Do not decode another read or fall back to a map claim. |
-| `FEATURE_DISABLED` | Verified settings do not have `option-contextual-color-variables` exactly equal to `on`, including missing, `off`, or invalid values. | No alias and no proof error. Other supported tokens may normalize. Keep `var(--bg-ultra-light)` unresolved. |
+| `FEATURE_DISABLED` | A verified reference has `option-contextual-color-variables` missing, set to `off`, or set to an invalid value. | No alias and no proof error. Other supported tokens may normalize. Keep `var(--bg-ultra-light)` unresolved. This state is unreachable for the sole currently accepted fixture, whose option is exactly `on`; it applies only if a future independently reviewed reference identity supports a disabled value. |
 | `ELIGIBLE_FOR_BG_ALIAS` | Verified settings have the exact option value `on`, and the normalized entry has the exact path and source key in section 1. | No proof diagnostic. Only the existing direct-owner pathway may resolve the alias. |
 
 The three `REJECTED_*` states are terminal. They produce a bounded source
 diagnostic without source bytes, caller assertions, or untrusted paths. They
 produce no trusted TokenSet. In the consuming Design IR flow, the source
 expression remains unresolved. `FEATURE_DISABLED` is terminal for this alias
-only. `ELIGIBLE_FOR_BG_ALIAS` does not bypass existing owner-token or terminal
-checks; any missing, ambiguous, unresolved, or unsupported result keeps the
-expression unresolved.
+only. It cannot be reached by changing the approved fixture bytes because
+those bytes then fail verification first. `ELIGIBLE_FOR_BG_ALIAS` does not
+bypass existing owner-token or terminal checks; any missing, ambiguous,
+unresolved, or unsupported result keeps the expression unresolved.
 
 The proof path does not use `source_version` or `source_version_status` from
 caller options. Existing descriptive metadata behavior may remain for legacy
-map reconstruction, but those fields are not proof and cannot change any
-state above.
+conversion, but those fields are not proof and cannot change any state above.
 
 ## 5. Existing authority behavior
 
@@ -186,21 +179,43 @@ TEXT_DARK_MUTED=UNRESOLVED
 Do not add or run these tests in this authority-freeze change. The later
 authorized implementation must cover:
 
-- The exact fixture bytes pass the proof boundary.
-- The exact fixture succeeds when the trusted reference binding exists,
-  without requiring caller `source_version` or `source_version_status` values.
-- A modified byte, substituted input, wrong length, or unsupported reference
-  fails before decoding.
-- A correct `source_version` with incorrect bytes fails.
-- A correct `source_version_status` with unverified bytes fails.
+- Existing `from_file/2`, `from_json/2`, and `normalize/2` callers retain their
+  current behavior. Caller `source_version` and `source_version_status`
+  options on those calls do not grant the new alias authority.
+- The exact fixture passes `from_reference_file/2` end to end and authorizes
+  the R3 alias because its `option-contextual-color-variables`
+  value is exactly `on`.
+- Temporary byte variants that change the option to `off`, remove it, or set
+  it to an invalid value fail the exact-byte proof before decoding. Do not
+  treat those modified bytes as verified inputs.
+- Test the feature guard separately for `on`, `off`, missing, and invalid
+  values at its isolated decision boundary. These tests assert only whether
+  the option enables the guard; they do not construct verified identity,
+  claim that modified bytes passed proof, or assert an alias for an unverified
+  map.
+- A modified byte, substituted input, wrong length, or unsupported internal
+  reference binding fails before decoding.
+- On `from_reference_file/2`, a correct `source_version` label with incorrect
+  bytes still receives a mismatch error.
+- On `from_reference_file/2`, a correct `source_version_status` label with
+  unverified bytes still receives a mismatch error.
+- An ordinary `from_file/2` or `from_json/2` call with a correct
+  `source_version_status` label and non-reference bytes remains an unverified
+  legacy conversion and cannot produce the new alias.
 - A missing, malformed, or unknown trusted source identity binding fails
   closed.
 - Verification and JSON decoding consume the same byte sequence, with one
-  read and one digest computation per ingestion.
-- Existing `normalize(map, opts)` cannot acquire verified authority through
-  caller options, caller metadata, or a reconstructed decoded map.
-- A verified input with the contextual option `off`, missing, or invalid
-  emits no background alias and leaves its direct expression unresolved.
+  bounded read and one digest computation per trusted ingestion.
+- Existing `normalize(map, opts)` and the Normalizer's public entrypoint
+  cannot acquire this alias authority through caller options, caller
+  metadata, or a reconstructed decoded map.
+- The separate feature-guard tests confirm `off`, missing, and invalid values
+  disable the alias without claiming a verified reference. If a future
+  independently approved identity supports one of those values, its trusted
+  ingestion test must also confirm that the expression remains unresolved.
+- No public proof-forging route is added for tests. The positive proof test
+  uses the exact fixture through the trusted-reference operation; guard tests
+  do not manufacture a proof handoff.
 - The exact contextual option `on`, exact path, and exact source key are all
   required before the alias can reach the direct-owner pathway.
 - The proof alone changes no unrelated TokenSet metadata.
@@ -244,6 +259,7 @@ STOP=MAIN_OR_AUTHORITY_CHANGED
 STOP=REFERENCE_FIXTURE_IDENTITY_MISMATCH
 STOP=SOURCE_VERSION_PROVENANCE_INSUFFICIENT
 STOP=TRUST_BOUNDARY_CAN_BE_SPOOFED
+STOP=TRUSTED_INGESTION_API_BOUNDARY_UNRESOLVED
 STOP=HISTORICAL_MAP_INPUT_CONFLICT
 STOP=NEW_PUBLICATION_APPROVAL_REQUIRED
 STOP=UNRELATED_API_WIDENING_REQUIRED
