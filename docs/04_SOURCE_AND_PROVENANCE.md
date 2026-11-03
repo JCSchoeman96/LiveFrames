@@ -245,7 +245,7 @@ SOURCE_SYSTEM=Automatic.css
 SOURCE_VERSION=4.0.1
 PUBLICATION_STATE=public_safe
 REDISTRIBUTION_STATUS=approved
-PUBLICATION_SCOPE=the_three_variable_facts_and_listed_hashes_only
+PUBLICATION_SCOPE=the_three_variable_facts_listed_hashes_and_one_contextual_output_condition_only
 BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
 PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
 ```
@@ -273,6 +273,20 @@ The hashes identify evidence artifacts only. This decision does not publish
 Automatic.css source code, generated stylesheet contents, configuration-export
 contents, or the broader private Automatic.css research corpus. It does not
 authorize production implementation.
+
+The project owner additionally approved publication of this single sanitized
+conditional output fact for Feature Milan R3:
+
+| Source | Option | State | Approved public fact |
+| --- | --- | --- | --- |
+| Automatic.css 4.0.1 | `option-contextual-color-variables` | `on` | The `--bg-ultra-light` contextual output is emitted. |
+| Automatic.css 4.0.1 | `option-contextual-color-variables` | `off` | The `--bg-ultra-light` contextual output is not emitted. |
+
+This is the only additional output condition approved here. It adds no source
+hashes and does not authorize publication of proprietary source, generated
+stylesheet, or configuration-export contents, other output contracts, or
+broader Automatic.css material.
+
 ## Human governance boundary
 
 An agent may record evidence, hashes, unknown values, and derived-artifact
