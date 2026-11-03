@@ -15,11 +15,19 @@ REFERENCE_FIXTURE_SIZE_BYTES=92199
 REFERENCE_FIXTURE_SHA256=19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05
 REFERENCE_DIGEST_STATUS=PROPOSED_FOR_REVIEW
 SOURCE_VERSION=Automatic.css 4.0.1 reference set
-R3_ACCEPTED=NO
+R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
+R3_ACCEPTED=YES
+R3_ACCEPTED_MEANING=EVIDENCE_GATE_ACCEPTANCE_WITH_UNRESOLVED_BLOCKERS_NOT_IMPLEMENTATION_COMPLETION
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 R3_BG_IMPLEMENTATION_AUTHORIZED=NO
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
 ```
+
+`R3_ACCEPTED=YES` reflects the BG-only evidence-gate acceptance recorded on
+current main. It does not expand or reapprove R3 evidence, or accept this
+source-identity proof authority. This authority remains pending independent
+review, and its implementation authorization remains `NO`.
 
 The proposed digest identifies the exact bytes of the checked-in fixture. The
 fixture provenance record names Automatic.css 4.0.1 as its reference-set
@@ -249,8 +257,12 @@ bytes or full input values in diagnostics.
 
 This proposal grants no production implementation authority. It does not
 change the existing TokenSet, VariableAuthority, or Design IR contracts. It
-does not accept R3, authorize R4 or R5, add a generic attestation system, or
-claim compatibility with arbitrary Automatic.css exports.
+does not expand or reapprove the R3 evidence gate, which current main records
+as accepted for `BG_ULTRA_LIGHT_ONLY` with unresolved blockers. This
+source-identity proof authority remains pending its own independent review
+and acceptance. It does not authorize BG implementation, R4, or R5, add a
+generic attestation system, or claim compatibility with arbitrary
+Automatic.css exports.
 
 Stop if any of these conditions occurs:
 
@@ -273,7 +285,10 @@ permitted step is a separate implementation-authorization decision. This
 document does not start that implementation.
 
 ```text
-R3_ACCEPTED=NO
+R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
+R3_ACCEPTED=YES
+R3_ACCEPTED_MEANING=EVIDENCE_GATE_ACCEPTANCE_WITH_UNRESOLVED_BLOCKERS_NOT_IMPLEMENTATION_COMPLETION
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 R3_BG_IMPLEMENTATION_AUTHORIZED=NO
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
