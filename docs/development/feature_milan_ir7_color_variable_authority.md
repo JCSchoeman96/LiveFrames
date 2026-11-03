@@ -1,16 +1,22 @@
-# Feature Milan IR7 R3 color variable authority candidate
+# Feature Milan IR7 R3 color variable authority
 
-Status: evidence candidate for independent review. This record does not
-authorize production implementation or close the remaining style blockers.
+Status: `--bg-ultra-light` is accepted as a conditional direct owner for the
+R3 evidence gate. `--text-dark-muted` and `--black-trans-10` remain unresolved.
+This record authorizes no production implementation or final generation.
 
-Scoped publication status and approved source/version identities are recorded in the [canonical provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision). This candidate does not broaden that scope.
+Scoped publication status and approved source/version identities are recorded in the [canonical provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision). This acceptance does not broaden that scope.
 
 ```text
-TASK=FEATURE_MILAN_IR7_R3_EXACT_COLOR_VARIABLE_EVIDENCE
-R3_LIFECYCLE=AWAITING_INDEPENDENT_REVIEW
+TASK=FEATURE_MILAN_IR7_R3_BG_AUTHORITY_ACCEPTANCE
+R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
 R3_BOUNDED_APPROVED_EVIDENCE_SET_INSPECTED=YES
 R3_EVIDENCE_SCOPE=S1,S2,S3,S5,S7,S8,S9,S10
 MATCHING_STAGING_ENVIRONMENT_EVIDENCE_COMPLETE=NO
+BG_EVIDENCE_REVIEW=INDEPENDENTLY_REVIEWED
+BG_LIFECYCLE=CANDIDATE -> EVIDENCE_REVIEWED -> ACCEPTED_CONDITIONAL_OWNER
+BG_ACCEPTANCE_STATUS=ACCEPTED_CONDITIONAL_OWNER
+TEXT_LIFECYCLE=EMISSION_PROVEN -> TOKEN_PATH_UNPROVEN -> UNRESOLVED
+BLACK_LIFECYCLE=DEFINITION_SEARCHED -> EVIDENCE_INCOMPLETE -> UNRESOLVED
 
 R3_EVIDENCE_BASE_SHA=5c4c307ef38c264dd0da41d23a907688df2f619e
 R3_EVIDENCE_BASE_TREE=e3c53f87d62a4c5b5cf34faf2112fe1658a73309
@@ -27,8 +33,11 @@ R2_ACCEPTED=YES
 R2_CONTROL_SHA256=bddf757881a116070e1973cad280115f5e6c30cb6a70beeb70f166bf61420a64
 R2_SHA256=b607eff3f51ca12ec3db6ae5aa29ca43588e1e7716061850d27e5ac35058f8a5
 R2_INTERMEDIATE_SHA256=b607eff3f51ca12ec3db6ae5aa29ca43588e1e7716061850d27e5ac35058f8a5
+R2_CANONICAL_BYTES=411535
+R2_NODE_COUNT=17
 STRUCTURAL_GRID_BLOCKERS=0
 UNRESOLVED_COLOR_VARIABLE_BLOCKERS=3
+HISTORICAL_TOTAL_UNSERIALIZABLE_OCCURRENCES=12
 SPACING_SCALE_S_PACKAGE_MAPPING_BLOCKERS=4
 
 R3_COLOR_VARIABLE_COUNT=3
@@ -38,8 +47,17 @@ R3_TEST_CHANGE=NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
 R4_WORK_PERFORMED=NO
 R5_WORK_PERFORMED=NO
-R3_ACCEPTED=NO
+R3_ACCEPTED=YES
+R3_ACCEPTED_MEANING=EVIDENCE_GATE_ACCEPTANCE_WITH_UNRESOLVED_BLOCKERS_NOT_IMPLEMENTATION_COMPLETION
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+R3_IMPLEMENTATION_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+NEW_DESIGNDOCUMENT_DIGEST_AUTHORIZED=NO
+DESIGNDOCUMENT_DIGEST_REISSUED=NO
 ```
+
+`R3_ACCEPTED=YES` records evidence-gate acceptance for BG only. It does not
+mean implementation is complete or that the remaining blockers are cleared.
 
 ## Evidence standard and corpus
 
@@ -59,7 +77,7 @@ candidate ordering were not used to select an owner.
 The exact source/version identities and hashes approved for publication are
 recorded in the [canonical provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision).
 The artifact identifiers used below refer only to that approved set:
-S1, S2, S3, S5, S7, S8, S9, and S10. This candidate publishes no source,
+S1, S2, S3, S5, S7, S8, S9, and S10. This authority publishes no source,
 generated stylesheet, or configuration-export contents.
 
 The matching staging global-variable registry and custom-code/style export
@@ -81,15 +99,20 @@ R2_OCCURRENCE=node_000001 property=background
 R2_EVIDENCE=docs/development/feature_milan_ir7_design_document_reconstruction_record.md:203
 PROJECT_SEMANTIC_EVIDENCE=docs/development/feature_milan_ir7_style_remediation_authority.md:233-255; docs/06_ACSS_TOKEN_ADAPTER.md:271
 SOURCE_VERSION=Automatic.css 4.0.1
+SOURCE_KEY=bg-ultra-light
 EVIDENCE_ARTIFACTS=S1,S2,S3,S5,S7,S8,S9,S10
-OWNERSHIP_PROVEN=YES
+EVIDENCE_REVIEW=INDEPENDENTLY_REVIEWED
+FEATURE_GUARD=option-contextual-color-variables=on
+OWNERSHIP_PROVEN=YES_WHEN_FEATURE_GUARD_ENABLED_AND_SOURCE_VERSION_EVIDENCE_PROVEN
 SETTING_KEY_PRESENT=YES
 ACSS_4_0_1_OUTPUT_DECLARATION=YES
-SOURCE_OUTPUT_FEATURE_GUARD=option-contextual-color-variables=on
-EXACT_TOKEN_PATH=color.background.ultra_light
+TOKEN_PATH=color.background.ultra_light
 AUTHORITY_KIND=source_output_alias
-DISPOSITION=EXACT_OWNER_AUTHORITY_CANDIDATE
-IMPLEMENTATION_REQUIRED=YES
+AUTHORITY_ID=automatic-css-4.0.1:contextual-background:bg-ultra-light
+ACCEPTANCE_STATUS=ACCEPTED_CONDITIONAL_OWNER
+DIRECT_OUTPUT_OWNERSHIP_WHEN_GUARD_DISABLED_OR_UNPROVEN=NO
+TOKEN_TERMINAL_RESOLUTION=FAIL_CLOSED
+IMPLEMENTATION_AUTHORIZED=NO
 ```
 
 The existing repository mapping associates source key `bg-ultra-light` with
@@ -97,12 +120,16 @@ The existing repository mapping associates source key `bg-ultra-light` with
 establish that this setting emits the exact CSS variable, and the four
 identified generated outputs agree. Together these facts prove the
 `source_output_alias`; no declaration value or spelling similarity was used
-to choose the token path. This exact output-alias candidate applies only while
-the ACSS 4.0.1 contextual-variable emission feature is enabled. A disabled or
-unproven feature state does not establish direct-output authority. This
-candidate does not authorize implementation.
-Since R2 leaves the Milan occurrence unresolved, realizing it would require
-separate production-change authority after review.
+to choose the token path. The accepted owner applies only when the ACSS 4.0.1
+contextual-variable feature is enabled and the source/version evidence is
+proven. A disabled or unproven feature state establishes no direct-output
+owner. The value depends on `color.neutral.ultra_light` through
+`--neutral-ultra-light`; that dependency does not transfer ownership away
+from `color.background.ultra_light`.
+
+Existing terminal resolution must fail closed if the token is missing,
+unresolved, or lacks a supported terminal. This evidence acceptance does not
+resolve the R2 occurrence or authorize production implementation.
 
 ## `--black-trans-10`
 
@@ -165,19 +192,30 @@ be an unsupported inference, so the variable remains unresolved.
 ## Terminal state
 
 ```text
-BG_ULTRA_LIGHT_DISPOSITION=EXACT_OWNER_AUTHORITY_CANDIDATE
+BG_ULTRA_LIGHT_DISPOSITION=ACCEPTED_CONDITIONAL_OWNER
 BG_ULTRA_LIGHT_TOKEN_PATH=color.background.ultra_light
 BG_ULTRA_LIGHT_AUTHORITY_KIND=source_output_alias
+BG_ULTRA_LIGHT_AUTHORITY_ID=automatic-css-4.0.1:contextual-background:bg-ultra-light
+BG_ULTRA_LIGHT_FEATURE_GUARD=option-contextual-color-variables=on
 
 BLACK_TRANS_10_DISPOSITION=UNRESOLVED_INSUFFICIENT_EXACT_EVIDENCE
 BLACK_TRANS_10_TOKEN_PATH=NONE
 BLACK_TRANS_10_AUTHORITY_KIND=NONE_AUTHORIZED
+BLACK_TRANS_10_DIRECT_OWNER_AUTHORIZED=NO
 
 TEXT_DARK_MUTED_DISPOSITION=UNRESOLVED_INSUFFICIENT_EXACT_EVIDENCE
 TEXT_DARK_MUTED_TOKEN_PATH=NONE
 TEXT_DARK_MUTED_AUTHORITY_KIND=NONE_AUTHORIZED
+TEXT_DARK_MUTED_DIRECT_OWNER_AUTHORIZED=NO
 
-R3_IMPLEMENTATION_REQUIRED=YES_FOR_BG_ULTRA_LIGHT_CANDIDATE_ONLY
+R3_ACCEPTED=YES
+R3_ACCEPTED_MEANING=EVIDENCE_GATE_ACCEPTANCE_WITH_UNRESOLVED_BLOCKERS_NOT_IMPLEMENTATION_COMPLETION
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+R3_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+NEW_DESIGNDOCUMENT_DIGEST_AUTHORIZED=NO
+DESIGNDOCUMENT_DIGEST_REISSUED=NO
 AUTOMATIC_CSS_NORMALIZER_CHANGED=NO
 VARIABLE_AUTHORITY_CHANGED=NO
 BRICKS_NORMALIZER_CHANGED=NO
@@ -190,6 +228,8 @@ R4_WORK_PERFORMED=NO
 R5_WORK_PERFORMED=NO
 ```
 
-The candidate path is not an accepted owner mapping until independent review
-accepts this record. The two unresolved variables remain unresolved, and the
-overall final-generation style blockers are not cleared by this R3 result.
+The BG path is accepted as a conditional owner mapping for the R3 evidence
+gate. The `--text-dark-muted` and `--black-trans-10` paths remain unresolved.
+R3 acceptance does not change the R2 reconstruction identity, the historical
+unresolved occurrence counts, or the final-generation blockers. A separate
+authority is required before production implementation or final generation.

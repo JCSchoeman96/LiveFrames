@@ -12,24 +12,33 @@ BASE_TREE=b89711063cf364513edb372dd81784fc8da8ece5
 BASE_SIGNATURE=VALID
 BASE_CI_RUN=41685653586
 BASE_CI_RESULT=SUCCESS
-CURRENT_MAIN_SHA=20b0acb2c808ec2746d09fd218317aa8513f3a9f
-CURRENT_MAIN_TREE=d7a9964f90aa20fc635befebb60baaa92ba12b52
-CURRENT_R3_EVIDENCE_CANDIDATE_BLOB=fb550ca5ee17e9693f62967e39d964c98b0bee5e
-CURRENT_PROVENANCE_BASE_BLOB=839f7d060e06aa0fcb9e70d964821f442e6dacd8
-R3_SOURCE_OUTPUT_ALIAS_STATUS=REVIEWED_EVIDENCE_CANDIDATE
-R3_LIFECYCLE=AWAITING_INDEPENDENT_REVIEW
-R3_ACCEPTED=NO
+HISTORICAL_MAIN_SHA_AT_AUTHORITY_DRAFT=20b0acb2c808ec2746d09fd218317aa8513f3a9f
+HISTORICAL_MAIN_TREE_AT_AUTHORITY_DRAFT=d7a9964f90aa20fc635befebb60baaa92ba12b52
+R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT=fb550ca5ee17e9693f62967e39d964c98b0bee5e
+PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT=839f7d060e06aa0fcb9e70d964821f442e6dacd8
+R3_SOURCE_OUTPUT_ALIAS_STATUS=ACCEPTED_CONDITIONAL_OWNER
+R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
+R3_EVIDENCE_GATE_ACCEPTED=YES
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+BG_IMPLEMENTATION_AUTHORITY_ACCEPTED=NO
 ```
 
 The `BASE_*` identities above record this PR branch's historical base. The
-`CURRENT_MAIN_*` identities record the current main commit and tree; they do
-not replace the branch-base identities.
+`HISTORICAL_MAIN_*_AT_AUTHORITY_DRAFT` identities record main as inspected
+when this authority was drafted. `R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT`
+is the historical blob snapshot of
+`docs/development/feature_milan_ir7_color_variable_authority.md`, and
+`PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT` is the historical blob snapshot of
+`docs/04_SOURCE_AND_PROVENANCE.md`; both were inspected at
+`20b0acb2c808ec2746d09fd218317aa8513f3a9f`. Neither value identifies a current
+file blob. These historical identities do not identify current main or replace
+the branch-base identities.
 
 ## 1. Frozen owner
 
-The current [R3 color-variable authority candidate](feature_milan_ir7_color_variable_authority.md)
+The current [R3 color-variable authority](feature_milan_ir7_color_variable_authority.md)
 and its [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision)
-record this exact source-output evidence candidate:
+record this exact conditional source-output owner:
 
 ```text
 SOURCE=Automatic.css
@@ -41,9 +50,10 @@ AUTHORITY_KIND=source_output_alias
 OTHER_COLOR_VARIABLES=UNRESOLVED
 ```
 
-The `--bg-ultra-light` source-output alias is a reviewed evidence candidate,
-not an accepted R3 authority. The full R3 lifecycle remains
-`AWAITING_INDEPENDENT_REVIEW`, and `R3_ACCEPTED=NO`.
+The R3 evidence gate accepts this conditional `--bg-ultra-light`
+source-output owner for BG only. This implementation authority remains
+proposed and unaccepted. Implementation cannot start until the separate
+source-version proof contract is authorized.
 
 The owner has also approved the single contextual-output condition recorded
 in the [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision):
@@ -222,13 +232,14 @@ Do not add or run these tests in this authority-freeze change.
 
 ## 6. Scope and stop conditions
 
-This authority proposes only the one `--bg-ultra-light` source-output alias
-and its necessary native package mapping. The contextual-output condition is
-limited to the owner-approved `on`/`off` fact cited above. It does not
-authorize production implementation before independent acceptance and merge.
-Implementation remains blocked until a separate source-version proof contract
-is authorized. This document does not change the Loader or Normalizer trust
-boundary, `VariableAuthority.resolve/2`, `resolve_terminal/2`, generic
+This proposed authority covers only the one `--bg-ultra-light` source-output
+alias and its necessary native package mapping. The contextual-output
+condition is limited to the owner-approved `on`/`off` fact cited above. The
+R3 evidence gate accepts BG-only ownership, but this implementation authority
+remains unaccepted and does not authorize production implementation.
+Implementation remains blocked until a separate source-version proof
+contract is authorized. This document does not change the Loader or Normalizer
+trust boundary, `VariableAuthority.resolve/2`, `resolve_terminal/2`, generic
 variable candidate rules, other color authority, TokenSet schema, or Design
 IR schema. It does not start R4 or R5.
 
@@ -251,7 +262,7 @@ STOP=PRIMARY_CHECKOUT_MUTATED
 STOP=REPEATED_FIX_FAILURE_ROOT_CAUSE_REVIEW_REQUIRED
 ```
 
-The next action after this authority candidate is independent review:
+The next action for this proposed implementation authority is independent review:
 
 ```text
 STOP=AWAIT_R3_BG_IMPLEMENTATION_AUTHORITY_REVIEW
