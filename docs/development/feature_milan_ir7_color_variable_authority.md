@@ -143,7 +143,6 @@ SOURCE_VARIABLE_EMISSION_PROVEN=YES
 TOKEN_PATH_OWNERSHIP_PROVEN=NO
 SETTING_KEY_PRESENT=YES
 ACSS_4_0_1_OUTPUT_DECLARATION=YES
-SOURCE_OUTPUT_FEATURE_GUARD=option-contextual-color-variables=on
 EXACT_TOKEN_PATH=NONE
 AUTHORITY_KIND=NONE_AUTHORIZED
 DISPOSITION=UNRESOLVED_INSUFFICIENT_EXACT_EVIDENCE
@@ -156,8 +155,7 @@ that group as contextual CSS variables, and the generated variables
 stylesheet contains the declaration in its global `:root` block at line 373.
 The other three generated outputs contain the declaration at line 373. This
 proves that ACSS emits the variable, but it does not establish a LiveFrames
-semantic token path. This guard records the source-emission condition only;
-it does not establish ownership. The accepted canonical token inventory lists
+semantic token path. The accepted canonical token inventory lists
 `color.text.dark` and `color.text.light`,
 but no exact path for this source item, and no separate explicit project
 contract supplies one. The source expression preserved in R2 is consumer
