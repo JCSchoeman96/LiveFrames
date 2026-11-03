@@ -14,8 +14,8 @@ BASE_CI_RUN=41685653586
 BASE_CI_RESULT=SUCCESS
 HISTORICAL_MAIN_SHA_AT_AUTHORITY_DRAFT=20b0acb2c808ec2746d09fd218317aa8513f3a9f
 HISTORICAL_MAIN_TREE_AT_AUTHORITY_DRAFT=d7a9964f90aa20fc635befebb60baaa92ba12b52
-CURRENT_R3_EVIDENCE_CANDIDATE_BLOB=fb550ca5ee17e9693f62967e39d964c98b0bee5e
-CURRENT_PROVENANCE_BASE_BLOB=839f7d060e06aa0fcb9e70d964821f442e6dacd8
+R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT=fb550ca5ee17e9693f62967e39d964c98b0bee5e
+PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT=839f7d060e06aa0fcb9e70d964821f442e6dacd8
 R3_SOURCE_OUTPUT_ALIAS_STATUS=ACCEPTED_CONDITIONAL_OWNER
 R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
 R3_EVIDENCE_GATE_ACCEPTED=YES
@@ -25,7 +25,13 @@ BG_IMPLEMENTATION_AUTHORITY_ACCEPTED=NO
 
 The `BASE_*` identities above record this PR branch's historical base. The
 `HISTORICAL_MAIN_*_AT_AUTHORITY_DRAFT` identities record main as inspected
-when this authority was drafted. They do not identify current main or replace
+when this authority was drafted. `R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT`
+is the historical blob snapshot of
+`docs/development/feature_milan_ir7_color_variable_authority.md`, and
+`PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT` is the historical blob snapshot of
+`docs/04_SOURCE_AND_PROVENANCE.md`; both were inspected at
+`20b0acb2c808ec2746d09fd218317aa8513f3a9f`. Neither value identifies a current
+file blob. These historical identities do not identify current main or replace
 the branch-base identities.
 
 ## 1. Frozen owner
