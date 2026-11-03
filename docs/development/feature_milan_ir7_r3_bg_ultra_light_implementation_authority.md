@@ -12,15 +12,24 @@ BASE_TREE=b89711063cf364513edb372dd81784fc8da8ece5
 BASE_SIGNATURE=VALID
 BASE_CI_RUN=41685653586
 BASE_CI_RESULT=SUCCESS
-ACCEPTED_R3_AUTHORITY_BLOB=a2d4238ad72c32df1e438055490125241f21f0e1
-ACCEPTED_R3_PROVENANCE_BLOB=839f7d060e06aa0fcb9e70d964821f442e6dacd8
+CURRENT_MAIN_SHA=20b0acb2c808ec2746d09fd218317aa8513f3a9f
+CURRENT_MAIN_TREE=d7a9964f90aa20fc635befebb60baaa92ba12b52
+CURRENT_R3_EVIDENCE_CANDIDATE_BLOB=fb550ca5ee17e9693f62967e39d964c98b0bee5e
+CURRENT_PROVENANCE_BASE_BLOB=839f7d060e06aa0fcb9e70d964821f442e6dacd8
+R3_SOURCE_OUTPUT_ALIAS_STATUS=REVIEWED_EVIDENCE_CANDIDATE
+R3_LIFECYCLE=AWAITING_INDEPENDENT_REVIEW
+R3_ACCEPTED=NO
 ```
+
+The `BASE_*` identities above record this PR branch's historical base. The
+`CURRENT_MAIN_*` identities record the current main commit and tree; they do
+not replace the branch-base identities.
 
 ## 1. Frozen owner
 
-The accepted [R3 color-variable authority](feature_milan_ir7_color_variable_authority.md)
+The current [R3 color-variable authority candidate](feature_milan_ir7_color_variable_authority.md)
 and its [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision)
-authorize this exact source-output fact:
+record this exact source-output evidence candidate:
 
 ```text
 SOURCE=Automatic.css
@@ -31,6 +40,10 @@ TOKEN_PATH=color.background.ultra_light
 AUTHORITY_KIND=source_output_alias
 OTHER_COLOR_VARIABLES=UNRESOLVED
 ```
+
+The `--bg-ultra-light` source-output alias is a reviewed evidence candidate,
+not an accepted R3 authority. The full R3 lifecycle remains
+`AWAITING_INDEPENDENT_REVIEW`, and `R3_ACCEPTED=NO`.
 
 The owner has also approved the single contextual-output condition recorded
 in the [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision):
