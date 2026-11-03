@@ -1,11 +1,11 @@
 # Feature Milan IR7 R3 source identity proof authority
 
-Status: proposed for independent review. This document freezes a source input
-proof contract for the reviewed Automatic.css 4.0.1 fixture. It does not
-authorize production implementation.
+Status: independently reviewed and accepted as a proof design. This document
+freezes a source input proof contract for the reviewed Automatic.css 4.0.1
+fixture. It does not authorize production implementation.
 
 ```text
-AUTHORITY_STATE=AWAITING_INDEPENDENT_REVIEW
+AUTHORITY_STATE=ACCEPTED_PROOF_DESIGN
 BASE_MAIN_SHA=7437c0bf1d0dc1d4009a1c9aaa6b7626d64ae0fa
 BASE_MAIN_TREE=0af3268e6367455f28a0d4d7421a3584f32bead8
 BASE_POST_MERGE_CI=41696448929
@@ -13,8 +13,11 @@ BASE_POST_MERGE_CI_RESULT=SUCCESS
 REFERENCE_FIXTURE=fixtures/automatic_css/acss_settings.json
 REFERENCE_FIXTURE_SIZE_BYTES=92199
 REFERENCE_FIXTURE_SHA256=19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05
-REFERENCE_DIGEST_STATUS=PROPOSED_FOR_REVIEW
+REFERENCE_DIGEST_STATUS=ACCEPTED_EXACT_FIXTURE_ONLY
 SOURCE_VERSION=Automatic.css 4.0.1 reference set
+R3_PROOF_AUTHORITY_ACCEPTANCE=YES
+PROOF_IMPLEMENTED=NO
+PROOF_IMPLEMENTATION_AUTHORIZED=NO
 R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
 R3_ACCEPTED=YES
 R3_ACCEPTED_MEANING=EVIDENCE_GATE_ACCEPTANCE_WITH_UNRESOLVED_BLOCKERS_NOT_IMPLEMENTATION_COMPLETION
@@ -22,14 +25,32 @@ R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 R3_BG_IMPLEMENTATION_AUTHORIZED=NO
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
+ACCEPTANCE_REVIEW_MERGE_PR=368
+ACCEPTANCE_REVIEW_MERGE_SHA=f6376063b92d98a8a1b1178dd8ab05f104a5307e
+ACCEPTANCE_REVIEW_MERGE_TREE=6fee1782fecb4579a78e9eb238efe71928a7f18f
+ACCEPTANCE_REVIEW_POST_MERGE_CI_RUN=41706616256
+ACCEPTANCE_REVIEW_POST_MERGE_CI_RESULT=SUCCESS
 ```
+
+The independent acceptance review checked the [merged proof authority PR
+#368](https://github.com/JCSchoeman96/LiveFrames/pull/368) at the recorded
+main commit and tree, and the [successful post-merge CI
+run](https://github.com/JCSchoeman96/LiveFrames/actions/runs/41706616256).
+The checked-in fixture matches the accepted byte length and digest. Its
+identity remains separate from the staging S5 export in the canonical
+provenance decision. The contract keeps `AutomaticCSS.from_reference_file/2`
+as the proposed entrypoint, which remains unimplemented. The review found the
+proof boundary, legacy API constraints, feature guard, terminal failure
+rules, test requirements, and BG-only scope consistent with this contract.
+It required no design changes and grants no production implementation
+authority.
 
 `R3_ACCEPTED=YES` reflects the BG-only evidence-gate acceptance recorded on
 current main. It does not expand or reapprove R3 evidence, or accept this
-source-identity proof authority. This authority remains pending independent
-review, and its implementation authorization remains `NO`.
+source-identity proof authority beyond the bounded proof design recorded here.
+Production implementation remains unauthorized.
 
-The proposed digest identifies the exact bytes of the checked-in fixture. The
+The accepted digest identifies the exact bytes of the checked-in fixture. The
 fixture provenance record names Automatic.css 4.0.1 as its reference-set
 version. The source/version association comes from that reviewed provenance,
 not from the digest alone, the fixture's JSON fields, or caller metadata. This
@@ -82,7 +103,7 @@ The only eligible reference identity is this pair:
 | Version scope | Automatic.css 4.0.1 reference set for this fixture only |
 | Contextual feature option in the fixture | `option-contextual-color-variables=on` |
 
-The proposed digest is a byte identity for the repository fixture. It is not
+The accepted digest is a byte identity for the repository fixture. It is not
 a vendor signature, and a matching digest alone does not establish vendor
 version. The accepted version binding is the reviewed provenance record named
 above. If that record no longer supports this fixture's 4.0.1 reference-set
@@ -255,14 +276,13 @@ bytes or full input values in diagnostics.
 
 ## 8. Scope and stop conditions
 
-This proposal grants no production implementation authority. It does not
-change the existing TokenSet, VariableAuthority, or Design IR contracts. It
-does not expand or reapprove the R3 evidence gate, which current main records
-as accepted for `BG_ULTRA_LIGHT_ONLY` with unresolved blockers. This
-source-identity proof authority remains pending its own independent review
-and acceptance. It does not authorize BG implementation, R4, or R5, add a
-generic attestation system, or claim compatibility with arbitrary
-Automatic.css exports.
+This accepted proof design grants no production implementation authority. It
+does not change the existing TokenSet, VariableAuthority, or Design IR
+contracts. It does not expand or reapprove the R3 evidence gate, which current
+main records as accepted for `BG_ULTRA_LIGHT_ONLY` with unresolved blockers.
+This source-identity proof design is accepted only for the exact fixture and
+does not authorize BG implementation, R4, or R5, add a generic attestation
+system, or claim compatibility with arbitrary Automatic.css exports.
 
 Stop if any of these conditions occurs:
 
@@ -280,9 +300,9 @@ STOP=PRIVATE_SOURCE_PUBLICATION_REQUIRED
 STOP=REPEATED_FIX_FAILURE_ROOT_CAUSE_REVIEW_REQUIRED
 ```
 
-After independent review and acceptance of this proof authority, the next
-permitted step is a separate implementation-authorization decision. This
-document does not start that implementation.
+This proof authority is accepted for design only. The next permitted step is
+a separate implementation-authorization decision. This document does not
+start that implementation.
 
 ```text
 R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
@@ -293,5 +313,5 @@ R3_BG_IMPLEMENTATION_AUTHORIZED=NO
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
 PRODUCTION_CHANGED=NO
-STOP=AWAIT_R3_SOURCE_IDENTITY_PROOF_AUTHORITY_REVIEW
+STOP=AWAIT_SEPARATE_PROOF_IMPLEMENTATION_AUTHORIZATION
 ```
