@@ -8,14 +8,16 @@ Scoped publication status and approved source/version identities are recorded in
 ```text
 TASK=FEATURE_MILAN_IR7_R3_EXACT_COLOR_VARIABLE_EVIDENCE
 R3_LIFECYCLE=AWAITING_INDEPENDENT_REVIEW
-R3_EVIDENCE_CORPUS_COMPLETE=YES
+R3_BOUNDED_APPROVED_EVIDENCE_SET_INSPECTED=YES
+R3_EVIDENCE_SCOPE=S1,S2,S3,S5,S7,S8,S9,S10
+MATCHING_STAGING_ENVIRONMENT_EVIDENCE_COMPLETE=NO
 
-CURRENT_MAIN_SHA=5c4c307ef38c264dd0da41d23a907688df2f619e
-CURRENT_MAIN_TREE=e3c53f87d62a4c5b5cf34faf2112fe1658a73309
-CURRENT_MAIN_SIGNATURE=VALID
-CURRENT_MAIN_CI_RUN=41648772191
-CURRENT_MAIN_CI_EVENT=push
-CURRENT_MAIN_CI_RESULT=SUCCESS
+R3_EVIDENCE_BASE_SHA=5c4c307ef38c264dd0da41d23a907688df2f619e
+R3_EVIDENCE_BASE_TREE=e3c53f87d62a4c5b5cf34faf2112fe1658a73309
+R3_EVIDENCE_BASE_SIGNATURE=VALID
+R3_EVIDENCE_BASE_CI_RUN=41648772191
+R3_EVIDENCE_BASE_CI_EVENT=push
+R3_EVIDENCE_BASE_CI_RESULT=SUCCESS
 SOURCE_VERSION_IDENTITY_PROVEN=YES
 SOURCE_ENVIRONMENT=Local Site danbricks
 SOURCE_VERSION=Automatic.css 4.0.1
@@ -60,6 +62,10 @@ The artifact identifiers used below refer only to that approved set:
 S1, S2, S3, S5, S7, S8, S9, and S10. This candidate publishes no source,
 generated stylesheet, or configuration-export contents.
 
+The matching staging global-variable registry and custom-code/style export
+were unavailable, so completeness is claimed only for the identified bounded
+evidence set.
+
 The accepted ACSS token adapter inventory contains
 `color.background.ultra_light`; the R2 authority records the source-key
 mapping for `bg-ultra-light`. The inventory contains no exact LiveFrames
@@ -79,6 +85,7 @@ EVIDENCE_ARTIFACTS=S1,S2,S3,S5,S7,S8,S9,S10
 OWNERSHIP_PROVEN=YES
 SETTING_KEY_PRESENT=YES
 ACSS_4_0_1_OUTPUT_DECLARATION=YES
+SOURCE_OUTPUT_FEATURE_GUARD=option-contextual-color-variables=on
 EXACT_TOKEN_PATH=color.background.ultra_light
 AUTHORITY_KIND=source_output_alias
 DISPOSITION=EXACT_OWNER_AUTHORITY_CANDIDATE
@@ -90,7 +97,10 @@ The existing repository mapping associates source key `bg-ultra-light` with
 establish that this setting emits the exact CSS variable, and the four
 identified generated outputs agree. Together these facts prove the
 `source_output_alias`; no declaration value or spelling similarity was used
-to choose the token path. This candidate does not authorize implementation.
+to choose the token path. This exact output-alias candidate applies only while
+the ACSS 4.0.1 contextual-variable emission feature is enabled. A disabled or
+unproven feature state does not establish direct-output authority. This
+candidate does not authorize implementation.
 Since R2 leaves the Milan occurrence unresolved, realizing it would require
 separate production-change authority after review.
 
@@ -133,6 +143,7 @@ SOURCE_VARIABLE_EMISSION_PROVEN=YES
 TOKEN_PATH_OWNERSHIP_PROVEN=NO
 SETTING_KEY_PRESENT=YES
 ACSS_4_0_1_OUTPUT_DECLARATION=YES
+SOURCE_OUTPUT_FEATURE_GUARD=option-contextual-color-variables=on
 EXACT_TOKEN_PATH=NONE
 AUTHORITY_KIND=NONE_AUTHORIZED
 DISPOSITION=UNRESOLVED_INSUFFICIENT_EXACT_EVIDENCE
@@ -145,7 +156,8 @@ that group as contextual CSS variables, and the generated variables
 stylesheet contains the declaration in its global `:root` block at line 373.
 The other three generated outputs contain the declaration at line 373. This
 proves that ACSS emits the variable, but it does not establish a LiveFrames
-semantic token path. The accepted canonical token inventory lists
+semantic token path. This guard records the source-emission condition only;
+it does not establish ownership. The accepted canonical token inventory lists
 `color.text.dark` and `color.text.light`,
 but no exact path for this source item, and no separate explicit project
 contract supplies one. The source expression preserved in R2 is consumer
