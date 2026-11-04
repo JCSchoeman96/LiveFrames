@@ -18,6 +18,25 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     Jason.decode!(File.read!(fixture_path()))
   end
 
+  defp with_temp_reference(bytes, fun) do
+    directory =
+      Path.join(
+        System.tmp_dir!(),
+        "liveframes-acss-reference-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(directory)
+    path = Path.join(directory, "acss_settings.json")
+
+    try do
+      File.write!(path, bytes)
+      fun.(path)
+    after
+      File.rm(path)
+      File.rmdir(directory)
+    end
+  end
+
   defp accepted_fixture_token_set do
     {:ok, token_set, _diagnostics} =
       AutomaticCSS.from_file(fixture_path(),
@@ -116,6 +135,31 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     |> Enum.find(&(&1["variable"] == variable and &1["kind"] == kind))
   end
 
+  defp assert_no_bg_ultra_light_source_output_alias(token_set) do
+    refute Enum.any?(token_set.tokens, fn {_path, token} ->
+             Enum.any?(Map.get(token.metadata, "variable_authorities", []), fn authority ->
+               authority["kind"] == "source_output_alias" and
+                 authority["variable"] == "--bg-ultra-light"
+             end)
+           end)
+  end
+
+  defp assert_bounded_source_error(diagnostics, forbidden_values) do
+    assert diagnostics != []
+
+    assert Enum.all?(diagnostics, fn diagnostic ->
+             is_binary(diagnostic.message) and String.length(diagnostic.message) <= 160 and
+               is_nil(diagnostic.path) and is_nil(diagnostic.source_key) and
+               diagnostic.metadata == %{}
+           end)
+
+    rendered = inspect(diagnostics)
+
+    Enum.each(forbidden_values, fn forbidden ->
+      refute rendered =~ forbidden
+    end)
+  end
+
   defp minimal_settings do
     %{
       "color-primary" => "#32a2c1",
@@ -191,6 +235,169 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert token_set.token_set_version == "1.0.0"
     assert is_list(diagnostics)
     assert token_set.source_metadata["source_shape"] == "flat_settings_map"
+  end
+
+  test "trusted reference ingestion fixes source identity despite caller metadata" do
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.from_reference_file(fixture_path(),
+               strict: true,
+               profile: :hero_foundation,
+               source_version: "99.0.0",
+               source_version_status: "caller_claimed_embedded",
+               export_version: "99.0.0"
+             )
+
+    assert token_set.source_metadata["source_version"] == "4.0.1"
+    assert token_set.source_metadata["source_version_status"] == "fixture_reference"
+    assert token_set.source_metadata["export_version"] == nil
+    assert token_set.source_metadata["source_shape"] == "flat_settings_map"
+
+    assert Map.keys(token_set.source_metadata) |> Enum.sort() ==
+             Enum.sort([
+               "source_system",
+               "source_type",
+               "source_shape",
+               "source_version",
+               "source_version_status",
+               "export_version",
+               "adapter",
+               "adapter_version",
+               "source_key_count",
+               "compatibility"
+             ])
+
+    assert Enum.all?(token_set.tokens, fn {_path, token} ->
+             token.provenance["source_version"] == "4.0.1" and
+               token.provenance["export_version"] == nil
+           end)
+
+    assert_no_bg_ultra_light_source_output_alias(token_set)
+  end
+
+  test "trusted reference accepts the exact bytes from another path" do
+    bytes = File.read!(fixture_path())
+
+    with_temp_reference(bytes, fn other_path ->
+      assert other_path != fixture_path()
+      assert Path.basename(other_path) == Path.basename(fixture_path())
+      assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_reference_file(other_path)
+      assert token_set.source_metadata["source_version"] == "4.0.1"
+      assert_no_bg_ultra_light_source_output_alias(token_set)
+    end)
+  end
+
+  test "trusted reference rejects a one-byte change without legacy fallback" do
+    bytes = File.read!(fixture_path())
+    mutated_bytes = :binary.replace(bytes, "\n", " ")
+
+    assert byte_size(mutated_bytes) == byte_size(bytes)
+    refute mutated_bytes == bytes
+    assert {:ok, _settings} = Jason.decode(mutated_bytes)
+
+    with_temp_reference(mutated_bytes, fn path ->
+      assert {:ok, _legacy_token_set, _diagnostics} = AutomaticCSS.from_file(path)
+
+      assert {:error, diagnostics} = AutomaticCSS.from_reference_file(path)
+      assert Enum.any?(diagnostics, &(&1.code == "acss.source.reference_mismatch"))
+      assert_bounded_source_error(diagnostics, [path, mutated_bytes])
+    end)
+  end
+
+  test "trusted reference rejects invalid JSON at the byte boundary" do
+    bytes = File.read!(fixture_path())
+    private_marker = "PRIVATE_STAGE_A_INPUT_SENTINEL"
+
+    invalid_bytes =
+      private_marker <>
+        binary_part(
+          bytes,
+          byte_size(private_marker),
+          byte_size(bytes) - byte_size(private_marker)
+        )
+
+    assert byte_size(invalid_bytes) == byte_size(bytes)
+    assert {:error, _decode_error} = Jason.decode(invalid_bytes)
+
+    with_temp_reference(invalid_bytes, fn path ->
+      assert {:error, diagnostics} = AutomaticCSS.from_reference_file(path)
+      assert Enum.any?(diagnostics, &(&1.code == "acss.source.reference_mismatch"))
+      refute Enum.any?(diagnostics, &(&1.code == "acss.source.json_invalid"))
+      assert_bounded_source_error(diagnostics, [path, private_marker, invalid_bytes])
+    end)
+  end
+
+  test "trusted reference rejects truncated, oversized, and empty files" do
+    bytes = File.read!(fixture_path())
+
+    invalid_inputs = [
+      {"truncated", binary_part(bytes, 0, byte_size(bytes) - 1)},
+      {"oversized", bytes <> "x"},
+      {"empty", <<>>}
+    ]
+
+    for {label, invalid_bytes} <- invalid_inputs do
+      with_temp_reference(invalid_bytes, fn path ->
+        assert {:error, diagnostics} = AutomaticCSS.from_reference_file(path), label
+        assert Enum.any?(diagnostics, &(&1.code == "acss.source.reference_mismatch")), label
+        forbidden = if invalid_bytes == <<>>, do: [path], else: [path, invalid_bytes]
+        assert_bounded_source_error(diagnostics, forbidden)
+      end)
+    end
+  end
+
+  test "trusted reference rejects missing, unreadable, and invalid-argument inputs safely" do
+    missing_marker = "PRIVATE_STAGE_A_MISSING_#{System.unique_integer([:positive])}"
+    missing_path = Path.join(System.tmp_dir!(), missing_marker)
+    unreadable_path = Path.dirname(fixture_path())
+
+    for {label, result, forbidden} <- [
+          {"missing", AutomaticCSS.from_reference_file(missing_path), [missing_path]},
+          {"directory", AutomaticCSS.from_reference_file(unreadable_path), [unreadable_path]},
+          {"invalid path", AutomaticCSS.from_reference_file(:not_a_path), [inspect(:not_a_path)]},
+          {"invalid options",
+           AutomaticCSS.from_reference_file(fixture_path(), [:private_option_sentinel]),
+           ["private_option_sentinel"]}
+        ] do
+      assert {:error, diagnostics} = result, label
+      assert_bounded_source_error(diagnostics, forbidden)
+    end
+  end
+
+  test "trusted reference results are deterministic and preserve required-path behavior" do
+    first = AutomaticCSS.from_reference_file(fixture_path(), required_paths: ["color.primary"])
+    second = AutomaticCSS.from_reference_file(fixture_path(), required_paths: ["color.primary"])
+
+    assert first == second
+    assert {:ok, token_set, _diagnostics} = first
+    assert token_set.tokens["color.primary"]
+    assert_no_bg_ultra_light_source_output_alias(token_set)
+  end
+
+  test "legacy adapter APIs keep caller descriptive identity metadata" do
+    bytes = File.read!(fixture_path())
+    settings = Jason.decode!(bytes)
+
+    identity_options = [
+      source_version: "legacy-described-version",
+      source_version_status: "legacy-described-status",
+      export_version: "legacy-described-export"
+    ]
+
+    with_temp_reference(bytes, fn path ->
+      results = [
+        AutomaticCSS.from_file(path, identity_options),
+        AutomaticCSS.from_json(bytes, identity_options),
+        AutomaticCSS.normalize(settings, identity_options)
+      ]
+
+      for result <- results do
+        assert {:ok, token_set, _diagnostics} = result
+        assert token_set.source_metadata["source_version"] == "legacy-described-version"
+        assert token_set.source_metadata["source_version_status"] == "legacy-described-status"
+        assert token_set.source_metadata["export_version"] == "legacy-described-export"
+        assert_no_bg_ultra_light_source_output_alias(token_set)
+      end
+    end)
   end
 
   test "does not claim a source version when the input has no embedded version" do
