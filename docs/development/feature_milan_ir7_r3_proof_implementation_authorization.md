@@ -1,20 +1,63 @@
 # Feature Milan IR7 R3 proof implementation authorization
 
-Status: proposed for independent review. This candidate requests approval for a
-proof-only trusted-ingestion implementation. It does not authorize production
-implementation until a separate reviewed decision changes the authorization
-state below.
+Owner decision recorded: the project owner approved only the proof-only
+trusted-ingestion scope below on 2026-11-04. Independent review and merge are
+still required before implementation is authorized.
 
 ```text
-AUTHORIZATION_STATE=PROPOSED_FOR_INDEPENDENT_REVIEW
+AUTHORIZATION_STATE=OWNER_APPROVED_PENDING_INDEPENDENT_REVIEW_AND_MERGE
+OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
+OWNER_APPROVAL_STATUS=APPROVED
+OWNER_APPROVAL_DATE=2026-11-04
+OWNER_APPROVAL_SOURCE=EXPLICIT_OWNER_DECISION_IN_CONVERSATION
 PROOF_DESIGN_ACCEPTED=YES
 PROOF_IMPLEMENTATION_AUTHORIZED=NO
+PROOF_IMPLEMENTED=NO
 BG_ALIAS_IMPLEMENTATION_AUTHORIZED=NO
 
 R3_ACCEPTED=YES
 R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+```
+
+## Owner decision record
+
+The project owner explicitly approved this exact proof-only scope in this
+conversation on 2026-11-04. This records the owner's decision; it does not
+claim an external approval URL, GitHub review, or owner signature. A separate
+independent review must confirm that the changed documents preserve this
+boundary.
+
+The current pre-merge state remains `PROOF_IMPLEMENTATION_AUTHORIZED=NO` until
+independent review and successful merge. Pull request
+[#371](https://github.com/JCSchoeman96/LiveFrames/pull/371) merged the prior
+proposal document; that merge did not authorize implementation.
+
+Owner approval is now recorded above. Keep the pre-merge state unauthorized
+while independent review or merge remains pending. The effective state below
+applies only after independent review and successful merge of this approved
+revision.
+
+## Effective state after independent review and merge
+
+This is the post-merge state. It does not apply while independent review or
+merge is pending. After both gates pass, the proof-only implementation is
+authorized, while the BG alias, R4, R5, and final generation remain
+unauthorized.
+
+```text
+PROOF_DESIGN_ACCEPTED=YES
+PROOF_IMPLEMENTATION_AUTHORIZED=YES
+PROOF_IMPLEMENTED=NO
+
+BG_ALIAS_IMPLEMENTATION_AUTHORIZED=NO
+R3_ACCEPTED=YES
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+R4_AUTHORIZED=NO
+R5_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
 ```
 
 ## Review boundary
@@ -23,33 +66,75 @@ The accepted proof design is recorded in
 [`feature_milan_ir7_r3_source_identity_proof_authority.md`](feature_milan_ir7_r3_source_identity_proof_authority.md).
 The R3 color-variable authority accepts the conditional `--bg-ultra-light`
 owner for the BG-only evidence gate. Its separate implementation authority
-remains proposed and unaccepted. This candidate requests permission to verify
-the fixed reference input only. It does not grant the BG alias, clear other R3
-blockers, or authorize R4 or R5 work.
+remains proposed and unaccepted. This owner decision covers proof-only
+verification of the fixed reference input; implementation remains
+unauthorized until independent review and successful merge. It does not grant
+the BG alias, clear other R3 blockers, or authorize R4 or R5 work.
 
 `R3_ACCEPTED=YES` records evidence-gate acceptance only. It does not mean proof
 or BG implementation is complete or authorized.
 
-The values in the state block remain unchanged while this candidate awaits
-review. A reviewer must record a separate approval decision before proof
-implementation may start. That decision must not authorize BG alias
-implementation.
+The owner-approved pre-merge state remains
+`PROOF_IMPLEMENTATION_AUTHORIZED=NO` while independent review and merge are
+pending. The decision does not authorize BG alias implementation.
 
-## Verified authority baseline
+## Historical proposal-preparation baseline
 
-The candidate was prepared from the following main commit, tree, and CI run:
+The following identities record the baseline used to prepare the original
+proposal. Preserve them as historical records; the approval-time snapshot
+below records the later authority state checked for this owner decision.
 
 ```text
-EXPECTED_MAIN=83331d923df29e0fb933d7f865502154be7d4ec4
-EXPECTED_MAIN_TREE=1cda76b30233e90530945e08a650fb946b38d3df
-EXPECTED_MAIN_CI=41778480449
-EXPECTED_MAIN_CI_RESULT=SUCCESS
+EXPECTED_MAIN=77ce052be82d76c409bea9f279d26cc12111b468
+EXPECTED_TREE=b7d5e3f5700c11bad3e61c9d0242813b12434e0b
+POST_MERGE_CI=41782456503
+POST_MERGE_CI_RESULT=SUCCESS
 
-PROOF_AUTHORITY_BLOB=4f9018c2fe5ae2fce57275a9c807026a53f94fbd
+PROOF_IMPLEMENTATION_AUTHORIZATION_BLOB=1c1daf60e5a4dd7ae6597f15258fdbd99bb22b93
+ACCEPTED_PROOF_DESIGN_BLOB=4f9018c2fe5ae2fce57275a9c807026a53f94fbd
 R3_AUTHORITY_BLOB=361c1811f485e414fe323565334f4ddb27b31e83
 BG_IMPLEMENTATION_AUTHORITY_BLOB=5e5b4a0fd66931614cd4e24d625b1438993fccf6
 PROVENANCE_BLOB=2aeeabebbfcda185ab08ae3200e59e7455fef9df
 ```
+
+These blob IDs identify the verified inputs at `EXPECTED_MAIN`, before this
+proposal's documentation changes. They do not identify the approval-time
+snapshot below. The owner decision does not change the accepted proof
+contract, BG authority, or fixture-publication permissions.
+
+## Owner-approval-time verification snapshot
+
+The following live identities were checked before recording this owner
+decision. The main commit and CI run identify the same successful main
+revision. The PR values identify PR #373 immediately before this amendment.
+
+```text
+APPROVAL_TIME=2026-11-04
+APPROVAL_TIME_MAIN_SHA=cc01aba34576c9250145bce2ed7ca2cbc3ae6330
+APPROVAL_TIME_MAIN_TREE=e02697df24ef227884b26d66a9aeea3295c37309
+APPROVAL_TIME_MAIN_CI_RUN=41787617778
+APPROVAL_TIME_MAIN_CI_COMMIT=cc01aba34576c9250145bce2ed7ca2cbc3ae6330
+APPROVAL_TIME_MAIN_CI_RESULT=SUCCESS
+APPROVAL_TIME_BG_AUTHORITY_BLOB=b304c7adac037efdef0555937b66fd1378fed9c2
+
+APPROVAL_TIME_PR=373
+APPROVAL_TIME_PR_PREAMENDMENT_HEAD=06c48a8d01d3143d82e3eefa5af28ebc0bf4d4f4
+APPROVAL_TIME_PR_PREAMENDMENT_TREE=74b16362dc7359cbb601c794fa13b4f7d56268a7
+APPROVAL_TIME_AUTHORIZATION_DOCUMENT_BLOB=cbdada899451d849e09d51f606fe1fa78b5d6d76
+APPROVAL_TIME_PROVENANCE_DOCUMENT_BLOB=546f5a75b3ed656a8597aaac420b920f66093dac
+```
+
+PR #372's `PROOF_IMPLEMENTATION_AUTHORIZED=NO` fields record the state at
+that authority's historical reconciliation and remain true for that snapshot.
+Its `BG_IMPLEMENTATION_AUTHORIZED=NO` remains current: this owner decision
+authorizes no BG Stage B work. The updated BG authority keeps Stage A and Stage
+B separate; Stage B still requires completed and merged Stage A, successful
+post-merge CI, and its own BG implementation authorization.
+
+The accepted proof-design document remains unchanged. Its
+`PROOF_IMPLEMENTATION_AUTHORIZED=NO` field records the state when that design
+was accepted. This decision record controls any later implementation
+permission.
 
 These blobs identify the accepted proof design in
 [`feature_milan_ir7_r3_source_identity_proof_authority.md`](feature_milan_ir7_r3_source_identity_proof_authority.md),
@@ -83,12 +168,13 @@ BROADER_FIXTURE_PROJECT_USE_STATUS=unknown
 BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
 ```
 
-This candidate publishes no fixture contents and does not change the permissions in
-[`04_SOURCE_AND_PROVENANCE.md`](../04_SOURCE_AND_PROVENANCE.md).
+This owner decision publishes no fixture contents and does not change the
+permissions in [`04_SOURCE_AND_PROVENANCE.md`](../04_SOURCE_AND_PROVENANCE.md).
 
-## Files covered if approval is granted
+## Files covered by this proof-only decision
 
-The later proof-only implementation may change only these files:
+If the authorization becomes effective after independent review and merge,
+implementation may change only these files:
 
 ```text
 apps/live_frames/lib/live_frames/adapters/automatic_css/loader.ex
@@ -96,12 +182,13 @@ apps/live_frames/lib/live_frames/adapters/automatic_css.ex
 apps/live_frames/test/live_frames/automatic_css_adapter_test.exs
 ```
 
-The candidate itself changes documentation only. Any implementation must be a
-separate change after independent approval.
+This amendment changes documentation only. Any implementation must be a
+separate change after independent review and successful merge.
 
 ## Trusted reference operation
 
-If separately approved, the implementation may add the public opt-in
+If this authorization becomes effective after independent review and merge,
+the implementation may add the public opt-in
 `AutomaticCSS.from_reference_file/2` operation for the one accepted reference
 identity. The input path locates bytes. It does not select a source version or
 prove identity by its name.
@@ -118,9 +205,24 @@ The operation must meet these requirements:
 - Bind the match to the fixed internal Automatic.css 4.0.1 reference record
   and its reviewed provenance. Caller options, including `source_version` and
   `source_version_status`, cannot select or establish that identity.
+- Populate the existing source-identity metadata from that fixed record. A
+  successful trusted result must report `source_version` as `"4.0.1"` and
+  `source_version_status` as `"fixture_reference"`. This existing descriptive
+  status is not a separate proof flag.
+- The accepted fixture has no embedded vendor `export_version`. Always report
+  `export_version` as `nil` for this trusted result; caller options cannot
+  claim an embedded export version.
+- Ignore caller-supplied `source_version`, `source_version_status`,
+  `export_version`, and equivalent source-identity claims wherever they occur
+  in supported conversion options. Conflicts have deterministic behavior:
+  the internally fixed reference metadata wins, and no contradictory caller
+  identity claim may remain in the returned TokenSet metadata. Conflicting
+  identity options alone do not reject otherwise valid input.
 - Pass recognized settings through the existing adapter normalization path.
-  Keep any verified handoff private to that call. Do not return a reusable
-  proof value or expose a proof field in TokenSet metadata.
+  Preserve the normal behavior of `strict`, `profile`, and other existing
+  normalization options. Keep any verified handoff private to that call. Do
+  not return a reusable proof value or expose a proof field in TokenSet
+  metadata.
 - Return a bounded source diagnostic for rejection. Do not include fixture
   bytes, raw file contents, untrusted paths, caller claims, or unbounded parser
   text in a diagnostic.
@@ -156,13 +258,15 @@ transition to ordinary ingestion or produce verified authority.
 The implementation must preserve the current behavior of
 `AutomaticCSS.from_file/2`, `AutomaticCSS.from_json/2`, and
 `AutomaticCSS.normalize/2`, including their existing valid inputs and
-descriptive source metadata. Those paths remain unverified and cannot gain BG
-authority from caller metadata or settings maps.
+descriptive source metadata supplied through the historical options. Only
+`from_reference_file/2` applies the fixed trusted metadata rules above. The
+legacy paths remain unverified and cannot gain BG authority from caller
+metadata or settings maps.
 
 Keep `normalize(map, opts)` as the historical decoded-map route. Preserve the
 accepted R2 reconstruction input procedure.
 
-This candidate explicitly excludes:
+This owner-approved scope explicitly excludes:
 
 - New `--bg-ultra-light` TokenSet alias metadata.
 - Changes to `AutomaticCSS.Normalizer` or `VariableAuthority`.
@@ -193,8 +297,16 @@ Add focused adapter tests in
   `from_file/2` and `from_json/2`, and for unsupported settings shapes through
   `from_json/2` and `normalize/2`.
 - Unreadable trusted-reference paths returning a terminal source error.
-- Caller-supplied `source_version` and `source_version_status` values not
-  selecting or changing the fixed reference binding.
+- Successful trusted conversion reports `source_version="4.0.1"`,
+  `source_version_status="fixture_reference"`, and `export_version=nil` from
+  the fixed reference record, even when callers supply conflicting values for
+  those options. Assert that no contradictory source-identity claim remains
+  in the returned TokenSet metadata.
+- Conflicting identity options do not change normal `strict`, `profile`, or
+  other supported normalization-option behavior on a valid reference input.
+- Existing `from_file/2`, `from_json/2`, and `normalize/2` tests preserve
+  their historical descriptive metadata behavior for caller-supplied identity
+  values.
 - Terminal rejection with no fallback to ordinary ingestion.
 - Compatibility with existing valid adapter inputs and unchanged TokenSet
   behavior, including no verified BG authority through ordinary APIs.
@@ -224,28 +336,38 @@ input, or modify the recorded R2 digest.
 Stop if any of these conditions occurs:
 
 ```text
-STOP=MAIN_OR_AUTHORITY_CHANGED
-STOP=PROOF_CONTRACT_CONTRADICTION
-STOP=FIXTURE_IDENTITY_MISMATCH
-STOP=PUBLICATION_APPROVAL_INSUFFICIENT
-STOP=LEGACY_ADAPTER_BEHAVIOR_CHANGE_REQUIRED
-STOP=PROOF_FORGING_ROUTE_REQUIRED
-STOP=UNRELATED_FILE_CHANGE
-STOP=PRODUCTION_CODE_STARTED
-STOP=CI_FAILURE_REQUIRES_ROOT_CAUSE_REVIEW
-STOP=AWAIT_PROOF_IMPLEMENTATION_AUTHORIZATION_REVIEW
+STOP=MAIN_CHANGED_AGAIN
+STOP=MAIN_CI_NOT_SUCCESSFUL
+STOP=BG_AUTHORITY_CONFLICT
+STOP=OWNER_APPROVAL_SCOPE_CHANGED
+STOP=UNRELATED_FILE_CHANGED
+STOP=PROOF_CONTRACT_CHANGED
+STOP=PRODUCTION_IMPLEMENTATION_STARTED
+STOP=CI_FAILURE
+STOP=AWAIT_PR373_FINAL_INDEPENDENT_REVIEW
 ```
 
-The proposed state remains:
+This is the effective pre-merge state after the explicit owner decision. It
+remains in force while independent review or merge is pending:
 
 ```text
-AUTHORIZATION_STATE=PROPOSED_FOR_INDEPENDENT_REVIEW
+OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
+OWNER_APPROVAL_STATUS=APPROVED
+OWNER_APPROVAL_DATE=2026-11-04
+OWNER_APPROVAL_SOURCE=EXPLICIT_OWNER_DECISION_IN_CONVERSATION
+AUTHORIZATION_STATE=OWNER_APPROVED_PENDING_INDEPENDENT_REVIEW_AND_MERGE
 PROOF_DESIGN_ACCEPTED=YES
 PROOF_IMPLEMENTATION_AUTHORIZED=NO
+PROOF_IMPLEMENTED=NO
 BG_ALIAS_IMPLEMENTATION_AUTHORIZED=NO
 
 R3_ACCEPTED=YES
 R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 R4_AUTHORIZED=NO
 R5_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
 ```
+
+After independent review and successful merge, the effective state in the
+section above applies. The pre-merge `PROOF_IMPLEMENTATION_AUTHORIZED=NO` is
+not the post-merge state.
