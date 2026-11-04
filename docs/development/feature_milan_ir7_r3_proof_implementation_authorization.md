@@ -205,9 +205,24 @@ The operation must meet these requirements:
 - Bind the match to the fixed internal Automatic.css 4.0.1 reference record
   and its reviewed provenance. Caller options, including `source_version` and
   `source_version_status`, cannot select or establish that identity.
+- Populate the existing source-identity metadata from that fixed record. A
+  successful trusted result must report `source_version` as `"4.0.1"` and
+  `source_version_status` as `"fixture_reference"`. This existing descriptive
+  status is not a separate proof flag.
+- The accepted fixture has no embedded vendor `export_version`. Always report
+  `export_version` as `nil` for this trusted result; caller options cannot
+  claim an embedded export version.
+- Ignore caller-supplied `source_version`, `source_version_status`,
+  `export_version`, and equivalent source-identity claims wherever they occur
+  in supported conversion options. Conflicts have deterministic behavior:
+  the internally fixed reference metadata wins, and no contradictory caller
+  identity claim may remain in the returned TokenSet metadata. Conflicting
+  identity options alone do not reject otherwise valid input.
 - Pass recognized settings through the existing adapter normalization path.
-  Keep any verified handoff private to that call. Do not return a reusable
-  proof value or expose a proof field in TokenSet metadata.
+  Preserve the normal behavior of `strict`, `profile`, and other existing
+  normalization options. Keep any verified handoff private to that call. Do
+  not return a reusable proof value or expose a proof field in TokenSet
+  metadata.
 - Return a bounded source diagnostic for rejection. Do not include fixture
   bytes, raw file contents, untrusted paths, caller claims, or unbounded parser
   text in a diagnostic.
@@ -243,8 +258,10 @@ transition to ordinary ingestion or produce verified authority.
 The implementation must preserve the current behavior of
 `AutomaticCSS.from_file/2`, `AutomaticCSS.from_json/2`, and
 `AutomaticCSS.normalize/2`, including their existing valid inputs and
-descriptive source metadata. Those paths remain unverified and cannot gain BG
-authority from caller metadata or settings maps.
+descriptive source metadata supplied through the historical options. Only
+`from_reference_file/2` applies the fixed trusted metadata rules above. The
+legacy paths remain unverified and cannot gain BG authority from caller
+metadata or settings maps.
 
 Keep `normalize(map, opts)` as the historical decoded-map route. Preserve the
 accepted R2 reconstruction input procedure.
@@ -280,8 +297,16 @@ Add focused adapter tests in
   `from_file/2` and `from_json/2`, and for unsupported settings shapes through
   `from_json/2` and `normalize/2`.
 - Unreadable trusted-reference paths returning a terminal source error.
-- Caller-supplied `source_version` and `source_version_status` values not
-  selecting or changing the fixed reference binding.
+- Successful trusted conversion reports `source_version="4.0.1"`,
+  `source_version_status="fixture_reference"`, and `export_version=nil` from
+  the fixed reference record, even when callers supply conflicting values for
+  those options. Assert that no contradictory source-identity claim remains
+  in the returned TokenSet metadata.
+- Conflicting identity options do not change normal `strict`, `profile`, or
+  other supported normalization-option behavior on a valid reference input.
+- Existing `from_file/2`, `from_json/2`, and `normalize/2` tests preserve
+  their historical descriptive metadata behavior for caller-supplied identity
+  values.
 - Terminal rejection with no fallback to ordinary ingestion.
 - Compatibility with existing valid adapter inputs and unchanged TokenSet
   behavior, including no verified BG authority through ordinary APIs.
