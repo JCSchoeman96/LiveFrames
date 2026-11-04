@@ -326,12 +326,14 @@ output condition above remain unchanged.
 ### Feature Milan R3 proof implementation authorization
 
 The separate [proof implementation authorization decision](development/feature_milan_ir7_r3_proof_implementation_authorization.md)
-is the current record for implementation permission. In its pending proposal
-state, owner approval is not recorded and `PROOF_IMPLEMENTATION_AUTHORIZED=NO`.
-Any effective authorization must agree with that decision and require its
-explicit owner approval, independent review, and successful merge. This
-decision does not change the fixture metadata publication scope or resolve
-fixture-content, broader project-use, or redistribution status.
+is the current record for implementation permission. It records the owner's
+explicit approval, dated 2026-11-04, for proof-only trusted ingestion. The
+current pre-merge state remains `PROOF_IMPLEMENTATION_AUTHORIZED=NO` until
+independent review and successful merge; only then does the decision's
+conditional proof-only authorization become effective. BG alias implementation
+remains unauthorized and requires its own decision. This owner decision does
+not change the fixture metadata publication scope or resolve fixture-content,
+broader project-use, or redistribution status.
 
 ## Human governance boundary
 

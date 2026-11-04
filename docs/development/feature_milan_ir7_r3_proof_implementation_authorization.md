@@ -1,15 +1,15 @@
 # Feature Milan IR7 R3 proof implementation authorization
 
-Proposal status: pending owner approval and independent review. This document
-asks the project owner to approve only the proof-only trusted-ingestion scope
-below. No owner approval is recorded, and this proposal does not authorize
-implementation.
+Owner decision recorded: the project owner approved only the proof-only
+trusted-ingestion scope below on 2026-11-04. Independent review and merge are
+still required before implementation is authorized.
 
 ```text
-AUTHORIZATION_STATE=PROPOSED_PENDING_OWNER_APPROVAL_AND_INDEPENDENT_REVIEW
-PROPOSED_OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
-OWNER_APPROVAL_STATUS=PENDING
-OWNER_APPROVAL_DATE=NOT_RECORDED
+AUTHORIZATION_STATE=OWNER_APPROVED_PENDING_INDEPENDENT_REVIEW_AND_MERGE
+OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
+OWNER_APPROVAL_STATUS=APPROVED
+OWNER_APPROVAL_DATE=2026-11-04
+OWNER_APPROVAL_SOURCE=EXPLICIT_OWNER_DECISION_IN_CONVERSATION
 PROOF_DESIGN_ACCEPTED=YES
 PROOF_IMPLEMENTATION_AUTHORIZED=NO
 PROOF_IMPLEMENTED=NO
@@ -24,31 +24,28 @@ FINAL_GENERATION_AUTHORIZED=NO
 
 ## Owner decision record
 
-The proposed decision is to approve only the scope in this document. The
-project owner has not recorded that approval. Before merge, the owner must
-record an explicit `APPROVE_PROOF_ONLY_SCOPE` decision and its date here and in
-the pull request. A generic pull-request approval does not record this
-scope-specific decision. A separate independent review must also confirm that
-the changed documents preserve this boundary.
+The project owner explicitly approved this exact proof-only scope in this
+conversation on 2026-11-04. This records the owner's decision; it does not
+claim an external approval URL, GitHub review, or owner signature. A separate
+independent review must confirm that the changed documents preserve this
+boundary.
 
-Until the explicit owner decision, independent review, and successful merge
-are all recorded, proof implementation remains unauthorized. Pull request
+The current pre-merge state remains `PROOF_IMPLEMENTATION_AUTHORIZED=NO` until
+independent review and successful merge. Pull request
 [#371](https://github.com/JCSchoeman96/LiveFrames/pull/371) merged the prior
 proposal document; that merge did not authorize implementation.
 
-After owner approval and independent review, record the owner's explicit
-decision and date, and set the proposal state to
-`APPROVED_PENDING_MERGE`. Keep `PROOF_IMPLEMENTATION_AUTHORIZED=NO` until that
-approved revision merges. The conditional state below becomes effective only
-after the successful merge. If the owner decision is missing or remains
-pending, merging this document does not authorize implementation.
+Owner approval is now recorded above. Keep the pre-merge state unauthorized
+while independent review or merge remains pending. The effective state below
+applies only after independent review and successful merge of this approved
+revision.
 
-## Conditional state after approval and merge
+## Effective state after independent review and merge
 
-This is the only effective state this proposal may establish. It applies only
-after explicit owner approval of this scope, independent review, and a
-successful merge of the updated decision. It does not apply while the proposal
-is open or pending review, or if it merges without the recorded owner decision.
+This is the post-merge state. It does not apply while independent review or
+merge is pending. After both gates pass, the proof-only implementation is
+authorized, while the BG alias, R4, R5, and final generation remain
+unauthorized.
 
 ```text
 PROOF_DESIGN_ACCEPTED=YES
@@ -69,21 +66,23 @@ The accepted proof design is recorded in
 [`feature_milan_ir7_r3_source_identity_proof_authority.md`](feature_milan_ir7_r3_source_identity_proof_authority.md).
 The R3 color-variable authority accepts the conditional `--bg-ultra-light`
 owner for the BG-only evidence gate. Its separate implementation authority
-remains proposed and unaccepted. This candidate requests permission to verify
-the fixed reference input only. It does not grant the BG alias, clear other R3
-blockers, or authorize R4 or R5 work.
+remains proposed and unaccepted. This owner decision covers proof-only
+verification of the fixed reference input; implementation remains
+unauthorized until independent review and successful merge. It does not grant
+the BG alias, clear other R3 blockers, or authorize R4 or R5 work.
 
 `R3_ACCEPTED=YES` records evidence-gate acceptance only. It does not mean proof
 or BG implementation is complete or authorized.
 
-The proposed state remains `PROOF_IMPLEMENTATION_AUTHORIZED=NO` while this
-decision awaits owner approval, independent review, and merge. The decision
-must not authorize BG alias implementation.
+The owner-approved pre-merge state remains
+`PROOF_IMPLEMENTATION_AUTHORIZED=NO` while independent review and merge are
+pending. The decision does not authorize BG alias implementation.
 
-## Verified authority baseline
+## Historical proposal-preparation baseline
 
-The live main branch, tree, authority blobs, and CI run were checked before
-this proposal was prepared:
+The following identities record the baseline used to prepare the original
+proposal. Preserve them as historical records; the approval-time snapshot
+below records the later authority state checked for this owner decision.
 
 ```text
 EXPECTED_MAIN=77ce052be82d76c409bea9f279d26cc12111b468
@@ -99,9 +98,38 @@ PROVENANCE_BLOB=2aeeabebbfcda185ab08ae3200e59e7455fef9df
 ```
 
 These blob IDs identify the verified inputs at `EXPECTED_MAIN`, before this
-proposal's documentation changes. The changes below add decision-boundary
-notes only. They do not change the accepted proof contract, BG authority, or
-fixture-publication permissions.
+proposal's documentation changes. They do not identify the approval-time
+snapshot below. The owner decision does not change the accepted proof
+contract, BG authority, or fixture-publication permissions.
+
+## Owner-approval-time verification snapshot
+
+The following live identities were checked before recording this owner
+decision. The main commit and CI run identify the same successful main
+revision. The PR values identify PR #373 immediately before this amendment.
+
+```text
+APPROVAL_TIME=2026-11-04
+APPROVAL_TIME_MAIN_SHA=cc01aba34576c9250145bce2ed7ca2cbc3ae6330
+APPROVAL_TIME_MAIN_TREE=e02697df24ef227884b26d66a9aeea3295c37309
+APPROVAL_TIME_MAIN_CI_RUN=41787617778
+APPROVAL_TIME_MAIN_CI_COMMIT=cc01aba34576c9250145bce2ed7ca2cbc3ae6330
+APPROVAL_TIME_MAIN_CI_RESULT=SUCCESS
+APPROVAL_TIME_BG_AUTHORITY_BLOB=b304c7adac037efdef0555937b66fd1378fed9c2
+
+APPROVAL_TIME_PR=373
+APPROVAL_TIME_PR_PREAMENDMENT_HEAD=06c48a8d01d3143d82e3eefa5af28ebc0bf4d4f4
+APPROVAL_TIME_PR_PREAMENDMENT_TREE=74b16362dc7359cbb601c794fa13b4f7d56268a7
+APPROVAL_TIME_AUTHORIZATION_DOCUMENT_BLOB=cbdada899451d849e09d51f606fe1fa78b5d6d76
+APPROVAL_TIME_PROVENANCE_DOCUMENT_BLOB=546f5a75b3ed656a8597aaac420b920f66093dac
+```
+
+PR #372's `PROOF_IMPLEMENTATION_AUTHORIZED=NO` fields record the state at
+that authority's historical reconciliation and remain true for that snapshot.
+Its `BG_IMPLEMENTATION_AUTHORIZED=NO` remains current: this owner decision
+authorizes no BG Stage B work. The updated BG authority keeps Stage A and Stage
+B separate; Stage B still requires completed and merged Stage A, successful
+post-merge CI, and its own BG implementation authorization.
 
 The accepted proof-design document remains unchanged. Its
 `PROOF_IMPLEMENTATION_AUTHORIZED=NO` field records the state when that design
@@ -140,12 +168,13 @@ BROADER_FIXTURE_PROJECT_USE_STATUS=unknown
 BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
 ```
 
-This proposal publishes no fixture contents and does not change the
+This owner decision publishes no fixture contents and does not change the
 permissions in [`04_SOURCE_AND_PROVENANCE.md`](../04_SOURCE_AND_PROVENANCE.md).
 
-## Files covered if approval is granted
+## Files covered by this proof-only decision
 
-The later proof-only implementation may change only these files:
+If the authorization becomes effective after independent review and merge,
+implementation may change only these files:
 
 ```text
 apps/live_frames/lib/live_frames/adapters/automatic_css/loader.ex
@@ -153,12 +182,13 @@ apps/live_frames/lib/live_frames/adapters/automatic_css.ex
 apps/live_frames/test/live_frames/automatic_css_adapter_test.exs
 ```
 
-The candidate itself changes documentation only. Any implementation must be a
-separate change after independent approval.
+This amendment changes documentation only. Any implementation must be a
+separate change after independent review and successful merge.
 
 ## Trusted reference operation
 
-If separately approved, the implementation may add the public opt-in
+If this authorization becomes effective after independent review and merge,
+the implementation may add the public opt-in
 `AutomaticCSS.from_reference_file/2` operation for the one accepted reference
 identity. The input path locates bytes. It does not select a source version or
 prove identity by its name.
@@ -219,7 +249,7 @@ authority from caller metadata or settings maps.
 Keep `normalize(map, opts)` as the historical decoded-map route. Preserve the
 accepted R2 reconstruction input procedure.
 
-This proposal explicitly excludes:
+This owner-approved scope explicitly excludes:
 
 - New `--bg-ultra-light` TokenSet alias metadata.
 - Changes to `AutomaticCSS.Normalizer` or `VariableAuthority`.
@@ -281,24 +311,26 @@ input, or modify the recorded R2 digest.
 Stop if any of these conditions occurs:
 
 ```text
-STOP=MAIN_OR_AUTHORITY_CHANGED
-STOP=OWNER_APPROVAL_NOT_EXPLICIT
-STOP=PUBLICATION_SCOPE_CHANGE_REQUIRED
-STOP=FIXTURE_IDENTITY_CHANGED
-STOP=CONFLICTING_EFFECTIVE_AUTHORIZATION_STATES
-STOP=TRUST_BOUNDARY_CHANGE_REQUIRED
-STOP=UNRELATED_FILE_CHANGE
+STOP=MAIN_CHANGED_AGAIN
+STOP=MAIN_CI_NOT_SUCCESSFUL
+STOP=BG_AUTHORITY_CONFLICT
+STOP=OWNER_APPROVAL_SCOPE_CHANGED
+STOP=UNRELATED_FILE_CHANGED
+STOP=PROOF_CONTRACT_CHANGED
 STOP=PRODUCTION_IMPLEMENTATION_STARTED
-STOP=CI_FAILURE_REQUIRES_ROOT_CAUSE_REVIEW
-STOP=AWAIT_PROOF_ONLY_AUTHORIZATION_DECISION_REVIEW
+STOP=CI_FAILURE
+STOP=AWAIT_PR373_FINAL_INDEPENDENT_REVIEW
 ```
 
-This pending state applies while owner approval is not recorded:
+This is the effective pre-merge state after the explicit owner decision. It
+remains in force while independent review or merge is pending:
 
 ```text
-AUTHORIZATION_STATE=PROPOSED_PENDING_OWNER_APPROVAL_AND_INDEPENDENT_REVIEW
-PROPOSED_OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
-OWNER_APPROVAL_STATUS=PENDING
+OWNER_DECISION=APPROVE_PROOF_ONLY_SCOPE
+OWNER_APPROVAL_STATUS=APPROVED
+OWNER_APPROVAL_DATE=2026-11-04
+OWNER_APPROVAL_SOURCE=EXPLICIT_OWNER_DECISION_IN_CONVERSATION
+AUTHORIZATION_STATE=OWNER_APPROVED_PENDING_INDEPENDENT_REVIEW_AND_MERGE
 PROOF_DESIGN_ACCEPTED=YES
 PROOF_IMPLEMENTATION_AUTHORIZED=NO
 PROOF_IMPLEMENTED=NO
@@ -311,7 +343,6 @@ R5_AUTHORIZED=NO
 FINAL_GENERATION_AUTHORIZED=NO
 ```
 
-If owner approval and independent review are completed, update this record
-before merge. Keep the approved pre-merge state unauthorized. After that
-approved revision merges, the conditional state above is effective and this
-pending block records the earlier proposal state.
+After independent review and successful merge, the effective state in the
+section above applies. The pre-merge `PROOF_IMPLEMENTATION_AUTHORIZED=NO` is
+not the post-merge state.
