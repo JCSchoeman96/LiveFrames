@@ -368,3 +368,43 @@ use, or another documented governance decision. Each option has repository,
 history, reproducibility, and future-conversion consequences. Until that
 decision is recorded, unknown redistribution remains unresolved and is
 insufficient for new public publication.
+
+## Feature Milan IR7 R3 implementation and R4 publication boundary
+
+R3's BG-only implementation merged in PR #377 and passed post-merge CI on
+`54d05a33f89c942c72607c851fbf782e18febe3e`. It adds the generated package
+declaration `--lf-color-background-ultra-light` for
+`color.background.ultra_light`. Implementation and CI status do not establish
+copyright, licensing, or redistribution permission.
+
+The generated theme and compiled application CSS are separate publication
+subjects:
+
+```text
+apps/live_frames/assets/css/theme/lf_theme.css
+apps/live_frames/priv/static/live_frames/css/live_frames.css
+```
+
+The Automatic.css fixture record continues to show unknown broader project-use
+and redistribution permissions. The earlier R3 metadata publication approval
+covers fixture identity and version-provenance metadata only. It does not
+automatically cover generated stylesheet contents.
+
+Human review is required before any new public-output publication decision.
+That review must establish whether the relevant output is independently
+authored, licensed for publication, or remains subject to source restrictions.
+This note makes no legal conclusion and grants no permission. There is no
+retrospective clearance.
+
+```text
+AUTOMATIC_CSS_BROADER_PROJECT_USE=UNKNOWN
+AUTOMATIC_CSS_REDISTRIBUTION=UNKNOWN
+R3_METADATA_PUBLICATION_SCOPE=R3_SOURCE_IDENTITY_VERIFICATION_METADATA_ONLY
+GENERATED_STYLESHEET_CONTENTS_COVERED_BY_METADATA_APPROVAL=NO
+
+R4_PACKAGE_VARIABLE=--lf-space-scale-s
+R4_PUBLIC_RELEASE_CLEARANCE=NOT_ESTABLISHED
+HUMAN_REVIEW_FOR_NEW_PUBLIC_OUTPUT=REQUIRED
+RETROSPECTIVE_CLEARANCE=NONE
+NEW_PERMISSION_GRANT=NO
+```
