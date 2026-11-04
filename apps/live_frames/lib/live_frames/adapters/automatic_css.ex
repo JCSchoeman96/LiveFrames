@@ -63,6 +63,7 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
   ]
 
   @profiles %{hero_foundation: @hero_foundation_required_paths}
+  @trusted_identity_options [:source_version, :source_version_status, :export_version]
 
   @spec from_file(term(), keyword()) ::
           {:ok, TokenSet.t(), [Diagnostic.t()]} | {:error, [Diagnostic.t()]}
@@ -70,6 +71,27 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
     with {:ok, settings, source_metadata} <- Loader.from_file(path, opts) do
       normalize_recognized(settings, source_metadata, opts)
     end
+  end
+
+  @spec from_reference_file(term(), keyword()) ::
+          {:ok, TokenSet.t(), [Diagnostic.t()]} | {:error, [Diagnostic.t()]}
+  def from_reference_file(path, opts \\ [])
+
+  def from_reference_file(path, opts) when is_binary(path) and is_list(opts) do
+    if Keyword.keyword?(opts) do
+      with {:ok, settings, source_metadata} <- Loader.from_reference_file(path) do
+        normalization_opts = Keyword.drop(opts, @trusted_identity_options)
+        normalize_recognized(settings, source_metadata, normalization_opts)
+      end
+    else
+      trusted_reference_input_error("Trusted Automatic.css options must be a keyword list")
+    end
+  end
+
+  def from_reference_file(_path, _opts) do
+    trusted_reference_input_error(
+      "Trusted Automatic.css path must be binary and options a keyword list"
+    )
   end
 
   @spec from_json(term(), keyword()) ::
@@ -201,5 +223,17 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
       {diagnostic.code || "", diagnostic.path || "", diagnostic.source_key || "",
        diagnostic.message || ""}
     end)
+  end
+
+  defp trusted_reference_input_error(message) do
+    {:error,
+     [
+       Diagnostic.new(
+         code: "acss.source.invalid",
+         severity: :error,
+         category: :source,
+         message: message
+       )
+     ]}
   end
 end

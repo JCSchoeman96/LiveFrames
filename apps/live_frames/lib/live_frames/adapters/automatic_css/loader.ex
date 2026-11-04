@@ -7,6 +7,12 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
 
   @adapter_version "1.0.0"
+  @reference_size_bytes 92_199
+  @reference_sha256 "19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05"
+  @reference_source_version "4.0.1"
+  @reference_source_version_status "fixture_reference"
+  @reference_export_version nil
+  @max_reference_read_bytes @reference_size_bytes + 1
 
   def from_file(path, opts \\ [])
 
@@ -31,6 +37,61 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
 
   def from_file(_path, _opts) do
     {:error, [diagnostic("acss.source.invalid", "Automatic.css file path must be a binary")]}
+  end
+
+  @spec from_reference_file(term()) ::
+          {:ok, map(), map()} | {:error, [Diagnostic.t()]}
+  def from_reference_file(path) when is_binary(path) do
+    with {:ok, bytes} <- read_reference_file(path),
+         :ok <- verify_reference_bytes(bytes),
+         {:ok, settings} <- decode_reference_bytes(bytes),
+         {:ok, recognized_settings, metadata} <- recognize(settings, []) do
+      {:ok, recognized_settings, trusted_reference_metadata(metadata)}
+    else
+      {:error, :read_failed} ->
+        {:error,
+         [
+           diagnostic(
+             "acss.source.invalid",
+             "Trusted Automatic.css reference could not be read"
+           )
+         ]}
+
+      {:error, :reference_mismatch} ->
+        {:error,
+         [
+           diagnostic(
+             "acss.source.reference_mismatch",
+             "Automatic.css reference bytes do not match the accepted identity"
+           )
+         ]}
+
+      {:error, :unsupported_source} ->
+        {:error,
+         [
+           diagnostic(
+             "acss.source.reference_unavailable",
+             "The trusted Automatic.css reference binding is unavailable"
+           )
+         ]}
+
+      {:error, :invalid_json} ->
+        {:error,
+         [
+           diagnostic(
+             "acss.source.json_invalid",
+             "The trusted Automatic.css reference could not be decoded"
+           )
+         ]}
+
+      {:error, diagnostics} when is_list(diagnostics) ->
+        {:error, diagnostics}
+    end
+  end
+
+  def from_reference_file(_path) do
+    {:error,
+     [diagnostic("acss.source.invalid", "Trusted Automatic.css reference path must be a binary")]}
   end
 
   def from_json(json, opts \\ [])
@@ -120,6 +181,73 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
 
   defp source_version_status(nil), do: "not_embedded"
   defp source_version_status(_source_version), do: "caller_supplied"
+
+  defp read_reference_file(path) do
+    case File.open(path, [:read, :binary]) do
+      {:ok, io_device} -> read_bounded_reference_bytes(io_device)
+      {:error, _reason} -> {:error, :read_failed}
+    end
+  rescue
+    _error -> {:error, :read_failed}
+  end
+
+  defp read_bounded_reference_bytes(io_device) do
+    try do
+      case IO.binread(io_device, @max_reference_read_bytes) do
+        bytes when is_binary(bytes) -> {:ok, bytes}
+        :eof -> {:ok, <<>>}
+        {:error, _reason} -> {:error, :read_failed}
+        _other -> {:error, :read_failed}
+      end
+    rescue
+      _error -> {:error, :read_failed}
+    catch
+      _kind, _reason -> {:error, :read_failed}
+    after
+      File.close(io_device)
+    end
+  end
+
+  defp verify_reference_bytes(bytes) do
+    if reference_binding_available?() do
+      digest = :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
+
+      if byte_size(bytes) == @reference_size_bytes and digest == @reference_sha256 do
+        :ok
+      else
+        {:error, :reference_mismatch}
+      end
+    else
+      {:error, :unsupported_source}
+    end
+  end
+
+  defp reference_binding_available? do
+    is_integer(@reference_size_bytes) and @reference_size_bytes > 0 and
+      is_binary(@reference_sha256) and byte_size(@reference_sha256) == 64 and
+      @reference_source_version == "4.0.1" and
+      @reference_source_version_status == "fixture_reference" and
+      is_nil(@reference_export_version)
+  end
+
+  defp decode_reference_bytes(bytes) do
+    case Jason.decode(bytes) do
+      {:ok, settings} -> {:ok, settings}
+      {:error, _reason} -> {:error, :invalid_json}
+    end
+  rescue
+    _error -> {:error, :invalid_json}
+  catch
+    _kind, _reason -> {:error, :invalid_json}
+  end
+
+  defp trusted_reference_metadata(source_metadata) do
+    Map.merge(source_metadata, %{
+      "source_version" => @reference_source_version,
+      "source_version_status" => @reference_source_version_status,
+      "export_version" => @reference_export_version
+    })
+  end
 
   defp diagnostic(code, message, opts \\ []) do
     Diagnostic.new(
