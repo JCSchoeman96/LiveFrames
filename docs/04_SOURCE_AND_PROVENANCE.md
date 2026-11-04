@@ -335,6 +335,22 @@ remains unauthorized and requires its own decision. This owner decision does
 not change the fixture metadata publication scope or resolve fixture-content,
 broader project-use, or redistribution status.
 
+### Feature Milan R3 BG-only implementation authorization
+
+The project owner recorded approval on 2026-11-04 for the conditional
+BG-only implementation decision in the [Stage B authorization
+record](development/feature_milan_ir7_r3_bg_ultra_light_implementation_authorization.md).
+The decision records `APPROVE_BG_ONLY_SCOPE` and treats Stage A as implemented,
+merged by PR #375, and verified by successful post-merge CI.
+
+`BG_IMPLEMENTATION_AUTHORIZED=NO` until independent review accepts the
+existing BG implementation contract and exact scope, the authorization PR
+merges, and post-merge CI succeeds on the exact merge SHA while the governing
+authorities remain unchanged. This new record governs the later BG-only
+implementation decision. It does not change the existing 2026-11-03
+publication approval or retroactively rewrite historical implementation
+states in earlier authority documents.
+
 ## Human governance boundary
 
 An agent may record evidence, hashes, unknown values, and derived-artifact
