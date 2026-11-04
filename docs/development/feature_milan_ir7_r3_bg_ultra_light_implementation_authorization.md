@@ -176,3 +176,73 @@ FINAL_GENERATION_AUTHORIZED=NO
 
 Before the gates pass, the next step is independent review of this decision
 and the exact BG-only scope.
+
+## Post-merge verification and R4 handoff
+
+The `AUTHORIZATION_STATE=OWNER_APPROVED_PENDING_INDEPENDENT_REVIEW_AND_MERGE`
+field above is the historical document-creation snapshot. It remains unchanged.
+This section records the later effective state after the authorization and
+implementation merges and their exact-head CI runs.
+
+The independent review acceptance was recorded in this conversation. No
+GitHub approving review is recorded.
+
+```text
+POST_MERGE_VERIFICATION_DATE=2026-11-04
+
+OWNER_APPROVAL=APPROVE_BG_ONLY_SCOPE
+INDEPENDENT_REVIEW=ACCEPTED_IN_CONVERSATION
+INDEPENDENT_REVIEW_SOURCE=THIS_CONVERSATION
+GITHUB_APPROVING_REVIEW=NONE_RECORDED
+
+AUTHORIZATION_PR=376
+AUTHORIZATION_MERGE_SHA=2055d79cd916afb2fcdd675bc4396fbd1a06d8bd
+AUTHORIZATION_PR_MERGED=YES
+AUTHORIZATION_POST_MERGE_CI_RUN=41804065360
+AUTHORIZATION_POST_MERGE_CI_HEAD=2055d79cd916afb2fcdd675bc4396fbd1a06d8bd
+AUTHORIZATION_POST_MERGE_CI=SUCCESS
+
+GOVERNING_AUTHORITIES_UNCHANGED_THROUGH_IMPLEMENTATION=YES
+BG_IMPLEMENTATION_AUTHORIZED_EFFECTIVE=YES
+
+IMPLEMENTATION_PR=377
+IMPLEMENTATION_MERGE_SHA=54d05a33f89c942c72607c851fbf782e18febe3e
+IMPLEMENTATION_PR_MERGED=YES
+IMPLEMENTATION_POST_MERGE_CI_RUN=41812875916
+IMPLEMENTATION_POST_MERGE_CI_HEAD=54d05a33f89c942c72607c851fbf782e18febe3e
+IMPLEMENTATION_POST_MERGE_CI=SUCCESS
+BG_IMPLEMENTED=YES
+
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+R3_PACKAGE_VARIABLE=--lf-color-background-ultra-light
+BLACK_TRANS_10=UNRESOLVED
+TEXT_DARK_MUTED=UNRESOLVED
+
+R4_AUTHORIZED=NO
+R5_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+```
+
+The authorization and implementation merges are recorded by [PR #376](https://github.com/JCSchoeman96/LiveFrames/pull/376)
+and [PR #377](https://github.com/JCSchoeman96/LiveFrames/pull/377). The exact-head
+CI runs are [41804065360](https://github.com/JCSchoeman96/LiveFrames/actions/runs/41804065360)
+and [41812875916](https://github.com/JCSchoeman96/LiveFrames/actions/runs/41812875916).
+The implementation status does not change source-publication or redistribution
+permissions.
+
+R4 technical readiness does not grant R4 implementation or public-output
+clearance:
+
+```text
+R4_TASK=R4_SPACING_SCALE_S_PACKAGE_MAPPING
+TOKEN_PATH=spacing.scale.s
+PACKAGE_VARIABLE=--lf-space-scale-s
+
+R4_TECHNICALLY_READY=YES
+R4_PUBLIC_OUTPUT_CLEARANCE=NOT_ESTABLISHED
+R4_OWNER_IMPLEMENTATION_APPROVAL=NOT_GRANTED
+R4_IMPLEMENTATION_AUTHORIZED=NO
+
+R5_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+```
