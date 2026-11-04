@@ -63,12 +63,22 @@ defmodule LiveFrames.Adapters.AutomaticCSS do
   ]
 
   @profiles %{hero_foundation: @hero_foundation_required_paths}
+  @source_identity_option_keys [:source_version, :source_version_status, :export_version]
 
   @spec from_file(term(), keyword()) ::
           {:ok, TokenSet.t(), [Diagnostic.t()]} | {:error, [Diagnostic.t()]}
   def from_file(path, opts \\ []) do
     with {:ok, settings, source_metadata} <- Loader.from_file(path, opts) do
       normalize_recognized(settings, source_metadata, opts)
+    end
+  end
+
+  @spec from_reference_file(term(), keyword()) ::
+          {:ok, TokenSet.t(), [Diagnostic.t()]} | {:error, [Diagnostic.t()]}
+  def from_reference_file(path, opts \\ []) do
+    with {:ok, settings, source_metadata} <- Loader.from_reference_file(path, opts) do
+      normalization_opts = Keyword.drop(opts, @source_identity_option_keys)
+      normalize_recognized(settings, source_metadata, normalization_opts)
     end
   end
 
