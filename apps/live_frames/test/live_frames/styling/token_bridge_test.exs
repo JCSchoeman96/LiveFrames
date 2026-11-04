@@ -375,7 +375,7 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v2])
   end
 
-  test "native_shared_v3 extends immutable v2 with only the h2 heading scale mapping" do
+  test "native_shared_v3 extends immutable v2 with the h2 and contextual BG mappings" do
     v2 = TokenBridge.load_mapping!(@previous_shared_mapping)
     v3 = TokenBridge.load_mapping!(@shared_mapping)
 
@@ -386,6 +386,10 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
              %{
                "token_set_path" => "typography.heading.scale.h2",
                "css_variable" => "--lf-typography-heading-size-h2"
+             },
+             %{
+               "token_set_path" => "color.background.ultra_light",
+               "css_variable" => "--lf-color-background-ultra-light"
              }
            ]
 
@@ -400,6 +404,38 @@ defmodule LiveFrames.Styling.TokenBridgeTest do
 
     assert {:ok, _v3_index} =
              LiveFrames.Styling.TokenBridge.PackageMappingIndex.build([v3])
+  end
+
+  test "native BG mapping is unique and serializes the semantic token terminal" do
+    mapping = TokenBridge.load_mapping!(@shared_mapping)
+    token_set = hero_token_set()
+    token = token_set.tokens["color.background.ultra_light"]
+
+    assert Enum.count(
+             mapping["entries"],
+             &(&1["token_set_path"] == "color.background.ultra_light")
+           ) ==
+             1
+
+    assert Enum.count(
+             mapping["entries"],
+             &(&1["css_variable"] == "--lf-color-background-ultra-light")
+           ) ==
+             1
+
+    assert token.value == %{
+             "type" => "reference",
+             "path" => "color.neutral.ultra_light"
+           }
+
+    assert {:ok, css} = TokenBridge.generate(token_set, mapping)
+    assert css =~ "--lf-color-background-ultra-light: #{token.resolved_value};"
+    refute css =~ "var(--bg-ultra-light)"
+
+    refute Enum.any?(token.metadata["variable_authorities"] || [], fn authority ->
+             authority["variable"] == "--bg-ultra-light" and
+               authority["kind"] == "source_output_alias"
+           end)
   end
 
   test "looks up primary action CSS variables from package metadata" do

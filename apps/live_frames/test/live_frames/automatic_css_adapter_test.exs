@@ -18,7 +18,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     Jason.decode!(File.read!(fixture_path()))
   end
 
-  defp with_temp_reference(bytes, fun) do
+  defp with_temp_reference(bytes, fun, filename \\ "acss_settings.json") do
     directory =
       Path.join(
         System.tmp_dir!(),
@@ -26,7 +26,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       )
 
     File.mkdir_p!(directory)
-    path = Path.join(directory, "acss_settings.json")
+    path = Path.join(directory, filename)
 
     try do
       File.write!(path, bytes)
@@ -142,6 +142,16 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                  authority["variable"] == "--bg-ultra-light"
              end)
            end)
+  end
+
+  defp bg_ultra_light_authority do
+    %{
+      "variable" => "--bg-ultra-light",
+      "kind" => "source_output_alias",
+      "authority_id" => "automatic-css-4.0.1:contextual-background:bg-ultra-light",
+      "source_key" => "bg-ultra-light",
+      "source_version" => "4.0.1"
+    }
   end
 
   defp assert_bounded_source_error(diagnostics, forbidden_values) do
@@ -271,18 +281,110 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
                token.provenance["export_version"] == nil
            end)
 
-    assert_no_bg_ultra_light_source_output_alias(token_set)
+    token = token_set.tokens["color.background.ultra_light"]
+    legacy_token_set = accepted_fixture_token_set()
+    legacy_token = legacy_token_set.tokens["color.background.ultra_light"]
+
+    assert token.value == %{
+             "type" => "reference",
+             "path" => "color.neutral.ultra_light"
+           }
+
+    assert token.references == ["color.neutral.ultra_light"]
+    assert token.resolved_value == legacy_token.resolved_value
+    assert token.source_expression == legacy_token.source_expression
+    assert token.provenance == legacy_token.provenance
+    assert token.resolution_status == legacy_token.resolution_status
+
+    assert Map.drop(token.metadata, ["variable_authorities"]) ==
+             Map.drop(legacy_token.metadata, ["variable_authorities"])
+
+    owners =
+      token.metadata
+      |> Map.get("variable_authorities", [])
+      |> Enum.filter(&(&1["variable"] == "--bg-ultra-light"))
+
+    assert owners == [bg_ultra_light_authority()]
+    assert token.provenance["source_keys"] == ["bg-ultra-light"]
+    assert token.metadata["source_key"] == "bg-ultra-light"
+
+    assert {:ok, index} = VariableAuthority.build(token_set)
+
+    assert {:ok,
+            %{
+              token_path: "color.background.ultra_light",
+              authorities: authorities,
+              token_present?: true,
+              resolution_status: :resolved
+            }} = VariableAuthority.resolve_direct_owner(index, "--bg-ultra-light")
+
+    assert Enum.filter(authorities, fn owner ->
+             owner["kind"] in ["source_output_alias", "explicit_project_contract"]
+           end) == [bg_ultra_light_authority()]
+
+    assert {:ok,
+            %{
+              token_path: "color.background.ultra_light",
+              authorities: ^authorities
+            }, terminal} =
+             VariableAuthority.resolve_direct_owner_terminal(index, "--bg-ultra-light")
+
+    assert terminal == token.resolved_value
+
+    assert {:error, :no_authority} =
+             VariableAuthority.resolve_direct_owner(index, "--black-trans-10")
+
+    assert {:error, :no_authority} =
+             VariableAuthority.resolve_direct_owner(index, "--text-dark-muted")
+
+    assert_no_bg_ultra_light_source_output_alias(legacy_token_set)
   end
 
   test "trusted reference accepts the exact bytes from another path" do
     bytes = File.read!(fixture_path())
 
-    with_temp_reference(bytes, fn other_path ->
-      assert other_path != fixture_path()
-      assert Path.basename(other_path) == Path.basename(fixture_path())
-      assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_reference_file(other_path)
-      assert token_set.source_metadata["source_version"] == "4.0.1"
-      assert_no_bg_ultra_light_source_output_alias(token_set)
+    with_temp_reference(
+      bytes,
+      fn other_path ->
+        assert other_path != fixture_path()
+        refute Path.basename(other_path) == Path.basename(fixture_path())
+        assert {:ok, token_set, _diagnostics} = AutomaticCSS.from_reference_file(other_path)
+        assert token_set.source_metadata["source_version"] == "4.0.1"
+
+        assert authority(
+                 token_set.tokens["color.background.ultra_light"],
+                 "--bg-ultra-light",
+                 "source_output_alias"
+               ) == bg_ultra_light_authority()
+      end,
+      "caller-selected-reference-name.json"
+    )
+  end
+
+  test "contextual BG feature guard accepts only on" do
+    assert AutomaticCSS.contextual_bg_feature_enabled?(%{
+             "option-contextual-color-variables" => "on"
+           })
+
+    refute AutomaticCSS.contextual_bg_feature_enabled?(%{
+             "option-contextual-color-variables" => "off"
+           })
+
+    refute AutomaticCSS.contextual_bg_feature_enabled?(%{})
+
+    refute AutomaticCSS.contextual_bg_feature_enabled?(%{
+             "option-contextual-color-variables" => true
+           })
+  end
+
+  test "a trusted reference with contextual BG disabled fails byte verification" do
+    settings = Map.put(fixture_settings(), "option-contextual-color-variables", "off")
+    bytes = Jason.encode!(settings)
+
+    with_temp_reference(bytes, fn path ->
+      assert {:error, diagnostics} = AutomaticCSS.from_reference_file(path)
+      assert Enum.any?(diagnostics, &(&1.code == "acss.source.reference_mismatch"))
+      refute Enum.any?(diagnostics, &(&1.code == "acss.value.unresolved"))
     end)
   end
 
@@ -370,7 +472,12 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     assert first == second
     assert {:ok, token_set, _diagnostics} = first
     assert token_set.tokens["color.primary"]
-    assert_no_bg_ultra_light_source_output_alias(token_set)
+
+    assert authority(
+             token_set.tokens["color.background.ultra_light"],
+             "--bg-ultra-light",
+             "source_output_alias"
+           ) == bg_ultra_light_authority()
   end
 
   test "legacy adapter APIs keep caller descriptive identity metadata" do
@@ -387,7 +494,21 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
       results = [
         AutomaticCSS.from_file(path, identity_options),
         AutomaticCSS.from_json(bytes, identity_options),
-        AutomaticCSS.normalize(settings, identity_options)
+        AutomaticCSS.normalize(settings, identity_options),
+        AutomaticCSS.from_file(
+          path,
+          identity_options ++ [metadata: %{"source_version" => "4.0.1"}]
+        ),
+        AutomaticCSS.normalize(
+          settings,
+          identity_options ++
+            [
+              source_metadata: %{
+                "source_version" => "4.0.1",
+                "source_version_status" => "fixture_reference"
+              }
+            ]
+        )
       ]
 
       for result <- results do
@@ -397,6 +518,25 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
         assert token_set.source_metadata["export_version"] == "legacy-described-export"
         assert_no_bg_ultra_light_source_output_alias(token_set)
       end
+
+      {normalizer_tokens, _diagnostics} =
+        Normalizer.normalize(
+          settings,
+          %{
+            "source_system" => "Automatic.css",
+            "source_version" => "4.0.1",
+            "source_version_status" => "fixture_reference",
+            "export_version" => "4.0.1"
+          },
+          identity_options
+        )
+
+      refute Enum.any?(normalizer_tokens, fn {_path, token} ->
+               Enum.any?(Map.get(token.metadata, "variable_authorities", []), fn authority ->
+                 authority["variable"] == "--bg-ultra-light" and
+                   authority["kind"] == "source_output_alias"
+               end)
+             end)
     end)
   end
 

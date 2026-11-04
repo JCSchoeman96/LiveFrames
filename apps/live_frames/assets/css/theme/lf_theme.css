@@ -22,6 +22,7 @@
   --lf-action-secondary-text: oklch(0.8839 0.154 90.78);
   --lf-action-secondary-text-hover: oklch(0.95 0.08 90.783124);
   --lf-color-background-ultra-dark: hsl(0 0% 10%);
+  --lf-color-background-ultra-light: hsl(0 0% 95%);
   --lf-color-heading-on-dark: light-dark(#fff, #000);
   --lf-color-text-on-dark: light-dark(#fff, #000);
   --lf-layout-container-max-width: 1366px;

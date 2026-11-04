@@ -21,6 +21,10 @@
     {
       "token_set_path": "typography.heading.scale.h2",
       "css_variable": "--lf-typography-heading-size-h2"
+    },
+    {
+      "token_set_path": "color.background.ultra_light",
+      "css_variable": "--lf-color-background-ultra-light"
     }
   ]
 }
