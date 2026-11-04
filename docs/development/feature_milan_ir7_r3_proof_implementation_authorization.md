@@ -159,6 +159,9 @@ The implementation must preserve the current behavior of
 descriptive source metadata. Those paths remain unverified and cannot gain BG
 authority from caller metadata or settings maps.
 
+Keep `normalize(map, opts)` as the historical decoded-map route. Preserve the
+accepted R2 reconstruction input procedure.
+
 This candidate explicitly excludes:
 
 - New `--bg-ultra-light` TokenSet alias metadata.
@@ -169,32 +172,52 @@ This candidate explicitly excludes:
 - Copying, publishing, or inlining fixture contents.
 - Changes to existing source-provenance permissions.
 
-The proof-only implementation must leave the canonical R2 reconstruction
-output unchanged. The [R3 color-variable authority](feature_milan_ir7_color_variable_authority.md)
-records its identity as SHA-256
+The canonical R2 reconstruction identity remains the SHA-256 and byte length
+recorded in the [R3 color-variable authority](feature_milan_ir7_color_variable_authority.md):
 `b607eff3f51ca12ec3db6ae5aa29ca43588e1e7716061850d27e5ac35058f8a5` and
-`411535` bytes.
+`411535` bytes. Keep both values unchanged. Full R2 reproduction is a separate
+integration control, not an adapter-test requirement.
 
 ## Required focused tests for a later implementation
 
-Add focused coverage in
+Add focused adapter tests in
 `apps/live_frames/test/live_frames/automatic_css_adapter_test.exs` for:
 
-- Acceptance and normalization of the exact approved fixture, with no new BG
-  alias authority.
-- Same-length changed bytes, wrong lengths, and files that exceed the
-  92,199-byte bound.
-- Unreadable paths, malformed JSON, unsupported settings shapes, and an
-  unavailable or unsupported fixed source identity.
-- Caller-supplied source-version and source-version-status spoofing.
-- One bounded read and decoding of the exact byte sequence that passed
-  verification.
+- Successful verification and normalization of the exact approved fixture,
+  with no new BG alias authority.
+- Modified bytes, malformed JSON variants, invalid settings variants,
+  wrong-length files, and oversized files rejected at the byte-proof boundary
+  before JSON decoding or settings-shape recognition. Malformed JSON and
+  unsupported settings shapes cannot pass the current exact-fixture digest.
+- Existing ordinary adapter diagnostics for malformed JSON through
+  `from_file/2` and `from_json/2`, and for unsupported settings shapes through
+  `from_json/2` and `normalize/2`.
+- Unreadable trusted-reference paths returning a terminal source error.
+- Caller-supplied `source_version` and `source_version_status` values not
+  selecting or changing the fixed reference binding.
 - Terminal rejection with no fallback to ordinary ingestion.
-- Existing valid `from_file/2`, `from_json/2`, and `normalize/2` inputs,
-  confirming their behavior remains unchanged and cannot gain verified BG
-  authority.
-- The canonical R2 reconstruction output, confirming its recorded digest and
-  byte length remain unchanged.
+- Compatibility with existing valid adapter inputs and unchanged TokenSet
+  behavior, including no verified BG authority through ordinary APIs.
+
+Keep an unavailable or unsupported fixed reference binding as a defensive
+fail-closed condition. Do not add caller-controlled reference selection or a
+test-only proof override to make that condition reachable.
+
+Verify through the implementation's direct control flow that the trusted
+operation performs one bounded read and passes the same bytes to the digest
+check and Jason decoder. Do not add an injectable filesystem abstraction only
+to count reads.
+
+Full canonical R2 reproduction is a separate integration control. Use the
+accepted historical reconstruction procedure and its required private Bricks
+reference input. If that input is unavailable, report:
+
+```text
+R2_FULL_RECONSTRUCTION=NOT_VERIFIED_MISSING_REFERENCE
+```
+
+Do not report the control as passed, invent or substitute reconstruction
+input, or modify the recorded R2 digest.
 
 ## Stop conditions
 
