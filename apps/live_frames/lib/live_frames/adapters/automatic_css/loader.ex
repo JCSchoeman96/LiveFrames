@@ -7,6 +7,15 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
   alias LiveFrames.Adapters.AutomaticCSS.Normalizer
 
   @adapter_version "1.0.0"
+  @reference_size 92_199
+  @reference_read_limit @reference_size + 1
+  @reference_sha256 "19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05"
+  @reference_identity_options [
+    source_version: "4.0.1",
+    source_version_status: "fixture_reference",
+    export_version: nil
+  ]
+  @source_identity_option_keys [:source_version, :source_version_status, :export_version]
 
   def from_file(path, opts \\ [])
 
@@ -31,6 +40,30 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
 
   def from_file(_path, _opts) do
     {:error, [diagnostic("acss.source.invalid", "Automatic.css file path must be a binary")]}
+  end
+
+  def from_reference_file(path, opts \\ [])
+
+  @spec from_reference_file(term(), keyword()) ::
+          {:ok, map(), map()} | {:error, [Diagnostic.t()]}
+  def from_reference_file(path, opts) when is_binary(path) and is_list(opts) do
+    if Keyword.keyword?(opts) do
+      with {:ok, bytes} <- read_reference_bytes(path),
+           :ok <- verify_reference_bytes(bytes),
+           {:ok, settings} <- decode_reference_bytes(bytes),
+           {:ok, settings, source_metadata} <-
+             recognize(settings, trusted_identity_options(opts)) do
+        {:ok, settings, source_metadata}
+      end
+    else
+      {:error,
+       [diagnostic("acss.source.invalid", "Automatic.css source options must be a keyword list")]}
+    end
+  end
+
+  def from_reference_file(_path, _opts) do
+    {:error,
+     [diagnostic("acss.source.invalid", "Automatic.css reference path and options are invalid")]}
   end
 
   def from_json(json, opts \\ [])
@@ -116,6 +149,82 @@ defmodule LiveFrames.Adapters.AutomaticCSS.Loader do
       "source_key_count" => map_size(settings),
       "compatibility" => "recognized_with_unknown_fields"
     }
+  end
+
+  defp read_reference_bytes(path) do
+    case File.open(path, [:read, :binary]) do
+      {:ok, device} ->
+        result =
+          try do
+            {:ok, IO.binread(device, @reference_read_limit)}
+          rescue
+            _error -> :read_error
+          after
+            File.close(device)
+          end
+
+        case result do
+          {:ok, bytes} when is_binary(bytes) -> {:ok, bytes}
+          {:ok, :eof} -> {:ok, <<>>}
+          _ -> reference_read_error()
+        end
+
+      {:error, _reason} ->
+        reference_read_error()
+    end
+  end
+
+  defp verify_reference_bytes(bytes) when byte_size(bytes) == @reference_size do
+    digest = :crypto.hash(:sha256, bytes)
+
+    if Base.encode16(digest, case: :lower) == @reference_sha256 do
+      :ok
+    else
+      reference_mismatch()
+    end
+  end
+
+  defp verify_reference_bytes(_bytes), do: reference_mismatch()
+
+  defp decode_reference_bytes(bytes) do
+    case Jason.decode(bytes) do
+      {:ok, settings} ->
+        {:ok, settings}
+
+      {:error, _reason} ->
+        {:error,
+         [
+           diagnostic(
+             "acss.source.invalid",
+             "Automatic.css reference file contains invalid settings"
+           )
+         ]}
+    end
+  end
+
+  defp trusted_identity_options(opts) do
+    opts
+    |> Keyword.drop(@source_identity_option_keys)
+    |> then(fn normalization_opts ->
+      Enum.reduce(@reference_identity_options, normalization_opts, fn {key, value}, acc ->
+        Keyword.put(acc, key, value)
+      end)
+    end)
+  end
+
+  defp reference_read_error do
+    {:error,
+     [diagnostic("acss.source.invalid", "Automatic.css reference file could not be read")]}
+  end
+
+  defp reference_mismatch do
+    {:error,
+     [
+       diagnostic(
+         "acss.source.reference_mismatch",
+         "Automatic.css reference file does not match the approved fixture"
+       )
+     ]}
   end
 
   defp source_version_status(nil), do: "not_embedded"

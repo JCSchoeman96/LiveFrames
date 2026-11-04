@@ -30,6 +30,36 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     token_set
   end
 
+  defp from_reference_file(path, opts \\ []) do
+    apply(AutomaticCSS, :from_reference_file, [path, opts])
+  end
+
+  defp with_temp_file(bytes, fun) do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "liveframes-acss-reference-#{System.unique_integer([:positive])}.json"
+      )
+
+    File.write!(path, bytes)
+
+    try do
+      fun.(path)
+    after
+      File.rm(path)
+    end
+  end
+
+  defp assert_no_bg_ultra_light_alias(token_set) do
+    refute Enum.any?(token_set.tokens, fn {_path, token} ->
+             token.metadata
+             |> Map.get("variable_authorities", [])
+             |> Enum.any?(fn authority ->
+               authority["variable"] == "--bg-ultra-light"
+             end)
+           end)
+  end
+
   defp viewport_samples(viewport_min, viewport_max) do
     span = viewport_max - viewport_min
 
@@ -219,6 +249,153 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
              AutomaticCSS.from_file("/tmp/liveframes-phase-3-missing-acss.json")
 
     assert Enum.any?(diagnostics, &(&1.code == "acss.source.invalid"))
+  end
+
+  @tag :trusted_reference
+  test "normalizes exact reference bytes with fixed identity and caller normalization options" do
+    options = [
+      strict: true,
+      profile: :hero_foundation,
+      source_version: "9.9.9",
+      source_version_status: "caller_claim",
+      export_version: "caller-export"
+    ]
+
+    assert {:ok, baseline, _diagnostics} =
+             from_reference_file(fixture_path(),
+               strict: true,
+               profile: :hero_foundation
+             )
+
+    assert {:ok, token_set, _diagnostics} = from_reference_file(fixture_path(), options)
+
+    assert token_set.tokens == baseline.tokens
+    assert token_set.source_metadata["source_version"] == "4.0.1"
+    assert token_set.source_metadata["source_version_status"] == "fixture_reference"
+    assert token_set.source_metadata["export_version"] == nil
+    refute Map.has_key?(token_set.source_metadata, "verified")
+    refute Map.has_key?(token_set.source_metadata, "proof")
+    refute Map.has_key?(token_set.source_metadata, "attestation")
+    assert_no_bg_ultra_light_alias(token_set)
+
+    fixture_bytes = File.read!(fixture_path())
+
+    with_temp_file(fixture_bytes, fn copied_path ->
+      assert {:ok, copied_token_set, _diagnostics} =
+               from_reference_file(copied_path, options)
+
+      assert copied_token_set == token_set
+      assert_no_bg_ultra_light_alias(copied_token_set)
+    end)
+  end
+
+  @tag :trusted_reference
+  test "rejects non-reference bytes before JSON or settings recognition" do
+    fixture_bytes = File.read!(fixture_path())
+    fixture_size = byte_size(fixture_bytes)
+
+    mutated_bytes =
+      String.replace(
+        fixture_bytes,
+        "\"accent-alt-c-oklch\":0.053",
+        "\"accent-alt-c-oklch\":0.054",
+        global: false
+      )
+
+    assert byte_size(mutated_bytes) == fixture_size
+    assert mutated_bytes != fixture_bytes
+
+    malformed_json = "{" <> String.duplicate(" ", fixture_size - 1)
+    another_malformed_json = String.duplicate("{", fixture_size)
+    unsupported_settings = Jason.encode!(%{"unrelated" => true})
+
+    unsupported_settings =
+      unsupported_settings <>
+        String.duplicate(" ", fixture_size - byte_size(unsupported_settings))
+
+    short_input = binary_part(fixture_bytes, 0, fixture_size - 1)
+    sentinel_input = fixture_bytes <> " "
+    oversized_input = fixture_bytes <> "  "
+
+    for bytes <- [
+          mutated_bytes,
+          malformed_json,
+          another_malformed_json,
+          unsupported_settings,
+          short_input,
+          sentinel_input,
+          oversized_input
+        ] do
+      with_temp_file(bytes, fn path ->
+        assert {:error, diagnostics} =
+                 from_reference_file(path,
+                   source_version: "4.0.1",
+                   source_version_status: "fixture_reference"
+                 )
+
+        assert Enum.any?(diagnostics, &(&1.code == "acss.source.reference_mismatch"))
+      end)
+    end
+
+    assert {:ok, mutated_settings} = Jason.decode(mutated_bytes)
+    assert {:ok, legacy_token_set, _diagnostics} = AutomaticCSS.normalize(mutated_settings)
+    assert_no_bg_ultra_light_alias(legacy_token_set)
+  end
+
+  @tag :trusted_reference
+  test "returns bounded errors for invalid trusted paths and arguments" do
+    missing_path = "/tmp/liveframes-missing-reference-#{System.unique_integer([:positive])}.json"
+
+    for path <- [missing_path, File.cwd!()] do
+      assert {:error, diagnostics} = from_reference_file(path)
+      assert Enum.any?(diagnostics, &(&1.code == "acss.source.invalid"))
+      refute inspect(diagnostics) =~ path
+    end
+
+    assert {:error, path_diagnostics} = from_reference_file(123)
+    assert Enum.any?(path_diagnostics, &(&1.code == "acss.source.invalid"))
+
+    assert {:error, options_diagnostics} = from_reference_file(fixture_path(), :invalid)
+    assert Enum.any?(options_diagnostics, &(&1.code == "acss.source.invalid"))
+  end
+
+  test "legacy ingestion keeps descriptive metadata and ordinary diagnostics" do
+    options = [
+      source_version: "9.9.9",
+      source_version_status: "fixture_reference",
+      export_version: "legacy-export"
+    ]
+
+    results = [
+      AutomaticCSS.from_file(fixture_path(), options),
+      AutomaticCSS.from_json(File.read!(fixture_path()), options),
+      AutomaticCSS.normalize(fixture_settings(), options)
+    ]
+
+    for result <- results do
+      assert {:ok, token_set, _diagnostics} = result
+      assert token_set.source_metadata["source_version"] == "9.9.9"
+      assert token_set.source_metadata["source_version_status"] == "fixture_reference"
+      assert token_set.source_metadata["export_version"] == "legacy-export"
+      assert_no_bg_ultra_light_alias(token_set)
+    end
+
+    with_temp_file("{not-json", fn path ->
+      assert {:error, file_diagnostics} = AutomaticCSS.from_file(path)
+      assert Enum.any?(file_diagnostics, &(&1.code == "acss.source.json_invalid"))
+    end)
+
+    assert {:error, json_diagnostics} = AutomaticCSS.from_json("{not-json")
+    assert Enum.any?(json_diagnostics, &(&1.code == "acss.source.json_invalid"))
+
+    unsupported_json = Jason.encode!(%{"unrelated" => true})
+    assert {:error, from_json_diagnostics} = AutomaticCSS.from_json(unsupported_json)
+    assert Enum.any?(from_json_diagnostics, &(&1.code == "acss.source.invalid"))
+
+    assert {:error, normalize_diagnostics} =
+             AutomaticCSS.normalize(%{"unrelated" => true})
+
+    assert Enum.any?(normalize_diagnostics, &(&1.code == "acss.source.invalid"))
   end
 
   test "normalizes representative categories and relationships" do
