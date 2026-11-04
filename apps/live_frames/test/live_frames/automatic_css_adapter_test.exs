@@ -30,23 +30,22 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     token_set
   end
 
-  defp from_reference_file(path, opts \\ []) do
-    apply(AutomaticCSS, :from_reference_file, [path, opts])
-  end
-
   defp with_temp_file(bytes, fun) do
-    path =
+    directory =
       Path.join(
         System.tmp_dir!(),
-        "liveframes-acss-reference-#{System.unique_integer([:positive])}.json"
+        "liveframes-acss-reference-#{Base.encode16(:crypto.strong_rand_bytes(16))}"
       )
 
-    File.write!(path, bytes)
+    File.mkdir!(directory)
 
     try do
+      File.chmod!(directory, 0o700)
+      path = Path.join(directory, "acss_settings.json")
+      File.write!(path, bytes, [:binary, :exclusive])
       fun.(path)
     after
-      File.rm(path)
+      File.rm_rf!(directory)
     end
   end
 
@@ -262,12 +261,13 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     ]
 
     assert {:ok, baseline, _diagnostics} =
-             from_reference_file(fixture_path(),
+             AutomaticCSS.from_reference_file(fixture_path(),
                strict: true,
                profile: :hero_foundation
              )
 
-    assert {:ok, token_set, _diagnostics} = from_reference_file(fixture_path(), options)
+    assert {:ok, token_set, _diagnostics} =
+             AutomaticCSS.from_reference_file(fixture_path(), options)
 
     assert token_set.tokens == baseline.tokens
     assert token_set.source_metadata["source_version"] == "4.0.1"
@@ -282,7 +282,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
 
     with_temp_file(fixture_bytes, fn copied_path ->
       assert {:ok, copied_token_set, _diagnostics} =
-               from_reference_file(copied_path, options)
+               AutomaticCSS.from_reference_file(copied_path, options)
 
       assert copied_token_set == token_set
       assert_no_bg_ultra_light_alias(copied_token_set)
@@ -328,7 +328,7 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
         ] do
       with_temp_file(bytes, fn path ->
         assert {:error, diagnostics} =
-                 from_reference_file(path,
+                 AutomaticCSS.from_reference_file(path,
                    source_version: "4.0.1",
                    source_version_status: "fixture_reference"
                  )
@@ -347,15 +347,17 @@ defmodule LiveFrames.AutomaticCSSAdapterTest do
     missing_path = "/tmp/liveframes-missing-reference-#{System.unique_integer([:positive])}.json"
 
     for path <- [missing_path, File.cwd!()] do
-      assert {:error, diagnostics} = from_reference_file(path)
+      assert {:error, diagnostics} = AutomaticCSS.from_reference_file(path)
       assert Enum.any?(diagnostics, &(&1.code == "acss.source.invalid"))
       refute inspect(diagnostics) =~ path
     end
 
-    assert {:error, path_diagnostics} = from_reference_file(123)
+    assert {:error, path_diagnostics} = AutomaticCSS.from_reference_file(123)
     assert Enum.any?(path_diagnostics, &(&1.code == "acss.source.invalid"))
 
-    assert {:error, options_diagnostics} = from_reference_file(fixture_path(), :invalid)
+    assert {:error, options_diagnostics} =
+             AutomaticCSS.from_reference_file(fixture_path(), :invalid)
+
     assert Enum.any?(options_diagnostics, &(&1.code == "acss.source.invalid"))
   end
 
