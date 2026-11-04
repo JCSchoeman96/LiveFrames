@@ -1,79 +1,92 @@
 # Feature Milan IR7 R3 `--bg-ultra-light` implementation authority
 
-Status: proposed for independent review. This PR freezes a documentation-only
-implementation contract. It does not change production code, tests, token maps,
-generated assets, or Design IR.
+Status: proposed for independent review. This document records a future BG-only
+implementation contract. It changes no production code, tests, token maps,
+generated assets, or Design IR. It grants no implementation permission.
 
 ```text
 AUTHORITY_STATE=AWAITING_INDEPENDENT_REVIEW
-IMPLEMENTATION_MAY_START=NO_CURRENT_SOURCE_VERSION_PROOF_CONTRACT
-BASE_SHA=b2ce594c6f8e48fe6093966e328b3a1a0969d471
-BASE_TREE=b89711063cf364513edb372dd81784fc8da8ece5
-BASE_SIGNATURE=VALID
-BASE_CI_RUN=41685653586
-BASE_CI_RESULT=SUCCESS
+SOURCE_PROOF_DESIGN_STATE=ACCEPTED_PROOF_DESIGN
+SOURCE_PROOF_IMPLEMENTED=NO
+SOURCE_PROOF_IMPLEMENTATION_AUTHORIZED=NO
+PROOF_IMPLEMENTED=NO
+PROOF_IMPLEMENTATION_AUTHORIZED=NO
+R3_BG_EVIDENCE_ACCEPTED=YES
+R3_EVIDENCE_GATE_ACCEPTED=YES
+R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
+BG_IMPLEMENTATION_AUTHORITY_ACCEPTED=NO
+PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+IMPLEMENTATION_MAY_START=NO
+R4_WORK_PERFORMED=NO
+R5_WORK_PERFORMED=NO
+
+AUTHORITY_DRAFT_BASE_SHA=b2ce594c6f8e48fe6093966e328b3a1a0969d471
+AUTHORITY_DRAFT_BASE_TREE=b89711063cf364513edb372dd81784fc8da8ece5
+AUTHORITY_DRAFT_BASE_SIGNATURE=VALID
+AUTHORITY_DRAFT_BASE_CI_RUN=41685653586
+AUTHORITY_DRAFT_BASE_CI_RESULT=SUCCESS
 HISTORICAL_MAIN_SHA_AT_AUTHORITY_DRAFT=20b0acb2c808ec2746d09fd218317aa8513f3a9f
 HISTORICAL_MAIN_TREE_AT_AUTHORITY_DRAFT=d7a9964f90aa20fc635befebb60baaa92ba12b52
 R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT=fb550ca5ee17e9693f62967e39d964c98b0bee5e
 PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT=839f7d060e06aa0fcb9e70d964821f442e6dacd8
+
+RECONCILIATION_BASE_SHA=83331d923df29e0fb933d7f865502154be7d4ec4
+RECONCILIATION_BASE_TREE=1cda76b30233e90530945e08a650fb946b38d3df
+RECONCILIATION_BASE_POST_MERGE_CI_RUN=41778480449
+RECONCILIATION_BASE_POST_MERGE_CI_RESULT=SUCCESS
 R3_SOURCE_OUTPUT_ALIAS_STATUS=ACCEPTED_CONDITIONAL_OWNER
 R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
-R3_EVIDENCE_GATE_ACCEPTED=YES
-R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
-BG_IMPLEMENTATION_AUTHORITY_ACCEPTED=NO
 ```
 
-The `BASE_*` identities above record this PR branch's historical base. The
-`HISTORICAL_MAIN_*_AT_AUTHORITY_DRAFT` identities record main as inspected
-when this authority was drafted. `R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT`
-is the historical blob snapshot of
-`docs/development/feature_milan_ir7_color_variable_authority.md`, and
-`PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT` is the historical blob snapshot of
-`docs/04_SOURCE_AND_PROVENANCE.md`; both were inspected at
-`20b0acb2c808ec2746d09fd218317aa8513f3a9f`. Neither value identifies a current
-file blob. These historical identities do not identify current main or replace
-the branch-base identities.
+The `AUTHORITY_DRAFT_BASE_*` values record the original proposal branch base.
+The `HISTORICAL_*_AT_AUTHORITY_DRAFT` and `*_BLOB_AT_AUTHORITY_DRAFT` values
+record the refs and document blobs inspected for that draft. They are
+historical identities, not current `main` identities. The `RECONCILIATION_*`
+values record the verified base for this update.
 
-## 1. Frozen owner
+The source identity proof design is accepted, but it has not been implemented
+or authorized for implementation. The R3 evidence gate accepts BG ownership
+only. This proposal remains unaccepted, and production implementation and
+final generation remain unauthorized.
+
+## 1. Frozen BG owner
 
 The current [R3 color-variable authority](feature_milan_ir7_color_variable_authority.md)
-and its [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision)
-record this exact conditional source-output owner:
+and [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision)
+record this conditional source-output owner:
 
 ```text
 SOURCE=Automatic.css
-SOURCE_VERSION=4.0.1
-SOURCE_KEY=bg-ultra-light
 VARIABLE=--bg-ultra-light
 TOKEN_PATH=color.background.ultra_light
+SOURCE_KEY=bg-ultra-light
+SOURCE_VERSION=4.0.1
 AUTHORITY_KIND=source_output_alias
+AUTHORITY_ID=automatic-css-4.0.1:contextual-background:bg-ultra-light
+REQUIRED_FEATURE_OPTION=option-contextual-color-variables
+REQUIRED_FEATURE_VALUE=on
 OTHER_COLOR_VARIABLES=UNRESOLVED
 ```
 
-The R3 evidence gate accepts this conditional `--bg-ultra-light`
-source-output owner for BG only. This implementation authority remains
-proposed and unaccepted. Implementation cannot start until the separate
-source-version proof contract is authorized.
+The scoped provenance decision publishes one output condition only:
 
-The owner has also approved the single contextual-output condition recorded
-in the [scoped provenance decision](../04_SOURCE_AND_PROVENANCE.md#feature-milan-r3-scoped-color-variable-publication-decision):
-Automatic.css 4.0.1 emits this output when
-`option-contextual-color-variables` is `on`; when it is `off`, the output is
-not emitted. No other output conditions are authorized by that approval.
+| Source | Option | State | Approved fact |
+| --- | --- | --- | --- |
+| Automatic.css 4.0.1 | `option-contextual-color-variables` | `on` | The `--bg-ultra-light` contextual output is emitted. |
+| Automatic.css 4.0.1 | `option-contextual-color-variables` | `off` | The `--bg-ultra-light` contextual output is not emitted. |
 
-That token path already exists in `AutomaticCSS.Normalizer`. Its current
-mapping treats `bg-ultra-light` as a semantic reference to
-`color.neutral.ultra_light`. If a trusted source identity can be established
-under a separately authorized proof contract, the proposed metadata will
-record the conditional `--bg-ultra-light` output as an alias for this same
-token path. It will not change the token's value or create a new color
-interpretation.
+No other output conditions are approved by that decision.
 
-Use this exact authority identifier and existing metadata record shape:
+The feature option must equal the exact string `on`. The existing normalized
+entry must have the exact token path and source key above. Source identity
+must pass the separate accepted fixture proof described below. A path, source
+key, option value, caller version label, or token value cannot establish that
+identity.
 
-```text
-AUTHORITY_ID=automatic-css-4.0.1:contextual-background:bg-ultra-light
-```
+The alias belongs in the existing token's `variable_authorities` metadata.
+The TokenSet map key remains `color.background.ultra_light`; the authority
+record does not repeat the path or change the token value. The record shape is:
 
 ```json
 {
@@ -85,88 +98,128 @@ AUTHORITY_ID=automatic-css-4.0.1:contextual-background:bg-ultra-light
 }
 ```
 
-The owning path remains the TokenSet map key. Do not add a path field to the
-metadata record.
-
-## 2. Source identity and output enablement guards
-
-The source/version guard is stricter than comparing a metadata string.
-`AutomaticCSS.Loader` sets `source_version` from caller options and marks it
-`caller_supplied` by default; `source_version_status` is also caller
-overridable. `AutomaticCSS` passes those options through and does not verify
-the settings input against the accepted fixture identity. The accepted
-fixture hash therefore does not independently authenticate an input passed
-through the current adapter boundary.
-
-The testable fail-closed rule is:
-
-- An externally verified Automatic.css 4.0.1 fixture/input is the only
-  eligible source identity. A caller-provided `source_version == "4.0.1"`,
-  including a caller-provided `source_version_status`, is not proof.
-- Missing, unsupported, or caller-asserted source identity does not receive
-  the alias authority. Do not default the missing version or infer it from
-  adapter or compile-time versions.
-- Even for an independently verified 4.0.1 input, emit the metadata record
-  only when `option-contextual-color-variables` is exactly `on` and the
-  existing entry has path `color.background.ultra_light` and source key
-  `bg-ultra-light`. An `off`, missing, or other option value emits no alias
-  authority and leaves the direct variable unresolved.
-
-The current `AutomaticCSS.Loader` and `AutomaticCSS` APIs expose no
-independent input-verification result for the Normalizer to consume. Under
-those APIs, no caller option can establish the required source proof, so the
-Normalizer must not emit this alias authority for an adapted input. A
-Normalizer-only extension is not implementable safely until a separate
-source-version proof contract is authorized. Do not change the Loader API or
-add a provenance subsystem in this work. The current stop is
-`STOP=R3_SOURCE_VERSION_PROOF_CONTRACT_MISSING`.
-
-The existing direct-variable path applies only to an exact source expression
-such as `var(--bg-ultra-light)`. Use the current Bricks normalization path and
-the current direct-owner APIs. Do not add a Bricks property branch or a
-Milan-specific production condition.
-
-Do not add aliases for any other source variable or source key. Do not infer
-ownership from variable spelling, token spelling, value equality, property
-name, or candidate order. In particular, `--black-trans-10` and
+The current Normalizer maps `bg-ultra-light` to a semantic reference from
+`color.background.ultra_light` to `color.neutral.ultra_light`. The future
+alias does not change that value or reference. `--black-trans-10` and
 `--text-dark-muted` remain unresolved.
 
-## 3. Existing authority APIs and outcomes
+## 2. Accepted source identity and use scope
 
-Use `VariableAuthority.resolve_direct_owner/2` to select direct owners and
-`VariableAuthority.resolve_direct_owner_terminal/2` to obtain a usable token
-terminal. Leave ordinary `resolve/2` and `resolve_terminal/2` unchanged.
-Do not change the existing direct-owner APIs, add a resolver module, or let
-Bricks read `tokens_by_path` directly.
+The accepted proof design permits only this reference identity:
 
-Resolve the owner during generation from the TokenSet. This operation needs no
-mutable runtime state, cache, database, Redis, GenServer, or PubSub component.
+| Field | Accepted value |
+| --- | --- |
+| Fixture | `fixtures/automatic_css/acss_settings.json` |
+| Exact byte length | `92199` |
+| SHA-256 | `19279873614b172a409f008dd4ab3c4b620c551a4ac4c68bb3773f0209e33a05` |
+| Version binding | Automatic.css 4.0.1 reference set, recorded by `fixtures/automatic_css/SOURCE.md` and the scoped provenance decision |
+| Fixture option | `option-contextual-color-variables=on` |
 
-A unique owner is usable only when its token is present, resolved, and exposes
-a terminal accepted by the CSS consumer. These outcomes apply to the new
-direct-owner path:
+The digest identifies the exact repository fixture bytes. It is not a vendor
+signature and does not establish vendor version by itself. The version
+binding comes from the reviewed provenance record. The proof does not cover
+arbitrary Automatic.css 4.0.1 exports.
 
-| State | Guard and API result | Normalization outcome |
-| --- | --- | --- |
-| `NO_OWNER` | No `source_output_alias` or `explicit_project_contract` path exists. `resolve_direct_owner/2` and its terminal companion return `{:error, :no_authority}`. Reference-only paths do not count as owners. | Keep the direct expression unresolved. |
-| `UNIQUE_OWNER` | Exactly one distinct owner path exists. `resolve_direct_owner/2` returns `{:ok, candidate}`. The candidate must be present and resolved, and the terminal API must return `{:ok, candidate, terminal}`. | Succeed only after the CSS consumer accepts the terminal. |
-| `AMBIGUOUS_OWNERS` | More than one distinct owner path exists. The direct-owner APIs return `{:error, :ambiguous_candidates}`. Equal terminal values do not remove ambiguity. | Keep unresolved; do not select by ordering. |
-| `OWNER_TOKEN_MISSING` | The selected owner path is absent from the TokenSet. The terminal API returns `{:error, :token_missing}`. | Keep unresolved. |
-| `OWNER_TOKEN_UNRESOLVED` | The selected token has unresolved status. The terminal API returns `{:error, :token_unresolved}`. | Keep unresolved. |
-| `OWNER_TERMINAL_UNAVAILABLE` | The resolved token has no supported CSS terminal. The terminal API returns `{:error, :token_value_unavailable}`. | Keep unresolved. |
+The accepted fixture is distinct from S5, which identifies the separate
+source-environment settings export. Their hashes must not be treated as
+interchangeable or described as byte-identical. The future trusted conversion
+is limited to the already approved internal-conversion context. The 2026-11-03
+publication approval covers the exact fixture identity and version-provenance
+metadata only. It does not approve fixture-content redistribution or expand
+project-use permission. Fixture contents, configuration exports, plugin
+source, generated stylesheets, and other Automatic.css material remain
+outside this approval. Broader fixture project use and redistribution remain
+unknown. A project owner must separately authorize any broader use.
 
-Multiple owner records on one path remain one owner path. A distinct second
-path carrying either owner kind remains ambiguous. Do not fall back to
-`source_reference` evidence.
+```text
+R3_FIXTURE_METADATA_PUBLICATION_APPROVED=YES
+APPROVAL_SCOPE=R3_SOURCE_IDENTITY_VERIFICATION_METADATA_ONLY
+APPROVAL_DATE=2026-11-03
+FIXTURE_CONTENT_REDISTRIBUTION_STATUS=unknown
+BROADER_FIXTURE_PROJECT_USE_STATUS=unknown
+BROADER_AUTOMATIC_CSS_REDISTRIBUTION_STATUS=unknown
+PROOF_IMPLEMENTATION_AUTHORIZED=NO
+BG_IMPLEMENTATION_AUTHORIZED=NO
+FINAL_GENERATION_AUTHORIZED=NO
+```
 
-## 4. Native package boundary
+## 3. Trusted ingestion boundary
 
-A native package mapping is required. `TokenBridge.package_css_variable/1`
-returns an unknown-path error when no direct mapping exists. Neither
-`native_shared_v3.json` nor `native_hero_v1.json` currently maps
-`color.background.ultra_light`.
+The future trusted entrypoint is `AutomaticCSS.from_reference_file/2`. Its
+contract is:
 
-The exact package mapping proposed for the later implementation is:
+1. The Loader reads at most `REFERENCE_FIXTURE_SIZE_BYTES + 1` bytes from one
+   input. It checks the exact length and digest against the fixed accepted
+   fixture identity before decoding.
+2. Verification and JSON decoding use the same byte sequence. The Loader does
+   not read the file again for decoding.
+3. The path only locates the bytes. A different path with the exact approved
+   bytes may pass; the expected path with different bytes must fail. The
+   digest, source version, and provenance binding are fixed internally. The
+   trusted call does not use caller `source_version` or
+   `source_version_status` values, and caller options cannot select or replace
+   the fixed binding.
+4. The adapter consumes successful verification immediately in its private
+   trusted conversion flow. It returns no reusable proof object and stores no
+   proof field, verification flag, or attestation in TokenSet metadata.
+5. A read, size, digest, provenance-binding, decode, or supported-input
+   failure returns an error. Diagnostics stay bounded and omit source bytes,
+   input contents, caller assertions, and untrusted paths. The operation does
+   not retry through a legacy API or turn a rejected input into a decoded-map
+   claim.
+
+Keep `AutomaticCSS.from_file/2`, `from_json/2`, and `normalize/2` backward
+compatible. Their existing descriptive `source_version` and
+`source_version_status` behavior remains descriptive only. Caller-supplied
+versions, statuses, metadata, filenames, paths, or decoded maps cannot grant
+BG authority. The public Normalizer entrypoint also cannot grant that
+authority from its arguments.
+
+The private trusted adapter flow may run the existing Normalizer, then add
+the one BG alias only after the byte proof, accepted provenance binding,
+exact feature guard, source-key check, and token-path check pass. It does so
+before final TokenSet validation. Do not add BG proof handling, a proof option,
+or a BG metadata case to the generic Normalizer. Do not add a public proof
+object or a new TokenSet schema field.
+
+A successful proof does not bypass direct-owner validation. The future alias
+is usable only when direct-owner selection finds one owner path and its token
+is present, resolved, and has a terminal supported by the CSS consumer. Do
+not add usable BG authority if that terminal gate fails. Keep the source
+expression unresolved when an owner or terminal check fails. If source
+verification fails, trusted ingestion returns an error.
+
+## 4. Alias and terminal outcomes
+
+Use the existing `VariableAuthority.resolve_direct_owner/2` and
+`resolve_direct_owner_terminal/2` APIs. Leave `resolve/2`, `resolve_terminal/2`,
+and the direct-owner APIs unchanged. The TokenSet key remains the owner path;
+source references do not count as owners.
+
+| State | Result |
+| --- | --- |
+| `UNVERIFIED` | Legacy calls receive no new BG authority, regardless of caller-supplied labels or metadata. |
+| `REJECTED_MISMATCH` | A byte length or digest mismatch returns a terminal source error. No fallback conversion runs. |
+| `REJECTED_UNSUPPORTED_SOURCE` | A missing or unsupported fixed provenance binding returns a terminal source error. Caller labels cannot supply the binding. |
+| `REJECTED_INVALID_INPUT` | An unreadable, malformed, or unsupported input returns a terminal source error. |
+| `FEATURE_DISABLED` | A missing, `off`, or invalid feature value adds no BG alias; the direct expression stays unresolved. |
+| `NO_OWNER` | No direct-owner record exists; the direct expression stays unresolved. |
+| `AMBIGUOUS_OWNERS` | More than one distinct owner path exists; do not choose by order or equal value. The expression stays unresolved. |
+| `OWNER_TOKEN_MISSING` | The selected owner path is absent; the expression stays unresolved. |
+| `OWNER_TOKEN_UNRESOLVED` | The selected token is unresolved; the expression stays unresolved. |
+| `OWNER_TERMINAL_UNAVAILABLE` | The token has no supported terminal; the expression stays unresolved. |
+| `UNIQUE_OWNER` | Resolve only when the exact BG guards pass and the direct-owner terminal API returns a supported terminal. |
+
+The approved fixture has the exact feature value `on`. Modified bytes with the
+option changed, removed, or invalid fail identity verification before decode.
+Tests may exercise the feature guard separately, but those tests must not
+claim that modified bytes passed verification.
+
+## 5. Native package boundary
+
+`TokenBridge.package_css_variable/1` is defined in
+`apps/live_frames/lib/live_frames/styling/token_bridge.ex`. The proposed native
+mapping remains:
 
 ```text
 TOKEN_PATH=color.background.ultra_light
@@ -175,20 +228,48 @@ PACKAGE_COLLISION_COUNT=0
 TOKEN_PATH_COLLISION_COUNT=0
 ```
 
-The candidate follows TokenBridge's existing token-path and CSS-variable
-patterns. Its terminal representation uses the existing Normalizer reference
-from `color.background.ultra_light` to `color.neutral.ultra_light`.
-`resolve_reference_values` resolves that reference from the TokenSet. The
-existing direct-owner terminal API and `CSSValue.candidate/1` accept only
-supported resolved terminal forms; TokenBridge then applies its CSS safety
-checks. This mapping adds no literal color or source-variable passthrough.
-If the token is missing, unresolved, non-serializable, or unsafe, generation
-must fail closed.
+The future implementation must add this mapping to
+`apps/live_frames/priv/token_maps/native_shared_v3.json` in the same change as
+the private trusted adapter alias. It must use the existing resolved token
+reference and CSS safety checks. Do not add a literal color or pass through a
+source variable. Missing, unresolved, non-serializable, ambiguous, or unsafe
+token values must fail closed.
 
-The later production change must update
-`apps/live_frames/priv/token_maps/native_shared_v3.json` with this mapping in
-the same implementation change as the Normalizer metadata case. Focused tests
-must cover:
+The future authorized implementation must regenerate these assets
+reproducibly and commit the generated output:
+
+- `apps/live_frames/assets/css/theme/lf_theme.css`
+- `apps/live_frames/priv/static/live_frames/css/live_frames.css`
+
+Do not hand-edit either asset. Do not inline `var(--bg-ultra-light)` or a
+guessed color.
+
+## 6. Later implementation tests and identity controls
+
+The later implementation must cover the following behavior:
+
+- Exact fixture ingestion through `from_reference_file/2`, including one
+  bounded read, one digest calculation, and verification and decoding of the
+  same bytes.
+- Exact-byte identity, wrong length, modified bytes, unsupported binding,
+  unreadable input, malformed JSON, and rejected-input behavior without a
+  legacy fallback.
+- Caller-spoofing rejection for `source_version`, `source_version_status`,
+  caller metadata, filenames, paths, and decoded maps.
+- Backward compatibility for `from_file/2`, `from_json/2`, `normalize/2`,
+  and the public Normalizer entrypoint.
+- Exact BG alias selection, including the fixture proof, feature value `on`,
+  source key, token path, and authority record fields.
+- Missing, disabled, or invalid feature values add no alias. Isolated feature
+  guard tests must not manufacture a proof.
+- No-owner, ambiguous-owner, missing-token, unresolved-token, unsupported
+  terminal, and supported-terminal cases. The source expression remains
+  unresolved whenever an authority or terminal gate fails.
+- `--black-trans-10` and `--text-dark-muted` remain unresolved.
+- Exact and unique package mapping, TokenBridge terminal safety and
+  determinism, and deterministic generated asset output with drift coverage.
+
+Keep the relevant focused coverage in these existing test files:
 
 - `apps/live_frames/test/live_frames/automatic_css_adapter_test.exs`
 - `apps/live_frames/test/live_frames/tokens/variable_authority_test.exs`
@@ -196,74 +277,61 @@ must cover:
 - `apps/live_frames/test/live_frames/styling/token_bridge_test.exs`
 - `apps/live_frames/test/live_frames/styling/assets_drift_test.exs`
 
-Because the package map feeds generated CSS, regenerate and commit both
-`apps/live_frames/assets/css/theme/lf_theme.css` and
-`apps/live_frames/priv/static/live_frames/css/live_frames.css`
-deterministically. Do not hand-edit either asset or inline
-`var(--bg-ultra-light)` or a guessed color value.
-
-## 5. Later implementation tests
-
-The implementation change must verify:
-
-- The exact alias record appears on `color.background.ultra_light`, with the
-  exact source version, source key, and authority ID above.
-- A caller-supplied `source_version == "4.0.1"` and caller-supplied status do
-  not establish source compatibility or emit this authority.
-- Missing or unsupported source identity does not emit this authority.
-- With the current adapter APIs, an option `on` value does not overcome the
-  missing source proof; alias metadata remains absent and the direct variable
-  unresolved.
-- The approved source-level condition is `on` emits and `off` does not emit.
-  Missing or other option values fail closed. Positive adapter-resolution
-  tests require a separate authorized source-version proof contract and must
-  not simulate proof with caller-supplied metadata.
-- Existing `VariableAuthority` direct-owner APIs resolve the alias without
-  changing generic candidate behavior.
-- Missing tokens, unresolved tokens, unsupported terminals, and distinct
-  conflicting owner paths fail closed.
-- `--black-trans-10` and `--text-dark-muted` remain unresolved.
-- No unrelated TokenSet authority metadata changes.
-- The package mapping is exact and unique, TokenBridge output is deterministic,
-  and both generated assets match deterministic build output.
-- No Design IR schema version bump occurs.
-
-Do not add or run these tests in this authority-freeze change.
-
-## 6. Scope and stop conditions
-
-This proposed authority covers only the one `--bg-ultra-light` source-output
-alias and its necessary native package mapping. The contextual-output
-condition is limited to the owner-approved `on`/`off` fact cited above. The
-R3 evidence gate accepts BG-only ownership, but this implementation authority
-remains unaccepted and does not authorize production implementation.
-Implementation remains blocked until a separate source-version proof
-contract is authorized. This document does not change the Loader or Normalizer
-trust boundary, `VariableAuthority.resolve/2`, `resolve_terminal/2`, generic
-variable candidate rules, other color authority, TokenSet schema, or Design
-IR schema. It does not start R4 or R5.
-
-Stop without a workaround if any of these conditions occurs:
+The historical R2 map-input procedure and identities remain fixed:
 
 ```text
-STOP=MAIN_OR_R3_AUTHORITY_CHANGED
-STOP=UNPROVEN_SOURCE_OUTPUT_ALIAS
-STOP=UNSUPPORTED_SOURCE_VERSION
-STOP=BG_ULTRA_LIGHT_PACKAGE_BOUNDARY_UNRESOLVED
-STOP=NEW_TOKEN_PATH_REQUIRED
-STOP=DIRECT_OWNER_API_CHANGE_REQUIRED
-STOP=GENERIC_VARIABLE_AUTHORITY_CHANGE_REQUIRED
-STOP=R3_OTHER_COLOR_AUTHORITY_REQUIRED
-STOP=R3_PROVENANCE_SCOPE_EXPANSION_REQUIRED
-STOP=R3_SOURCE_VERSION_PROOF_CONTRACT_MISSING
-STOP=IMPLEMENTATION_STARTED_DURING_AUTHORITY_FREEZE
-STOP=DOC_SCOPE_EXPANSION_REQUIRED
-STOP=PRIMARY_CHECKOUT_MUTATED
-STOP=REPEATED_FIX_FAILURE_ROOT_CAUSE_REVIEW_REQUIRED
+CONTROL_PROCEDURE=HISTORICAL_DECODED_MAP_INPUT
+CONTROL_INPUT_BOUNDARY=decoded Bricks map + decoded ACSS map
+CONTROL_SHA256=bddf757881a116070e1973cad280115f5e6c30cb6a70beeb70f166bf61420a64
+CONTROL_CANONICAL_BYTES=411416
+R2_SHA256=b607eff3f51ca12ec3db6ae5aa29ca43588e1e7716061850d27e5ac35058f8a5
+R2_CANONICAL_BYTES=411535
 ```
 
-The next action for this proposed implementation authority is independent review:
+The historical `AutomaticCSS.normalize/2` map route must continue to reproduce
+the R2 control. A new R3 DesignDocument identity requires separate approval.
+This proposal issues no new DesignDocument identity, changes no Design IR
+schema, and authorizes no final generation.
+
+Do not add or run the future implementation tests in this authority-only
+change.
+
+## 7. Publication, performance, and scope limits
+
+Fixture metadata publication does not publish fixture contents and does not
+broaden project-use permission. Keep future trusted conversion within the
+approved internal-conversion context unless the project owner records a
+separate authorization.
+
+Verification runs once per trusted conversion. Read no more than the fixture
+size bound plus one sentinel byte, hash once, and decode the same byte
+sequence. Do not hash per token. Do not add Redis, ETS, a database,
+GenServer, PubSub, a cache, or another runtime component.
+
+This authority covers one conditional BG source-output alias and the required
+native package mapping. It does not authorize `--text-dark-muted`,
+`--black-trans-10`, other source versions or exports, a generic proof system,
+R4, R5, production implementation, or final generation.
+
+Stop if any of these conditions occurs:
 
 ```text
-STOP=AWAIT_R3_BG_IMPLEMENTATION_AUTHORITY_REVIEW
+STOP=MAIN_AUTHORITY_MOVED
+STOP=SOURCE_PROOF_DESIGN_CONFLICT
+STOP=TRUST_BOUNDARY_WIDENED
+STOP=CALLER_FORGEABLE_VERIFICATION
+STOP=FIXTURE_PERMISSION_SCOPE_EXPANDED
+STOP=GENERIC_NORMALIZER_AUTHORITY_REQUIRED
+STOP=UNRESOLVED_COLOR_AUTHORITY_ADDED
+STOP=R2_IDENTITY_MODIFIED
+STOP=OUT_OF_SCOPE_FILE_CHANGE
+STOP=PRODUCTION_IMPLEMENTATION_STARTED
+STOP=CI_FAILURE
+```
+
+This proposal's next step is independent review. It does not authorize proof
+implementation, BG implementation, or final generation.
+
+```text
+STOP=AWAIT_BG_IMPLEMENTATION_AUTHORITY_PR_REVIEW
 ```
