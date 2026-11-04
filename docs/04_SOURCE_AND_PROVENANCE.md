@@ -310,6 +310,11 @@ BG_IMPLEMENTATION_AUTHORIZED=NO
 FINAL_GENERATION_AUTHORIZED=NO
 ```
 
+The three implementation fields record the state when this metadata
+publication decision was approved on 2026-11-03. Preserve them as historical
+facts. This publication decision remains limited to the listed metadata and
+does not set later implementation permission.
+
 This approval covers publication of the named metadata only. It does not
 approve or publish the fixture bytes, configuration export, plugin source,
 generated stylesheets, or other Automatic.css materials. It does not expand
@@ -317,6 +322,16 @@ the fixture's internal-use scope, resolve broader project-use or
 redistribution status, or authorize proof implementation, BG implementation,
 or final generation. The existing S1–S10 identities and the contextual BG
 output condition above remain unchanged.
+
+### Feature Milan R3 proof implementation authorization
+
+The separate [proof implementation authorization decision](development/feature_milan_ir7_r3_proof_implementation_authorization.md)
+is the current record for implementation permission. In its pending proposal
+state, owner approval is not recorded and `PROOF_IMPLEMENTATION_AUTHORIZED=NO`.
+Any effective authorization must agree with that decision and require its
+explicit owner approval, independent review, and successful merge. This
+decision does not change the fixture metadata publication scope or resolve
+fixture-content, broader project-use, or redistribution status.
 
 ## Human governance boundary
 
