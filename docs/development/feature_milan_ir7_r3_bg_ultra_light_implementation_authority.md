@@ -9,12 +9,15 @@ AUTHORITY_STATE=AWAITING_INDEPENDENT_REVIEW
 SOURCE_PROOF_DESIGN_STATE=ACCEPTED_PROOF_DESIGN
 SOURCE_PROOF_IMPLEMENTED=NO
 SOURCE_PROOF_IMPLEMENTATION_AUTHORIZED=NO
+PROOF_IMPLEMENTATION_PROPOSAL=PR371
 PROOF_IMPLEMENTED=NO
 PROOF_IMPLEMENTATION_AUTHORIZED=NO
 R3_BG_EVIDENCE_ACCEPTED=YES
 R3_EVIDENCE_GATE_ACCEPTED=YES
 R3_ACCEPTED_SCOPE=BG_ULTRA_LIGHT_ONLY
 BG_IMPLEMENTATION_AUTHORITY_ACCEPTED=NO
+BG_IMPLEMENTATION_AUTHORIZED=NO
+BG_IMPLEMENTATION_REQUIRES_PROOF_STAGE=YES
 PRODUCTION_IMPLEMENTATION_AUTHORIZED=NO
 FINAL_GENERATION_AUTHORIZED=NO
 IMPLEMENTATION_MAY_START=NO
@@ -31,9 +34,13 @@ HISTORICAL_MAIN_TREE_AT_AUTHORITY_DRAFT=d7a9964f90aa20fc635befebb60baaa92ba12b52
 R3_EVIDENCE_CANDIDATE_BLOB_AT_AUTHORITY_DRAFT=fb550ca5ee17e9693f62967e39d964c98b0bee5e
 PROVENANCE_BASE_BLOB_AT_AUTHORITY_DRAFT=839f7d060e06aa0fcb9e70d964821f442e6dacd8
 
-RECONCILIATION_BASE_SHA=83331d923df29e0fb933d7f865502154be7d4ec4
-RECONCILIATION_BASE_TREE=1cda76b30233e90530945e08a650fb946b38d3df
-RECONCILIATION_BASE_POST_MERGE_CI_RUN=41778480449
+PREVIOUS_RECONCILIATION_BASE_SHA=83331d923df29e0fb933d7f865502154be7d4ec4
+PREVIOUS_RECONCILIATION_BASE_TREE=1cda76b30233e90530945e08a650fb946b38d3df
+PREVIOUS_RECONCILIATION_BASE_POST_MERGE_CI_RUN=41778480449
+PREVIOUS_RECONCILIATION_BASE_POST_MERGE_CI_RESULT=SUCCESS
+RECONCILIATION_BASE_SHA=77ce052be82d76c409bea9f279d26cc12111b468
+RECONCILIATION_BASE_TREE=b7d5e3f5700c11bad3e61c9d0242813b12434e0b
+RECONCILIATION_BASE_POST_MERGE_CI_RUN=41782456503
 RECONCILIATION_BASE_POST_MERGE_CI_RESULT=SUCCESS
 R3_SOURCE_OUTPUT_ALIAS_STATUS=ACCEPTED_CONDITIONAL_OWNER
 R3_LIFECYCLE=EVIDENCE_GATE_ACCEPTED_WITH_UNRESOLVED_BLOCKERS
@@ -49,6 +56,43 @@ The source identity proof design is accepted, but it has not been implemented
 or authorized for implementation. The R3 evidence gate accepts BG ownership
 only. This proposal remains unaccepted, and production implementation and
 final generation remain unauthorized.
+
+## Implementation stages
+
+The proof-only implementation and the BG alias implementation are separate
+stages. Acceptance of the proof design, merge of its proposal, and acceptance
+of the BG evidence do not authorize either stage.
+
+### Stage A — Proof-only
+
+The governing proposal is
+[`feature_milan_ir7_r3_proof_implementation_authorization.md`](feature_milan_ir7_r3_proof_implementation_authorization.md)
+(PR #371). Its authorization state is
+`PROPOSED_FOR_INDEPENDENT_REVIEW`; production implementation is not
+authorized. Merging PR #371 records the proposal only and does not grant
+implementation permission. Before a separate proof-only implementation
+authorization is granted, the proposal's historical dependency identities
+must be rechecked against the current authorities.
+
+If Stage A is separately authorized, it may implement
+`AutomaticCSS.from_reference_file/2` and the bounded trusted-byte ingestion
+flow specified by the accepted proof design. It must preserve legacy adapter
+behavior and must not add BG alias metadata, token mappings, or generated
+assets. Stage A does not authorize the BG alias or final generation.
+
+### Stage B — BG alias
+
+This document governs the BG alias stage. Stage B must not start until Stage A
+has been independently authorized, implemented, independently reviewed,
+merged, and verified by successful post-merge CI. Stage B also requires its
+own separate BG implementation-authorization decision; the present proposal
+does not supply that decision.
+
+If separately authorized after those gates pass, Stage B may add only the
+accepted conditional `--bg-ultra-light` alias through the verified adapter
+path. It includes the native package mapping, focused tests, and deterministic
+asset regeneration specified below. It must not change generic Normalizer
+authority behavior. Stage B does not authorize final generation.
 
 ## 1. Frozen BG owner
 
