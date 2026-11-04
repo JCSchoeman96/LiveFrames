@@ -23,6 +23,17 @@ defmodule LiveFrames.Styling.AssetsDriftTest do
     assert {:ok, generated} = TokenBridge.generate(token_set, mappings)
     assert {:ok, repeated} = TokenBridge.generate(token_set, mappings)
     assert generated == repeated
+
+    bg_ultra_light = token_set.tokens["color.background.ultra_light"]
+    assert bg_ultra_light.value == %{"type" => "reference", "path" => "color.neutral.ultra_light"}
+    assert generated =~ "--lf-color-background-ultra-light: #{bg_ultra_light.resolved_value};"
+    refute generated =~ "var(--bg-ultra-light)"
+
+    refute Enum.any?(bg_ultra_light.metadata["variable_authorities"] || [], fn authority ->
+             authority["variable"] == "--bg-ultra-light" and
+               authority["kind"] == "source_output_alias"
+           end)
+
     assert length(Regex.scan(~r/--lf-space-scale-xs:/, generated)) == 1
     assert length(Regex.scan(~r/--lf-typography-heading-size-h2:/, generated)) == 1
 
