@@ -107,6 +107,18 @@ variables introduced for cross-component tokens: `--lf-typography-body-size-smal
 `--lf-typography-heading-size-h2`. This document names variable groups and
 purpose; it does not duplicate literal token values.
 
+The current default theme build obtains its TokenSet through
+`AutomaticCSS.from_file/2` using the Automatic.css settings fixture; this path
+does not verify the fixed reference identity. The shared and Hero mapping files
+select TokenSet paths and package variables; they do not define token values.
+The `native_shared_v3` name does not establish independent LiveFrames authorship
+for the values that flow through this build. The proposed
+native-profile separation is recorded in
+[`liveframes_native_token_math_authority_proposal.md`](development/liveframes_native_token_math_authority_proposal.md).
+That proposal is not accepted authority and changes no token, mapping, or CSS
+output. Current generated output remains unchanged until a separate owner-
+accepted, versioned migration is reviewed and verified.
+
 ### Public variable groups (Hero-relevant)
 
 | Group | Examples (names only) | Purpose |
