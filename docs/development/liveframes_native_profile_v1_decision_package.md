@@ -72,7 +72,25 @@ package CSS mappings:
 | Body size | typography.body.size | Category typography; fluid_scale_step at power -2; reference the typography scale. |
 | Heading sizes | typography.heading.size.h6 through typography.heading.size.h1 | Category typography; one fluid_scale_step per heading, with powers -1 through 4; each references the typography scale. |
 | Spacing scale | spacing.scale.native_core | Category spacing; fluid_scale; reference the domain path. |
-| Spacing steps | spacing.scale.3xs through spacing.scale.3xl | Category spacing; one fluid_scale_step per step, with powers -4 through 4; each references the spacing scale. |
+| Spacing steps | See the proposed canonical paths below. | Category spacing; one fluid_scale_step per step; each references spacing.scale.native_core. |
+
+The spacing labels remain human-readable scale labels. Use separate canonical
+token paths so each path segment starts with a letter and follows the existing
+TokenSet and TokenBridge path rule. These nine paths are **PROPOSED**; each
+step's Token.references and Fluid semantic reference target
+spacing.scale.native_core.
+
+| Human-readable step label | PROPOSED power | PROPOSED canonical token path | PROPOSED reference target |
+| --- | ---: | --- | --- |
+| 3xs | -4 | spacing.native_core.step_n4 | spacing.scale.native_core |
+| 2xs | -3 | spacing.native_core.step_n3 | spacing.scale.native_core |
+| xs | -2 | spacing.native_core.step_n2 | spacing.scale.native_core |
+| s | -1 | spacing.native_core.step_n1 | spacing.scale.native_core |
+| m | 0 | spacing.native_core.step_zero | spacing.scale.native_core |
+| l | 1 | spacing.native_core.step_p1 | spacing.scale.native_core |
+| xl | 2 | spacing.native_core.step_p2 | spacing.scale.native_core |
+| 2xl | 3 | spacing.native_core.step_p3 | spacing.scale.native_core |
+| 3xl | 4 | spacing.native_core.step_p4 | spacing.scale.native_core |
 
 For every edge, Token.references must equal the reference named in its closed
 Fluid semantic map. The profile does not assign --lf-* names or change the
