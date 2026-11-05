@@ -1,21 +1,25 @@
 # LiveFrames native profile V1 decision package
 
 - **Status:** Proposal only. No profile values or ownership decisions are accepted.
+- **Lifecycle state:** DESIGN_PROPOSED. No profile JSON exists.
 - **Implementation:** Not authorized.
 - **Profile JSON:** Not created.
 - **Date:** 2026-11-05
 
-This package recommends a first independently authored LiveFrames profile for
-typography and spacing. Its values are design proposals. It does not change
-TokenSet, Design IR, mappings, the current theme build, or generated CSS.
+This package proposes a first independently authored LiveFrames typography and
+spacing core profile. It is not acceptance of a complete design system. Its
+values are design proposals. It does not change TokenSet, Design IR, mappings,
+the current theme build, or generated CSS.
 
 ## Decision summary
 
 Adopt the proposed profile identity **liveframes.native.core**, independent
-profile version **1.0.0**, and future source path
+profile version **1.0.0**, and future canonical repository path
 **apps/live_frames/priv/native_profiles/liveframes_native_core_v1.json**.
-Keep the profile version separate from the existing TokenSet and Design IR
-versions.
+That path is public if committed and is not a private draft or evidence
+location. Any future use of it requires separately scoped implementation
+authorization after the appropriate gates. Keep the profile version separate
+from the existing TokenSet and Design IR versions.
 
 Use one explicitly shared viewport domain for typography and spacing. Give the
 two groups separate coupled FluidScale parameters and token steps. Typography
@@ -107,7 +111,7 @@ profile adds no math engine or source-specific branch.
 | --- | --- |
 | Stable profile ID | **PROPOSED:** liveframes.native.core. Keep this ID stable across content revisions. |
 | Independent profile version | **PROPOSED:** 1.0.0, using SemVer independently from TokenSet 1.0.0, Design IR 6.0.0, and Fluid format_version 1.0.0. |
-| Future profile file | **PROPOSED:** apps/live_frames/priv/native_profiles/liveframes_native_core_v1.json. This is a future location only; this PR creates no JSON. |
+| Future canonical repository profile file | **PROPOSED:** apps/live_frames/priv/native_profiles/liveframes_native_core_v1.json. This path is public if committed; it is not the private Stage 3 draft or evidence location. This PR creates no JSON. |
 
 Treat each accepted profile version as immutable. Any semantic change needs a
 new version, a new owner decision, and fresh verification. Under the proposed
@@ -122,25 +126,34 @@ fields.
 | Record | Proposed fields |
 | --- | --- |
 | Profile provenance | authority_kind = liveframes_native_profile; profile_id; profile_version; authorship_basis = independent_liveframes_design; author_ref; authored_at; selection_rationale_ref; source_inputs = []. |
-| Owner decision | status = not_accepted in a draft; decision_ref; accepted_profile_sha256; decision_owner_ref; decided_at. Accepted fields stay empty until a human decision identifies the exact profile content. |
-| TokenSet root | Store the profile provenance and owner decision under TokenSet.source_metadata["native_profile"]. Preserve the existing outer TokenSet shape. |
-| Each authored token | Store profile_id, profile_version, authorship_basis, selection_rationale_ref, and the exact accepted decision reference and digest in the existing token provenance map. |
+| Design decision record | Keep outside the profile JSON. Record status, decision_ref, the full accepted decision-document Git blob object ID, the named accepted scope, profile_id, profile_version, every accepted parameter, all 19 canonical token paths and their type/power/reference relationships, decision_owner_ref, and decided_at. This record does not require a profile-file digest because the profile JSON does not exist at this stage. |
+| Profile artifact decision | Keep outside the hashed profile file. Before Stage 5, status = not_accepted. At Stage 5, record decision_ref, accepted_profile_sha256, decision_owner_ref, and decided_at for the exact validated profile bytes. |
+| TokenSet root | Store the profile provenance, design decision, and profile artifact decision under TokenSet.source_metadata["native_profile"]. Preserve the existing outer TokenSet shape. |
+| Each authored token | Store profile_id, profile_version, authorship_basis, and selection_rationale_ref in the existing token provenance map. After Stage 5, include the design decision reference, profile artifact decision reference, and exact profile digest there. |
 
 Use stable identity references for author_ref and decision_owner_ref. Store
-authored_at and decided_at as UTC timestamps. The owner_decision status is
-not_accepted in a draft and may become accepted or rejected only through a
-recorded human decision. decision_ref points to that durable decision record.
-accepted_profile_sha256 is the SHA-256 digest of the exact profile file bytes.
-Store the owner decision in TokenSet.source_metadata, outside the hashed file.
-selection_rationale_ref points to this proposal and any later accepted design
-decision that records why the values were chosen.
+authored_at and decided_at as UTC timestamps. A design decision may become
+accepted or rejected only through an explicit, durable human decision that
+identifies the full Git blob object ID for this document. Stage 2 records the
+accepted design scope, profile ID and version, all accepted parameters, and
+all 19 canonical token paths with their type, power, and reference
+relationships. It records no profile-file digest because no profile JSON
+exists yet.
 
-Admission requires the root and each token to agree on the profile ID, version,
-and accepted content digest. A native profile has no source inputs. Do not
-relabel imported evidence or clear provenance to make an imported token look
-native. CSSValue gives metadata["css_expression"] precedence over
-resolved_value. Derived tokens may also carry source_expression, and source
-variable authority can identify imported values. Those signals
+Reserve accepted_profile_sha256 for Stage 5, after Stage 4 has validated an
+existing profile file and calculated SHA-256 over its exact bytes. The Stage 5
+artifact decision stays outside the hashed profile file. decision_ref points
+to the durable decision record. selection_rationale_ref points to this
+proposal and any later accepted design decision that records why the values
+were chosen.
+
+After Stage 5, admission requires the root and each token to agree on the
+profile ID, version, and accepted content digest. A native profile has no
+source inputs. Do not relabel imported evidence or clear provenance to make an
+imported token look native. CSSValue gives
+metadata["css_expression"] precedence over resolved_value. Derived tokens may
+also carry source_expression, and source variable authority can identify
+imported values. Those signals
 require rejection unless separate evidence proves independent authorship and
 owner authorization.
 
@@ -324,28 +337,67 @@ container behavior, and whether these values fit the current public theme.
 
 Identical commonplace values would not prove independent authorship. The
 recorded selection reasons above are the proposed rationale. Future
-implementation must keep source inputs empty and retain the exact owner
-decision reference and profile content digest.
+implementation must keep source inputs empty. After Stage 5, the materialized
+TokenSet provenance must retain both the design decision reference and the
+profile artifact decision reference with the exact profile digest.
 
 ## Future implementation boundary
 
-The smallest future slice should run only after the owner accepts this exact
-profile and its provenance fields:
+The owner must first accept the exact decision-document blob as a design-only
+decision. Stage 3 requires a separate, explicit implementation authorization
+for JSON drafting only. The authorization must name the exact resolved private
+path, for example
+`~/.local/state/liveframes/native-profile-work/liveframes.native.core/1.0.0/profile.json`,
+and confirm that it is outside Git worktrees and public repositories and is
+not in shared, synchronized, or otherwise public storage. Restrict directory
+and file permissions to the owner, and keep draft and evidence files in that
+authorized private location. A file committed to GitHub is not treated as
+private evidence. If the path cannot be kept private, stop without creating
+the draft.
 
-1. Add the approved profile file at the proposed path and a loader that creates
-   the existing TokenSet shape. Keep the new profile version independent from
-   TokenSet and Design IR versions.
-2. Validate its closed semantic maps and references with existing TokenSet and
-   Fluid validation. Resolve one typography step and one spacing step through
-   Resolver.
-3. Produce an in-memory or private candidate through CSSValue and
-   CSSSerializer. Keep the current default theme build and all committed
-   generated bytes unchanged. Do not edit mappings or publish the candidate.
-4. Add acceptance and rejection tests listed below. Measure the work at build
-   time against the existing compiler path before any broader integration.
+The proposed canonical repository path
+`apps/live_frames/priv/native_profiles/liveframes_native_core_v1.json` is
+separate from this private draft location and is public if committed. Stage 3
+does not authorize writing to or committing that canonical path. It also does
+not authorize a loader, compiler integration, tests, mappings, generated CSS,
+or any other persistent code.
+
+1. Create only the profile JSON at the exact authorized private path. Do not
+   create a loader, parser, harness, tests, mappings, assets, or persistent
+   code. Keep the profile version independent from TokenSet and Design IR
+   versions.
+2. Validate the closed semantic maps and references with existing TokenSet
+   and Fluid validators through an already-authorized path that can consume
+   the private draft. Confirm every value and relationship matches the
+   owner-accepted design. Calculate the profile-file SHA-256 only after these
+   bytes exist. If validation needs a new loader or harness, stop at
+   `PRIVATE_PROFILE_DRAFT` with
+   `STOP=VALIDATION_PATH_NOT_AUTHORIZED`. Proceed only after a separate,
+   explicit authorization names the temporary private tool, its files, allowed
+   use, and removal or quarantine plan. The tool may only adapt or submit the
+   draft to the existing validators; it does not authorize changes to those
+   validators, production loader code, or compiler integration.
+3. After separate owner acceptance of the exact validated profile bytes, a
+   further scoped authorization may produce only the named private or
+   in-memory candidate through CSSValue and CSSSerializer. Any temporary
+   private tooling must be named with its files, allowed use, and removal or
+   quarantine plan in that authorization. Keep the current
+   default theme build and all committed generated bytes unchanged. Do not
+   edit mappings or publish the candidate.
+4. The acceptance and rejection tests below are requirements for later,
+   separately authorized proof work; they are not implementation authority.
+   Measure authorized build-time work against the existing compiler path
+   before any broader integration.
+
+Any persistent native profile loader, compiler integration, or related
+production code requires its own separately scoped implementation/proof
+authorization after the appropriate design and artifact gates. This proposal
+and the Stage 3 JSON-only authorization do not grant that authority.
 
 Lead 1 owns native profile selection, its loader boundary, and compiler mode
-isolation. Lead 4 owns FluidDomain, FluidValue, FluidScale, FluidScaleStep,
+isolation. Naming Lead 1 as owner defines responsibility, not implementation
+permission. Any persistent loader requires its own later, separately scoped
+authorization. Lead 4 owns FluidDomain, FluidValue, FluidScale, FluidScaleStep,
 validation, resolution, serializer math, compatibility math, and any
 TokenBridge integration. Lead 1 must not change Lead 4's math contracts.
 Any required math or public TokenSet contract change stops with
@@ -375,7 +427,7 @@ docs-only change.
 
 | Test | Accept when | Reject when |
 | --- | --- | --- |
-| Profile identity and owner digest | The loader selects the exact accepted ID, version, and profile content digest; root and token provenance match. | ID, version, decision reference, digest, or token provenance is missing or mismatched. |
+| Design identity and profile artifact acceptance | The design decision identifies the exact accepted document blob, scope, profile ID/version, parameters, and token relationships. After the JSON exists and validates, a separate owner decision accepts its exact SHA-256 digest; root and token provenance match that accepted artifact. | The design blob, scope, ID, version, values, relationships, artifact decision reference, digest, or provenance is missing or mismatched. |
 | Existing schemas | The result keeps TokenSet 1.0.0, Design IR 6.0.0, and Fluid object format_version 1.0.0. | Any implementation requires changing those contracts without a separate authority decision. |
 | Independent authorship | The native profile has an empty source input list and independently authored token provenance. | Any default came from ACSS fixtures, source CSS, Bricks, Frames, adapter output, or a cleared/replaced source record. |
 | Calculated samples | Resolver results at 360px, 900px, and 1440px match the full-precision coupled formulas within the existing pure-math tolerance. The tables show those results to ten decimal places. | Any sample uses endpoint-first math for a FluidScaleStep or exceeds the existing tolerance. |
@@ -394,7 +446,8 @@ docs-only change.
 
 The positive authoring test also admits an independently authored native static
 value whose number happens to match a commonplace or imported value, provided
-its source input list is empty and its exact profile digest has owner approval.
+its source input list is empty and its exact profile digest has separate Stage 5
+owner acceptance.
 Three negative admission cases must reject: an imported numeric token whose
 metadata contains css_expression, a derived token with source_expression, and
 a token whose variable authority identifies an imported source.
@@ -408,60 +461,93 @@ add a rounding policy.
 
 ## Lifecycle and transition rules
 
-This is a future lifecycle. The package remains at DRAFT now.
+This package is at `DESIGN_PROPOSED`. No profile JSON exists, no owner has
+accepted this proposal, and no implementation authorization exists. The
+lifecycle below applies only to the proposed typography-and-spacing core. It
+does not accept a complete design system.
 
 | Transition | Guards | Side effects | Rejection or terminal result |
 | --- | --- | --- | --- |
-| DRAFT → VALIDATED | Closed profile shape; known profile version; complete proposed provenance fields; exact TokenSet references; existing Fluid validation passes; every proposed number is finite and within current units, ratio, domain, and power rules. | Record validation diagnostics only. Write no profile or CSS asset. | Invalid shape, missing provenance, invalid reference, or invalid math returns to author review as INVALID_PROFILE; no materialization. |
-| VALIDATED → OWNER_ACCEPTED | The project owner accepts the exact profile ID, version, all typography and spacing values, shared-domain choice, provenance fields, and version policy. Record the decision reference, owner identity reference, timestamp, and accepted profile digest. | Record owner authority for that immutable profile content. Write no generated asset. | Owner rejection ends that submitted revision as REJECTED. Any changed content needs a new profile version and new decision. |
-| OWNER_ACCEPTED → PRIVATE_MATERIALIZED | The build explicitly selects that accepted profile and matching digest. TokenSet validation, Fluid resolution, CSSValue, and serializer checks pass. The build has no adapter or fixture input for native values. | Produce only an in-memory or private candidate with provenance and output digest. Do not write or publish package CSS. | Mismatch, unresolved native values, source contamination, or scope collision gives MATERIALIZATION_REJECTED; no output fallback. |
-| PRIVATE_MATERIALIZED → VERIFIED | The exact profile and candidate pass the acceptance tests, safety checks, deterministic byte check, collision checks, and unchanged-current-output regression. | Record verification for the exact profile digest and candidate digest. Candidate remains private. | Any failed check gives VERIFICATION_FAILED. Correcting it requires a new private candidate and complete verification. |
-| VERIFIED → PUBLICATION_APPROVED | A separate owner decision accepts the exact output digest, publication target, scope, provenance, and applicable distribution authority. | Record approval for that target and exact digest. This transition grants only the recorded publication scope. | Missing rights evidence or owner approval gives terminal PUBLICATION_BLOCKED for that candidate. It creates no public asset. |
+| `DESIGN_PROPOSED` → `DESIGN_OWNER_ACCEPTED` | A human owner explicitly accepts the exact full Git blob object ID of this document and the named scope: the LiveFrames native typography-and-spacing core, including its proposed profile ID/version, versioning policy, every proposed parameter, the shared viewport domain, and all 19 canonical token paths with their types, powers, and reference relationships. The decision states that it does not accept a complete design system. No profile-file digest is requested because no profile JSON exists. | Record the durable decision reference, owner identity, UTC timestamp, full document blob ID, accepted scope, profile ID/version, versioning policy, parameters, and token relationships. Change only the design-decision state. Create no JSON, code, tests, mappings, CSS, or publication authority. | Explicit rejection gives `DESIGN_REJECTED`, terminal for that document blob. A changed document has a new blob ID and returns to `DESIGN_PROPOSED`; acceptance never transfers to a different blob. |
+| `DESIGN_OWNER_ACCEPTED` → `PRIVATE_PROFILE_DRAFT` | A separate, explicit human implementation authorization cites the accepted design decision and blob ID, names the exact resolved private draft path and evidence location, confirms they are outside Git worktrees/public repositories and shared or synchronized storage, and permits creation of the JSON profile only. It must not authorize a loader, parser, harness, tests, mappings, assets, or persistent code. Design acceptance alone is not authorization. | Create only the JSON profile and necessary private directories at the authorized location; restrict their permissions to the owner. Keep draft and evidence out of GitHub, packages, and assets. Do not write the proposed canonical repository path, publish an asset, or replace the default theme. | A declined or missing authorization gives `IMPLEMENTATION_NOT_AUTHORIZED` for that attempt. An unprivate or public location rejects the attempt; create no file or evidence and do not enter `PRIVATE_PROFILE_DRAFT`. |
+| `PRIVATE_PROFILE_DRAFT` → `PROFILE_VALIDATED` | Existing TokenSet and Fluid validators pass through an already-authorized path that consumes the private draft. Every value and relationship matches the owner-accepted design. Provenance is complete, `source_inputs` is empty, source isolation passes, and TokenSet 1.0.0, Design IR 6.0.0, and Lead 4 math contracts remain unchanged. If a new loader or harness is needed, a separate explicit authorization must name the temporary private tool, files, permitted use, and removal or quarantine plan; it may only call existing validators and cannot authorize production loader code or compiler integration. Without that authorization, stop with `STOP=VALIDATION_PATH_NOT_AUTHORIZED` and remain at `PRIVATE_PROFILE_DRAFT`. | Record validation evidence only in the authorized private evidence location and calculate SHA-256 over the exact profile-file bytes. This is the first state with a profile-file digest. A separately authorized temporary validation tool must remain private and be removed or quarantined as specified. Write no generated CSS. | Failure of the existing validators or design/provenance checks gives `PROFILE_VALIDATION_REJECTED`, terminal for those exact bytes. A corrected file is a new candidate and must pass validation again. An unavailable or unauthorized validation path is a stop at `PRIVATE_PROFILE_DRAFT`, not a validation result; create no loader or harness. |
+| `PROFILE_VALIDATED` → `PROFILE_ARTIFACT_ACCEPTED` | A human owner separately accepts the exact profile bytes and SHA-256 digest, profile ID/version, accepted design decision, provenance, and validation record. No acceptance is inferred from a proposal merge, CI result, or agent output. | Record the artifact decision outside the hashed profile file. Freeze the accepted profile bytes, identity, and provenance for that version. This grants no publication clearance. | Rejection gives `PROFILE_ARTIFACT_REJECTED`, terminal for those exact bytes. Changed bytes require validation and a new artifact decision. A design change requires a new design decision first. |
+| `PROFILE_ARTIFACT_ACCEPTED` → `PRIVATE_MATERIALIZED` | A separate authorization explicitly permits the private or in-memory proof and names its scope, exact accepted profile digest, evidence location, and any temporary private tooling. It passes the existing TokenSet, Fluid, CSSValue, and serializer checks and uses no adapter or fixture input for native values. A persistent loader or compiler integration is outside this transition and requires its own separately scoped implementation/proof authorization after the appropriate gates. | Produce only the authorized private or in-memory candidate and record its output digest in the authorized private evidence location. Keep temporary tools private and remove or quarantine them as authorized. Do not change committed generated CSS, publish an asset, write the proposed canonical repository path, or replace the default theme. | Missing or declined proof authorization gives `PRIVATE_PROOF_NOT_AUTHORIZED`, terminal for that authorization attempt. A mismatch, unresolved value, source contamination, or scope collision gives `MATERIALIZATION_REJECTED`, terminal for that candidate. Produce no fallback output. |
+| `PRIVATE_MATERIALIZED` → `VERIFIED` | The exact profile and candidate pass deterministic-output, math-equivalence, isolation, regression, collision, and safety checks. Authorized technical reviewers explicitly accept the evidence. It confirms TokenSet 1.0.0, Design IR 6.0.0, and the Lead 4 math contract remain unchanged. | Record verification against the exact profile and output digests with reviewer references. Keep the candidate private. | Any failed or unaccepted check gives `VERIFICATION_REJECTED`, terminal for that candidate. A changed candidate requires complete verification again. |
+| `VERIFIED` → `PUBLICATION_APPROVED` | A separate human decision approves the exact output digest, named target, selector/scope, provenance, and applicable distribution rights. Existing R3/R4 rights holds remain unchanged; this transition does not clear Milan R4. | Record clearance for that exact target and output. The approval permits only that output and scope to publish. This transition does not publish or create an asset. | Missing owner approval or rights evidence gives `PUBLICATION_BLOCKED`, terminal for that output and target. Create no public asset. |
 
-Approval of one profile version or output does not carry to another version,
-target, selector scope, or generated digest. Revisions require a new
-validation, owner decision, private materialization, and verification.
+Each terminal state applies to the exact document blob, authorization attempt,
+profile bytes, candidate, or publication target named in its transition. A new
+attempt starts at the earliest state invalidated by the changed identity and
+must produce fresh evidence. Any document edit changes its Git blob identity
+and invalidates design acceptance. Any change to profile bytes, identity, or
+provenance invalidates artifact acceptance. Any output change invalidates
+verification and publication approval. A proposal merge, successful CI run, or
+agent output never counts as human acceptance.
 
-## Complete owner-decision checklist
+## Owner-decision checklist
 
-Before implementation, the project owner must decide each item:
+The Stage 2 design decision is limited to the typography-and-spacing core
+proposal. Its durable record must include:
 
-- [ ] Accept or reject the native-profile authority boundary. Bricks, Frames,
-  and Automatic.css remain adapters, not LiveFrames default authorities.
-- [ ] Accept or change profile ID liveframes.native.core.
-- [ ] Accept or change independent profile version 1.0.0 and its versioning
-  policy.
-- [ ] Accept or change the proposed future profile storage path.
-- [ ] Accept every proposed viewport, typography, and spacing parameter and
-  calculated scale relationship.
-- [ ] Accept the shared viewport domain, the separate typography/spacing
-  parameters, each power assignment, and the section/gap/padding usage.
-- [ ] Decide font family, line-height, font weight, text wrapping constraints,
-  and any smaller-text use policy.
-- [ ] Accept the native provenance and owner-decision fields, including the
-  empty source input requirement and exact accepted-content digest.
-- [ ] Confirm those fields fit existing JSON maps without changing TokenSet
-  1.0.0 or Design IR 6.0.0.
-- [ ] Accept or change the proposed semantic token paths and decide mapping
-  ownership. This package makes no mapping change.
-- [ ] Decide how a future compiler selects native mode and how missing tokens
-  fail. Keep source-fidelity output separate.
-- [ ] Confirm that global :root output remains single-mode until separate
-  scope authority is accepted.
-- [ ] Decide whether a later default-theme migration is in scope and define
-  its byte-compatibility and review gates.
-- [ ] Set the performance threshold at build time before broader integration.
-- [ ] Decide the exact publication target and required rights review after
-  private verification. Native authorship does not establish publication
-  clearance.
+- [ ] An explicit human acceptance or rejection and the full Git blob object ID
+  of this exact document.
+- [ ] The named scope: the LiveFrames native typography-and-spacing core in
+  that document, not a complete design system.
+- [ ] Profile ID `liveframes.native.core` and independent profile version
+  `1.0.0`, or the exact changed identity if the owner rejects those proposals.
+- [ ] The proposed profile versioning policy, or the exact alternative the
+  owner selects.
+- [ ] Every accepted numeric parameter, the shared viewport domain, the
+  separate typography and spacing scales, and their calculated sample
+  relationships.
+- [ ] All 19 canonical token paths with their types, powers, and reference
+  relationships.
+- [ ] A durable decision reference, owner identity reference, and UTC
+  timestamp.
+- [ ] An explicit statement that design acceptance does not authorize
+  implementation or publication. No profile-file digest is required at Stage
+  2 because no profile JSON exists.
 
-Until every required decision is recorded, the status stays proposal-only.
+Later gates require separate records:
+
+- [ ] Before Stage 3, authorize only one JSON profile at an exact resolved
+  private path, for example
+  `~/.local/state/liveframes/native-profile-work/liveframes.native.core/1.0.0/profile.json`.
+  Confirm the draft and evidence locations are outside Git worktrees and
+  public repositories and are not shared or synchronized; restrict their
+  permissions to the owner. Do not authorize the proposed canonical repository
+  path, a loader, parser, harness, tests, mappings, assets, or persistent code.
+- [ ] Before Stage 4, identify an already-authorized path that runs the
+  existing TokenSet and Fluid validators on the private draft. If a new loader
+  or harness is needed, stop at `PRIVATE_PROFILE_DRAFT` with
+  `STOP=VALIDATION_PATH_NOT_AUTHORIZED`. Resume only after a separate explicit
+  authorization names the temporary private tool, its files, allowed use, and
+  removal or quarantine plan; it may call existing validators only, cannot
+  change them, and grants no production loader or compiler integration
+  authority.
+- [ ] Before Stage 5, accept the exact validated profile bytes and SHA-256
+  digest.
+- [ ] Before Stage 6, authorize the exact profile digest and named private or
+  in-memory proof, its private evidence location, and any temporary private
+  tooling with its files, allowed use, and removal or quarantine plan. This
+  does not authorize a persistent loader or compiler integration; those
+  require a separately scoped implementation/proof authorization after the
+  appropriate gates.
+- [ ] Before Stage 8, approve the exact output digest, publication target,
+  scope, and rights evidence. This cannot clear existing R3/R4 holds.
+
+Font family, line-height, font weight, wrapping constraints, smaller-text
+policy, semantic mapping ownership, default-theme migration, and performance
+threshold remain separate decisions. None is accepted by this core proposal.
 
 ## Unresolved design decisions
 
-The owner has not accepted the proposed numeric values, profile ID, version, or
-storage path. Final token paths and the mapping between those paths and public
-LiveFrames variables also remain open. The profile does not choose font family,
+The owner has not accepted the proposed numeric values, profile ID, version,
+or storage decisions. The canonical repository path is proposed; the private
+draft and evidence paths must be named and verified in separate authorizations.
+Final token paths and the mapping between those paths and public LiveFrames
+variables also remain open. The profile does not choose font family,
 line-height, or weight. The current default theme migration, native mode
 selection, override precedence, and any future CSS scoping need separate
 decisions. The owner must set a performance threshold at build time and identify
