@@ -6,19 +6,19 @@
 - **Decision reference:** `LIVEFRAMES_NATIVE_V1_OWNER_DECISION_RECORD`
 - **Accepted proposal:** `docs/development/liveframes_native_profile_v1_decision_package.md`
 - **Accepted proposal Git blob:** `c27c53f2f318cfad77d2597c945d758da3438b72`
-- **Owner approval date:** 2026-11-05, as stated by the project owner.
+- **Approval conversation date:** 2026-11-05, as shown in the conversation record.
 - **Decision owner reference:** [GitHub account JCSchoeman96](https://github.com/JCSchoeman96)
 - **Identity check:** The authenticated GitHub account and the owner of `JCSchoeman96/LiveFrames` both resolve to `JCSchoeman96`.
 - **Decision recorded at:** `2026-11-05T13:59:39Z`
 
-The project owner explicitly approved the exact proposal blob above on
-2026-11-05. This record sets `DESIGN_OWNER_ACCEPTED` for the LiveFrames native
-typography-and-spacing core described below. The approval is design-only. It
-does not accept a complete design system or authorize implementation or
-publication.
+In the conversation dated 2026-11-05, the project owner replied "approved" to
+the exact-blob approval question for the proposal above. This record sets
+`DESIGN_OWNER_ACCEPTED` for the LiveFrames native typography-and-spacing core
+described below. The approval is design-only. It does not accept a complete
+design system or authorize implementation or publication.
 
-The owner supplied the approval date but no time of approval. The UTC timestamp
-above records this durable decision.
+The conversation record supplies the approval date but no time. The UTC
+timestamp above records when this decision document was created.
 
 ## Accepted profile identity and version policy
 
