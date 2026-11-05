@@ -29,6 +29,8 @@ The profile and its materialized tokens should retain source-neutral provenance 
 
 Native profiles and imported TokenSets are separate inputs. A native profile cannot inherit values from an imported TokenSet. An imported TokenSet cannot become a native profile through a mapping filename, package variable, or successful build. The current native profile format, storage location, and metadata field names remain open decisions. This proposal does not change the TokenSet version or the Design IR schema.
 
+Native-profile admission must verify independent LiveFrames authorship and versioned owner authorization. `CSSValue.candidate/1` gives `metadata["css_expression"]` precedence over `resolved_value`; for derived values it can also use `source_expression`. An adapter-derived expression or source `variable_authorities` record must not enter native defaults without separate evidence of independent authorship and owner authorization. Clearing or replacing source metadata to make an imported token appear native is not an admission path. This guard does not reject legitimate static CSS values authored independently for a native profile, including values that happen to match an imported value.
+
 ## Source-neutral mathematical contract
 
 The generic math contract remains owned by Lead 4 and uses the existing Fluid semantics:
@@ -48,20 +50,26 @@ Calculation runs during build or conversion. The implementation should reuse the
 
 ## Profile modes, precedence, and isolation
 
-Compilation must select one explicit mode for each output scope:
+The profile mode defines value authority, not CSS scope. `TokenBridge.generate/2` currently emits declarations under global `:root`, so the compiler does not provide separate native and source-fidelity scopes today. Until a scoped CSS realization is separately accepted and verified, one generated stylesheet must select one profile mode.
 
 | Mode | Value authority | Precedence |
 | --- | --- | --- |
-| Native design-system mode | Owner-accepted LiveFrames native profile | Explicit consumer override for the named theme or component scope, then the selected native profile. A missing native value fails validation. |
-| Source-fidelity mode | Source-verified and adapter-normalized imported TokenSet | Explicit consumer override for the named scope, then the proven imported value. A missing or unresolved source value stays unresolved. |
+| Native design-system mode | Owner-accepted LiveFrames native profile | The selected native profile, then an explicit compiler-managed override accepted for that profile build. A missing native value fails validation. |
+| Source-fidelity mode | Source-verified and adapter-normalized imported TokenSet | The proven, resolved imported value. An intentional compiler-managed change is a separate visual-divergence output, not source-fidelity output. |
 
-Native values never fill gaps in source-fidelity mode. Imported values never fill gaps in native mode. Conflicting authorities for the same path and scope reject with `AMBIGUOUS_AUTHORITY`. A deliberate scoped override affects only the named scope, carries its own provenance, and does not mutate the base profile or imported TokenSet. No implicit cross-profile merge is allowed.
+Native values never fill gaps in source-fidelity mode. Imported values never fill gaps in native mode. An explicit override cannot change a missing, unresolved, ambiguous, or unsupported imported value into a resolved source value. Preserve the original source-resolution state and provenance when a separate visual-divergence output intentionally supplies a different presentation. Conflicting authorities for the same path reject with `AMBIGUOUS_AUTHORITY`. No implicit cross-profile merge is allowed.
+
+Compiler-managed overrides belong to a selected profile build, require explicit versioned authority, and retain their own provenance. They may change a resolved value only within the accepted profile contract. An unmanaged consumer CSS override is a downstream cascade rule. As `docs/11` describes, a consumer may load it after LiveFrames CSS or place it on a scoped container. TokenBridge does not inspect or validate that CSS; it does not alter TokenSet resolution or make the result source-faithful.
 
 Source adapters preserve source meaning at the adapter boundary. Source-fidelity profiles must name the source identity, supported token paths, target component or theme scope, and the evidence for each mapping. Unsupported or ambiguous source values remain unresolved. Conversion fidelity and native design quality are separate review questions.
 
 ## CSS generation boundary
 
 TokenSet keeps semantic authority. CSSValue selects a supported candidate. TokenBridge owns package mapping and CSS materialization. The existing Fluid serializer may realize accepted semantics with its supported `clamp()`, `calc()`, or progressive CSS output and deterministic fallback behavior. A FluidScale fallback must preserve the coupled base-and-ratio curve.
+
+Legacy TokenBridge output wraps declarations in global `:root`. Progressive output also places fallback dependencies in global `:root`, then emits modern overrides in an `@supports` block targeting global `:root`. These declarations are not currently isolated by native or source-fidelity profile.
+
+Mixed native and source-fidelity profiles on the same page must not be described as safely scoped today. That use requires separately accepted scoped CSS realization and tests for selector isolation and collisions across declarations, custom-property names, and Fluid fallback dependencies. This proposal does not choose a scoping mechanism or authorize its implementation.
 
 This proposal adds no CSS syntax, package mapping, or source-specific branch to NativeGenerator. It authorizes no JavaScript or request-time calculations and no change to current generated CSS. Future materialization must prove deterministic output and preserve existing fallback behavior before any stylesheet changes.
 
@@ -102,8 +110,10 @@ This proposal changes documentation only. It does not assign implementation work
 Future implementation review should require:
 
 - A native profile fixture with explicit LiveFrames provenance and no Automatic.css, Bricks, or Frames input dependency.
+- A negative admission test where adapter-derived `metadata["css_expression"]` takes precedence over `resolved_value`, or source `variable_authorities` identify the token as imported; reject it as a native default without independent owner authorization. A positive test must admit an independently authored native static CSS value with native provenance.
 - Independent native and imported profile builds that produce their own TokenSets and preserve their separate provenance.
-- Scoped override tests that prove only the requested component or theme scope changes and the source TokenSet remains unchanged.
+- Compiler-managed override tests that preserve the imported token's original resolution state and provenance, keep unresolved or unsupported values unresolved, and record intentional visual divergence separately from source-fidelity output. Consumer CSS override tests must show that unmanaged cascade rules do not mutate TokenSet state.
+- Scoped realization and collision tests for declaration selectors, custom-property names, and Fluid fallback dependencies before any mixed native/source-fidelity same-page use is supported.
 - A FluidValue case and a FluidScale case that distinguish endpoint interpolation from coupled base-and-ratio interpolation between endpoints.
 - TokenSet and CSSValue resolution tests for typography and spacing profiles using the accepted math contract.
 - Stable TokenBridge bytes, safe declarations, unique package variables, and existing FluidScale fallback equivalence.
